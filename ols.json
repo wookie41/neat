@@ -1,0 +1,16 @@
+{
+    "collections": [
+        {
+            "name": "core",
+            "path": "/home/wookie/Tools/Odin/core"
+        },
+        {
+            "name": "vendor",
+            "path": "/home/wookie/Tools/Odin/vendor"
+        }
+    ],
+    "enable_document_symbols": true,
+    "enable_semantic_tokens": false,
+    "enable_hover": true,
+    "enable_snippets": true
+}

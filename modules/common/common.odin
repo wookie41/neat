@@ -1,0 +1,5 @@
+package common
+
+KIOBYTE :: 1024
+MEGABYTE :: KIOBYTE * 1024
+GIGABYTE :: MEGABYTE * 1024
