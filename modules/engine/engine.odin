@@ -56,7 +56,6 @@ init :: proc(p_options: InitOptions) -> bool {
 	}
 
 	//Init renderer
-
 	{
 		renderer_init_options := renderer.InitOptions {
 			allocator = context.allocator,
@@ -66,7 +65,7 @@ init :: proc(p_options: InitOptions) -> bool {
             renderer_init_options.window = G_ENGINE.window
         }
 
-		if (renderer.init(renderer_init_options) == false) {
+		if renderer.init(renderer_init_options) == false {
             log.error("Failed to init renderer")
             return false
         }

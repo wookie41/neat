@@ -12,7 +12,7 @@ when USE_VULKAN_BACKEND {
 	import sdl "vendor:sdl2"
 	import vk "vendor:vulkan"
 
-	import  "../common"
+	import "../common"
 
 	//---------------------------------------------------------------------------//
 
@@ -85,9 +85,6 @@ when USE_VULKAN_BACKEND {
 			defer mem.free_all(temp_arena_allocator)
 
 			// Specify a list of required extensions and layers
-
-			context.allocator = context.temp_allocator
-
 			required_extensions := make([dynamic]cstring)
 			required_layers := make([dynamic]cstring)
 
@@ -166,9 +163,9 @@ when USE_VULKAN_BACKEND {
 
 			app_info := vk.ApplicationInfo {
 				sType              = .APPLICATION_INFO,
-				pApplicationName   = "near-renderer",
+				pApplicationName   = "neat-renderer",
 				applicationVersion = vk.MAKE_VERSION(0, 0, 1),
-				pEngineName        = "near",
+				pEngineName        = "neat",
 				engineVersion      = vk.MAKE_VERSION(0, 0, 1),
 				apiVersion         = vk.API_VERSION_1_3,
 			}
@@ -188,7 +185,7 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
-		// Load the rest of the functions with our instance
+		// Load the rest of the functions
 		vk.load_proc_addresses(G_RENDERER.instance)
 
 		// Create a single surface for now
@@ -422,8 +419,6 @@ when USE_VULKAN_BACKEND {
 		vk.load_proc_addresses(G_RENDERER.device)
 
 		// Get the swapchain working
-
-		// also the image views for the framebuffers (what part of the framebuffer to use)
 		G_RENDERER.swapchain_images = make([dynamic]vk.Image, G_RENDERER.allocator)
 
 		// find ideal format for surface
@@ -631,13 +626,22 @@ when USE_VULKAN_BACKEND {
 @(private)
 backend_update :: proc(p_dt: f32) {
 
+	context.logger = G_RENDERER_LOG
+
 	// Wait until frame resources will not be used anymore
 	frame_idx := G_RENDERER.frame_idx
 
-	vk.WaitForFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx], true, max(u64))
+	vk.WaitForFences(
+		G_RENDERER.device,
+		1,
+		&G_RENDERER.frame_fences[frame_idx],
+		true,
+		max(u64),
+	)
 	vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx])
 
 	// Acquire the index of the image we'll present to
+	// @TODO Move this after recording the command buffer to save some performance
 	swap_image_index: u32
 	vk.AcquireNextImageKHR(
 		G_RENDERER.device,
@@ -648,18 +652,27 @@ backend_update :: proc(p_dt: f32) {
 		&swap_image_index,
 	)
 
+	// Render
+	cmd_buff := vt_update(swap_image_index)
+
 	// Submit current frame
 	submit_info := vk.SubmitInfo {
 		sType                = .SUBMIT_INFO,
 		waitSemaphoreCount   = 1,
 		pWaitSemaphores      = &G_RENDERER.image_available_semaphores[frame_idx],
 		pWaitDstStageMask    = &vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT},
-		commandBufferCount   = 0,
+		commandBufferCount   = 1,
+		pCommandBuffers      = &cmd_buff,
 		signalSemaphoreCount = 1,
 		pSignalSemaphores    = &G_RENDERER.render_finished_semaphores[frame_idx],
 	}
 
-	vk.QueueSubmit(G_RENDERER.graphics_queue, 1, &submit_info, G_RENDERER.frame_fences[frame_idx])
+	vk.QueueSubmit(
+		G_RENDERER.graphics_queue,
+		1,
+		&submit_info,
+		G_RENDERER.frame_fences[frame_idx],
+	)
 
 	// Present current frame
 	present_info := vk.PresentInfoKHR {
@@ -672,7 +685,7 @@ backend_update :: proc(p_dt: f32) {
 	}
 
 	vk.QueuePresentKHR(G_RENDERER.present_queue, &present_info)
-	
+
 	// Advace frame index
 	G_RENDERER.frame_idx = (G_RENDERER.frame_idx + 1) % G_RENDERER.num_frames_in_flight
 }

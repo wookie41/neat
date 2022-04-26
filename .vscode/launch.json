@@ -5,13 +5,14 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug",
-            "type": "gdb",
+            "type": "cppvsdbg",
             "request": "launch",
-            "target": "bin/neat",
+            "name": "Launch Program",
+            "program": "bin/neat.exe",
             "cwd": "${workspaceRoot}",
             "valuesFormatting": "parseText",
             "preLaunchTask": "(Debug) Build",
+            "symbolSearchPath": "${workspaceRoot}/bin",
             "console": "integratedTerminal"
         }
     ]

@@ -2,11 +2,11 @@
     "collections": [
         {
             "name": "core",
-            "path": "/home/wookie/Tools/Odin/core"
+            "path": "A:\\Tools\\Odin\\core"
         },
         {
             "name": "vendor",
-            "path": "/home/wookie/Tools/Odin/vendor"
+            "path": "A:\\Tools\\Odin\\vendor"
         }
     ],
     "enable_document_symbols": true,

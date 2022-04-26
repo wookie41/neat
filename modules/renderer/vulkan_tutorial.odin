@@ -172,8 +172,9 @@ init_vt :: proc() -> bool {
 		using G_VT
 
 		pool_info := vk.CommandPoolCreateInfo {
-			sType            = .COMMAND_POOL_CREATE_INFO,
+			sType = .COMMAND_POOL_CREATE_INFO,
 			queueFamilyIndex = u32(queue_family_graphics_index),
+			flags = {.RESET_COMMAND_BUFFER},
 		}
 
 		resize(&command_pools, int(num_frames_in_flight))
@@ -211,4 +212,99 @@ deinit_vt :: proc() {
 	vk.DestroyShaderModule(device, fragment_shader_module, nil)
 	vk.DestroyPipeline(device, pso, nil)
 	vk.DestroyPipelineLayout(device, pipeline_layout, nil)
+}
+
+
+vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
+	using G_VT
+	using G_RENDERER
+
+	color_attachment := vk.RenderingAttachmentInfo {
+		sType = .RENDERING_ATTACHMENT_INFO,
+		pNext = nil,
+		clearValue = {color = {float32 = {0, 0, 0, 1}}},
+		imageLayout = .ATTACHMENT_OPTIMAL,
+		imageView = swapchain_image_views[p_image_index],
+		loadOp = .CLEAR,
+		storeOp = .STORE,
+	}
+
+	rendering_info := vk.RenderingInfo {
+		sType = .RENDERING_INFO,
+		colorAttachmentCount = 1,
+		layerCount = 1,
+		viewMask = 0,
+		pColorAttachments = &color_attachment,
+		renderArea = {extent = G_RENDERER.swap_extent},
+	}
+
+	cmd_buffer_begin_info := vk.CommandBufferBeginInfo {
+		sType = .COMMAND_BUFFER_BEGIN_INFO,
+		pNext = nil,
+		flags = {.ONE_TIME_SUBMIT},
+	}
+
+	to_color_barrier := vk.ImageMemoryBarrier {
+		sType = .IMAGE_MEMORY_BARRIER,
+		dstAccessMask = {.COLOR_ATTACHMENT_WRITE},
+		oldLayout = .UNDEFINED,
+		newLayout = .ATTACHMENT_OPTIMAL,
+		image = swapchain_images[p_image_index],
+		subresourceRange = {
+			aspectMask = {.COLOR},
+			baseArrayLayer = 0,
+			layerCount = 1,
+			baseMipLevel = 0,
+			levelCount = 1,
+		},
+	}
+
+	to_present_barrier := vk.ImageMemoryBarrier {
+		sType = .IMAGE_MEMORY_BARRIER,
+		srcAccessMask = {.COLOR_ATTACHMENT_WRITE},
+		oldLayout = .ATTACHMENT_OPTIMAL,
+		newLayout = .PRESENT_SRC_KHR,
+		image = swapchain_images[p_image_index],
+		subresourceRange = {
+			aspectMask = {.COLOR},
+			baseArrayLayer = 0,
+			layerCount = 1,
+			baseMipLevel = 0,
+			levelCount = 1,
+		},
+	}
+
+	vk.BeginCommandBuffer(command_buffers[frame_idx], &cmd_buffer_begin_info)
+	vk.CmdBeginRendering(command_buffers[frame_idx], &rendering_info)
+	vk.CmdPipelineBarrier(
+		command_buffers[frame_idx],
+		{.TOP_OF_PIPE},
+		{.COLOR_ATTACHMENT_OUTPUT},
+		{},
+		0,
+		nil,
+		0,
+		nil,
+		1,
+		&to_color_barrier,
+	)
+	vk.CmdBindPipeline(command_buffers[frame_idx], .GRAPHICS, pso)
+	vk.CmdDraw(command_buffers[frame_idx], 3, 1, 0, 0);
+	vk.CmdPipelineBarrier(
+		command_buffers[frame_idx],
+		{.COLOR_ATTACHMENT_OUTPUT},
+		{.BOTTOM_OF_PIPE},
+		{},
+		0,
+		nil,
+		0,
+		nil,
+		1,
+		&to_present_barrier,
+	)
+
+	vk.CmdEndRendering(command_buffers[frame_idx])
+	vk.EndCommandBuffer(command_buffers[frame_idx])
+
+	return command_buffers[frame_idx]
 }
