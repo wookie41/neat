@@ -1,0 +1,9 @@
+[submodule "modules\\renderer\\odin-binding-generator"]
+	path = modules\\renderer\\odin-binding-generator
+	url = https://github.com/Breush/odin-binding-generator
+[submodule "modules\\third_party\\odin-binding-generator"]
+	path = modules\\third_party\\odin-binding-generator
+	url = git@github.com:Breush/odin-binding-generator.git
+[submodule "modules\\third_party\\odin-binding-gen"]
+	path = modules\\third_party\\odin-binding-gen
+	url = git@github.com:terickson001/bind-odin-port.git

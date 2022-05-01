@@ -11,6 +11,7 @@ when USE_VULKAN_BACKEND {
 
 	import sdl "vendor:sdl2"
 	import vk "vendor:vulkan"
+	import vma "../third_party/vma"
 
 	import "../common"
 
@@ -587,6 +588,23 @@ when USE_VULKAN_BACKEND {
 					nil,
 					&image_available_semaphores[i],
 				)
+			}
+		}
+
+		// Init VMA
+		{
+			vulkan_functions := vma.create_vulkan_functions()
+			create_info := vma.AllocatorCreateInfo {
+				vulkanApiVersion = vk.API_VERSION_1_3,
+				physicalDevice = G_RENDERER.physical_device,
+				device = G_RENDERER.device,
+				instance = G_RENDERER.instance,
+				pVulkanFunctions = &vulkan_functions,
+			}
+			allocator: vma.Allocator
+			if vma.create_allocator(&create_info, &allocator) != .SUCCESS {
+				log.error("Failed to create VMA allocator")
+				return false
 			}
 		}
 

@@ -1,6 +1,6 @@
 package main
 
-import "../../engine"
+import "../engine"
 
 main :: proc() {
     engine_opts := engine.InitOptions {

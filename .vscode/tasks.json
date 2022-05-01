@@ -6,7 +6,7 @@
         {
             "label": "(Debug) Build",
             "type": "shell",
-            "command": "odin build modules/runner/src/neat.odin -file --debug --opt=0 --vet --out=bin/neat",
+            "command": "odin build modules/runner/neat.odin -file --debug --opt=0 --vet --out=bin/neat",
             "problemMatcher": [],
             "group": {
                 "kind": "build",

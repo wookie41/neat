@@ -3,7 +3,9 @@ package renderer
 import vk "vendor:vulkan"
 import "core:fmt"
 
-G_VT: struct {
+import "core:math/linalg/glsl"
+
+G_VT : struct {
 	pipeline_layout:        vk.PipelineLayout,
 	pso:                    vk.Pipeline,
 	vertex_shader_module:   vk.ShaderModule,
@@ -12,15 +14,50 @@ G_VT: struct {
 	command_buffers:        [dynamic]vk.CommandBuffer,
 }
 
-init_vt :: proc() -> bool {
+Vertex :: struct {
+	position: glsl.vec2,
+	color: glsl.vec3,
+}
 
+get_binding_description :: proc() -> vk.VertexInputBindingDescription{
+	return vk.VertexInputBindingDescription {
+		binding = 0,
+		stride = size_of(Vertex),
+		inputRate = .VERTEX,
+	}
+}
+
+get_attribute_descriptions :: proc() -> []vk.VertexInputAttributeDescription {
+	return {
+		{
+			binding = 0,
+			location = 0,
+			format = .R32G32_SFLOAT,
+		},
+		{
+			binding = 0,
+			location = 1,
+			format = .R32G32B32_SFLOAT,
+			offset = u32(offset_of(Vertex, color)),
+		},
+	}
+}
+
+G_VERTICES :: []Vertex {
+	{position = {0.0, -0.5}, color = {1.0, 0.0, 0.0}},
+	{position = {0.5, 0.5}, color = {0.0, 1.0, 0.0}},
+    {position = {-0.5, 0.5}, color = {0.0, 0.0, 1.0}},
+}
+
+init_vt :: proc() -> bool {
+	
 	{
 		using G_RENDERER
 		using G_VT
 
 		// load the code
-		vertex_shader_code := #load("app_data/assets/shaders/setup_sdl2_debug.vert.spv")
-		fragment_shader_code := #load("app_data/assets/shaders/setup_sdl2_debug.frag.spv")
+		vertex_shader_code := #load("../../app_data/renderer/assets/shaders/setup_sdl2_debug.vert.spv")
+		fragment_shader_code := #load("../../app_data/renderer/assets/shaders/setup_sdl2_debug.frag.spv")
 
 		// create the modules for each
 		vertex_module_info := vk.ShaderModuleCreateInfo {
@@ -57,9 +94,16 @@ init_vt :: proc() -> bool {
 			fragment_stage_info,
 		}
 
+		vertex_binding_desc := get_binding_description()
+		vertex_attribute_desc := get_attribute_descriptions()
+
 		// state for vertex input
 		vertex_input_info := vk.PipelineVertexInputStateCreateInfo {
 			sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+			vertexBindingDescriptionCount = 1,
+			pVertexBindingDescriptions = &vertex_binding_desc,
+			vertexAttributeDescriptionCount = u32(len(vertex_attribute_desc)),
+			pVertexAttributeDescriptions = raw_data(vertex_attribute_desc),
 		}
 
 		// state for assembly
@@ -222,7 +266,7 @@ vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
 	color_attachment := vk.RenderingAttachmentInfo {
 		sType = .RENDERING_ATTACHMENT_INFO,
 		pNext = nil,
-		clearValue = {color = {float32 = {0, 0, 0, 1}}},
+		clearValue = {color = {float32 = {0	, 0, 0, 1}}},
 		imageLayout = .ATTACHMENT_OPTIMAL,
 		imageView = swapchain_image_views[p_image_index],
 		loadOp = .CLEAR,
@@ -307,4 +351,9 @@ vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
 	vk.EndCommandBuffer(command_buffers[frame_idx])
 
 	return command_buffers[frame_idx]
+}
+
+create_vertex_buffer :: proc() {
+	using G_RENDERER
+	using G_VT
 }
