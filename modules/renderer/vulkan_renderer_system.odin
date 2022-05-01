@@ -52,6 +52,7 @@ when USE_VULKAN_BACKEND {
 		frame_fences:                [dynamic]vk.Fence,
 		num_frames_in_flight:        u32,
 		frame_idx:                   u32,
+		vma_allocator:               vma.Allocator,
 	}
 
 	@(private = "file")
@@ -596,13 +597,12 @@ when USE_VULKAN_BACKEND {
 			vulkan_functions := vma.create_vulkan_functions()
 			create_info := vma.AllocatorCreateInfo {
 				vulkanApiVersion = vk.API_VERSION_1_3,
-				physicalDevice = G_RENDERER.physical_device,
-				device = G_RENDERER.device,
-				instance = G_RENDERER.instance,
+				physicalDevice   = G_RENDERER.physical_device,
+				device           = G_RENDERER.device,
+				instance         = G_RENDERER.instance,
 				pVulkanFunctions = &vulkan_functions,
 			}
-			allocator: vma.Allocator
-			if vma.create_allocator(&create_info, &allocator) != .SUCCESS {
+			if vma.create_allocator(&create_info, &G_RENDERER.vma_allocator) != .SUCCESS {
 				log.error("Failed to create VMA allocator")
 				return false
 			}
@@ -614,6 +614,7 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_deinit :: proc() {
 		using G_RENDERER
+		vma.destroy_allocator(vma_allocator)
 		for i in 0 ..< num_frames_in_flight {
 			vk.DestroyFence(device, frame_fences[i], nil)
 			vk.DestroySemaphore(device, render_finished_semaphores[i], nil)

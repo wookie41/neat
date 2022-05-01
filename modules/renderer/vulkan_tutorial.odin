@@ -1,63 +1,63 @@
 package renderer
 
-import vk "vendor:vulkan"
 import "core:fmt"
-
 import "core:math/linalg/glsl"
+import "core:mem"
 
-G_VT : struct {
-	pipeline_layout:        vk.PipelineLayout,
-	pso:                    vk.Pipeline,
-	vertex_shader_module:   vk.ShaderModule,
-	fragment_shader_module: vk.ShaderModule,
-	command_pools:          [dynamic]vk.CommandPool,
-	command_buffers:        [dynamic]vk.CommandBuffer,
+import vk "vendor:vulkan"
+import vma "../third_party/vma"
+
+G_VT: struct {
+	pipeline_layout:          vk.PipelineLayout,
+	pso:                      vk.Pipeline,
+	vertex_shader_module:     vk.ShaderModule,
+	fragment_shader_module:   vk.ShaderModule,
+	command_pools:            [dynamic]vk.CommandPool,
+	command_buffers:          [dynamic]vk.CommandBuffer,
+	vertex_buffer:            vk.Buffer,
+	vertex_buffer_allocation: vma.Allocation,
 }
 
 Vertex :: struct {
 	position: glsl.vec2,
-	color: glsl.vec3,
+	color:    glsl.vec3,
 }
 
-get_binding_description :: proc() -> vk.VertexInputBindingDescription{
-	return vk.VertexInputBindingDescription {
+vertex_binding_description := vk.VertexInputBindingDescription {
+	binding   = 0,
+	stride    = size_of(Vertex),
+	inputRate = .VERTEX,
+}
+
+vertex_attributes_descriptions := []vk.VertexInputAttributeDescription{
+	{binding = 0, location = 0, format = .R32G32_SFLOAT},
+	{
 		binding = 0,
-		stride = size_of(Vertex),
-		inputRate = .VERTEX,
-	}
+		location = 1,
+		format = .R32G32B32_SFLOAT,
+		offset = u32(offset_of(Vertex, color)),
+	},
 }
 
-get_attribute_descriptions :: proc() -> []vk.VertexInputAttributeDescription {
-	return {
-		{
-			binding = 0,
-			location = 0,
-			format = .R32G32_SFLOAT,
-		},
-		{
-			binding = 0,
-			location = 1,
-			format = .R32G32B32_SFLOAT,
-			offset = u32(offset_of(Vertex, color)),
-		},
-	}
-}
-
-G_VERTICES :: []Vertex {
+G_VERTICES :: []Vertex{
 	{position = {0.0, -0.5}, color = {1.0, 0.0, 0.0}},
 	{position = {0.5, 0.5}, color = {0.0, 1.0, 0.0}},
-    {position = {-0.5, 0.5}, color = {0.0, 0.0, 1.0}},
+	{position = {-0.5, 0.5}, color = {0.0, 0.0, 1.0}},
 }
 
 init_vt :: proc() -> bool {
-	
+
 	{
 		using G_RENDERER
 		using G_VT
 
 		// load the code
-		vertex_shader_code := #load("../../app_data/renderer/assets/shaders/setup_sdl2_debug.vert.spv")
-		fragment_shader_code := #load("../../app_data/renderer/assets/shaders/setup_sdl2_debug.frag.spv")
+		vertex_shader_code := #load(
+			"../../app_data/renderer/assets/shaders/setup_sdl2_debug.vert.spv",
+		)
+		fragment_shader_code := #load(
+			"../../app_data/renderer/assets/shaders/setup_sdl2_debug.frag.spv",
+		)
 
 		// create the modules for each
 		vertex_module_info := vk.ShaderModuleCreateInfo {
@@ -94,16 +94,13 @@ init_vt :: proc() -> bool {
 			fragment_stage_info,
 		}
 
-		vertex_binding_desc := get_binding_description()
-		vertex_attribute_desc := get_attribute_descriptions()
-
 		// state for vertex input
 		vertex_input_info := vk.PipelineVertexInputStateCreateInfo {
-			sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-			vertexBindingDescriptionCount = 1,
-			pVertexBindingDescriptions = &vertex_binding_desc,
-			vertexAttributeDescriptionCount = u32(len(vertex_attribute_desc)),
-			pVertexAttributeDescriptions = raw_data(vertex_attribute_desc),
+			sType                           = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+			vertexBindingDescriptionCount   = 1,
+			pVertexBindingDescriptions      = &vertex_binding_description,
+			vertexAttributeDescriptionCount = u32(len(vertex_attributes_descriptions)),
+			pVertexAttributeDescriptions    = &vertex_attributes_descriptions[0],
 		}
 
 		// state for assembly
@@ -243,12 +240,17 @@ init_vt :: proc() -> bool {
 		}
 	}
 
+	create_vertex_buffer()
+
 	return true
 }
 
 deinit_vt :: proc() {
 	using G_VT
 	using G_RENDERER
+
+	vma.destroy_buffer(vma_allocator, vertex_buffer, vertex_buffer_allocation)
+
 	for cmd_pool in command_pools {
 		vk.DestroyCommandPool(device, cmd_pool, nil)
 	}
@@ -266,7 +268,7 @@ vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
 	color_attachment := vk.RenderingAttachmentInfo {
 		sType = .RENDERING_ATTACHMENT_INFO,
 		pNext = nil,
-		clearValue = {color = {float32 = {0	, 0, 0, 1}}},
+		clearValue = {color = {float32 = {0, 0, 0, 1}}},
 		imageLayout = .ATTACHMENT_OPTIMAL,
 		imageView = swapchain_image_views[p_image_index],
 		loadOp = .CLEAR,
@@ -318,10 +320,11 @@ vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
 		},
 	}
 
-	vk.BeginCommandBuffer(command_buffers[frame_idx], &cmd_buffer_begin_info)
-	vk.CmdBeginRendering(command_buffers[frame_idx], &rendering_info)
+	cmd := command_buffers[frame_idx]
+	vk.BeginCommandBuffer(cmd, &cmd_buffer_begin_info)
+	vk.CmdBeginRendering(cmd, &rendering_info)
 	vk.CmdPipelineBarrier(
-		command_buffers[frame_idx],
+		cmd,
 		{.TOP_OF_PIPE},
 		{.COLOR_ATTACHMENT_OUTPUT},
 		{},
@@ -332,10 +335,14 @@ vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
 		1,
 		&to_color_barrier,
 	)
-	vk.CmdBindPipeline(command_buffers[frame_idx], .GRAPHICS, pso)
-	vk.CmdDraw(command_buffers[frame_idx], 3, 1, 0, 0);
+
+	offset := vk.DeviceSize {}
+
+	vk.CmdBindPipeline(cmd, .GRAPHICS, pso)
+	vk.CmdBindVertexBuffers(cmd, 0, 1, &vertex_buffer, &offset)
+	vk.CmdDraw(cmd, u32(len(G_VERTICES)), 1, 0, 0)
 	vk.CmdPipelineBarrier(
-		command_buffers[frame_idx],
+		cmd,
 		{.COLOR_ATTACHMENT_OUTPUT},
 		{.BOTTOM_OF_PIPE},
 		{},
@@ -347,13 +354,39 @@ vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
 		&to_present_barrier,
 	)
 
-	vk.CmdEndRendering(command_buffers[frame_idx])
-	vk.EndCommandBuffer(command_buffers[frame_idx])
+	vk.CmdEndRendering(cmd)
+	vk.EndCommandBuffer(cmd)
 
-	return command_buffers[frame_idx]
+	return cmd
 }
 
 create_vertex_buffer :: proc() {
 	using G_RENDERER
 	using G_VT
+	context.logger = G_RENDERER_LOG
+
+	buffer_info := vk.BufferCreateInfo {
+		sType = .BUFFER_CREATE_INFO,
+		size = vk.DeviceSize(len(G_VERTICES) * size_of(Vertex)),
+		usage = {.VERTEX_BUFFER},
+	}
+
+	alloc_info := vma.AllocationCreateInfo {
+		usage = .CPU_TO_GPU,
+		flags = {.HOST_ACCESS_SEQUENTIAL_WRITE},
+	}
+
+	vma.create_buffer(
+		vma_allocator,
+		&buffer_info,
+		&alloc_info,
+		&vertex_buffer,
+		&vertex_buffer_allocation,
+		nil,
+	)
+
+	vertex_data: rawptr
+	vma.map_memory(vma_allocator, vertex_buffer_allocation, &vertex_data)
+	mem.copy(vertex_data, raw_data(G_VERTICES), len(G_VERTICES) * size_of(Vertex))
+	vma.unmap_memory(vma_allocator, vertex_buffer_allocation)
 }

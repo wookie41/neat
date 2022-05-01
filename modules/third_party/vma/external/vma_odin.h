@@ -2290,7 +2290,7 @@ VMA_CALL_PRE VkResult VMA_CALL_POST vmaCreateBuffer(
     VmaAllocator  allocator,
     const VkBufferCreateInfo*  pBufferCreateInfo,
     const VmaAllocationCreateInfo*  pAllocationCreateInfo,
-    VkBuffer   pBuffer,
+    VkBuffer *  pBuffer,
     VmaAllocation *  pAllocation,
     VmaAllocationInfo*  pAllocationInfo);
 
@@ -2305,7 +2305,7 @@ VMA_CALL_PRE VkResult VMA_CALL_POST vmaCreateBufferWithAlignment(
     const VkBufferCreateInfo*  pBufferCreateInfo,
     const VmaAllocationCreateInfo*  pAllocationCreateInfo,
     VkDeviceSize minAlignment,
-    VkBuffer   pBuffer,
+    VkBuffer *  pBuffer,
     VmaAllocation *  pAllocation,
     VmaAllocationInfo*  pAllocationInfo);
 
@@ -2332,7 +2332,7 @@ VMA_CALL_PRE VkResult VMA_CALL_POST vmaCreateAliasingBuffer(
     VmaAllocator  allocator,
     VmaAllocation  allocation,
     const VkBufferCreateInfo*  pBufferCreateInfo,
-    VkBuffer   pBuffer);
+    VkBuffer *  pBuffer);
 
 /** \brief Destroys Vulkan buffer and frees allocated memory.
 
@@ -2355,7 +2355,7 @@ VMA_CALL_PRE VkResult VMA_CALL_POST vmaCreateImage(
     VmaAllocator  allocator,
     const VkImageCreateInfo*  pImageCreateInfo,
     const VmaAllocationCreateInfo*  pAllocationCreateInfo,
-    VkImage   pImage,
+    VkImage *  pImage,
     VmaAllocation *  pAllocation,
     VmaAllocationInfo*  pAllocationInfo);
 
@@ -2364,7 +2364,7 @@ VMA_CALL_PRE VkResult VMA_CALL_POST vmaCreateAliasingImage(
     VmaAllocator  allocator,
     VmaAllocation  allocation,
     const VkImageCreateInfo*  pImageCreateInfo,
-    VkImage   pImage);
+    VkImage *  pImage);
 
 /** \brief Destroys Vulkan image and frees allocated memory.
 
@@ -2435,7 +2435,7 @@ If the allocation fails due to not enough free space available, `VK_ERROR_OUT_OF
 VMA_CALL_PRE VkResult VMA_CALL_POST vmaVirtualAllocate(
     VmaVirtualBlock  virtualBlock,
     const VmaVirtualAllocationCreateInfo*  pCreateInfo,
-    VmaVirtualAllocation   pAllocation,
+    VmaVirtualAllocation *  pAllocation,
     VkDeviceSize*  pOffset);
 
 /** \brief Frees virtual allocation inside given #VmaVirtualBlock.
