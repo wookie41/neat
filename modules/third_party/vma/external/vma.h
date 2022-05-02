@@ -596,6 +596,7 @@ typedef enum VmaAllocationCreateFlagBits
     Better prepare your data in a local variable and `memcpy()` it to the mapped pointer all at once.
     */
     VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT = 0x00000400,
+    
     /**
     Requests possibility to map the allocation (using vmaMapMemory() or #VMA_ALLOCATION_CREATE_MAPPED_BIT).
     
@@ -618,7 +619,7 @@ typedef enum VmaAllocationCreateFlagBits
     issue an explicit transfer to write/read your data.
     To prepare for this possibility, don't forget to add appropriate flags like
     `VK_BUFFER_USAGE_TRANSFER_DST_BIT`, `VK_BUFFER_USAGE_TRANSFER_SRC_BIT` to the parameters of created buffer or image.
-    */
+    */  
     VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT = 0x00001000,
     /** Allocation strategy that chooses smallest possible free range for the allocation
     to minimize memory usage and fragmentation, possibly at the expense of allocation time.

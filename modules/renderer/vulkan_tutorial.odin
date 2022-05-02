@@ -3,6 +3,7 @@ package renderer
 import "core:fmt"
 import "core:math/linalg/glsl"
 import "core:mem"
+import "core:log"
 
 import vk "vendor:vulkan"
 import vma "../third_party/vma"
@@ -16,6 +17,8 @@ G_VT: struct {
 	command_buffers:          [dynamic]vk.CommandBuffer,
 	vertex_buffer:            vk.Buffer,
 	vertex_buffer_allocation: vma.Allocation,
+	index_buffer:             vk.Buffer,
+	index_buffer_allocation:  vma.Allocation,
 }
 
 Vertex :: struct {
@@ -39,11 +42,14 @@ vertex_attributes_descriptions := []vk.VertexInputAttributeDescription{
 	},
 }
 
-G_VERTICES :: []Vertex{
-	{position = {0.0, -0.5}, color = {1.0, 0.0, 0.0}},
-	{position = {0.5, 0.5}, color = {0.0, 1.0, 0.0}},
-	{position = {-0.5, 0.5}, color = {0.0, 0.0, 1.0}},
+g_vertices :: []Vertex{
+    {{-0.5, -0.5}, {1.0, 0.0, 0.0}},
+    {{0.5, -0.5}, {0.0, 1.0, 0.0}},
+    {{0.5, 0.5}, {0.0, 0.0, 1.0}},
+    {{-0.5, 0.5}, {1.0, 1.0, 1.0}},
 }
+
+g_indices :: []u16{0, 1, 2, 2, 3, 0}
 
 init_vt :: proc() -> bool {
 
@@ -240,7 +246,8 @@ init_vt :: proc() -> bool {
 		}
 	}
 
-	create_vertex_buffer()
+	vt_create_vertex_buffer()
+	vt_create_index_buffer()
 
 	return true
 }
@@ -250,6 +257,7 @@ deinit_vt :: proc() {
 	using G_RENDERER
 
 	vma.destroy_buffer(vma_allocator, vertex_buffer, vertex_buffer_allocation)
+	vma.destroy_buffer(vma_allocator, index_buffer, index_buffer_allocation)
 
 	for cmd_pool in command_pools {
 		vk.DestroyCommandPool(device, cmd_pool, nil)
@@ -336,11 +344,12 @@ vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
 		&to_color_barrier,
 	)
 
-	offset := vk.DeviceSize {}
+	offset := vk.DeviceSize{}
 
 	vk.CmdBindPipeline(cmd, .GRAPHICS, pso)
 	vk.CmdBindVertexBuffers(cmd, 0, 1, &vertex_buffer, &offset)
-	vk.CmdDraw(cmd, u32(len(G_VERTICES)), 1, 0, 0)
+	vk.CmdBindIndexBuffer(cmd, index_buffer, offset, .UINT16)
+	vk.CmdDrawIndexed(cmd, u32(len(g_indices)), 1, 0, 0, 0)
 	vk.CmdPipelineBarrier(
 		cmd,
 		{.COLOR_ATTACHMENT_OUTPUT},
@@ -360,33 +369,127 @@ vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
 	return cmd
 }
 
-create_vertex_buffer :: proc() {
+vt_create_vertex_buffer :: proc() {
 	using G_RENDERER
 	using G_VT
-	context.logger = G_RENDERER_LOG
 
-	buffer_info := vk.BufferCreateInfo {
-		sType = .BUFFER_CREATE_INFO,
-		size = vk.DeviceSize(len(G_VERTICES) * size_of(Vertex)),
-		usage = {.VERTEX_BUFFER},
-	}
-
-	alloc_info := vma.AllocationCreateInfo {
-		usage = .CPU_TO_GPU,
-		flags = {.HOST_ACCESS_SEQUENTIAL_WRITE},
-	}
-
-	vma.create_buffer(
-		vma_allocator,
-		&buffer_info,
-		&alloc_info,
-		&vertex_buffer,
-		&vertex_buffer_allocation,
+	buff_size := vk.DeviceSize(len(g_vertices) * size_of(Vertex))
+	vertex_buffer, vertex_buffer_allocation = vt_create_buffer(
+		buff_size,
+		{.VERTEX_BUFFER, .TRANSFER_DST},
+		.AUTO,
 		nil,
+	)
+	staging_buffer, staging_buffer_allocaction := vt_create_buffer(
+		buff_size,
+		{.TRANSFER_SRC},
+		.AUTO_PREFER_HOST,
+		{.HOST_ACCESS_SEQUENTIAL_WRITE},
 	)
 
 	vertex_data: rawptr
-	vma.map_memory(vma_allocator, vertex_buffer_allocation, &vertex_data)
-	mem.copy(vertex_data, raw_data(G_VERTICES), len(G_VERTICES) * size_of(Vertex))
-	vma.unmap_memory(vma_allocator, vertex_buffer_allocation)
+	vma.map_memory(vma_allocator, staging_buffer_allocaction, &vertex_data)
+	mem.copy(vertex_data, raw_data(g_vertices), len(g_vertices) * size_of(Vertex))
+	vma.unmap_memory(vma_allocator, staging_buffer_allocaction)
+
+	vt_copy_buffer(staging_buffer, vertex_buffer, buff_size)
+
+	vma.destroy_buffer(vma_allocator, staging_buffer, staging_buffer_allocaction)
+}
+
+vt_create_index_buffer :: proc() {
+	using G_RENDERER
+	using G_VT
+
+	buff_size := vk.DeviceSize(len(g_indices) * size_of(g_indices[0]))
+	index_buffer, index_buffer_allocation = vt_create_buffer(
+		buff_size,
+		{.INDEX_BUFFER, .TRANSFER_DST},
+		.AUTO,
+		nil,
+	)
+	staging_buffer, staging_buffer_allocaction := vt_create_buffer(
+		buff_size,
+		{.TRANSFER_SRC},
+		.AUTO_PREFER_HOST,
+		{.HOST_ACCESS_SEQUENTIAL_WRITE},
+	)
+
+	index_data: rawptr
+	vma.map_memory(vma_allocator, staging_buffer_allocaction, &index_data)
+	mem.copy(index_data, raw_data(g_indices), len(g_indices) * size_of(g_indices[0]))
+	vma.unmap_memory(vma_allocator, staging_buffer_allocaction)
+
+	vt_copy_buffer(staging_buffer, index_buffer, buff_size)
+
+	vma.destroy_buffer(vma_allocator, staging_buffer, staging_buffer_allocaction)
+}
+
+vt_create_buffer :: proc(
+	p_size: vk.DeviceSize,
+	p_usage: vk.BufferUsageFlags,
+	p_alloc_usage: vma.MemoryUsage,
+	p_alloc_flags: vma.AllocationCreateFlags,
+) -> (
+	vk.Buffer,
+	vma.Allocation,
+) {
+	using G_RENDERER
+	buffer_info := vk.BufferCreateInfo {
+		sType       = .BUFFER_CREATE_INFO,
+		size        = p_size,
+		usage       = p_usage,
+		sharingMode = .EXCLUSIVE,
+	}
+	alloc_info := vma.AllocationCreateInfo {
+		usage = p_alloc_usage,
+		flags = p_alloc_flags,
+	}
+
+	buffer: vk.Buffer
+	alloc: vma.Allocation
+	if vma.create_buffer(vma_allocator, &buffer_info, &alloc_info, &buffer, &alloc, nil) != .SUCCESS {
+		log.warn("Failed to create buffer")
+		return vk.BUFFER_NULL, nil
+	}
+	return buffer, alloc
+}
+
+vt_copy_buffer :: proc(
+	p_src_buffer: vk.Buffer,
+	p_dst_buffer: vk.Buffer,
+	p_size: vk.DeviceSize,
+) {
+	using G_VT
+	using G_RENDERER
+
+	alloc_info := vk.CommandBufferAllocateInfo {
+		sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
+		level              = .PRIMARY,
+		commandPool        = command_pools[0],
+		commandBufferCount = 1,
+	}
+	copy_cmd_buff: vk.CommandBuffer
+	vk.AllocateCommandBuffers(device, &alloc_info, &copy_cmd_buff)
+
+	begin_info := vk.CommandBufferBeginInfo {
+		sType = .COMMAND_BUFFER_BEGIN_INFO,
+		flags = {.ONE_TIME_SUBMIT},
+	}
+
+	vk.BeginCommandBuffer(copy_cmd_buff, &begin_info)
+
+	copy_region := vk.BufferCopy {
+		size = p_size,
+	}
+	vk.CmdCopyBuffer(copy_cmd_buff, p_src_buffer, p_dst_buffer, 1, &copy_region)
+	vk.EndCommandBuffer(copy_cmd_buff)
+
+	submit_info := vk.SubmitInfo {
+		sType              = .SUBMIT_INFO,
+		commandBufferCount = 1,
+		pCommandBuffers    = &copy_cmd_buff,
+	}
+	vk.QueueSubmit(graphics_queue, 1, &submit_info, vk.FENCE_NULL)
+	vk.QueueWaitIdle(graphics_queue)
 }

@@ -68,20 +68,20 @@ MemoryUsage :: enum i32 {
 
 AllocationCreateFlags :: distinct bit_set[AllocationCreateFlagBits; u32]
 AllocationCreateFlagBits :: enum u32 {
-	DEDICATED_MEMORY                   = 0,
-	NEVER_ALLOCATE                     = 1,
-	CREATE_MAPPED                      = 2,
-	USER_DATA_COPY_STRING              = 3,
-	UPPER_ADDRESS                      = 4,
-	DONT_BIND                          = 5,
-	WITHIN_BUDGET                      = 6,
-	CAN_ALIAS                          = 7,
-	HOST_ACCESS_SEQUENTIAL_WRITE       = 8,
-	HOST_ACCESS_RANDOM                 = 9,
-	HOST_ACCESS_ALLOW_TRANSFER_INSTEAD = 10,
-	STRATEGY_MIN_MEMORY                = 11,
-	STRATEGY_MIN_TIME                  = 12,
-	STRATEGY_MIN_OFFSET                = 13,
+	DEDICATED_MEMORY                   = 1,
+	NEVER_ALLOCATE                     = 2,
+	CREATE_MAPPED                      = 3,
+	USER_DATA_COPY_STRING              = 6,
+	UPPER_ADDRESS                      = 7,
+	DONT_BIND                          = 8,
+	WITHIN_BUDGET                      = 9,
+	CAN_ALIAS                          = 10,
+	HOST_ACCESS_SEQUENTIAL_WRITE       = 11,
+	HOST_ACCESS_RANDOM                 = 12,
+	HOST_ACCESS_ALLOW_TRANSFER_INSTEAD = 13,
+	STRATEGY_MIN_MEMORY                = 17,
+	STRATEGY_MIN_TIME                  = 18,
+	STRATEGY_MIN_OFFSET                = 19,
 	STRATEGY_BEST_FIT                  = STRATEGY_MIN_MEMORY,
 	STRATEGY_FIRST_FIT                 = STRATEGY_MIN_TIME,
 	STRATEGY_MASK                      = STRATEGY_MIN_MEMORY | STRATEGY_MIN_TIME | STRATEGY_MIN_OFFSET,
@@ -89,17 +89,17 @@ AllocationCreateFlagBits :: enum u32 {
 
 PoolCreateFlags :: distinct bit_set[PoolCreateFlagBits; u32]
 PoolCreateFlagBits :: enum u32 {
-	IGNORE_BUFFER_IMAGE_GRANULARITY = 2,
-	LINEAR                          = 4,
+	IGNORE_BUFFER_IMAGE_GRANULARITY = 1,
+	LINEAR                          = 2,
 	ALGORITHM_MASK                  = IGNORE_BUFFER_IMAGE_GRANULARITY | LINEAR,
 }
 
 DefragmentationFlags :: distinct bit_set[DefragmentationFlagBits; u32]
 DefragmentationFlagBits :: enum u32 {
-	FAST      = 0,
-	BALANCED  = 1,
-	FULL      = 2,
-	EXTENSIVE = 3,
+	FAST      = 1,
+	BALANCED  = 2,
+	FULL      = 3,
+	EXTENSIVE = 4,
 	MASK      = FAST | BALANCED | FULL | EXTENSIVE,
 }
 
