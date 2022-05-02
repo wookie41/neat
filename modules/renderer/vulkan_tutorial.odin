@@ -4,21 +4,26 @@ import "core:fmt"
 import "core:math/linalg/glsl"
 import "core:mem"
 import "core:log"
+import "core:time"
 
 import vk "vendor:vulkan"
 import vma "../third_party/vma"
 
 G_VT: struct {
-	pipeline_layout:          vk.PipelineLayout,
-	pso:                      vk.Pipeline,
-	vertex_shader_module:     vk.ShaderModule,
-	fragment_shader_module:   vk.ShaderModule,
-	command_pools:            [dynamic]vk.CommandPool,
-	command_buffers:          [dynamic]vk.CommandBuffer,
-	vertex_buffer:            vk.Buffer,
-	vertex_buffer_allocation: vma.Allocation,
-	index_buffer:             vk.Buffer,
-	index_buffer_allocation:  vma.Allocation,
+	descriptor_set_layout:     vk.DescriptorSetLayout,
+	pipeline_layout:           vk.PipelineLayout,
+	pso:                       vk.Pipeline,
+	vertex_shader_module:      vk.ShaderModule,
+	fragment_shader_module:    vk.ShaderModule,
+	command_pools:             [dynamic]vk.CommandPool,
+	command_buffers:           [dynamic]vk.CommandBuffer,
+	uniform_buffers:           [dynamic]vk.Buffer,
+	uniform_buffer_allocation: [dynamic]vma.Allocation,
+	vertex_buffer:             vk.Buffer,
+	vertex_buffer_allocation:  vma.Allocation,
+	index_buffer:              vk.Buffer,
+	index_buffer_allocation:   vma.Allocation,
+	start_time:                time.Time,
 }
 
 Vertex :: struct {
@@ -43,19 +48,30 @@ vertex_attributes_descriptions := []vk.VertexInputAttributeDescription{
 }
 
 g_vertices :: []Vertex{
-    {{-0.5, -0.5}, {1.0, 0.0, 0.0}},
-    {{0.5, -0.5}, {0.0, 1.0, 0.0}},
-    {{0.5, 0.5}, {0.0, 0.0, 1.0}},
-    {{-0.5, 0.5}, {1.0, 1.0, 1.0}},
+	{{-0.5, -0.5}, {1.0, 0.0, 0.0}},
+	{{0.5, -0.5}, {0.0, 1.0, 0.0}},
+	{{0.5, 0.5}, {0.0, 0.0, 1.0}},
+	{{-0.5, 0.5}, {1.0, 1.0, 1.0}},
 }
 
 g_indices :: []u16{0, 1, 2, 2, 3, 0}
+
+UniformBufferObject :: struct {
+	model: glsl.mat4x4,
+	view:  glsl.mat4x4,
+	proj:  glsl.mat4x4,
+}
 
 init_vt :: proc() -> bool {
 
 	{
 		using G_RENDERER
 		using G_VT
+
+		start_time = time.now()
+
+		vt_create_descriptor_set_layout()
+		vt_create_uniform_buffers()
 
 		// load the code
 		vertex_shader_code := #load(
@@ -180,7 +196,9 @@ init_vt :: proc() -> bool {
 
 		// pipeline layout
 		pipeline_layout_info := vk.PipelineLayoutCreateInfo {
-			sType = .PIPELINE_LAYOUT_CREATE_INFO,
+			sType          = .PIPELINE_LAYOUT_CREATE_INFO,
+			pSetLayouts    = &descriptor_set_layout,
+			setLayoutCount = 1,
 		}
 
 		if vk.CreatePipelineLayout(device, &pipeline_layout_info, nil, &pipeline_layout) != .SUCCESS {
@@ -256,11 +274,16 @@ deinit_vt :: proc() {
 	using G_VT
 	using G_RENDERER
 
+	vk.DestroyDescriptorSetLayout(device, descriptor_set_layout, nil)
+
 	vma.destroy_buffer(vma_allocator, vertex_buffer, vertex_buffer_allocation)
 	vma.destroy_buffer(vma_allocator, index_buffer, index_buffer_allocation)
 
 	for cmd_pool in command_pools {
 		vk.DestroyCommandPool(device, cmd_pool, nil)
+	}
+	for buff, i in uniform_buffers {
+		vma.destroy_buffer(vma_allocator, buff, uniform_buffer_allocation[i])
 	}
 	vk.DestroyShaderModule(device, vertex_shader_module, nil)
 	vk.DestroyShaderModule(device, fragment_shader_module, nil)
@@ -330,6 +353,9 @@ vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
 
 	cmd := command_buffers[frame_idx]
 	vk.BeginCommandBuffer(cmd, &cmd_buffer_begin_info)
+
+	vt_update_uniform_buffer()
+
 	vk.CmdBeginRendering(cmd, &rendering_info)
 	vk.CmdPipelineBarrier(
 		cmd,
@@ -492,4 +518,71 @@ vt_copy_buffer :: proc(
 	}
 	vk.QueueSubmit(graphics_queue, 1, &submit_info, vk.FENCE_NULL)
 	vk.QueueWaitIdle(graphics_queue)
+}
+
+vt_create_descriptor_set_layout :: proc() {
+	using G_RENDERER
+	using G_VT
+
+	ubo_layout_binding := vk.DescriptorSetLayoutBinding {
+		binding = 0,
+		descriptorType = .UNIFORM_BUFFER,
+		descriptorCount = 1,
+		stageFlags = {.VERTEX},
+	}
+
+	layout_info := vk.DescriptorSetLayoutCreateInfo {
+		sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+		bindingCount = 1,
+		pBindings    = &ubo_layout_binding,
+	}
+
+	if vk.CreateDescriptorSetLayout(device, &layout_info, nil, &descriptor_set_layout) != .SUCCESS {
+		log.warn("Failed to create descriptor set layout")
+	}
+}
+
+vt_create_uniform_buffers :: proc() {
+	using G_RENDERER
+	using G_VT
+
+	buff_size := vk.DeviceSize(size_of(UniformBufferObject))
+
+	resize(&uniform_buffers, int(num_frames_in_flight))
+	resize(&uniform_buffer_allocation, int(num_frames_in_flight))
+
+	for i in 0 ..< num_frames_in_flight {
+		uniform_buffers[i], uniform_buffer_allocation[i] = vt_create_buffer(
+			buff_size,
+			{.UNIFORM_BUFFER },
+			.AUTO,
+			{.HOST_ACCESS_SEQUENTIAL_WRITE},
+		)
+
+	}
+
+}
+
+// @TODO use p_dt
+vt_update_uniform_buffer :: proc() {
+	using G_RENDERER
+	using G_VT
+
+	current_time := time.now()
+	dt := f32(time.duration_milliseconds(time.diff(start_time, current_time)))
+
+	
+	ubo := UniformBufferObject{
+		model = glsl.identity(glsl.mat4) * glsl.mat4Rotate({0, 0, 1}, glsl.radians_f32(90.0) * dt),
+		view = glsl.mat4LookAt({2, 2, 2}, {0, 0, 0}, {0, 0, 1}),
+		proj = glsl.mat4Perspective(glsl.radians_f32(45.0), f32(swap_extent.width) / f32(swap_extent.height), 0.1, 10.0),
+	}
+
+	ubo.proj[1][1] *= -1;
+
+	ubo_data: rawptr
+	vma.map_memory(vma_allocator, uniform_buffer_allocation[frame_idx], &ubo_data)
+	mem.copy(ubo_data, &ubo, size_of(UniformBufferObject))
+	vma.unmap_memory(vma_allocator, uniform_buffer_allocation[frame_idx])
+
 }
