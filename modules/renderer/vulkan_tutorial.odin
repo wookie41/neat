@@ -24,6 +24,8 @@ G_VT: struct {
 	index_buffer:              vk.Buffer,
 	index_buffer_allocation:   vma.Allocation,
 	start_time:                time.Time,
+	descriptor_pool:           vk.DescriptorPool,
+	descriptor_sets:           [dynamic]vk.DescriptorSet,
 }
 
 Vertex :: struct {
@@ -72,6 +74,9 @@ init_vt :: proc() -> bool {
 
 		vt_create_descriptor_set_layout()
 		vt_create_uniform_buffers()
+		vt_create_descriptor_pool()
+		vk_create_descriptor_sets()
+		vt_write_descriptor_sets()
 
 		// load the code
 		vertex_shader_code := #load(
@@ -274,6 +279,7 @@ deinit_vt :: proc() {
 	using G_VT
 	using G_RENDERER
 
+	vk.DestroyDescriptorPool(device, descriptor_pool, nil)
 	vk.DestroyDescriptorSetLayout(device, descriptor_set_layout, nil)
 
 	vma.destroy_buffer(vma_allocator, vertex_buffer, vertex_buffer_allocation)
@@ -373,6 +379,16 @@ vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
 	offset := vk.DeviceSize{}
 
 	vk.CmdBindPipeline(cmd, .GRAPHICS, pso)
+	vk.CmdBindDescriptorSets(
+		cmd,
+		.GRAPHICS,
+		pipeline_layout,
+		0,
+		1,
+		&descriptor_sets[frame_idx],
+		0,
+		nil,
+	)
 	vk.CmdBindVertexBuffers(cmd, 0, 1, &vertex_buffer, &offset)
 	vk.CmdBindIndexBuffer(cmd, index_buffer, offset, .UINT16)
 	vk.CmdDrawIndexed(cmd, u32(len(g_indices)), 1, 0, 0, 0)
@@ -554,7 +570,7 @@ vt_create_uniform_buffers :: proc() {
 	for i in 0 ..< num_frames_in_flight {
 		uniform_buffers[i], uniform_buffer_allocation[i] = vt_create_buffer(
 			buff_size,
-			{.UNIFORM_BUFFER },
+			{.UNIFORM_BUFFER},
 			.AUTO,
 			{.HOST_ACCESS_SEQUENTIAL_WRITE},
 		)
@@ -569,20 +585,98 @@ vt_update_uniform_buffer :: proc() {
 	using G_VT
 
 	current_time := time.now()
-	dt := f32(time.duration_milliseconds(time.diff(start_time, current_time)))
+	dt := f32(time.duration_seconds(time.diff(start_time, current_time)))
 
-	
-	ubo := UniformBufferObject{
-		model = glsl.identity(glsl.mat4) * glsl.mat4Rotate({0, 0, 1}, glsl.radians_f32(90.0) * dt),
-		view = glsl.mat4LookAt({2, 2, 2}, {0, 0, 0}, {0, 0, 1}),
-		proj = glsl.mat4Perspective(glsl.radians_f32(45.0), f32(swap_extent.width) / f32(swap_extent.height), 0.1, 10.0),
+
+	ubo := UniformBufferObject {
+		model = glsl.identity(
+			glsl.mat4,
+		) * glsl.mat4Rotate({0, 0, 1}, glsl.radians_f32(90.0) * dt),
+		view  = glsl.mat4LookAt({0, 1, 2}, {0, 0, 0}, {0, 1, 0}),
+		proj  = glsl.mat4Perspective(
+			glsl.radians_f32(45.0),
+			f32(swap_extent.width) / f32(swap_extent.height),
+			0.1,
+			10.0,
+		),
 	}
-
-	ubo.proj[1][1] *= -1;
 
 	ubo_data: rawptr
 	vma.map_memory(vma_allocator, uniform_buffer_allocation[frame_idx], &ubo_data)
 	mem.copy(ubo_data, &ubo, size_of(UniformBufferObject))
 	vma.unmap_memory(vma_allocator, uniform_buffer_allocation[frame_idx])
+}
 
+vt_create_descriptor_pool :: proc() {
+	using G_RENDERER
+	using G_VT
+
+	pool_size := vk.DescriptorPoolSize {
+		type            = .UNIFORM_BUFFER,
+		descriptorCount = num_frames_in_flight,
+	}
+
+	pool_info := vk.DescriptorPoolCreateInfo {
+		sType         = .DESCRIPTOR_POOL_CREATE_INFO,
+		poolSizeCount = 1,
+		pPoolSizes    = &pool_size,
+		maxSets       = num_frames_in_flight,
+	}
+
+	if vk.CreateDescriptorPool(device, &pool_info, nil, &descriptor_pool) != .SUCCESS {
+		log.debug("Failed to create descriptor pool")
+	}
+}
+
+vk_create_descriptor_sets :: proc() {
+	using G_RENDERER
+	using G_VT
+
+	resize(&descriptor_sets, int(num_frames_in_flight))
+
+	set_layouts := make(
+		[dynamic]vk.DescriptorSetLayout,
+		int(num_frames_in_flight),
+		context.allocator,
+	)
+	for _, i in set_layouts {
+		set_layouts[i] = descriptor_set_layout
+	}
+	defer delete(set_layouts)
+
+	descriptor_sets_alloc_info := vk.DescriptorSetAllocateInfo {
+		sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
+		descriptorPool     = descriptor_pool,
+		descriptorSetCount = num_frames_in_flight,
+		pSetLayouts        = raw_data(set_layouts),
+	}
+
+	if vk.AllocateDescriptorSets(
+		   device,
+		   &descriptor_sets_alloc_info,
+		   raw_data(descriptor_sets),
+	   ) != .SUCCESS {
+		log.debug("Failed to allocate descriptor sets")
+	}
+}
+
+vt_write_descriptor_sets :: proc() {
+	using G_RENDERER
+	using G_VT
+
+	buffer_info := vk.DescriptorBufferInfo {
+		range = size_of(UniformBufferObject),
+	}
+	descriptor_write := vk.WriteDescriptorSet {
+		sType           = .WRITE_DESCRIPTOR_SET,
+		dstBinding      = 0,
+		descriptorCount = 1,
+		descriptorType  = .UNIFORM_BUFFER,
+		pBufferInfo     = &buffer_info,
+	}
+	for i in 0 ..< num_frames_in_flight {
+		buffer_info.buffer = uniform_buffers[i]
+		descriptor_write.dstSet = descriptor_sets[i]
+		vk.UpdateDescriptorSets(device, 1, &descriptor_write, 0, nil)
+	}
 }
