@@ -40,8 +40,8 @@ def build_vma():
         "clang++",
         "-I %s/Include" % vulkan_sdk_path,
         "-c", 
-        "-o modules/third_party/vma/external/vma.o", 
-        "modules/third_party/vma/external/vma.cpp"
+        "-o src/third_party/vma/external/vma.o", 
+        "src/third_party/vma/external/vma.cpp"
     ])
 
     if res != 0:
@@ -51,15 +51,15 @@ def build_vma():
     res = run_command_silent([
         "llvm-ar",
         "rc",
-        "modules/third_party/vma/external/vma.lib",
-        "modules/third_party/vma/external/vma.o"
+        "src/third_party/vma/external/vma.lib",
+        "src/third_party/vma/external/vma.o"
     ])
 
     if res != 0:
         print(" Failed to build VMA")
         exit(-1)
 
-    os.remove("modules/third_party/vma/external/vma.o")
+    os.remove("src/third_party/vma/external/vma.o")
 
     print ("VMA build successfull")
 

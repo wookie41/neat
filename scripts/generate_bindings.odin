@@ -6,7 +6,7 @@
 
  import "core:fmt"
  
- import "../modules/third_party/odin-binding-generator/bindgen"
+ import "../src/third_party/odin-binding-generator/bindgen"
  
  main :: proc() {
      
@@ -68,8 +68,8 @@
      bindgen.generate(
          packageName = "vma",
          foreignLibrary = "vma",
-         outputFile = "modules/third_party/vma/vma.odin",
-         headerFiles = []string{"modules/third_party/vma/external/vma_odin.h"},
+         outputFile = "src/third_party/vma/vma.odin",
+         headerFiles = []string{"src/third_party/vma/external/vma_odin.h"},
          options = options,
      )
  }
