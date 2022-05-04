@@ -33,10 +33,13 @@ G_VT: struct {
 	texture_image_allocation:  vma.Allocation,
 	texture_image_view:        vk.ImageView,
 	texture_sampler:           vk.Sampler,
+	depth_image:               vk.Image,
+	depth_image_view:          vk.ImageView,
+	depth_image_allocation:    vma.Allocation,
 }
 
 Vertex :: struct {
-	position: glsl.vec2,
+	position: glsl.vec3,
 	color:    glsl.vec3,
 	uv:       glsl.vec2,
 }
@@ -48,7 +51,12 @@ vertex_binding_description := vk.VertexInputBindingDescription {
 }
 
 vertex_attributes_descriptions := []vk.VertexInputAttributeDescription{
-	{binding = 0, location = 0, format = .R32G32_SFLOAT},
+	{
+		binding = 0,
+		location = 0,
+		format = .R32G32B32_SFLOAT,
+		offset = u32(offset_of(Vertex, position)),
+	},
 	{
 		binding = 0,
 		location = 1,
@@ -64,13 +72,17 @@ vertex_attributes_descriptions := []vk.VertexInputAttributeDescription{
 }
 
 g_vertices :: []Vertex{
-	{{-0.5, -0.5}, {1.0, 0.0, 0.0}, {1.0, 0.0}},
-	{{0.5, -0.5}, {0.0, 1.0, 0.0}, {0.0, 0.0}},
-	{{0.5, 0.5}, {0.0, 0.0, 1.0}, {0.0, 1.0}},
-	{{-0.5, 0.5}, {1.0, 1.0, 1.0}, {1.0, 1.0}},
+	{{-0.5, -0.5, 0.0}, {1.0, 0.0, 0.0}, {0.0, 0.0}},
+	{{0.5, -0.5, 0.0}, {0.0, 1.0, 0.0}, {1.0, 0.0}},
+	{{0.5, 0.5, 0.0}, {0.0, 0.0, 1.0}, {1.0, 1.0}},
+	{{-0.5, 0.5, 0.0}, {1.0, 1.0, 1.0}, {0.0, 1.0}},
+	{{-0.5, -0.5, -0.5}, {1.0, 0.0, 0.0}, {0.0, 0.0}},
+	{{0.5, -0.5, -0.5}, {0.0, 1.0, 0.0}, {1.0, 0.0}},
+	{{0.5, 0.5, -0.5}, {0.0, 0.0, 1.0}, {1.0, 1.0}},
+	{{-0.5, 0.5, -0.5}, {1.0, 1.0, 1.0}, {0.0, 1.0}},
 }
 
-g_indices :: []u16{0, 1, 2, 2, 3, 0}
+g_indices :: []u16{0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4}
 
 UniformBufferObject :: struct {
 	model: glsl.mat4x4,
@@ -212,6 +224,16 @@ init_vt :: proc() -> bool {
 			blendConstants = {0.0, 0.0, 0.0, 0.0},
 		}
 
+		depth_stencil := vk.PipelineDepthStencilStateCreateInfo {
+			sType             = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+			depthTestEnable   = true,
+			depthWriteEnable  = true,
+			depthCompareOp    = .LESS,
+			minDepthBounds    = 0,
+			maxDepthBounds    = 1,
+			stencilTestEnable = false,
+		}
+
 		// pipeline layout
 		pipeline_layout_info := vk.PipelineLayoutCreateInfo {
 			sType          = .PIPELINE_LAYOUT_CREATE_INFO,
@@ -228,6 +250,7 @@ init_vt :: proc() -> bool {
 			sType                   = .PIPELINE_RENDERING_CREATE_INFO,
 			colorAttachmentCount    = 1,
 			pColorAttachmentFormats = &surface_format.format,
+			depthAttachmentFormat   = .D32_SFLOAT,
 		}
 
 		pipeline_info := vk.GraphicsPipelineCreateInfo {
@@ -241,6 +264,7 @@ init_vt :: proc() -> bool {
 			pRasterizationState = &rasteriser,
 			pMultisampleState   = &multisampling,
 			pColorBlendState    = &colour_blending,
+			pDepthStencilState  = &depth_stencil,
 			layout              = pipeline_layout,
 		}
 
@@ -288,6 +312,7 @@ init_vt :: proc() -> bool {
 	vt_create_texture_image_view()
 	vt_create_texture_sampler()
 	vt_write_descriptor_sets()
+	vt_create_depth_resources()
 
 	return true
 }
@@ -332,9 +357,20 @@ vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
 		storeOp = .STORE,
 	}
 
+	depth_attachment := vk.RenderingAttachmentInfo {
+		sType = .RENDERING_ATTACHMENT_INFO,
+		pNext = nil,
+		clearValue = {depthStencil = {depth = 1, stencil = 0}},
+		imageLayout = .DEPTH_ATTACHMENT_OPTIMAL,
+		imageView = depth_image_view,
+		loadOp = .CLEAR,
+		storeOp = .DONT_CARE,
+	}
+
 	rendering_info := vk.RenderingInfo {
 		sType = .RENDERING_INFO,
 		colorAttachmentCount = 1,
+		pDepthAttachment = &depth_attachment,
 		layerCount = 1,
 		viewMask = 0,
 		pColorAttachments = &color_attachment,
@@ -696,7 +732,6 @@ vt_write_descriptor_sets :: proc() {
 		sampler     = texture_sampler,
 		imageLayout = .READ_ONLY_OPTIMAL,
 		imageView   = texture_image_view,
-
 	}
 
 	image_write := vk.WriteDescriptorSet {
@@ -870,6 +905,15 @@ vt_transition_image_layout :: proc(
 
 		src_stage = {.TRANSFER}
 		dst_stage = {.FRAGMENT_SHADER}
+	} else if p_old_layout == .UNDEFINED && p_new_layout == .DEPTH_ATTACHMENT_OPTIMAL {
+		barrier.dstAccessMask = {
+			.DEPTH_STENCIL_ATTACHMENT_READ,
+			.DEPTH_STENCIL_ATTACHMENT_WRITE,
+		}
+
+		src_stage = {.TOP_OF_PIPE}
+		dst_stage = {.EARLY_FRAGMENT_TESTS}
+
 	}
 	vk.CmdPipelineBarrier(cmd_buff, src_stage, dst_stage, nil, 0, nil, 0, nil, 1, &barrier)
 	vt_end_single_time_command_buffer(cmd_buff)
@@ -895,10 +939,18 @@ vt_copy_buffer_to_image :: proc(
 }
 
 vt_create_texture_image_view :: proc() {
-	G_VT.texture_image_view = vt_create_image_view(G_VT.texture_image, .R8G8B8A8_SRGB)
+	G_VT.texture_image_view = vt_create_image_view(
+		G_VT.texture_image,
+		.R8G8B8A8_SRGB,
+		{.COLOR},
+	)
 }
 
-vt_create_image_view :: proc(p_image: vk.Image, p_format: vk.Format) -> vk.ImageView {
+vt_create_image_view :: proc(
+	p_image: vk.Image,
+	p_format: vk.Format,
+	p_aspect_mask: vk.ImageAspectFlags,
+) -> vk.ImageView {
 	using G_RENDERER
 	using G_VT
 
@@ -907,7 +959,7 @@ vt_create_image_view :: proc(p_image: vk.Image, p_format: vk.Format) -> vk.Image
 		image = p_image,
 		viewType = .D2,
 		format = p_format,
-		subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
+		subresourceRange = {aspectMask = p_aspect_mask, levelCount = 1, layerCount = 1},
 	}
 
 	image_view: vk.ImageView
@@ -938,4 +990,41 @@ vt_create_texture_sampler :: proc() {
 	if vk.CreateSampler(device, &sampler_create_info, nil, &texture_sampler) != .SUCCESS {
 		log.warn("Failed to create sampler")
 	}
+}
+
+
+vt_create_depth_resources :: proc() {
+	using G_RENDERER
+	using G_VT
+
+
+	depth_image_create_info := vk.ImageCreateInfo {
+		sType = .IMAGE_CREATE_INFO,
+		imageType = .D2,
+		extent = {width = swap_extent.width, height = swap_extent.height, depth = 1},
+		mipLevels = 1,
+		arrayLayers = 1,
+		format = .D32_SFLOAT,
+		tiling = .OPTIMAL,
+		initialLayout = .UNDEFINED,
+		usage = {.DEPTH_STENCIL_ATTACHMENT},
+		sharingMode = .EXCLUSIVE,
+		samples = {._1},
+	}
+	alloc_create_info := vma.AllocationCreateInfo {
+		usage = .AUTO,
+	}
+
+	if vma.create_image(
+		   vma_allocator,
+		   &depth_image_create_info,
+		   &alloc_create_info,
+		   &depth_image,
+		   &depth_image_allocation,
+		   nil,
+	   ) != .SUCCESS {
+		log.warn("Failed to create an image")
+	}
+
+	depth_image_view = vt_create_image_view(depth_image, .D32_SFLOAT, {.DEPTH})
 }
