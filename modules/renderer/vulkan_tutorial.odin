@@ -5,8 +5,11 @@ import "core:math/linalg/glsl"
 import "core:mem"
 import "core:log"
 import "core:time"
+import "core:c"
 
 import vk "vendor:vulkan"
+import stb_image "vendor:stb/image"
+
 import vma "../third_party/vma"
 
 G_VT: struct {
@@ -26,11 +29,16 @@ G_VT: struct {
 	start_time:                time.Time,
 	descriptor_pool:           vk.DescriptorPool,
 	descriptor_sets:           [dynamic]vk.DescriptorSet,
+	texture_image:             vk.Image,
+	texture_image_allocation:  vma.Allocation,
+	texture_image_view:        vk.ImageView,
+	texture_sampler:           vk.Sampler,
 }
 
 Vertex :: struct {
 	position: glsl.vec2,
 	color:    glsl.vec3,
+	uv:       glsl.vec2,
 }
 
 vertex_binding_description := vk.VertexInputBindingDescription {
@@ -47,13 +55,19 @@ vertex_attributes_descriptions := []vk.VertexInputAttributeDescription{
 		format = .R32G32B32_SFLOAT,
 		offset = u32(offset_of(Vertex, color)),
 	},
+	{
+		binding = 0,
+		location = 2,
+		format = .R32G32_SFLOAT,
+		offset = u32(offset_of(Vertex, uv)),
+	},
 }
 
 g_vertices :: []Vertex{
-	{{-0.5, -0.5}, {1.0, 0.0, 0.0}},
-	{{0.5, -0.5}, {0.0, 1.0, 0.0}},
-	{{0.5, 0.5}, {0.0, 0.0, 1.0}},
-	{{-0.5, 0.5}, {1.0, 1.0, 1.0}},
+	{{-0.5, -0.5}, {1.0, 0.0, 0.0}, {1.0, 0.0}},
+	{{0.5, -0.5}, {0.0, 1.0, 0.0}, {0.0, 0.0}},
+	{{0.5, 0.5}, {0.0, 0.0, 1.0}, {0.0, 1.0}},
+	{{-0.5, 0.5}, {1.0, 1.0, 1.0}, {1.0, 1.0}},
 }
 
 g_indices :: []u16{0, 1, 2, 2, 3, 0}
@@ -76,7 +90,6 @@ init_vt :: proc() -> bool {
 		vt_create_uniform_buffers()
 		vt_create_descriptor_pool()
 		vk_create_descriptor_sets()
-		vt_write_descriptor_sets()
 
 		// load the code
 		vertex_shader_code := #load(
@@ -271,6 +284,10 @@ init_vt :: proc() -> bool {
 
 	vt_create_vertex_buffer()
 	vt_create_index_buffer()
+	vt_create_texture_image()
+	vt_create_texture_image_view()
+	vt_create_texture_sampler()
+	vt_write_descriptor_sets()
 
 	return true
 }
@@ -279,6 +296,9 @@ deinit_vt :: proc() {
 	using G_VT
 	using G_RENDERER
 
+	vk.DestroySampler(device, texture_sampler, nil)
+	vk.DestroyImageView(device, texture_image_view, nil)
+	vma.destroy_image(vma_allocator, texture_image, texture_image_allocation)
 	vk.DestroyDescriptorPool(device, descriptor_pool, nil)
 	vk.DestroyDescriptorSetLayout(device, descriptor_set_layout, nil)
 
@@ -504,36 +524,12 @@ vt_copy_buffer :: proc(
 ) {
 	using G_VT
 	using G_RENDERER
-
-	alloc_info := vk.CommandBufferAllocateInfo {
-		sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
-		level              = .PRIMARY,
-		commandPool        = command_pools[0],
-		commandBufferCount = 1,
-	}
-	copy_cmd_buff: vk.CommandBuffer
-	vk.AllocateCommandBuffers(device, &alloc_info, &copy_cmd_buff)
-
-	begin_info := vk.CommandBufferBeginInfo {
-		sType = .COMMAND_BUFFER_BEGIN_INFO,
-		flags = {.ONE_TIME_SUBMIT},
-	}
-
-	vk.BeginCommandBuffer(copy_cmd_buff, &begin_info)
-
+	copy_cmd_buff := vt_begin_single_time_command_buffer()
 	copy_region := vk.BufferCopy {
 		size = p_size,
 	}
 	vk.CmdCopyBuffer(copy_cmd_buff, p_src_buffer, p_dst_buffer, 1, &copy_region)
-	vk.EndCommandBuffer(copy_cmd_buff)
-
-	submit_info := vk.SubmitInfo {
-		sType              = .SUBMIT_INFO,
-		commandBufferCount = 1,
-		pCommandBuffers    = &copy_cmd_buff,
-	}
-	vk.QueueSubmit(graphics_queue, 1, &submit_info, vk.FENCE_NULL)
-	vk.QueueWaitIdle(graphics_queue)
+	vt_end_single_time_command_buffer(copy_cmd_buff)
 }
 
 vt_create_descriptor_set_layout :: proc() {
@@ -547,10 +543,22 @@ vt_create_descriptor_set_layout :: proc() {
 		stageFlags = {.VERTEX},
 	}
 
+	sampler_layout_binding := vk.DescriptorSetLayoutBinding {
+		binding = 1,
+		descriptorType = .COMBINED_IMAGE_SAMPLER,
+		descriptorCount = 1,
+		stageFlags = {.FRAGMENT},
+	}
+
+	layout_bindings := []vk.DescriptorSetLayoutBinding{
+		ubo_layout_binding,
+		sampler_layout_binding,
+	}
+
 	layout_info := vk.DescriptorSetLayoutCreateInfo {
 		sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		bindingCount = 1,
-		pBindings    = &ubo_layout_binding,
+		bindingCount = u32(len(layout_bindings)),
+		pBindings    = raw_data(layout_bindings),
 	}
 
 	if vk.CreateDescriptorSetLayout(device, &layout_info, nil, &descriptor_set_layout) != .SUCCESS {
@@ -611,20 +619,29 @@ vt_create_descriptor_pool :: proc() {
 	using G_RENDERER
 	using G_VT
 
-	pool_size := vk.DescriptorPoolSize {
+	ubo_pool_size := vk.DescriptorPoolSize {
 		type            = .UNIFORM_BUFFER,
 		descriptorCount = num_frames_in_flight,
 	}
 
+	sampler_pool_size := vk.DescriptorPoolSize {
+		type            = .COMBINED_IMAGE_SAMPLER,
+		descriptorCount = num_frames_in_flight,
+	}
+
+
+	pool_sizes := []vk.DescriptorPoolSize{ubo_pool_size, sampler_pool_size}
+
+
 	pool_info := vk.DescriptorPoolCreateInfo {
 		sType         = .DESCRIPTOR_POOL_CREATE_INFO,
-		poolSizeCount = 1,
-		pPoolSizes    = &pool_size,
+		poolSizeCount = u32(len(pool_sizes)),
+		pPoolSizes    = raw_data(pool_sizes),
 		maxSets       = num_frames_in_flight,
 	}
 
 	if vk.CreateDescriptorPool(device, &pool_info, nil, &descriptor_pool) != .SUCCESS {
-		log.debug("Failed to create descriptor pool")
+		log.warn("Failed to create descriptor pool")
 	}
 }
 
@@ -656,7 +673,7 @@ vk_create_descriptor_sets :: proc() {
 		   &descriptor_sets_alloc_info,
 		   raw_data(descriptor_sets),
 	   ) != .SUCCESS {
-		log.debug("Failed to allocate descriptor sets")
+		log.warn("Failed to allocate descriptor sets")
 	}
 }
 
@@ -664,19 +681,261 @@ vt_write_descriptor_sets :: proc() {
 	using G_RENDERER
 	using G_VT
 
-	buffer_info := vk.DescriptorBufferInfo {
+	ubo_info := vk.DescriptorBufferInfo {
 		range = size_of(UniformBufferObject),
 	}
-	descriptor_write := vk.WriteDescriptorSet {
+	ubo_write := vk.WriteDescriptorSet {
 		sType           = .WRITE_DESCRIPTOR_SET,
 		dstBinding      = 0,
 		descriptorCount = 1,
 		descriptorType  = .UNIFORM_BUFFER,
-		pBufferInfo     = &buffer_info,
+		pBufferInfo     = &ubo_info,
 	}
+
+	image_info := vk.DescriptorImageInfo {
+		sampler     = texture_sampler,
+		imageLayout = .READ_ONLY_OPTIMAL,
+		imageView   = texture_image_view,
+
+	}
+
+	image_write := vk.WriteDescriptorSet {
+		sType           = .WRITE_DESCRIPTOR_SET,
+		dstBinding      = 1,
+		descriptorCount = 1,
+		descriptorType  = .COMBINED_IMAGE_SAMPLER,
+		pImageInfo      = &image_info,
+	}
+
+
 	for i in 0 ..< num_frames_in_flight {
-		buffer_info.buffer = uniform_buffers[i]
-		descriptor_write.dstSet = descriptor_sets[i]
-		vk.UpdateDescriptorSets(device, 1, &descriptor_write, 0, nil)
+		ubo_info.buffer = uniform_buffers[i]
+		ubo_write.dstSet = descriptor_sets[i]
+		image_write.dstSet = descriptor_sets[i]
+		descriptor_writes := []vk.WriteDescriptorSet{ubo_write, image_write}
+
+		vk.UpdateDescriptorSets(
+			device,
+			u32(len(descriptor_writes)),
+			raw_data(descriptor_writes),
+			0,
+			nil,
+		)
+	}
+}
+
+vt_create_texture_image :: proc() {
+	using G_RENDERER
+	using G_VT
+
+	image_width, image_height, channels: c.int
+	pixels := stb_image.load(
+		"app_data/renderer/assets/textures/texture.jpg",
+		&image_width,
+		&image_height,
+		&channels,
+		4,
+	)
+
+	if pixels == nil {
+		log.debug("Failed to load image")
+	}
+
+	image_size := vk.DeviceSize(image_width * image_height * 4)
+
+	staging_buffer, staging_buffer_alloc := vt_create_buffer(
+		image_size,
+		{.TRANSFER_SRC},
+		.AUTO_PREFER_HOST,
+		{.HOST_ACCESS_SEQUENTIAL_WRITE},
+	)
+
+	defer vma.destroy_buffer(vma_allocator, staging_buffer, staging_buffer_alloc)
+
+	mapped_data: rawptr
+	vma.map_memory(vma_allocator, staging_buffer_alloc, &mapped_data)
+	mem.copy(mapped_data, pixels, int(image_size * size_of(u8)))
+	vma.unmap_memory(vma_allocator, staging_buffer_alloc)
+
+	stb_image.image_free(pixels)
+
+	image_create_info := vk.ImageCreateInfo {
+		sType = .IMAGE_CREATE_INFO,
+		imageType = .D2,
+		extent = {width = u32(image_width), height = u32(image_height), depth = 1},
+		mipLevels = 1,
+		arrayLayers = 1,
+		format = .R8G8B8A8_SRGB,
+		tiling = .OPTIMAL,
+		initialLayout = .UNDEFINED,
+		usage = {.TRANSFER_DST, .SAMPLED},
+		sharingMode = .EXCLUSIVE,
+		samples = {._1},
+	}
+	alloc_create_info := vma.AllocationCreateInfo {
+		usage = .AUTO,
+	}
+
+	if vma.create_image(
+		   vma_allocator,
+		   &image_create_info,
+		   &alloc_create_info,
+		   &texture_image,
+		   &texture_image_allocation,
+		   nil,
+	   ) != .SUCCESS {
+		log.warn("Failed to create an image")
+	}
+
+
+	vt_transition_image_layout(texture_image, .UNDEFINED, .TRANSFER_DST_OPTIMAL)
+	vt_copy_buffer_to_image(
+		staging_buffer,
+		texture_image,
+		u32(image_width),
+		u32(image_height),
+	)
+	vt_transition_image_layout(
+		texture_image,
+		.TRANSFER_DST_OPTIMAL,
+		.SHADER_READ_ONLY_OPTIMAL,
+	)
+}
+
+
+vt_begin_single_time_command_buffer :: proc() -> vk.CommandBuffer {
+	using G_VT
+	using G_RENDERER
+
+	alloc_info := vk.CommandBufferAllocateInfo {
+		sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
+		level              = .PRIMARY,
+		commandPool        = command_pools[0],
+		commandBufferCount = 1,
+	}
+	cmd_buff: vk.CommandBuffer
+	vk.AllocateCommandBuffers(device, &alloc_info, &cmd_buff)
+
+	begin_info := vk.CommandBufferBeginInfo {
+		sType = .COMMAND_BUFFER_BEGIN_INFO,
+		flags = {.ONE_TIME_SUBMIT},
+	}
+
+	vk.BeginCommandBuffer(cmd_buff, &begin_info)
+	return cmd_buff
+}
+
+vt_end_single_time_command_buffer :: proc(cmd_buff: vk.CommandBuffer) {
+	using G_VT
+	using G_RENDERER
+
+	vk.EndCommandBuffer(cmd_buff)
+
+	command_buffer := cmd_buff
+	submit_info := vk.SubmitInfo {
+		sType              = .SUBMIT_INFO,
+		commandBufferCount = 1,
+		pCommandBuffers    = &command_buffer,
+	}
+	vk.QueueSubmit(graphics_queue, 1, &submit_info, vk.FENCE_NULL)
+	vk.QueueWaitIdle(graphics_queue)
+}
+
+vt_transition_image_layout :: proc(
+	p_image: vk.Image,
+	p_old_layout: vk.ImageLayout,
+	p_new_layout: vk.ImageLayout,
+) {
+
+	cmd_buff := vt_begin_single_time_command_buffer()
+	barrier := vk.ImageMemoryBarrier {
+		sType = .IMAGE_MEMORY_BARRIER,
+		oldLayout = p_old_layout,
+		newLayout = p_new_layout,
+		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		image = p_image,
+		subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
+	}
+	src_stage: vk.PipelineStageFlags
+	dst_stage: vk.PipelineStageFlags
+	if p_old_layout == .UNDEFINED && p_new_layout == .TRANSFER_DST_OPTIMAL {
+		barrier.dstAccessMask = {.TRANSFER_WRITE}
+
+		src_stage = {.TOP_OF_PIPE}
+		dst_stage = {.TRANSFER}
+	} else if p_old_layout == .TRANSFER_DST_OPTIMAL && p_new_layout == .SHADER_READ_ONLY_OPTIMAL {
+		barrier.srcAccessMask = {.TRANSFER_WRITE}
+		barrier.dstAccessMask = {.SHADER_READ}
+
+		src_stage = {.TRANSFER}
+		dst_stage = {.FRAGMENT_SHADER}
+	}
+	vk.CmdPipelineBarrier(cmd_buff, src_stage, dst_stage, nil, 0, nil, 0, nil, 1, &barrier)
+	vt_end_single_time_command_buffer(cmd_buff)
+
+}
+
+vt_copy_buffer_to_image :: proc(
+	p_buffer: vk.Buffer,
+	p_image: vk.Image,
+	p_width: u32,
+	p_height: u32,
+) {
+	cmd_buff := vt_begin_single_time_command_buffer()
+	region := vk.BufferImageCopy {
+		bufferOffset = 0,
+		bufferRowLength = 0,
+		bufferImageHeight = 0,
+		imageSubresource = {aspectMask = {.COLOR}, layerCount = 1},
+		imageExtent = {width = p_width, height = p_height, depth = 1},
+	}
+	vk.CmdCopyBufferToImage(cmd_buff, p_buffer, p_image, .TRANSFER_DST_OPTIMAL, 1, &region)
+	vt_end_single_time_command_buffer(cmd_buff)
+}
+
+vt_create_texture_image_view :: proc() {
+	G_VT.texture_image_view = vt_create_image_view(G_VT.texture_image, .R8G8B8A8_SRGB)
+}
+
+vt_create_image_view :: proc(p_image: vk.Image, p_format: vk.Format) -> vk.ImageView {
+	using G_RENDERER
+	using G_VT
+
+	view_create_info := vk.ImageViewCreateInfo {
+		sType = .IMAGE_VIEW_CREATE_INFO,
+		image = p_image,
+		viewType = .D2,
+		format = p_format,
+		subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
+	}
+
+	image_view: vk.ImageView
+	if vk.CreateImageView(device, &view_create_info, nil, &image_view) != .SUCCESS {
+		log.warn("Failed to create image view")
+	}
+	return image_view
+}
+
+vt_create_texture_sampler :: proc() {
+	using G_RENDERER
+	using G_VT
+
+	sampler_create_info := vk.SamplerCreateInfo {
+		sType            = .SAMPLER_CREATE_INFO,
+		magFilter        = .LINEAR,
+		minFilter        = .LINEAR,
+		addressModeU     = .REPEAT,
+		addressModeV     = .REPEAT,
+		addressModeW     = .REPEAT,
+		anisotropyEnable = true,
+		maxAnisotropy    = device_properties.limits.maxSamplerAnisotropy,
+		borderColor      = .INT_OPAQUE_BLACK,
+		compareOp        = .ALWAYS,
+		mipmapMode       = .LINEAR,
+	}
+
+	if vk.CreateSampler(device, &sampler_create_info, nil, &texture_sampler) != .SUCCESS {
+		log.warn("Failed to create sampler")
 	}
 }

@@ -30,6 +30,7 @@ when USE_VULKAN_BACKEND {
 		instance:                    vk.Instance,
 		physical_device:             vk.PhysicalDevice,
 		device_capabilities:         vk.SurfaceCapabilitiesKHR,
+		device_properties:           vk.PhysicalDeviceProperties,
 		device_formats:              []vk.SurfaceFormatKHR,
 		device_present_modes:        []vk.PresentModeKHR,
 		queue_family_graphics_index: u32,
@@ -337,6 +338,8 @@ when USE_VULKAN_BACKEND {
 				log.error("Suitable device not found")
 				return false
 			}
+
+			vk.GetPhysicalDeviceProperties(physical_device, &device_properties)
 		}
 
 		// Create logical device for our queues (and the queues themselves)
@@ -370,6 +373,7 @@ when USE_VULKAN_BACKEND {
 			}
 
 			device_features := vk.PhysicalDeviceFeatures{}
+			device_features.samplerAnisotropy = true
 
 			dynamic_rendering_frature := vk.PhysicalDeviceDynamicRenderingFeatures {
 				sType            = .PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
