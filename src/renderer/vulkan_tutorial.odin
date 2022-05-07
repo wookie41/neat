@@ -226,7 +226,7 @@ init_vt :: proc() -> bool {
 		pipeline_rendering_create_info := vk.PipelineRenderingCreateInfo {
 			sType                   = .PIPELINE_RENDERING_CREATE_INFO,
 			colorAttachmentCount    = 1,
-			pColorAttachmentFormats = &surface_format.format,
+			pColorAttachmentFormats = &swapchain_format.format,
 			depthAttachmentFormat   = .D32_SFLOAT,
 		}
 

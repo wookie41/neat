@@ -42,7 +42,7 @@ when USE_VULKAN_BACKEND {
 		present_queue:               vk.Queue,
 		compute_queue:               vk.Queue,
 		surface:                     vk.SurfaceKHR,
-		surface_format:              vk.SurfaceFormatKHR,
+		swapchain_format:            vk.SurfaceFormatKHR,
 		present_mode:                vk.PresentModeKHR,
 		swap_extent:                 vk.Extent2D,
 		swapchain:                   vk.SwapchainKHR,
@@ -427,20 +427,20 @@ when USE_VULKAN_BACKEND {
 		// Get the swapchain working
 		G_RENDERER.swapchain_images = make([dynamic]vk.Image, G_RENDERER.allocator)
 
-		// find ideal format for surface
+		// find ideal format for swapchain
 		{
 			ideal_format := false
 
 			for format in &G_RENDERER.device_formats {
 				if format.format == .B8G8R8A8_SRGB && format.colorSpace == .SRGB_NONLINEAR {
-					G_RENDERER.surface_format = format
+					G_RENDERER.swapchain_format = format
 					ideal_format = true
 					break
 				}
 			}
 
 			if !ideal_format {
-				G_RENDERER.surface_format = G_RENDERER.device_formats[0]
+				G_RENDERER.swapchain_format = G_RENDERER.device_formats[0]
 			}
 		}
 
@@ -459,142 +459,11 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
-		// find ideal swap extent from capabilities or sdl2
-		{
-			using G_RENDERER
-			swap_extent = device_capabilities.currentExtent
-			if swap_extent.width == max(u32) {
-				width, height: c.int
-				sdl.Vulkan_GetDrawableSize(window, &width, &height)
-				swap_extent.width = clamp(
-					u32(width),
-					device_capabilities.minImageExtent.width,
-					device_capabilities.maxImageExtent.width,
-				)
-				swap_extent.height = clamp(
-					u32(height),
-					device_capabilities.minImageExtent.height,
-					device_capabilities.maxImageExtent.height,
-				)
-			}
-
-			// prefer min + 1 images on the swapchain but no more than max
-			swap_images_count := device_capabilities.minImageCount + 1
-			if device_capabilities.maxImageCount > 0 && swap_images_count > device_capabilities.maxImageCount {
-				swap_images_count = device_capabilities.maxImageCount
-			}
-			resize(&swapchain_images, int(swap_images_count))
-			resize(&swapchain_image_views, int(swap_images_count))
+		if create_swapchain() == false {
+			return false
 		}
 
-		// Create the swapchain
-		{
-			using G_RENDERER
-			create_info := vk.SwapchainCreateInfoKHR {
-				sType = .SWAPCHAIN_CREATE_INFO_KHR,
-				surface = surface,
-				minImageCount = u32(len(swapchain_images)),
-				imageFormat = surface_format.format,
-				imageColorSpace = surface_format.colorSpace,
-				imageExtent = swap_extent,
-				imageArrayLayers = 1,
-				imageUsage = {.COLOR_ATTACHMENT},
-				imageSharingMode = .EXCLUSIVE,
-				preTransform = device_capabilities.currentTransform,
-				compositeAlpha = {.OPAQUE},
-				presentMode = present_mode,
-				clipped = true,
-			}
-
-			// handle different queue families
-			queue_families := []u32{
-				u32(queue_family_graphics_index),
-				u32(queue_family_present_index),
-			}
-			if queue_family_graphics_index != queue_family_present_index {
-				create_info.imageSharingMode = .CONCURRENT
-				create_info.queueFamilyIndexCount = 2
-				create_info.pQueueFamilyIndices = raw_data(queue_families)
-			}
-
-			// finally the swapchain
-			if vk.CreateSwapchainKHR(device, &create_info, nil, &swapchain) != .SUCCESS {
-				log.error("Couldn't create swapchain")
-				return false
-			}
-		}
-
-		// Get swap images
-		{
-			using G_RENDERER
-
-			swap_images_count := u32(len(swapchain_images))
-			vk.GetSwapchainImagesKHR(
-				device,
-				swapchain,
-				&swap_images_count,
-				raw_data(swapchain_images),
-			)
-
-			// Create image views for each image
-			for i in 0 ..< len(swapchain_image_views) {
-				create_info := vk.ImageViewCreateInfo {
-					sType = .IMAGE_VIEW_CREATE_INFO,
-					image = swapchain_images[i],
-					viewType = .D2,
-					format = surface_format.format,
-					components = {r = .IDENTITY, g = .IDENTITY, b = .IDENTITY, a = .IDENTITY},
-					subresourceRange = {
-						aspectMask = {.COLOR},
-						baseMipLevel = 0,
-						levelCount = 1,
-						baseArrayLayer = 0,
-						layerCount = 1,
-					},
-				}
-
-				if vk.CreateImageView(device, &create_info, nil, &swapchain_image_views[i]) != .SUCCESS {
-					log.error("Error creating image view")
-					return false
-				}
-			}
-		}
-
-		// Create synchronization semaphores for presentation
-		{
-			using G_RENDERER
-
-			num_frames_in_flight = u32(clamp(MAX_NUM_FRAMES_IN_FLIGHT, 0, len(swapchain_images)))
-
-			resize(&render_finished_semaphores, int(num_frames_in_flight))
-			resize(&image_available_semaphores, int(num_frames_in_flight))
-			resize(&frame_fences, int(num_frames_in_flight))
-
-			fence_create_info := vk.FenceCreateInfo {
-				sType = .FENCE_CREATE_INFO,
-				flags = {.SIGNALED},
-			}
-
-			semaphore_create_info := vk.SemaphoreCreateInfo {
-				sType = .SEMAPHORE_CREATE_INFO,
-			}
-
-			for i in 0 ..< num_frames_in_flight {
-				vk.CreateFence(device, &fence_create_info, nil, &frame_fences[i])
-				vk.CreateSemaphore(
-					device,
-					&semaphore_create_info,
-					nil,
-					&render_finished_semaphores[i],
-				)
-				vk.CreateSemaphore(
-					device,
-					&semaphore_create_info,
-					nil,
-					&image_available_semaphores[i],
-				)
-			}
-		}
+		create_synchronization_primitives()
 
 		// Init VMA
 		{
@@ -711,4 +580,134 @@ backend_update :: proc(p_dt: f32) {
 
 	// Advace frame index
 	G_RENDERER.frame_idx = (G_RENDERER.frame_idx + 1) % G_RENDERER.num_frames_in_flight
+}
+
+
+@(private = "file")
+create_swapchain :: proc() -> bool {
+	using G_RENDERER
+
+	// find ideal swap extent from capabilities or sdl2
+	{
+		swap_extent = device_capabilities.currentExtent
+		if swap_extent.width == max(u32) {
+			width, height: c.int
+			sdl.Vulkan_GetDrawableSize(window, &width, &height)
+			swap_extent.width = clamp(
+				u32(width),
+				device_capabilities.minImageExtent.width,
+				device_capabilities.maxImageExtent.width,
+			)
+			swap_extent.height = clamp(
+				u32(height),
+				device_capabilities.minImageExtent.height,
+				device_capabilities.maxImageExtent.height,
+			)
+		}
+
+		// prefer min + 1 images on the swapchain but no more than max
+		swap_images_count := device_capabilities.minImageCount + 1
+		if device_capabilities.maxImageCount > 0 && swap_images_count > device_capabilities.maxImageCount {
+			swap_images_count = device_capabilities.maxImageCount
+		}
+		resize(&swapchain_images, int(swap_images_count))
+		resize(&swapchain_image_views, int(swap_images_count))
+	}
+
+	// Create the swapchain
+	{
+		create_info := vk.SwapchainCreateInfoKHR {
+			sType = .SWAPCHAIN_CREATE_INFO_KHR,
+			surface = surface,
+			minImageCount = u32(len(swapchain_images)),
+			imageFormat = swapchain_format.format,
+			imageColorSpace = swapchain_format.colorSpace,
+			imageExtent = swap_extent,
+			imageArrayLayers = 1,
+			imageUsage = {.COLOR_ATTACHMENT},
+			imageSharingMode = .EXCLUSIVE,
+			preTransform = device_capabilities.currentTransform,
+			compositeAlpha = {.OPAQUE},
+			presentMode = present_mode,
+			clipped = true,
+		}
+
+		// handle different queue families
+		queue_families := []u32{
+			u32(queue_family_graphics_index),
+			u32(queue_family_present_index),
+		}
+		if queue_family_graphics_index != queue_family_present_index {
+			create_info.imageSharingMode = .CONCURRENT
+			create_info.queueFamilyIndexCount = 2
+			create_info.pQueueFamilyIndices = raw_data(queue_families)
+		}
+
+		// finally the swapchain
+		if vk.CreateSwapchainKHR(device, &create_info, nil, &swapchain) != .SUCCESS {
+			log.error("Couldn't create swapchain")
+			return false
+		}
+	}
+
+	// Get swap images
+	{
+		swap_images_count := u32(len(swapchain_images))
+		vk.GetSwapchainImagesKHR(
+			device,
+			swapchain,
+			&swap_images_count,
+			raw_data(swapchain_images),
+		)
+
+		// Create image views for each image
+		for i in 0 ..< len(swapchain_image_views) {
+			create_info := vk.ImageViewCreateInfo {
+				sType = .IMAGE_VIEW_CREATE_INFO,
+				image = swapchain_images[i],
+				viewType = .D2,
+				format = swapchain_format.format,
+				components = {r = .IDENTITY, g = .IDENTITY, b = .IDENTITY, a = .IDENTITY},
+				subresourceRange = {
+					aspectMask = {.COLOR},
+					baseMipLevel = 0,
+					levelCount = 1,
+					baseArrayLayer = 0,
+					layerCount = 1,
+				},
+			}
+
+			if vk.CreateImageView(device, &create_info, nil, &swapchain_image_views[i]) != .SUCCESS {
+				log.error("Error creating image view")
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+create_synchronization_primitives :: proc() {
+	using G_RENDERER
+
+	num_frames_in_flight = u32(clamp(MAX_NUM_FRAMES_IN_FLIGHT, 0, len(swapchain_images)))
+
+	resize(&render_finished_semaphores, int(num_frames_in_flight))
+	resize(&image_available_semaphores, int(num_frames_in_flight))
+	resize(&frame_fences, int(num_frames_in_flight))
+
+	fence_create_info := vk.FenceCreateInfo {
+		sType = .FENCE_CREATE_INFO,
+		flags = {.SIGNALED},
+	}
+
+	semaphore_create_info := vk.SemaphoreCreateInfo {
+		sType = .SEMAPHORE_CREATE_INFO,
+	}
+
+	for i in 0 ..< num_frames_in_flight {
+		vk.CreateFence(device, &fence_create_info, nil, &frame_fences[i])
+		vk.CreateSemaphore(device, &semaphore_create_info, nil, &render_finished_semaphores[i])
+		vk.CreateSemaphore(device, &semaphore_create_info, nil, &image_available_semaphores[i])
+	}
 }
