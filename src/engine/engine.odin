@@ -48,7 +48,7 @@ init :: proc(p_options: InitOptions) -> bool {
 		sdl.WINDOWPOS_CENTERED,
 		i32(p_options.window_width),
 		i32(p_options.window_height),
-		{.VULKAN},
+		{.VULKAN, .RESIZABLE},
 	)
 
 	if G_ENGINE.window == nil {

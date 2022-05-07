@@ -7,7 +7,6 @@ when USE_VULKAN_BACKEND {
 	import "core:c"
 	import "core:mem"
 	import "core:log"
-	import "core:slice"
 
 	import sdl "vendor:sdl2"
 	import vk "vendor:vulkan"
@@ -29,10 +28,10 @@ when USE_VULKAN_BACKEND {
 		window:                      ^sdl.Window,
 		instance:                    vk.Instance,
 		physical_device:             vk.PhysicalDevice,
-		device_capabilities:         vk.SurfaceCapabilitiesKHR,
+		surface_capabilities:        vk.SurfaceCapabilitiesKHR,
 		device_properties:           vk.PhysicalDeviceProperties,
-		device_formats:              []vk.SurfaceFormatKHR,
-		device_present_modes:        []vk.PresentModeKHR,
+		swapchain_formats:           []vk.SurfaceFormatKHR,
+		swapchain_present_modes:     []vk.PresentModeKHR,
 		queue_family_graphics_index: u32,
 		queue_family_present_index:  u32,
 		queue_family_compute_index:  u32,
@@ -251,7 +250,7 @@ when USE_VULKAN_BACKEND {
 					continue
 				}
 
-				// device capabilities
+				// surface capabilities
 				capabilities: vk.SurfaceCapabilitiesKHR
 				vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(pd, surface, &capabilities)
 
@@ -325,9 +324,9 @@ when USE_VULKAN_BACKEND {
 					log.infof("Picked device: %s\n ", device_props.deviceName)
 
 					physical_device = pd
-					device_capabilities = capabilities
-					device_formats = slice.clone(formats)
-					device_present_modes = slice.clone(present_modes)
+					surface_capabilities = capabilities
+					swapchain_formats = formats
+					swapchain_present_modes = present_modes
 					queue_family_graphics_index = u32(graphics_index)
 					queue_family_present_index = u32(present_index)
 					break
@@ -427,38 +426,6 @@ when USE_VULKAN_BACKEND {
 		// Get the swapchain working
 		G_RENDERER.swapchain_images = make([dynamic]vk.Image, G_RENDERER.allocator)
 
-		// find ideal format for swapchain
-		{
-			ideal_format := false
-
-			for format in &G_RENDERER.device_formats {
-				if format.format == .B8G8R8A8_SRGB && format.colorSpace == .SRGB_NONLINEAR {
-					G_RENDERER.swapchain_format = format
-					ideal_format = true
-					break
-				}
-			}
-
-			if !ideal_format {
-				G_RENDERER.swapchain_format = G_RENDERER.device_formats[0]
-			}
-		}
-
-		// find ideal mode for presentation
-		{
-			ideal_present_mode := false
-			for present_mode in &G_RENDERER.device_present_modes {
-				if present_mode == .MAILBOX {
-					G_RENDERER.present_mode = present_mode
-					ideal_present_mode = true
-					break
-				}
-			}
-			if !ideal_present_mode {
-				G_RENDERER.present_mode = .FIFO
-			}
-		}
-
 		if create_swapchain() == false {
 			return false
 		}
@@ -530,12 +497,11 @@ backend_update :: proc(p_dt: f32) {
 		true,
 		max(u64),
 	)
-	vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx])
 
 	// Acquire the index of the image we'll present to
 	// @TODO Move this after recording the command buffer to save some performance
 	swap_image_index: u32
-	vk.AcquireNextImageKHR(
+	acquire_result := vk.AcquireNextImageKHR(
 		G_RENDERER.device,
 		G_RENDERER.swapchain,
 		max(u64),
@@ -543,6 +509,15 @@ backend_update :: proc(p_dt: f32) {
 		0,
 		&swap_image_index,
 	)
+
+	if acquire_result != .SUCCESS {
+		if acquire_result == .ERROR_OUT_OF_DATE_KHR || acquire_result == .SUBOPTIMAL_KHR {
+			recreate_swapchain()
+			return
+		}
+	}
+
+	vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx])
 
 	// Render
 	cmd_buff := vt_update(swap_image_index)
@@ -584,67 +559,109 @@ backend_update :: proc(p_dt: f32) {
 
 
 @(private = "file")
-create_swapchain :: proc() -> bool {
-	using G_RENDERER
+create_swapchain :: proc(p_is_recreating: bool = false) -> bool {
+	old_format := G_RENDERER.swapchain_format
+	// find ideal format for swapchain
+	{
+		ideal_format := false
 
+		for format in &G_RENDERER.swapchain_formats {
+			if format.format == .B8G8R8A8_SRGB && format.colorSpace == .SRGB_NONLINEAR {
+				G_RENDERER.swapchain_format = format
+				ideal_format = true
+				break
+			}
+		}
+
+		if !ideal_format {
+			G_RENDERER.swapchain_format = G_RENDERER.swapchain_formats[0]
+		}
+	}
+
+	old_present_mode := G_RENDERER.present_mode
+	// find ideal mode for presentation
+	{
+		ideal_present_mode := false
+		for present_mode in &G_RENDERER.swapchain_present_modes {
+			if present_mode == .MAILBOX {
+				G_RENDERER.present_mode = present_mode
+				ideal_present_mode = true
+				break
+			}
+		}
+		if !ideal_present_mode {
+			G_RENDERER.present_mode = .FIFO
+		}
+	}
+
+	if p_is_recreating && (old_present_mode != G_RENDERER.present_mode || old_format != G_RENDERER.swapchain_format) {
+		log.fatal(
+			"Changing swapchain format/presnet mode on runtime is currently not supported",
+		)
+	}
 	// find ideal swap extent from capabilities or sdl2
 	{
-		swap_extent = device_capabilities.currentExtent
-		if swap_extent.width == max(u32) {
+		G_RENDERER.swap_extent = G_RENDERER.surface_capabilities.currentExtent
+		if G_RENDERER.swap_extent.width == max(u32) {
 			width, height: c.int
-			sdl.Vulkan_GetDrawableSize(window, &width, &height)
-			swap_extent.width = clamp(
+			sdl.Vulkan_GetDrawableSize(G_RENDERER.window, &width, &height)
+			G_RENDERER.swap_extent.width = clamp(
 				u32(width),
-				device_capabilities.minImageExtent.width,
-				device_capabilities.maxImageExtent.width,
+				G_RENDERER.surface_capabilities.minImageExtent.width,
+				G_RENDERER.surface_capabilities.maxImageExtent.width,
 			)
-			swap_extent.height = clamp(
+			G_RENDERER.swap_extent.height = clamp(
 				u32(height),
-				device_capabilities.minImageExtent.height,
-				device_capabilities.maxImageExtent.height,
+				G_RENDERER.surface_capabilities.minImageExtent.height,
+				G_RENDERER.surface_capabilities.maxImageExtent.height,
 			)
 		}
 
 		// prefer min + 1 images on the swapchain but no more than max
-		swap_images_count := device_capabilities.minImageCount + 1
-		if device_capabilities.maxImageCount > 0 && swap_images_count > device_capabilities.maxImageCount {
-			swap_images_count = device_capabilities.maxImageCount
+		swap_images_count := G_RENDERER.surface_capabilities.minImageCount + 1
+		if G_RENDERER.surface_capabilities.maxImageCount > 0 && swap_images_count > G_RENDERER.surface_capabilities.maxImageCount {
+			swap_images_count = G_RENDERER.surface_capabilities.maxImageCount
 		}
-		resize(&swapchain_images, int(swap_images_count))
-		resize(&swapchain_image_views, int(swap_images_count))
+		resize(&G_RENDERER.swapchain_images, int(swap_images_count))
+		resize(&G_RENDERER.swapchain_image_views, int(swap_images_count))
 	}
 
 	// Create the swapchain
 	{
 		create_info := vk.SwapchainCreateInfoKHR {
 			sType = .SWAPCHAIN_CREATE_INFO_KHR,
-			surface = surface,
-			minImageCount = u32(len(swapchain_images)),
-			imageFormat = swapchain_format.format,
-			imageColorSpace = swapchain_format.colorSpace,
-			imageExtent = swap_extent,
+			surface = G_RENDERER.surface,
+			minImageCount = u32(len(G_RENDERER.swapchain_images)),
+			imageFormat = G_RENDERER.swapchain_format.format,
+			imageColorSpace = G_RENDERER.swapchain_format.colorSpace,
+			imageExtent = G_RENDERER.swap_extent,
 			imageArrayLayers = 1,
 			imageUsage = {.COLOR_ATTACHMENT},
 			imageSharingMode = .EXCLUSIVE,
-			preTransform = device_capabilities.currentTransform,
+			preTransform = G_RENDERER.surface_capabilities.currentTransform,
 			compositeAlpha = {.OPAQUE},
-			presentMode = present_mode,
+			presentMode = G_RENDERER.present_mode,
 			clipped = true,
 		}
 
 		// handle different queue families
 		queue_families := []u32{
-			u32(queue_family_graphics_index),
-			u32(queue_family_present_index),
+			u32(G_RENDERER.queue_family_graphics_index),
+			u32(G_RENDERER.queue_family_present_index),
 		}
-		if queue_family_graphics_index != queue_family_present_index {
+		if G_RENDERER.queue_family_graphics_index != G_RENDERER.queue_family_present_index {
 			create_info.imageSharingMode = .CONCURRENT
 			create_info.queueFamilyIndexCount = 2
 			create_info.pQueueFamilyIndices = raw_data(queue_families)
 		}
 
 		// finally the swapchain
-		if vk.CreateSwapchainKHR(device, &create_info, nil, &swapchain) != .SUCCESS {
+		if vk.CreateSwapchainKHR(
+			   G_RENDERER.device,
+			   &create_info,
+			   nil,
+			   &G_RENDERER.swapchain,
+		   ) != .SUCCESS {
 			log.error("Couldn't create swapchain")
 			return false
 		}
@@ -652,21 +669,21 @@ create_swapchain :: proc() -> bool {
 
 	// Get swap images
 	{
-		swap_images_count := u32(len(swapchain_images))
+		swap_images_count := u32(len(G_RENDERER.swapchain_images))
 		vk.GetSwapchainImagesKHR(
-			device,
-			swapchain,
+			G_RENDERER.device,
+			G_RENDERER.swapchain,
 			&swap_images_count,
-			raw_data(swapchain_images),
+			raw_data(G_RENDERER.swapchain_images),
 		)
 
 		// Create image views for each image
-		for i in 0 ..< len(swapchain_image_views) {
+		for i in 0 ..< len(G_RENDERER.swapchain_image_views) {
 			create_info := vk.ImageViewCreateInfo {
 				sType = .IMAGE_VIEW_CREATE_INFO,
-				image = swapchain_images[i],
+				image = G_RENDERER.swapchain_images[i],
 				viewType = .D2,
-				format = swapchain_format.format,
+				format = G_RENDERER.swapchain_format.format,
 				components = {r = .IDENTITY, g = .IDENTITY, b = .IDENTITY, a = .IDENTITY},
 				subresourceRange = {
 					aspectMask = {.COLOR},
@@ -677,7 +694,12 @@ create_swapchain :: proc() -> bool {
 				},
 			}
 
-			if vk.CreateImageView(device, &create_info, nil, &swapchain_image_views[i]) != .SUCCESS {
+			if vk.CreateImageView(
+				   G_RENDERER.device,
+				   &create_info,
+				   nil,
+				   &G_RENDERER.swapchain_image_views[i],
+			   ) != .SUCCESS {
 				log.error("Error creating image view")
 				return false
 			}
@@ -710,4 +732,79 @@ create_synchronization_primitives :: proc() {
 		vk.CreateSemaphore(device, &semaphore_create_info, nil, &render_finished_semaphores[i])
 		vk.CreateSemaphore(device, &semaphore_create_info, nil, &image_available_semaphores[i])
 	}
+}
+
+recreate_swapchain :: proc() {
+	using G_RENDERER
+
+	// Refresh capabilties, formats and present modes
+	vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &surface_capabilities)
+
+	format_count: u32
+	vk.GetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &format_count, nil)
+	if format_count == 0 {
+		log.fatal("Can't recreate a swapchain - no formats")
+	}
+
+	formats := make([]vk.SurfaceFormatKHR, int(format_count), context.temp_allocator)
+	defer delete(formats)
+	vk.GetPhysicalDeviceSurfaceFormatsKHR(
+		physical_device,
+		surface,
+		&format_count,
+		raw_data(formats),
+	)
+
+
+	present_mode_count: u32
+	vk.GetPhysicalDeviceSurfacePresentModesKHR(
+		physical_device,
+		surface,
+		&present_mode_count,
+		nil,
+	)
+	if present_mode_count == 0 {
+		log.fatal("Can't recreate a swapchain - no presnet modes")
+	}
+
+	present_modes := make([]vk.PresentModeKHR, int(present_mode_count))
+	defer delete(present_modes)
+	vk.GetPhysicalDeviceSurfacePresentModesKHR(
+		physical_device,
+		surface,
+		&present_mode_count,
+		raw_data(present_modes),
+	)
+
+	// TODO Why do you crash?
+	// delete(swapchain_formats)
+	// delete(swapchain_present_modes)
+
+	swapchain_formats = formats
+	swapchain_present_modes = present_modes
+
+	// @TODO Why do you crash?
+	// delete(swapchain_images)
+
+	// @TODO Make it better, use pOldSwapchain when recreating the swapchain 
+	vk.DeviceWaitIdle(device)
+
+	log.debug("Recreating swapchain!")
+	for image_view in swapchain_image_views {
+		vk.DestroyImageView(device, image_view, nil)
+	}
+
+	for _, i in frame_fences {
+		vk.DestroyFence(device, frame_fences[i], nil)
+		vk.DestroySemaphore(device, render_finished_semaphores[i], nil)
+		vk.DestroySemaphore(device, image_available_semaphores[i], nil)
+	}
+
+	vk.DestroySwapchainKHR(device, swapchain, nil)
+
+	if create_swapchain(true) == false {
+		log.fatal("Failed to recreate the swapchain")
+	}
+
+	create_synchronization_primitives()
 }
