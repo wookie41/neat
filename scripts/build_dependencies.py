@@ -61,13 +61,45 @@ def build_vma():
 
     os.remove("src/third_party/vma/external/vma.o")
 
-    print ("VMA build successfull")
+    print("VMA build successfull")
+
+#-----------------------------------------------------------------------#
+def build_tinyobj():
+
+    print("Building tiny_obj_loader...")
+
+    res = run_command_silent([
+        "clang++",
+        "-c", 
+        "-o src/third_party/tiny_obj_loader/external/tiny_obj_loader.o", 
+        "src/third_party/tiny_obj_loader/external/tiny_obj_loader.cc"
+    ])
+
+    if res != 0:
+        print("Failed to build VMA")
+        exit(-1)
+
+    res = run_command_silent([
+        "llvm-ar",
+        "rc",
+        "src/third_party/vma/external/vma.lib",
+        "src/third_party/vma/external/vma.o"
+    ])
+
+    if res != 0:
+        print("Failed to build tiny_obj_loader")
+        exit(-1)
+
+    os.remove("src/third_party/tiny_obj_loader/external/tiny_obj_loader.o")
+
+    print("tiny_obj_loader build successfull")
+
 
 #-----------------------------------------------------------------------#
 
 def main():
     build_vma()
-
+    build_tinyobj()
 #-----------------------------------------------------------------------#
 
 if __name__ == '__main__':
