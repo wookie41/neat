@@ -5,6 +5,8 @@ package renderer
 import "core:mem"
 import "core:log"
 
+import "../common"
+
 //---------------------------------------------------------------------------//
 
 @(private)
@@ -38,6 +40,15 @@ InitOptions :: struct {
 init :: proc(p_options: InitOptions) -> bool {
 	G_RENDERER_LOG = log.create_console_logger()
 
+	G_RENDERER.allocator = p_options.allocator
+	mem.init_arena(
+		&G_RENDERER.temp_arena,
+		make([]byte, common.MEGABYTE * 4, p_options.allocator),
+	)
+	G_RENDERER.temp_arena_allocator = mem.arena_allocator(&G_RENDERER.temp_arena)
+
+    setup_renderer_context()
+
 	backend_init(p_options) or_return
 	init_vt()
 	return true
@@ -45,12 +56,14 @@ init :: proc(p_options: InitOptions) -> bool {
 //---------------------------------------------------------------------------//
 
 update :: proc(p_dt: f32) {
+    setup_renderer_context()
 	backend_update(p_dt)
 }
 
 //---------------------------------------------------------------------------//
 
 deinit :: proc() {
+    setup_renderer_context()
 	backend_deinit()
 }
 
@@ -61,7 +74,15 @@ WindowResizedEvent :: struct {
 }
 
 handler_on_window_resized :: proc(p_event: WindowResizedEvent) {
-	backend_handler_on_window_resized(p_event)
+    setup_renderer_context()
+    backend_handler_on_window_resized(p_event)
 }
 
+//---------------------------------------------------------------------------//
+
+setup_renderer_context :: proc () {
+    context.allocator = G_RENDERER.allocator
+    context.temp_allocator = G_RENDERER.temp_arena_allocator
+    context.logger = G_RENDERER_LOG
+}
 //---------------------------------------------------------------------------//

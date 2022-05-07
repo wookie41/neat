@@ -12,8 +12,6 @@ when USE_VULKAN_BACKEND {
 	import vk "vendor:vulkan"
 	import vma "../third_party/vma"
 
-	import "../common"
-
 	//---------------------------------------------------------------------------//
 
 	@(private)
@@ -63,9 +61,6 @@ when USE_VULKAN_BACKEND {
 		misc_flags:                  BackendMiscFlags,
 	}
 
-	@(private = "file")
-	g_log: log.Logger
-
 	//---------------------------------------------------------------------------//
 
 	@(private)
@@ -73,18 +68,9 @@ when USE_VULKAN_BACKEND {
 
 		device_extensions := []cstring{"VK_KHR_swapchain"}
 
-		context.logger = G_RENDERER_LOG
-
-		G_RENDERER.allocator = p_options.allocator
 		G_RENDERER.window = p_options.window
 		G_RENDERER.windowID = sdl.GetWindowID(p_options.window)
 		G_RENDERER.frame_idx = 0
-
-		mem.init_arena(
-			&G_RENDERER.temp_arena,
-			make([]byte, common.MEGABYTE * 4, p_options.allocator),
-		)
-		G_RENDERER.temp_arena_allocator = mem.arena_allocator(&G_RENDERER.temp_arena)
 
 		// Load the base vulkan procedures
 		vk.load_proc_addresses(sdl.Vulkan_GetVkGetInstanceProcAddr())
@@ -92,12 +78,11 @@ when USE_VULKAN_BACKEND {
 		// Create Vulkan Instance
 		{
 			using G_RENDERER
-			context.allocator = temp_arena_allocator
 			defer mem.free_all(temp_arena_allocator)
 
 			// Specify a list of required extensions and layers
-			required_extensions := make([dynamic]cstring)
-			required_layers := make([dynamic]cstring)
+			required_extensions := make([dynamic]cstring, temp_arena_allocator)
+			required_layers := make([dynamic]cstring, temp_arena_allocator)
 
 			// Add SDL extensions
 			{
@@ -212,7 +197,6 @@ when USE_VULKAN_BACKEND {
 		// Create physical device
 		{
 			using G_RENDERER
-			context.allocator = temp_arena_allocator
 			defer mem.free_all(temp_arena_allocator)
 
 			physical_device_count: u32
@@ -222,7 +206,11 @@ when USE_VULKAN_BACKEND {
 				return false
 			}
 
-			physical_devices := make([]vk.PhysicalDevice, physical_device_count)
+			physical_devices := make(
+				[]vk.PhysicalDevice,
+				physical_device_count,
+				temp_arena_allocator,
+			)
 
 			vk.EnumeratePhysicalDevices(
 				instance,
@@ -292,7 +280,11 @@ when USE_VULKAN_BACKEND {
 				queue_family_count: u32
 				vk.GetPhysicalDeviceQueueFamilyProperties(pd, &queue_family_count, nil)
 
-				queue_families := make([]vk.QueueFamilyProperties, int(queue_family_count))
+				queue_families := make(
+					[]vk.QueueFamilyProperties,
+					int(queue_family_count),
+					temp_arena_allocator,
+				)
 				vk.GetPhysicalDeviceQueueFamilyProperties(
 					pd,
 					&queue_family_count,
@@ -353,11 +345,10 @@ when USE_VULKAN_BACKEND {
 		// Create logical device for our queues (and the queues themselves)
 		{
 			using G_RENDERER
-			context.allocator = temp_arena_allocator
 			defer mem.free_all(temp_arena_allocator)
 
 			// Avoid creating duplicates
-			queue_families: map[u32]int
+			queue_families := make(map[u32]int, 3, temp_arena_allocator)
 			queue_families[queue_family_graphics_index] += 1
 			queue_families[queue_family_present_index] += 1
 			queue_families[queue_family_compute_index] += 1
@@ -433,7 +424,7 @@ when USE_VULKAN_BACKEND {
 		vk.load_proc_addresses(G_RENDERER.device)
 
 		// Get the swapchain working
-		G_RENDERER.swapchain_images = make([dynamic]vk.Image, G_RENDERER.allocator)
+		G_RENDERER.swapchain_images = make([dynamic]vk.Image)
 
 		if create_swapchain() == false {
 			return false
@@ -768,15 +759,13 @@ recreate_swapchain :: proc() {
 		log.fatal("Can't recreate a swapchain - no formats")
 	}
 
-	formats := make([]vk.SurfaceFormatKHR, int(format_count), context.temp_allocator)
-	defer delete(formats)
+	formats := make([]vk.SurfaceFormatKHR, int(format_count))
 	vk.GetPhysicalDeviceSurfaceFormatsKHR(
 		physical_device,
 		surface,
 		&format_count,
 		raw_data(formats),
 	)
-
 
 	present_mode_count: u32
 	vk.GetPhysicalDeviceSurfacePresentModesKHR(
@@ -790,7 +779,6 @@ recreate_swapchain :: proc() {
 	}
 
 	present_modes := make([]vk.PresentModeKHR, int(present_mode_count))
-	defer delete(present_modes)
 	vk.GetPhysicalDeviceSurfacePresentModesKHR(
 		physical_device,
 		surface,
@@ -798,15 +786,14 @@ recreate_swapchain :: proc() {
 		raw_data(present_modes),
 	)
 
-	// TODO Why do you crash?
-	// delete(swapchain_formats)
-	// delete(swapchain_present_modes)
+	delete(swapchain_formats)
+	delete(swapchain_present_modes)
 
 	swapchain_formats = formats
 	swapchain_present_modes = present_modes
 
-	// @TODO Why do you crash?
-	// delete(swapchain_images)
+	clear(&swapchain_images)
+	clear(&swapchain_image_views)
 
 	// @TODO Make it better, use pOldSwapchain when recreating the swapchain 
 	vk.DeviceWaitIdle(device)
