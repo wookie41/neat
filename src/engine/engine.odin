@@ -20,7 +20,7 @@ InitOptions :: struct {
 
 //---------------------------------------------------------------------------//
 
-G_ENGINE : struct {
+G_ENGINE: struct {
 	window: ^sdl.Window,
 }
 
@@ -32,9 +32,9 @@ G_ENGINE_LOG: log.Logger
 //---------------------------------------------------------------------------//
 
 init :: proc(p_options: InitOptions) -> bool {
-    
-    G_ENGINE_LOG = log.create_console_logger()
-    context.logger = G_ENGINE_LOG
+
+	G_ENGINE_LOG = log.create_console_logger()
+	context.logger = G_ENGINE_LOG
 
 	// Initialize SDL2
 	if sdl.Init(sdl.INIT_VIDEO) != 0 {
@@ -61,14 +61,14 @@ init :: proc(p_options: InitOptions) -> bool {
 			allocator = context.allocator,
 		}
 
-        when USE_VULKAN_BACKEND {
-            renderer_init_options.window = G_ENGINE.window
-        }
+		when USE_VULKAN_BACKEND {
+			renderer_init_options.window = G_ENGINE.window
+		}
 
 		if renderer.init(renderer_init_options) == false {
-            log.error("Failed to init renderer")
-            return false
-        }
+			log.error("Failed to init renderer")
+			return false
+		}
 	}
 
 	return true
@@ -77,15 +77,25 @@ init :: proc(p_options: InitOptions) -> bool {
 //---------------------------------------------------------------------------//
 
 run :: proc() {
-    sdl_event: sdl.Event
-    running := true
-    for running {
-        sdl.PollEvent(&sdl_event)
-        if sdl_event.type == .QUIT || 
-            sdl_event.type == .KEYDOWN && sdl_event.key.keysym.scancode == .ESCAPE {
-            running = false
-        }
-
-        renderer.update(0)
-    }
+	sdl_event: sdl.Event
+	running := true
+	for running {
+		sdl.PollEvent(&sdl_event)
+		#partial switch sdl_event.type {
+		case .QUIT:
+			running = false
+		case .WINDOWEVENT:
+			if sdl_event.window.event == .RESIZED {
+				renderer_event := renderer.WindowResizedEvent {
+					windowID = sdl_event.window.windowID,
+				}
+				renderer.handler_on_window_resized(renderer_event)
+			}
+		case .KEYDOWN:
+			if sdl_event.key.keysym.scancode == .ESCAPE {
+				running = false
+			}
+		}
+		renderer.update(0)
+	}
 }

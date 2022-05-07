@@ -23,9 +23,16 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
+	BackendMiscFlagBits :: enum u32 {
+		WINDOW_RESIZED,
+	}
+
+	BackendMiscFlags :: distinct bit_set[BackendMiscFlagBits;u32]
+
 	@(private)
 	BackendRendererState :: struct {
 		window:                      ^sdl.Window,
+		windowID:                    u32,
 		instance:                    vk.Instance,
 		physical_device:             vk.PhysicalDevice,
 		surface_capabilities:        vk.SurfaceCapabilitiesKHR,
@@ -53,6 +60,7 @@ when USE_VULKAN_BACKEND {
 		num_frames_in_flight:        u32,
 		frame_idx:                   u32,
 		vma_allocator:               vma.Allocator,
+		misc_flags:                  BackendMiscFlags,
 	}
 
 	@(private = "file")
@@ -69,6 +77,7 @@ when USE_VULKAN_BACKEND {
 
 		G_RENDERER.allocator = p_options.allocator
 		G_RENDERER.window = p_options.window
+		G_RENDERER.windowID = sdl.GetWindowID(p_options.window)
 		G_RENDERER.frame_idx = 0
 
 		mem.init_arena(
@@ -510,11 +519,20 @@ backend_update :: proc(p_dt: f32) {
 		&swap_image_index,
 	)
 
+
+	// Check if we need to recreate the swapchain
+	should_recreate_swapchain := .WINDOW_RESIZED in G_RENDERER.misc_flags
+	G_RENDERER.misc_flags -= {.WINDOW_RESIZED}
+
 	if acquire_result != .SUCCESS {
 		if acquire_result == .ERROR_OUT_OF_DATE_KHR || acquire_result == .SUBOPTIMAL_KHR {
-			recreate_swapchain()
-			return
+			should_recreate_swapchain |= true
 		}
+	}
+
+	if should_recreate_swapchain {
+		recreate_swapchain()
+		return
 	}
 
 	vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx])
@@ -738,7 +756,11 @@ recreate_swapchain :: proc() {
 	using G_RENDERER
 
 	// Refresh capabilties, formats and present modes
-	vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &surface_capabilities)
+	vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(
+		physical_device,
+		surface,
+		&surface_capabilities,
+	)
 
 	format_count: u32
 	vk.GetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &format_count, nil)
@@ -808,3 +830,13 @@ recreate_swapchain :: proc() {
 
 	create_synchronization_primitives()
 }
+
+//---------------------------------------------------------------------------//
+
+backend_handler_on_window_resized :: proc(p_event: WindowResizedEvent) {
+	if p_event.windowID == G_RENDERER.windowID {
+		G_RENDERER.misc_flags += {.WINDOW_RESIZED}
+	}
+}
+
+//---------------------------------------------------------------------------//
