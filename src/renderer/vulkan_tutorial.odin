@@ -161,29 +161,6 @@ init_vt :: proc() -> bool {
 			topology               = .TRIANGLE_LIST,
 			primitiveRestartEnable = false,
 		}
-		// state for viewport
-		viewport := vk.Viewport {
-			x        = 0.0,
-			y        = 0.0,
-			width    = cast(f32)swap_extent.width,
-			height   = cast(f32)swap_extent.height,
-			minDepth = 0.0,
-			maxDepth = 1.0,
-		}
-
-		scissor := vk.Rect2D {
-			offset = {0, 0},
-			extent = swap_extent,
-		}
-
-		viewport_state := vk.PipelineViewportStateCreateInfo {
-			sType         = .PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-			viewportCount = 1,
-			pViewports    = &viewport,
-			scissorCount  = 1,
-			pScissors     = &scissor,
-		}
-
 		// state for rasteriser
 		rasteriser := vk.PipelineRasterizationStateCreateInfo {
 			sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -253,19 +230,33 @@ init_vt :: proc() -> bool {
 			depthAttachmentFormat   = .D32_SFLOAT,
 		}
 
+		dynamic_states := []vk.DynamicState{.VIEWPORT, .SCISSOR}
+		dynamic_state_create_info := vk.PipelineDynamicStateCreateInfo {
+			sType             = .PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+			dynamicStateCount = u32(len(dynamic_states)),
+			pDynamicStates    = raw_data(dynamic_states),
+		}
+
+		viewport_state := vk.PipelineViewportStateCreateInfo {
+			sType = .PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+			scissorCount = 1,
+			viewportCount = 1,
+		}
+
 		pipeline_info := vk.GraphicsPipelineCreateInfo {
 			sType               = .GRAPHICS_PIPELINE_CREATE_INFO,
+			pDynamicState       = &dynamic_state_create_info,
 			pNext               = &pipeline_rendering_create_info,
 			stageCount          = u32(len(shader_stages)),
 			pStages             = raw_data(shader_stages),
 			pVertexInputState   = &vertex_input_info,
 			pInputAssemblyState = &input_assembly_info,
-			pViewportState      = &viewport_state,
 			pRasterizationState = &rasteriser,
 			pMultisampleState   = &multisampling,
 			pColorBlendState    = &colour_blending,
 			pDepthStencilState  = &depth_stencil,
 			layout              = pipeline_layout,
+			pViewportState      = &viewport_state,
 		}
 
 		if vk.CreateGraphicsPipelines(device, 0, 1, &pipeline_info, nil, &pso) != .SUCCESS {
@@ -413,12 +404,26 @@ vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
 		},
 	}
 
+	// state for viewport
+	viewport := vk.Viewport {
+		x        = 0.0,
+		y        = 0.0,
+		width    = cast(f32)swap_extent.width,
+		height   = cast(f32)swap_extent.height,
+		minDepth = 0.0,
+		maxDepth = 1.0,
+	}
+
+	scissor := vk.Rect2D {
+		offset = {0, 0},
+		extent = swap_extent,
+	}
+
 	cmd := command_buffers[frame_idx]
 	vk.BeginCommandBuffer(cmd, &cmd_buffer_begin_info)
 
 	vt_update_uniform_buffer()
 
-	vk.CmdBeginRendering(cmd, &rendering_info)
 	vk.CmdPipelineBarrier(
 		cmd,
 		{.TOP_OF_PIPE},
@@ -431,10 +436,10 @@ vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
 		1,
 		&to_color_barrier,
 	)
-
-	offset := vk.DeviceSize{}
-
+	vk.CmdBeginRendering(cmd, &rendering_info)
 	vk.CmdBindPipeline(cmd, .GRAPHICS, pso)
+	vk.CmdSetViewport(cmd, 0, 1, &viewport)
+	vk.CmdSetScissor(cmd, 0, 1, &scissor)
 	vk.CmdBindDescriptorSets(
 		cmd,
 		.GRAPHICS,
@@ -445,9 +450,14 @@ vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
 		0,
 		nil,
 	)
+
+	offset := vk.DeviceSize{}
+
 	vk.CmdBindVertexBuffers(cmd, 0, 1, &vertex_buffer, &offset)
 	vk.CmdBindIndexBuffer(cmd, index_buffer, offset, .UINT16)
 	vk.CmdDrawIndexed(cmd, u32(len(g_indices)), 1, 0, 0, 0)
+	vk.CmdEndRendering(cmd)
+
 	vk.CmdPipelineBarrier(
 		cmd,
 		{.COLOR_ATTACHMENT_OUTPUT},
@@ -461,7 +471,6 @@ vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
 		&to_present_barrier,
 	)
 
-	vk.CmdEndRendering(cmd)
 	vk.EndCommandBuffer(cmd)
 
 	return cmd
@@ -548,7 +557,7 @@ vt_create_buffer :: proc(
 	alloc: vma.Allocation
 	if vma.create_buffer(vma_allocator, &buffer_info, &alloc_info, &buffer, &alloc, nil) != .SUCCESS {
 		log.warn("Failed to create buffer")
-		return vk.BUFFER_NULL, nil
+		return 0, nil
 	}
 	return buffer, alloc
 }
@@ -872,7 +881,7 @@ vt_end_single_time_command_buffer :: proc(cmd_buff: vk.CommandBuffer) {
 		commandBufferCount = 1,
 		pCommandBuffers    = &command_buffer,
 	}
-	vk.QueueSubmit(graphics_queue, 1, &submit_info, vk.FENCE_NULL)
+	vk.QueueSubmit(graphics_queue, 1, &submit_info, 0)
 	vk.QueueWaitIdle(graphics_queue)
 }
 

@@ -627,7 +627,7 @@ when USE_VULKAN_BACKEND {
 		for swap_image_view in swapchain_image_views {
 			vk.DestroyImageView(device, swap_image_view, nil)
 		}
-		if swapchain != vk.SWAPCHAINKHR_NULL {
+		if swapchain != 0 {
 			vk.DestroySwapchainKHR(device, swapchain, nil)
 		}
 		if device != nil {
