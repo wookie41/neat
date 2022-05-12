@@ -11,7 +11,6 @@ when USE_VULKAN_BACKEND {
 	import sdl "vendor:sdl2"
 	import vk "vendor:vulkan"
 	import vma "../third_party/vma"
-	import "../third_party/tiny_obj_loader"
 
 	//---------------------------------------------------------------------------//
 

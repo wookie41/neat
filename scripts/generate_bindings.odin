@@ -10,30 +10,23 @@ import "../src/third_party/odin-binding-generator/bindgen"
 
 main :: proc() {
 	// generate_vma_bindings()
-    generate_tiny_obj_loader_bindings()
+	// generate_tiny_obj_loader_bindings()
 }
 
 generate_tiny_obj_loader_bindings :: proc() {
-    options: bindgen.GeneratorOptions
+	options: bindgen.GeneratorOptions
 
 	// We remove defines' prefix.
-	options.definePrefixes = []string{"VMA_"}
 	options.defineCase = bindgen.Case.Constant
-
-	options.pseudoTypePrefixes = []string{"Vma", "vma"}
-
 	options.functionPrefixes = []string{"tinyobj_"}
 	options.functionCase = bindgen.Case.Snake
-
-	options.enumValuePrefixes = []string{"VMA_"}
 	options.enumValueCase = bindgen.Case.Pascal
 	options.enumValueNameRemove = true
-
 	options.pseudoTypeTransparentPrefixes = []string{"TINYOBJ_"}
 
 	bindgen.generate(
 		packageName = "tiny_obj_loader",
-		foreignLibrary = "tiny_obj_loader",
+		foreignLibrary = "tiny_obj_loader.lib",
 		outputFile = "src/third_party/tiny_obj_loader/tiny_obj_loader.odin",
 		headerFiles = []string{"src/third_party/tiny_obj_loader/external/tiny_obj_loader.h"},
 		options = options,
@@ -101,7 +94,7 @@ generate_vma_bindings :: proc() {
 
 	bindgen.generate(
 		packageName = "vma",
-		foreignLibrary = "vma",
+		foreignLibrary = "vma.lib",
 		outputFile = "src/third_party/vma/vma.odin",
 		headerFiles = []string{"src/third_party/vma/external/vma_odin.h"},
 		options = options,

@@ -1,6 +1,6 @@
 package tiny_obj_loader
 
-foreign import "tiny_obj_loader"
+foreign import "external/tiny_obj_loader.lib"
 
 import _c "core:c"
 
@@ -17,7 +17,7 @@ HASH_TABLE_ERROR :: 1;
 HASH_TABLE_SUCCESS :: 0;
 HASH_TABLE_DEFAULT_SIZE :: 10;
 
-file_reader_callback :: #type proc(ctx : rawptr, filename : cstring, is_mtl : _c.int, obj_filename : cstring, buf : ^cstring, len : ^_c.size_t);
+file_reader_callback :: #type proc "c" (ctx : rawptr, filename : cstring, is_mtl : _c.int, obj_filename : cstring, buf : ^cstring, len : ^_c.size_t);
 
 CommandType :: enum i32 {
     CommandEmpty,
@@ -71,10 +71,10 @@ tinyobj_attrib_t :: struct {
     num_faces : _c.uint,
     num_face_num_verts : _c.uint,
     pad0 : _c.int,
-    vertices : ^_c.float,
-    normals : ^_c.float,
-    texcoords : ^_c.float,
-    faces : ^tinyobj_vertex_index_t,
+    vertices : [^]_c.float,
+    normals : [^]_c.float,
+    texcoords : [^]_c.float,
+    faces : [^]tinyobj_vertex_index_t,
     face_num_verts : ^_c.int,
     material_ids : ^_c.int,
 };
@@ -130,7 +130,7 @@ Command :: struct {
 foreign tiny_obj_loader {
 
     @(link_name="tinyobj_parse_obj")
-    parse_obj :: proc(attrib : ^tinyobj_attrib_t, shapes : ^^tinyobj_shape_t, num_shapes : ^_c.size_t, materials : ^^tinyobj_material_t, num_materials : ^_c.size_t, file_name : cstring, file_reader : file_reader_callback, ctx : rawptr, flags : _c.uint) -> _c.int ---;
+    parse_obj :: proc(attrib : ^tinyobj_attrib_t, shapes : ^[^]tinyobj_shape_t, num_shapes : ^_c.size_t, materials : ^[^]tinyobj_material_t, num_materials : ^_c.size_t, file_name : cstring, file_reader : file_reader_callback, ctx : rawptr, flags : _c.uint) -> _c.int ---;
 
     @(link_name="tinyobj_parse_mtl_file")
     parse_mtl_file :: proc(materials_out : ^^tinyobj_material_t, num_materials_out : ^_c.size_t, filename : cstring, obj_filename : cstring, file_reader : file_reader_callback, ctx : rawptr) -> _c.int ---;
@@ -195,8 +195,8 @@ foreign tiny_obj_loader {
     @(link_name="my_strndup")
     my_strndup :: proc(s : cstring, len : _c.size_t) -> cstring ---;
 
-    @(link_name="dynamic_fgets")
-    dynamic_fgets :: proc(buf : ^cstring, size : ^_c.size_t, file : ^FILE) -> cstring ---;
+    // @(link_name="dynamic_fgets")
+    // dynamic_fgets :: proc(buf : ^cstring, size : ^_c.size_t, file : ^FILE) -> cstring ---;
 
     @(link_name="initMaterial")
     init_material :: proc(material : ^tinyobj_material_t) ---;

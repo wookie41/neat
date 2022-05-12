@@ -6,11 +6,14 @@ import "core:mem"
 import "core:log"
 import "core:time"
 import "core:c"
+import "core:strings"
 
 import vk "vendor:vulkan"
 import stb_image "vendor:stb/image"
 
 import vma "../third_party/vma"
+import tinyobj "../third_party/tiny_obj_loader"
+import assimp "../third_party/assimp"
 
 G_VT: struct {
 	descriptor_set_layout:     vk.DescriptorSetLayout,
@@ -71,18 +74,11 @@ vertex_attributes_descriptions := []vk.VertexInputAttributeDescription{
 	},
 }
 
-g_vertices :: []Vertex{
-	{{-0.5, -0.5, 0.0}, {1.0, 0.0, 0.0}, {0.0, 0.0}},
-	{{0.5, -0.5, 0.0}, {0.0, 1.0, 0.0}, {1.0, 0.0}},
-	{{0.5, 0.5, 0.0}, {0.0, 0.0, 1.0}, {1.0, 1.0}},
-	{{-0.5, 0.5, 0.0}, {1.0, 1.0, 1.0}, {0.0, 1.0}},
-	{{-0.5, -0.5, -0.5}, {1.0, 0.0, 0.0}, {0.0, 0.0}},
-	{{0.5, -0.5, -0.5}, {0.0, 1.0, 0.0}, {1.0, 0.0}},
-	{{0.5, 0.5, -0.5}, {0.0, 0.0, 1.0}, {1.0, 1.0}},
-	{{-0.5, 0.5, -0.5}, {1.0, 1.0, 1.0}, {0.0, 1.0}},
-}
+g_vertices: []Vertex
+g_indices: []u32
 
-g_indices :: []u16{0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4}
+MODEL_PATH :: "app_data/renderer/assets/models/viking_room.obj"
+MODEL_TEXTURE_PATH :: "app_data/renderer/assets/models/viking_room.png"
 
 UniformBufferObject :: struct {
 	model: glsl.mat4x4,
@@ -238,8 +234,8 @@ init_vt :: proc() -> bool {
 		}
 
 		viewport_state := vk.PipelineViewportStateCreateInfo {
-			sType = .PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-			scissorCount = 1,
+			sType         = .PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+			scissorCount  = 1,
 			viewportCount = 1,
 		}
 
@@ -297,6 +293,7 @@ init_vt :: proc() -> bool {
 		}
 	}
 
+	vt_load_model()
 	vt_create_vertex_buffer()
 	vt_create_index_buffer()
 	vt_create_texture_image()
@@ -454,8 +451,9 @@ vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
 	offset := vk.DeviceSize{}
 
 	vk.CmdBindVertexBuffers(cmd, 0, 1, &vertex_buffer, &offset)
-	vk.CmdBindIndexBuffer(cmd, index_buffer, offset, .UINT16)
-	vk.CmdDrawIndexed(cmd, u32(len(g_indices)), 1, 0, 0, 0)
+	vk.CmdBindIndexBuffer(cmd, index_buffer, offset, .UINT32)
+	// vk.CmdDrawIndexed(cmd, u32(len(g_indices)), 1, 0, 0, 0)
+	vk.CmdDraw(cmd, u32(len(g_vertices)), 1, 0, 0)
 	vk.CmdEndRendering(cmd)
 
 	vk.CmdPipelineBarrier(
@@ -645,7 +643,7 @@ vt_update_uniform_buffer :: proc() {
 		model = glsl.identity(
 			glsl.mat4,
 		) * glsl.mat4Rotate({0, 0, 1}, glsl.radians_f32(90.0) * dt),
-		view  = glsl.mat4LookAt({0, 1, 2}, {0, 0, 0}, {0, 1, 0}),
+		view  = glsl.mat4LookAt({0, 3.0, 1.5}, {0, 0, 0}, {0, 1, 0}),
 		proj  = glsl.mat4Perspective(
 			glsl.radians_f32(45.0),
 			f32(swap_extent.width) / f32(swap_extent.height),
@@ -774,7 +772,7 @@ vt_create_texture_image :: proc() {
 
 	image_width, image_height, channels: c.int
 	pixels := stb_image.load(
-		"app_data/renderer/assets/textures/texture.jpg",
+		"app_data/renderer/assets/textures/viking_room.png",
 		&image_width,
 		&image_height,
 		&channels,
@@ -1036,4 +1034,82 @@ vt_create_depth_resources :: proc() {
 	}
 
 	depth_image_view = vt_create_image_view(depth_image, .D32_SFLOAT, {.DEPTH})
+}
+
+vt_load_model :: proc() {
+
+	ctx := create_new_tiny_obj_loader_ctx()
+	defer free_all(context.temp_allocator)
+
+	attrib: tinyobj.tinyobj_attrib_t
+	num_shapes: c.size_t
+	num_materials: c.size_t
+	shapes: [^]tinyobj.tinyobj_shape_t
+	materials: [^]tinyobj.tinyobj_material_t
+
+	model_path := strings.clone_to_cstring(
+		"app_data/renderer/assets/models/viking_room.obj",
+		context.temp_allocator,
+	)
+
+	load_result := tinyobj.parse_obj(
+		&attrib,
+		&shapes,
+		&num_shapes,
+		&materials,
+		&num_materials,
+		model_path,
+		g_tiny_obj_file_reader,
+		&ctx,
+		tinyobj.TINYOBJ_FLAG_TRIANGULATE,
+	)
+
+	if load_result != 0 {
+		log.fatalf("Failed to load model")
+	}
+
+	defer tinyobj.attrib_free(&attrib)
+	defer tinyobj.shapes_free(shapes, num_shapes)
+	defer tinyobj.materials_free(materials, num_materials)
+
+	g_vertices = make([]Vertex, attrib.num_faces)
+	g_indices = make([]u32, int(attrib.num_faces))
+
+	// for i in 0..<attrib.num_vertices {
+	// 	g_vertices[i] = Vertex {
+	// 		position = {
+	// 			attrib.vertices[i * 3],
+	// 			attrib.vertices[i * 3 + 1],
+	// 			attrib.vertices[i * 3 + 2],
+	// 		},
+	// 		uv =  {
+	// 			attrib.texcoords[i * 2],
+	// 			1 - attrib.texcoords[i * 2 + 1],
+	// 		},
+	// 	}
+	// }
+
+	for i in 0 ..< attrib.num_faces {
+		g_vertices[i] = Vertex {
+			position = {
+				attrib.vertices[attrib.faces[i].v_idx * 3],
+				attrib.vertices[attrib.faces[i].v_idx * 3 + 1],
+				attrib.vertices[attrib.faces[i].v_idx * 3 + 2],
+			},
+			uv = {
+				attrib.texcoords[attrib.faces[i].vt_idx * 2],
+				1 - attrib.texcoords[attrib.faces[i].vt_idx * 2 + 1],
+			},
+		}
+		// g_indices[i] = u32(attrib.faces[i].v_idx)
+	}
+
+	scene := assimp.import_file(
+		"app_data/renderer/assets/models/viking_room.obj",
+		{.CalcTangentSpace, .Triangulate, .JoinIdenticalVertices},
+	)
+
+	if scene != nil {
+		assimp.release_import(scene)
+	}
 }

@@ -132,15 +132,15 @@ extern int tinyobj_parse_obj(tinyobj_attrib_t *attrib, tinyobj_shape_t **shapes,
  * Returns TINYOBJ_SUCCESS if things goes well.
  * Returns TINYOBJ_ERR_*** when there is an error.
  */
-extern int tinyobj_parse_mtl_file(tinyobj_material_t **materials_out,
+extern int  tinyobj_parse_mtl_file(tinyobj_material_t **materials_out,
                                   size_t *num_materials_out,
                                   const char *filename, const char *obj_filename, file_reader_callback file_reader,
 				  void *ctx);
 
-extern void tinyobj_attrib_init(tinyobj_attrib_t *attrib);
-extern void tinyobj_attrib_free(tinyobj_attrib_t *attrib);
-extern void tinyobj_shapes_free(tinyobj_shape_t *shapes, size_t num_shapes);
-extern void tinyobj_materials_free(tinyobj_material_t *materials,
+extern void  tinyobj_attrib_init(tinyobj_attrib_t *attrib);
+extern void  tinyobj_attrib_free(tinyobj_attrib_t *attrib);
+extern void  tinyobj_shapes_free(tinyobj_shape_t *shapes, size_t num_shapes);
+extern void  tinyobj_materials_free(tinyobj_material_t *materials,
                                    size_t num_materials);
 
 #ifdef TINYOBJ_LOADER_C_IMPLEMENTATION
@@ -1071,7 +1071,7 @@ static int tinyobj_parse_and_index_mtl_file(tinyobj_material_t **materials_out,
   return TINYOBJ_SUCCESS;
 }
 
-int tinyobj_parse_mtl_file(tinyobj_material_t **materials_out,
+int  tinyobj_parse_mtl_file(tinyobj_material_t **materials_out,
                            size_t *num_materials_out,
                            const char *mtl_filename, const char *obj_filename, file_reader_callback file_reader,
                            void *ctx) {
