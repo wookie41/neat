@@ -6,13 +6,11 @@ import "core:mem"
 import "core:log"
 import "core:time"
 import "core:c"
-import "core:strings"
 
 import vk "vendor:vulkan"
 import stb_image "vendor:stb/image"
 
 import vma "../third_party/vma"
-import tinyobj "../third_party/tiny_obj_loader"
 import assimp "../third_party/assimp"
 
 G_VT: struct {
@@ -452,8 +450,8 @@ vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
 
 	vk.CmdBindVertexBuffers(cmd, 0, 1, &vertex_buffer, &offset)
 	vk.CmdBindIndexBuffer(cmd, index_buffer, offset, .UINT32)
-	// vk.CmdDrawIndexed(cmd, u32(len(g_indices)), 1, 0, 0, 0)
-	vk.CmdDraw(cmd, u32(len(g_vertices)), 1, 0, 0)
+	vk.CmdDrawIndexed(cmd, u32(len(g_indices)), 1, 0, 0, 0)
+	// vk.CmdDraw(cmd, u32(len(g_vertices)), 1, 0, 0)
 	vk.CmdEndRendering(cmd)
 
 	vk.CmdPipelineBarrier(
@@ -1038,78 +1036,62 @@ vt_create_depth_resources :: proc() {
 
 vt_load_model :: proc() {
 
-	ctx := create_new_tiny_obj_loader_ctx()
-	defer free_all(context.temp_allocator)
-
-	attrib: tinyobj.tinyobj_attrib_t
-	num_shapes: c.size_t
-	num_materials: c.size_t
-	shapes: [^]tinyobj.tinyobj_shape_t
-	materials: [^]tinyobj.tinyobj_material_t
-
-	model_path := strings.clone_to_cstring(
-		"app_data/renderer/assets/models/viking_room.obj",
-		context.temp_allocator,
-	)
-
-	load_result := tinyobj.parse_obj(
-		&attrib,
-		&shapes,
-		&num_shapes,
-		&materials,
-		&num_materials,
-		model_path,
-		g_tiny_obj_file_reader,
-		&ctx,
-		tinyobj.TINYOBJ_FLAG_TRIANGULATE,
-	)
-
-	if load_result != 0 {
-		log.fatalf("Failed to load model")
-	}
-
-	defer tinyobj.attrib_free(&attrib)
-	defer tinyobj.shapes_free(shapes, num_shapes)
-	defer tinyobj.materials_free(materials, num_materials)
-
-	g_vertices = make([]Vertex, attrib.num_faces)
-	g_indices = make([]u32, int(attrib.num_faces))
-
-	// for i in 0..<attrib.num_vertices {
-	// 	g_vertices[i] = Vertex {
-	// 		position = {
-	// 			attrib.vertices[i * 3],
-	// 			attrib.vertices[i * 3 + 1],
-	// 			attrib.vertices[i * 3 + 2],
-	// 		},
-	// 		uv =  {
-	// 			attrib.texcoords[i * 2],
-	// 			1 - attrib.texcoords[i * 2 + 1],
-	// 		},
-	// 	}
-	// }
-
-	for i in 0 ..< attrib.num_faces {
-		g_vertices[i] = Vertex {
-			position = {
-				attrib.vertices[attrib.faces[i].v_idx * 3],
-				attrib.vertices[attrib.faces[i].v_idx * 3 + 1],
-				attrib.vertices[attrib.faces[i].v_idx * 3 + 2],
-			},
-			uv = {
-				attrib.texcoords[attrib.faces[i].vt_idx * 2],
-				1 - attrib.texcoords[attrib.faces[i].vt_idx * 2 + 1],
-			},
-		}
-		// g_indices[i] = u32(attrib.faces[i].v_idx)
-	}
-
 	scene := assimp.import_file(
 		"app_data/renderer/assets/models/viking_room.obj",
-		{.CalcTangentSpace, .Triangulate, .JoinIdenticalVertices},
+		{.OptimizeMeshes, .Triangulate, .FlipUVs},
 	)
+	if scene == nil {
+		log.fatalf("Failed to load he model")
+	}
+	defer assimp.release_import(scene)
 
-	if scene != nil {
-		assimp.release_import(scene)
+	num_vertices: u32 = 0
+	num_indices: u32 = 0
+	for i in 0 ..< scene.mNumMeshes {
+		num_vertices += u32(scene.mMeshes[i].mNumVertices)
+		num_indices += u32(scene.mMeshes[i].mNumFaces * 3)
+	}
+
+	g_vertices = make([]Vertex, num_vertices)
+	g_indices = make([]u32, num_indices)
+
+	import_ctx: ImportContext
+
+	vt_assimp_load_node(scene, scene.mRootNode, &import_ctx)
+	fmt.println(import_ctx.curr_idx)
+}
+
+ImportContext :: struct {
+	curr_vtx: u32,
+	curr_idx: u32,
+}
+
+vt_assimp_load_node :: proc(
+	p_scene: ^assimp.Scene,
+	p_node: ^assimp.Node,
+	p_import_ctx: ^ImportContext,
+) {
+	for i in 0 ..< p_node.mNumMeshes {
+		mesh := p_scene.mMeshes[i]
+		for j in 0 ..< mesh.mNumVertices {
+			vertex := Vertex {
+				position = {mesh.mVertices[j].x, mesh.mVertices[j].y, mesh.mVertices[j].z},
+				color = {0, 0, 0},
+				uv = {mesh.mTextureCoords[0][j].x, mesh.mTextureCoords[0][j].y},
+			}
+			g_vertices[p_import_ctx.curr_vtx] = vertex
+			p_import_ctx.curr_vtx += 1
+		}
+
+		for j in 0 ..< mesh.mNumFaces {
+			for k in 0 ..< mesh.mFaces[j].mNumIndices {
+				g_indices[p_import_ctx.curr_idx] = mesh.mFaces[j].mIndices[k]
+				p_import_ctx.curr_idx += 1
+			}
+		}
+	}
+
+	for i in 0 ..< p_node.mNumChildren {
+		vt_assimp_load_node(p_scene, p_node.mChildren[i], p_import_ctx)
 	}
 }
