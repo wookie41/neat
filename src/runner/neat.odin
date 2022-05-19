@@ -1,5 +1,6 @@
 package main
 
+import "core:os"
 import "../engine"
 
 main :: proc() {
@@ -7,6 +8,8 @@ main :: proc() {
         window_width = 1280,
         window_height = 720,
     }
-    engine.init(engine_opts)
+    if engine.init(engine_opts) == false {
+        os.exit(-1)
+    } 
     engine.run()
 }

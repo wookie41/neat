@@ -14,7 +14,7 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	@(private)
+	@private
 	BackendInitOptions :: struct {
 		window: ^sdl.Window,
 	}
@@ -27,7 +27,7 @@ when USE_VULKAN_BACKEND {
 
 	BackendMiscFlags :: distinct bit_set[BackendMiscFlagBits;u32]
 
-	@(private)
+	@private
 	BackendRendererState :: struct {
 		window:                      ^sdl.Window,
 		windowID:                    u32,
@@ -63,7 +63,7 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	@(private)
+	@private
 	backend_init :: proc(p_options: InitOptions) -> bool {
 
 		device_extensions := []cstring{"VK_KHR_swapchain"}
@@ -78,6 +78,8 @@ when USE_VULKAN_BACKEND {
 		// Create Vulkan Instance
 		{
 			using G_RENDERER
+			using G_RENDERER_ALLOCATORS
+
 			defer mem.free_all(temp_arena_allocator)
 
 			// Specify a list of required extensions and layers
@@ -197,6 +199,8 @@ when USE_VULKAN_BACKEND {
 		// Create physical device
 		{
 			using G_RENDERER
+			using G_RENDERER_ALLOCATORS
+
 			defer mem.free_all(temp_arena_allocator)
 
 			physical_device_count: u32
@@ -345,6 +349,8 @@ when USE_VULKAN_BACKEND {
 		// Create logical device for our queues (and the queues themselves)
 		{
 			using G_RENDERER
+			using G_RENDERER_ALLOCATORS
+
 			defer mem.free_all(temp_arena_allocator)
 
 			// Avoid creating duplicates
@@ -451,7 +457,7 @@ when USE_VULKAN_BACKEND {
 		return true
 	}
 	//---------------------------------------------------------------------------//
-	@(private)
+	@private
 	backend_deinit :: proc() {
 		using G_RENDERER
 		vma.destroy_allocator(vma_allocator)
@@ -482,7 +488,7 @@ when USE_VULKAN_BACKEND {
 	}
 }
 //---------------------------------------------------------------------------//
-@(private)
+@private
 backend_update :: proc(p_dt: f32) {
 
 	context.logger = G_RENDERER_LOG

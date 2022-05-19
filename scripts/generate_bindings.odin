@@ -11,7 +11,8 @@ import "../src/third_party/odin-binding-generator/bindgen"
 main :: proc() {
 	// generate_vma_bindings()
 	// generate_tiny_obj_loader_bindings()
-	generate_assimp_bindings()
+	// generate_assimp_bindings()
+	generate_spirv_reflect_binding()
 }
 generate_assimp_bindings :: proc() {
 	options: bindgen.GeneratorOptions
@@ -57,6 +58,26 @@ generate_assimp_bindings :: proc() {
 			"src/third_party/assimp/external/vector3.h",
 			"src/third_party/assimp/external/version.h",
 		},
+		options = options,
+	)
+}
+
+generate_spirv_reflect_binding :: proc() {
+	options: bindgen.GeneratorOptions
+
+	// We remove defines' prefix.
+	options.defineCase = bindgen.Case.Constant
+	options.functionCase = bindgen.Case.Snake
+	options.enumValueCase = bindgen.Case.Pascal
+	options.enumValueNameRemove = true
+
+	bindgen.generate(
+		packageName = "spirv_reflect",
+		foreignLibrary = "spirv_reflect.lib",
+		outputFile = "src/third_party/spirv_reflect/spirv_reflect.odin",
+		headerFiles = []string{
+			"src/third_party/spirv_reflect/external/spirv.h",
+			"src/third_party/spirv_reflect/external/spirv_reflect.h"},
 		options = options,
 	)
 }

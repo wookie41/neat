@@ -9,30 +9,33 @@ import "../common"
 
 //---------------------------------------------------------------------------//
 
-@(private)
+@private
 USE_VULKAN_BACKEND :: #config(USE_VULKAN_BACKEND, true)
 
-@(private)
+@private
 MAX_NUM_FRAMES_IN_FLIGHT :: #config(NUM_FRAMES_IN_FLIGHT, 2)
 
 //---------------------------------------------------------------------------//
 
-@(private)
+@private
 G_RENDERER: struct {
-	using backend_state:  BackendRendererState,
-	allocator:            mem.Allocator,
+	using backend_state: BackendRendererState,
+}
+
+@private
+G_RENDERER_ALLOCATORS: struct {
+	main_allocator:       mem.Allocator,
 	temp_arena:           mem.Arena,
 	temp_arena_allocator: mem.Allocator,
 }
 
-@(private)
+@private
 G_RENDERER_LOG: log.Logger
 
 //---------------------------------------------------------------------------//
 
 InitOptions :: struct {
 	using backend_options: BackendInitOptions,
-	allocator:             mem.Allocator,
 }
 
 //---------------------------------------------------------------------------//
@@ -40,30 +43,33 @@ InitOptions :: struct {
 init :: proc(p_options: InitOptions) -> bool {
 	G_RENDERER_LOG = log.create_console_logger()
 
-	G_RENDERER.allocator = p_options.allocator
+	// Just take the current context allocator for now
+	G_RENDERER_ALLOCATORS.main_allocator = context.allocator 
 	mem.init_arena(
-		&G_RENDERER.temp_arena,
-		make([]byte, common.MEGABYTE * 4, p_options.allocator),
+		&G_RENDERER_ALLOCATORS.temp_arena,
+		make([]byte, common.MEGABYTE * 4, G_RENDERER_ALLOCATORS.main_allocator),
 	)
-	G_RENDERER.temp_arena_allocator = mem.arena_allocator(&G_RENDERER.temp_arena)
+	G_RENDERER_ALLOCATORS.temp_arena_allocator = mem.arena_allocator(&G_RENDERER_ALLOCATORS.temp_arena)
 
-    setup_renderer_context()
+	setup_renderer_context()
 
 	backend_init(p_options) or_return
+	load_shaders() or_return
+
 	init_vt()
 	return true
 }
 //---------------------------------------------------------------------------//
 
 update :: proc(p_dt: f32) {
-    setup_renderer_context()
+	setup_renderer_context()
 	backend_update(p_dt)
 }
 
 //---------------------------------------------------------------------------//
 
 deinit :: proc() {
-    setup_renderer_context()
+	setup_renderer_context()
 	backend_deinit()
 }
 
@@ -74,15 +80,15 @@ WindowResizedEvent :: struct {
 }
 
 handler_on_window_resized :: proc(p_event: WindowResizedEvent) {
-    setup_renderer_context()
-    backend_handler_on_window_resized(p_event)
+	setup_renderer_context()
+	backend_handler_on_window_resized(p_event)
 }
 
 //---------------------------------------------------------------------------//
 
-setup_renderer_context :: proc () {
-    context.allocator = G_RENDERER.allocator
-    context.temp_allocator = G_RENDERER.temp_arena_allocator
-    context.logger = G_RENDERER_LOG
+setup_renderer_context :: proc() {
+	context.allocator = G_RENDERER_ALLOCATORS.main_allocator
+	context.temp_allocator = G_RENDERER_ALLOCATORS.temp_arena_allocator
+	context.logger = G_RENDERER_LOG
 }
 //---------------------------------------------------------------------------//

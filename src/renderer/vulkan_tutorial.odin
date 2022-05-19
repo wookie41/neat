@@ -153,24 +153,17 @@ init_vt :: proc() -> bool {
 		input_assembly_info := vk.PipelineInputAssemblyStateCreateInfo {
 			sType                  = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
 			topology               = .TRIANGLE_LIST,
-			primitiveRestartEnable = false,
 		}
 		// state for rasteriser
 		rasteriser := vk.PipelineRasterizationStateCreateInfo {
 			sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-			depthClampEnable = false,
-			rasterizerDiscardEnable = false,
 			polygonMode = .FILL,
 			lineWidth = 1.0,
-			cullMode = {.BACK},
-			frontFace = .CLOCKWISE,
-			depthBiasEnable = false,
 		}
 
 		// state for multisampling
 		multisampling := vk.PipelineMultisampleStateCreateInfo {
 			sType = .PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-			sampleShadingEnable = false,
 			rasterizationSamples = {._1},
 		}
 

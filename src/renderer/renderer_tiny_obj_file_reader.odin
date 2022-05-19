@@ -5,7 +5,7 @@ import "core:os"
 import "core:strings"
 import "core:runtime"
 
-@(private)
+@private
 TinyObjLoaderContext :: struct {
     using ctx: runtime.Context,
 }
@@ -16,7 +16,7 @@ create_new_tiny_obj_loader_ctx :: proc () -> TinyObjLoaderContext {
     }
 }
 
-@(private)
+@private
 g_tiny_obj_file_reader :: proc "c" (
 	ctx: rawptr,
 	filename: cstring,

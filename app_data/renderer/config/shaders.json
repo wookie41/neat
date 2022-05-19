@@ -1,0 +1,14 @@
+[
+    {
+        "name": "base.vert",
+        "path": "setup_sdl2_debug.vert"
+    },
+    {
+        "name": "base.frag",
+        "path": "setup_sdl2_debug.frag"
+    },
+    {
+        "name": "base.frag",
+        "path": "setup_sdl2_debug.frag"
+    }
+]

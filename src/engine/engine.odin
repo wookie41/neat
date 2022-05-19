@@ -9,7 +9,7 @@ import "../renderer"
 
 //---------------------------------------------------------------------------//
 
-@(private)
+@private
 USE_VULKAN_BACKEND :: #config(USE_VULKAN_BACKEND, true)
 
 //---------------------------------------------------------------------------//
@@ -26,7 +26,7 @@ G_ENGINE: struct {
 
 //---------------------------------------------------------------------------//
 
-@(private)
+@private
 G_ENGINE_LOG: log.Logger
 
 //---------------------------------------------------------------------------//
@@ -58,7 +58,6 @@ init :: proc(p_options: InitOptions) -> bool {
 	//Init renderer
 	{
 		renderer_init_options := renderer.InitOptions {
-			allocator = context.allocator,
 		}
 
 		when USE_VULKAN_BACKEND {
