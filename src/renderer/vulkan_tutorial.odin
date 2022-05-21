@@ -6,6 +6,7 @@ import "core:mem"
 import "core:log"
 import "core:time"
 import "core:c"
+import "core:os"
 
 import vk "vendor:vulkan"
 import stb_image "vendor:stb/image"
@@ -98,12 +99,20 @@ init_vt :: proc() -> bool {
 		vk_create_descriptor_sets()
 
 		// load the code
-		vertex_shader_code := #load(
-			"../../app_data/renderer/assets/shaders/setup_sdl2_debug.vert.spv",
-		)
-		fragment_shader_code := #load(
-			"../../app_data/renderer/assets/shaders/setup_sdl2_debug.frag.spv",
-		)
+		vertex_path := "app_data/renderer/assets/shaders/bin/base.vert.sprv"
+		fragment_path := "app_data/renderer/assets/shaders/bin/base.frag.sprv"
+
+		vertex_shader_code, okv := os.read_entire_file(vertex_path)
+		if okv == false {
+			log.fatalf("failed to read vertex shader")
+		}
+		fragment_shader_code, okf := os.read_entire_file(fragment_path)
+		if okf == false {
+			log.fatalf("failed to read fragment shader")
+		}
+
+		defer delete(vertex_shader_code)
+		defer delete(fragment_shader_code)
 
 		// create the modules for each
 		vertex_module_info := vk.ShaderModuleCreateInfo {

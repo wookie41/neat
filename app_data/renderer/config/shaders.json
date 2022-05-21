@@ -1,14 +1,10 @@
 [
     {
         "name": "base.vert",
-        "path": "setup_sdl2_debug.vert"
+        "path": "base.vert.hlsl"
     },
     {
         "name": "base.frag",
-        "path": "setup_sdl2_debug.frag"
-    },
-    {
-        "name": "base.frag",
-        "path": "setup_sdl2_debug.frag"
+        "path": "base.frag.hlsl"
     }
 ]
