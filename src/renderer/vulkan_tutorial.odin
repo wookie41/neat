@@ -6,13 +6,13 @@ import "core:mem"
 import "core:log"
 import "core:time"
 import "core:c"
-import "core:os"
 
 import vk "vendor:vulkan"
 import stb_image "vendor:stb/image"
 
 import vma "../third_party/vma"
 import assimp "../third_party/assimp"
+import "../common"
 
 G_VT: struct {
 	descriptor_set_layout:     vk.DescriptorSetLayout,
@@ -98,49 +98,20 @@ init_vt :: proc() -> bool {
 		vt_create_descriptor_pool()
 		vk_create_descriptor_sets()
 
-		// load the code
-		vertex_path := "app_data/renderer/assets/shaders/bin/base.vert.sprv"
-		fragment_path := "app_data/renderer/assets/shaders/bin/base.frag.sprv"
-
-		vertex_shader_code, okv := os.read_entire_file(vertex_path)
-		if okv == false {
-			log.fatalf("failed to read vertex shader")
-		}
-		fragment_shader_code, okf := os.read_entire_file(fragment_path)
-		if okf == false {
-			log.fatalf("failed to read fragment shader")
-		}
-
-		defer delete(vertex_shader_code)
-		defer delete(fragment_shader_code)
-
-		// create the modules for each
-		vertex_module_info := vk.ShaderModuleCreateInfo {
-			sType    = .SHADER_MODULE_CREATE_INFO,
-			codeSize = len(vertex_shader_code),
-			pCode    = cast(^u32)raw_data(vertex_shader_code),
-		}
-
-		vk.CreateShaderModule(device, &vertex_module_info, nil, &vertex_shader_module)
-
-		fragment_module_info := vk.ShaderModuleCreateInfo {
-			sType    = .SHADER_MODULE_CREATE_INFO,
-			codeSize = len(fragment_shader_code),
-			pCode    = cast(^u32)raw_data(fragment_shader_code),
-		}
-		vk.CreateShaderModule(device, &fragment_module_info, nil, &fragment_shader_module)
+		vertex_shader_ref := find_shader_by_name(common.make_name("base.vert"))
+		fragment_shader_ref := find_shader_by_name(common.make_name("base.frag"))
 
 		// create stage info for each
 		vertex_stage_info := vk.PipelineShaderStageCreateInfo {
 			sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
 			stage = {.VERTEX},
-			module = vertex_shader_module,
+			module = get_shader_module(vertex_shader_ref),
 			pName = "main",
 		}
 		fragment_stage_info := vk.PipelineShaderStageCreateInfo {
 			sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
 			stage = {.FRAGMENT},
-			module = fragment_shader_module,
+			module = get_shader_module(fragment_shader_ref),
 			pName = "main",
 		}
 

@@ -9,27 +9,29 @@ import "../common"
 
 //---------------------------------------------------------------------------//
 
-@private
+@(private)
 USE_VULKAN_BACKEND :: #config(USE_VULKAN_BACKEND, true)
 
-@private
+@(private)
 MAX_NUM_FRAMES_IN_FLIGHT :: #config(NUM_FRAMES_IN_FLIGHT, 2)
 
 //---------------------------------------------------------------------------//
 
-@private
+@(private)
 G_RENDERER: struct {
 	using backend_state: BackendRendererState,
 }
 
-@private
+@(private)
 G_RENDERER_ALLOCATORS: struct {
 	main_allocator:       mem.Allocator,
+	resource_arena:       mem.Arena,
+	resource_allocator:   mem.Allocator,
 	temp_arena:           mem.Arena,
 	temp_arena_allocator: mem.Allocator,
 }
 
-@private
+@(private)
 G_RENDERER_LOG: log.Logger
 
 //---------------------------------------------------------------------------//
@@ -44,12 +46,25 @@ init :: proc(p_options: InitOptions) -> bool {
 	G_RENDERER_LOG = log.create_console_logger()
 
 	// Just take the current context allocator for now
-	G_RENDERER_ALLOCATORS.main_allocator = context.allocator 
+	G_RENDERER_ALLOCATORS.main_allocator = context.allocator
+	
+	// Temp arena
 	mem.init_arena(
 		&G_RENDERER_ALLOCATORS.temp_arena,
 		make([]byte, common.MEGABYTE * 4, G_RENDERER_ALLOCATORS.main_allocator),
 	)
-	G_RENDERER_ALLOCATORS.temp_arena_allocator = mem.arena_allocator(&G_RENDERER_ALLOCATORS.temp_arena)
+	G_RENDERER_ALLOCATORS.temp_arena_allocator = mem.arena_allocator(
+		&G_RENDERER_ALLOCATORS.temp_arena,
+	)
+
+	// Resource arena
+	mem.init_arena(
+		&G_RENDERER_ALLOCATORS.resource_arena,
+		make([]byte, common.MEGABYTE * 4, G_RENDERER_ALLOCATORS.main_allocator),
+	)
+	G_RENDERER_ALLOCATORS.resource_allocator = mem.arena_allocator(
+		&G_RENDERER_ALLOCATORS.resource_arena,
+	)
 
 	setup_renderer_context()
 

@@ -11,11 +11,11 @@ SPV_MAGIC_NUMBER :: 119734787
 SPV_OP_CODE_MASK :: 65535
 SPV_WORD_COUNT_SHIFT :: 16
 SPIRV_REFLECT_H :: 1
-SPV_REFLECT_MAX_ARRAY_DIMS                    :: 32
-SPV_REFLECT_MAX_DESCRIPTOR_SETS               :: 64
+MAX_ARRAY_DIMS                    :: 32
+MAX_DESCRIPTOR_SETS               :: 64
 
-SPV_REFLECT_BINDING_NUMBER_DONT_CHANGE        :: _c.UINT32_MAX
-SPV_REFLECT_SET_NUMBER_DONT_CHANGE            :: _c.UINT32_MAX
+BINDING_NUMBER_DONT_CHANGE        :: _c.UINT32_MAX
+SET_NUMBER_DONT_CHANGE            :: _c.UINT32_MAX
 
 SpvId :: _c.uint;
 SpvSourceLanguage :: SpvSourceLanguage_;
@@ -69,10 +69,10 @@ SpvQuantizationModes :: SpvQuantizationModes_;
 SpvOverflowModes :: SpvOverflowModes_;
 SpvPackedVectorFormat :: SpvPackedVectorFormat_;
 SpvOp :: SpvOp_;
-SpvReflectModuleFlags :: u32;
-SpvReflectTypeFlags :: u32;
-SpvReflectDecorationFlags :: u32;
-SpvReflectVariableFlags :: u32;
+ModuleFlags :: u32;
+TypeFlags :: u32;
+DecorationFlags :: u32;
+VariableFlags :: u32;
 
 SpvSourceLanguage_ :: enum i32 {
     SpvSourceLanguageUnknown = 0,
@@ -1882,7 +1882,7 @@ SpvOp_ :: enum i32 {
     SpvOpMax = 2147483647,
 };
 
-SpvReflectResult :: enum i32 {
+Result :: enum i32 {
     Success,
     NotReady,
     ErrorParseFailed,
@@ -1906,52 +1906,52 @@ SpvReflectResult :: enum i32 {
     ErrorSpirvInvalidExecutionMode,
 };
 
-SpvReflectModuleFlagBits :: enum i32 {
-    SpvReflectModuleFlagNone = 0,
-    SpvReflectModuleFlagNoCopy = 1,
+ModuleFlagBits :: enum i32 {
+    ModuleFlagNone = 0,
+    ModuleFlagNoCopy = 1,
 };
 
-SpvReflectTypeFlagBits :: enum i32 {
-    SpvReflectTypeFlagUndefined = 0,
-    SpvReflectTypeFlagVoid = 1,
-    SpvReflectTypeFlagBool = 2,
-    SpvReflectTypeFlagInt = 4,
-    SpvReflectTypeFlagFloat = 8,
-    SpvReflectTypeFlagVector = 256,
-    SpvReflectTypeFlagMatrix = 512,
-    SpvReflectTypeFlagExternalImage = 65536,
-    SpvReflectTypeFlagExternalSampler = 131072,
-    SpvReflectTypeFlagExternalSampledImage = 262144,
-    SpvReflectTypeFlagExternalBlock = 524288,
-    SpvReflectTypeFlagExternalAccelerationStructure = 1048576,
-    SpvReflectTypeFlagExternalMask = 16711680,
-    SpvReflectTypeFlagStruct = 268435456,
-    SpvReflectTypeFlagArray = 536870912,
+TypeFlagBits :: enum i32 {
+    TypeFlagUndefined = 0,
+    TypeFlagVoid = 1,
+    TypeFlagBool = 2,
+    TypeFlagInt = 4,
+    TypeFlagFloat = 8,
+    TypeFlagVector = 256,
+    TypeFlagMatrix = 512,
+    TypeFlagExternalImage = 65536,
+    TypeFlagExternalSampler = 131072,
+    TypeFlagExternalSampledImage = 262144,
+    TypeFlagExternalBlock = 524288,
+    TypeFlagExternalAccelerationStructure = 1048576,
+    TypeFlagExternalMask = 16711680,
+    TypeFlagStruct = 268435456,
+    TypeFlagArray = 536870912,
 };
 
-SpvReflectDecorationFlagBits :: enum i32 {
-    SpvReflectDecorationNone = 0,
-    SpvReflectDecorationBlock = 1,
-    SpvReflectDecorationBufferBlock = 2,
-    SpvReflectDecorationRowMajor = 4,
-    SpvReflectDecorationColumnMajor = 8,
-    SpvReflectDecorationBuiltIn = 16,
-    SpvReflectDecorationNoperspective = 32,
-    SpvReflectDecorationFlat = 64,
-    SpvReflectDecorationNonWritable = 128,
-    SpvReflectDecorationRelaxedPrecision = 256,
-    SpvReflectDecorationNonReadable = 512,
+DecorationFlagBits :: enum i32 {
+    DecorationNone = 0,
+    DecorationBlock = 1,
+    DecorationBufferBlock = 2,
+    DecorationRowMajor = 4,
+    DecorationColumnMajor = 8,
+    DecorationBuiltIn = 16,
+    DecorationNoperspective = 32,
+    DecorationFlat = 64,
+    DecorationNonWritable = 128,
+    DecorationRelaxedPrecision = 256,
+    DecorationNonReadable = 512,
 };
 
-SpvReflectResourceType :: enum i32 {
-    SpvReflectResourceFlagUndefined = 0,
-    SpvReflectResourceFlagSampler = 1,
-    SpvReflectResourceFlagCbv = 2,
-    SpvReflectResourceFlagSrv = 4,
-    SpvReflectResourceFlagUav = 8,
+ResourceType :: enum i32 {
+    ResourceFlagUndefined = 0,
+    ResourceFlagSampler = 1,
+    ResourceFlagCbv = 2,
+    ResourceFlagSrv = 4,
+    ResourceFlagUav = 8,
 };
 
-SpvReflectFormat :: enum i32 {
+Format :: enum i32 {
     Undefined = 0,
     R32Uint = 98,
     R32Sint = 99,
@@ -1979,12 +1979,12 @@ SpvReflectFormat :: enum i32 {
     R64G64B64A64Sfloat = 121,
 };
 
-SpvReflectVariableFlagBits :: enum i32 {
-    SpvReflectVariableFlagsNone = 0,
-    SpvReflectVariableFlagsUnused = 1,
+VariableFlagBits :: enum i32 {
+    VariableFlagsNone = 0,
+    VariableFlagsUnused = 1,
 };
 
-SpvReflectDescriptorType :: enum i32 {
+DescriptorType :: enum i32 {
     Sampler = 0,
     CombinedImageSampler = 1,
     SampledImage = 2,
@@ -1999,24 +1999,24 @@ SpvReflectDescriptorType :: enum i32 {
     AccelerationStructureKhr = 1000150000,
 };
 
-SpvReflectShaderStageFlagBits :: enum i32 {
-    SpvReflectShaderStageVertexBit = 1,
-    SpvReflectShaderStageTessellationControlBit = 2,
-    SpvReflectShaderStageTessellationEvaluationBit = 4,
-    SpvReflectShaderStageGeometryBit = 8,
-    SpvReflectShaderStageFragmentBit = 16,
-    SpvReflectShaderStageComputeBit = 32,
-    SpvReflectShaderStageTaskBitNv = 64,
-    SpvReflectShaderStageMeshBitNv = 128,
-    SpvReflectShaderStageRaygenBitKhr = 256,
-    SpvReflectShaderStageAnyHitBitKhr = 512,
-    SpvReflectShaderStageClosestHitBitKhr = 1024,
-    SpvReflectShaderStageMissBitKhr = 2048,
-    SpvReflectShaderStageIntersectionBitKhr = 4096,
-    SpvReflectShaderStageCallableBitKhr = 8192,
+ShaderStageFlagBits :: enum i32 {
+    ShaderStageVertexBit = 1,
+    ShaderStageTessellationControlBit = 2,
+    ShaderStageTessellationEvaluationBit = 4,
+    ShaderStageGeometryBit = 8,
+    ShaderStageFragmentBit = 16,
+    ShaderStageComputeBit = 32,
+    ShaderStageTaskBitNv = 64,
+    ShaderStageMeshBitNv = 128,
+    ShaderStageRaygenBitKhr = 256,
+    ShaderStageAnyHitBitKhr = 512,
+    ShaderStageClosestHitBitKhr = 1024,
+    ShaderStageMissBitKhr = 2048,
+    ShaderStageIntersectionBitKhr = 4096,
+    ShaderStageCallableBitKhr = 8192,
 };
 
-SpvReflectGenerator :: enum i32 {
+Generator :: enum i32 {
     KhronosLlvmSpirvTranslator = 6,
     KhronosSpirvToolsAssembler = 7,
     KhronosGlslangReferenceFrontEnd = 8,
@@ -2030,13 +2030,13 @@ SpvReflectGenerator :: enum i32 {
 };
 
 AnonymousEnum0 :: enum i32 {
-    SpvReflectMaxArrayDims = 32,
-    SpvReflectMaxDescriptorSets = 64,
+    MaxArrayDims = 32,
+    MaxDescriptorSets = 64,
 };
 
 AnonymousEnum1 :: enum i32 {
-    SpvReflectBindingNumberDontChange = -1,
-    SpvReflectSetNumberDontChange = -1,
+    BindingNumberDontChange = -1,
+    SetNumberDontChange = -1,
 };
 
 Scalar :: struct {
@@ -2054,13 +2054,13 @@ Matrix :: struct {
     stride : u32,
 };
 
-SpvReflectNumericTraits :: struct {
+NumericTraits :: struct {
     scalar : Scalar,
     vector : Vector,
     mat : Matrix,
 };
 
-SpvReflectImageTraits :: struct {
+ImageTraits :: struct {
     dim : SpvDim,
     depth : u32,
     arrayed : u32,
@@ -2069,25 +2069,25 @@ SpvReflectImageTraits :: struct {
     image_format : SpvImageFormat,
 };
 
-SpvReflectArrayTraits :: struct {
+ArrayTraits :: struct {
     dims_count : u32,
-    dims: [SPV_REFLECT_MAX_ARRAY_DIMS]u32,
-    spec_constant_op_ids: [SPV_REFLECT_MAX_ARRAY_DIMS]u32,
+    dims: [MAX_ARRAY_DIMS]u32,
+    spec_constant_op_ids: [MAX_ARRAY_DIMS]u32,
     stride : u32,
 };
 
-SpvReflectBindingArrayTraits :: struct {
+BindingArrayTraits :: struct {
     dims_count : u32,
-    dims: [SPV_REFLECT_MAX_ARRAY_DIMS]u32,
+    dims: [MAX_ARRAY_DIMS]u32,
 };
 
 Traits :: struct {
-    numeric : SpvReflectNumericTraits,
-    image : SpvReflectImageTraits,
-    array : SpvReflectArrayTraits,
+    numeric : NumericTraits,
+    image : ImageTraits,
+    array : ArrayTraits,
 };
 
-SpvReflectTypeDescription :: struct {
+TypeDescription :: struct {
     id : u32,
     op : SpvOp,
     type_name : cstring,
@@ -2097,10 +2097,10 @@ SpvReflectTypeDescription :: struct {
     decoration_flags : u32,
     traits : Traits,
     member_count : u32,
-    members : ^SpvReflectTypeDescription,
+    members : ^TypeDescription,
 };
 
-SpvReflectInterfaceVariable :: struct {
+InterfaceVariable :: struct {
     spirv_id : u32,
     name : cstring,
     location : u32,
@@ -2108,12 +2108,12 @@ SpvReflectInterfaceVariable :: struct {
     semantic : cstring,
     decoration_flags : u32,
     built_in : SpvBuiltIn,
-    numeric : SpvReflectNumericTraits,
-    array : SpvReflectArrayTraits,
+    numeric : NumericTraits,
+    array : ArrayTraits,
     member_count : u32,
-    members : ^SpvReflectInterfaceVariable,
-    format : SpvReflectFormat,
-    type_description : ^SpvReflectTypeDescription,
+    members : ^InterfaceVariable,
+    format : Format,
+    type_description : ^TypeDescription,
     word_offset : AnonymousStruct0,
 };
 
@@ -2121,7 +2121,7 @@ AnonymousStruct0 :: struct {
     location : u32,
 };
 
-SpvReflectBlockVariable :: struct {
+BlockVariable :: struct {
     spirv_id : u32,
     name : cstring,
     offset : u32,
@@ -2129,30 +2129,30 @@ SpvReflectBlockVariable :: struct {
     size : u32,
     padded_size : u32,
     decoration_flags : u32,
-    numeric : SpvReflectNumericTraits,
-    array : SpvReflectArrayTraits,
+    numeric : NumericTraits,
+    array : ArrayTraits,
     flags : u32,
     member_count : u32,
-    members : ^SpvReflectBlockVariable,
-    type_description : ^SpvReflectTypeDescription,
+    members : ^BlockVariable,
+    type_description : ^TypeDescription,
 };
 
-SpvReflectDescriptorBinding :: struct {
+DescriptorBinding :: struct {
     spirv_id : u32,
     name : cstring,
     binding : u32,
     input_attachment_index : u32,
     set : u32,
-    descriptor_type : SpvReflectDescriptorType,
-    resource_type : SpvReflectResourceType,
-    image : SpvReflectImageTraits,
-    block : SpvReflectBlockVariable,
-    array : SpvReflectBindingArrayTraits,
+    descriptor_type : DescriptorType,
+    resource_type : ResourceType,
+    image : ImageTraits,
+    block : BlockVariable,
+    array : BindingArrayTraits,
     count : u32,
     accessed : u32,
     uav_counter_id : u32,
-    uav_counter_binding : ^SpvReflectDescriptorBinding,
-    type_description : ^SpvReflectTypeDescription,
+    uav_counter_binding : ^DescriptorBinding,
+    type_description : ^TypeDescription,
     word_offset : AnonymousStruct1,
     decoration_flags : u32,
 };
@@ -2162,10 +2162,10 @@ AnonymousStruct1 :: struct {
     set : u32,
 };
 
-SpvReflectDescriptorSet :: struct {
+DescriptorSet :: struct {
     set : u32,
     binding_count : u32,
-    bindings : ^^SpvReflectDescriptorBinding,
+    bindings : [^]^DescriptorBinding,
 };
 
 LocalSize :: struct {
@@ -2174,19 +2174,19 @@ LocalSize :: struct {
     z : u32,
 };
 
-SpvReflectEntryPoint :: struct {
+EntryPoint :: struct {
     name : cstring,
     id : u32,
     spirv_execution_model : SpvExecutionModel,
-    shader_stage : SpvReflectShaderStageFlagBits,
+    shader_stage : ShaderStageFlagBits,
     input_variable_count : u32,
-    input_variables : ^^SpvReflectInterfaceVariable,
+    input_variables : [^]^InterfaceVariable,
     output_variable_count : u32,
-    output_variables : ^^SpvReflectInterfaceVariable,
+    output_variables : [^]^InterfaceVariable,
     interface_variable_count : u32,
-    interface_variables : ^SpvReflectInterfaceVariable,
+    interface_variables : ^InterfaceVariable,
     descriptor_set_count : u32,
-    descriptor_sets : ^SpvReflectDescriptorSet,
+    descriptor_sets : ^DescriptorSet,
     used_uniform_count : u32,
     used_uniforms : ^u32,
     used_push_constant_count : u32,
@@ -2204,33 +2204,33 @@ Internal :: struct {
     spirv_code : ^u32,
     spirv_word_count : u32,
     type_description_count : _c.size_t,
-    type_descriptions : ^SpvReflectTypeDescription,
+    type_descriptions : ^TypeDescription,
 };
 
-SpvReflectShaderModule :: struct {
-    generator : SpvReflectGenerator,
+ShaderModule :: struct {
+    generator : Generator,
     entry_point_name : cstring,
     entry_point_id : u32,
     entry_point_count : u32,
-    entry_points : ^SpvReflectEntryPoint,
+    entry_points : ^EntryPoint,
     source_language : SpvSourceLanguage,
     source_language_version : u32,
     source_file : cstring,
     source_source : cstring,
     spirv_execution_model : SpvExecutionModel,
-    shader_stage : SpvReflectShaderStageFlagBits,
+    shader_stage : ShaderStageFlagBits,
     descriptor_binding_count : u32,
-    descriptor_bindings : ^SpvReflectDescriptorBinding,
+    descriptor_bindings : ^DescriptorBinding,
     descriptor_set_count : u32,
-    descriptor_sets: [SPV_REFLECT_MAX_DESCRIPTOR_SETS]SpvReflectDescriptorSet,
+    descriptor_sets: [MAX_DESCRIPTOR_SETS]DescriptorSet,
     input_variable_count : u32,
-    input_variables : ^^SpvReflectInterfaceVariable,
+    input_variables : [^]^InterfaceVariable,
     output_variable_count : u32,
-    output_variables : ^^SpvReflectInterfaceVariable,
+    output_variables : [^]^InterfaceVariable,
     interface_variable_count : u32,
-    interface_variables : ^SpvReflectInterfaceVariable,
+    interface_variables : ^InterfaceVariable,
     push_constant_block_count : u32,
-    push_constant_blocks : ^SpvReflectBlockVariable,
+    push_constant_blocks : ^BlockVariable,
     internal : ^Internal,
 };
 
@@ -2241,117 +2241,117 @@ foreign spirv_reflect {
     spv_has_result_and_type :: proc(opcode : SpvOp, hasResult : ^bool, hasResultType : ^bool) ---;
 
     @(link_name="spvReflectCreateShaderModule")
-    spv_reflect_create_shader_module :: proc(size : _c.size_t, p_code : rawptr, p_module : ^SpvReflectShaderModule) -> SpvReflectResult ---;
+    create_shader_module :: proc(size : _c.size_t, p_code : rawptr, p_module : ^ShaderModule) -> Result ---;
 
     @(link_name="spvReflectCreateShaderModule2")
-    spv_reflect_create_shader_module2 :: proc(flags : u32, size : _c.size_t, p_code : rawptr, p_module : ^SpvReflectShaderModule) -> SpvReflectResult ---;
+    create_shader_module2 :: proc(flags : u32, size : _c.size_t, p_code : rawptr, p_module : ^ShaderModule) -> Result ---;
 
     @(link_name="spvReflectDestroyShaderModule")
-    spv_reflect_destroy_shader_module :: proc(p_module : ^SpvReflectShaderModule) ---;
+    destroy_shader_module :: proc(p_module : ^ShaderModule) ---;
 
     @(link_name="spvReflectGetCodeSize")
-    spv_reflect_get_code_size :: proc(p_module : ^SpvReflectShaderModule) -> u32 ---;
+    get_code_size :: proc(p_module : ^ShaderModule) -> u32 ---;
 
     @(link_name="spvReflectGetCode")
-    spv_reflect_get_code :: proc(p_module : ^SpvReflectShaderModule) -> ^u32 ---;
+    get_code :: proc(p_module : ^ShaderModule) -> ^u32 ---;
 
     @(link_name="spvReflectGetEntryPoint")
-    spv_reflect_get_entry_point :: proc(p_module : ^SpvReflectShaderModule, entry_point : cstring) -> ^SpvReflectEntryPoint ---;
+    get_entry_point :: proc(p_module : ^ShaderModule, entry_point : cstring) -> ^EntryPoint ---;
 
     @(link_name="spvReflectEnumerateDescriptorBindings")
-    spv_reflect_enumerate_descriptor_bindings :: proc(p_module : ^SpvReflectShaderModule, p_count : ^u32, pp_bindings : ^^SpvReflectDescriptorBinding) -> SpvReflectResult ---;
+    enumerate_descriptor_bindings :: proc(p_module : ^ShaderModule, p_count : ^u32, pp_bindings : [^]^DescriptorBinding) -> Result ---;
 
     @(link_name="spvReflectEnumerateEntryPointDescriptorBindings")
-    spv_reflect_enumerate_entry_point_descriptor_bindings :: proc(p_module : ^SpvReflectShaderModule, entry_point : cstring, p_count : ^u32, pp_bindings : ^^SpvReflectDescriptorBinding) -> SpvReflectResult ---;
+    enumerate_entry_point_descriptor_bindings :: proc(p_module : ^ShaderModule, entry_point : cstring, p_count : ^u32, pp_bindings : [^]^DescriptorBinding) -> Result ---;
 
     @(link_name="spvReflectEnumerateDescriptorSets")
-    spv_reflect_enumerate_descriptor_sets :: proc(p_module : ^SpvReflectShaderModule, p_count : ^u32, pp_sets : ^^SpvReflectDescriptorSet) -> SpvReflectResult ---;
+    enumerate_descriptor_sets :: proc(p_module : ^ShaderModule, p_count : ^u32, pp_sets : [^]^DescriptorSet) -> Result ---;
 
     @(link_name="spvReflectEnumerateEntryPointDescriptorSets")
-    spv_reflect_enumerate_entry_point_descriptor_sets :: proc(p_module : ^SpvReflectShaderModule, entry_point : cstring, p_count : ^u32, pp_sets : ^^SpvReflectDescriptorSet) -> SpvReflectResult ---;
+    enumerate_entry_point_descriptor_sets :: proc(p_module : ^ShaderModule, entry_point : cstring, p_count : ^u32, pp_sets : [^]^DescriptorSet) -> Result ---;
 
     @(link_name="spvReflectEnumerateInterfaceVariables")
-    spv_reflect_enumerate_interface_variables :: proc(p_module : ^SpvReflectShaderModule, p_count : ^u32, pp_variables : ^^SpvReflectInterfaceVariable) -> SpvReflectResult ---;
+    enumerate_interface_variables :: proc(p_module : ^ShaderModule, p_count : ^u32, pp_variables : [^]^InterfaceVariable) -> Result ---;
 
     @(link_name="spvReflectEnumerateEntryPointInterfaceVariables")
-    spv_reflect_enumerate_entry_point_interface_variables :: proc(p_module : ^SpvReflectShaderModule, entry_point : cstring, p_count : ^u32, pp_variables : ^^SpvReflectInterfaceVariable) -> SpvReflectResult ---;
+    enumerate_entry_point_interface_variables :: proc(p_module : ^ShaderModule, entry_point : cstring, p_count : ^u32, pp_variables : [^]^InterfaceVariable) -> Result ---;
 
     @(link_name="spvReflectEnumerateInputVariables")
-    spv_reflect_enumerate_input_variables :: proc(p_module : ^SpvReflectShaderModule, p_count : ^u32, pp_variables : ^^SpvReflectInterfaceVariable) -> SpvReflectResult ---;
+    enumerate_input_variables :: proc(p_module : ^ShaderModule, p_count : ^u32, pp_variables : [^]^InterfaceVariable) -> Result ---;
 
     @(link_name="spvReflectEnumerateEntryPointInputVariables")
-    spv_reflect_enumerate_entry_point_input_variables :: proc(p_module : ^SpvReflectShaderModule, entry_point : cstring, p_count : ^u32, pp_variables : ^^SpvReflectInterfaceVariable) -> SpvReflectResult ---;
+    enumerate_entry_point_input_variables :: proc(p_module : ^ShaderModule, entry_point : cstring, p_count : ^u32, pp_variables : [^]^InterfaceVariable) -> Result ---;
 
     @(link_name="spvReflectEnumerateOutputVariables")
-    spv_reflect_enumerate_output_variables :: proc(p_module : ^SpvReflectShaderModule, p_count : ^u32, pp_variables : ^^SpvReflectInterfaceVariable) -> SpvReflectResult ---;
+    enumerate_output_variables :: proc(p_module : ^ShaderModule, p_count : ^u32, pp_variables : [^]^InterfaceVariable) -> Result ---;
 
     @(link_name="spvReflectEnumerateEntryPointOutputVariables")
-    spv_reflect_enumerate_entry_point_output_variables :: proc(p_module : ^SpvReflectShaderModule, entry_point : cstring, p_count : ^u32, pp_variables : ^^SpvReflectInterfaceVariable) -> SpvReflectResult ---;
+    enumerate_entry_point_output_variables :: proc(p_module : ^ShaderModule, entry_point : cstring, p_count : ^u32, pp_variables : [^]^InterfaceVariable) -> Result ---;
 
     @(link_name="spvReflectEnumeratePushConstantBlocks")
-    spv_reflect_enumerate_push_constant_blocks :: proc(p_module : ^SpvReflectShaderModule, p_count : ^u32, pp_blocks : ^^SpvReflectBlockVariable) -> SpvReflectResult ---;
+    enumerate_push_constant_blocks :: proc(p_module : ^ShaderModule, p_count : ^u32, pp_blocks : [^]^BlockVariable) -> Result ---;
 
     @(link_name="spvReflectEnumerateEntryPointPushConstantBlocks")
-    spv_reflect_enumerate_entry_point_push_constant_blocks :: proc(p_module : ^SpvReflectShaderModule, entry_point : cstring, p_count : ^u32, pp_blocks : ^^SpvReflectBlockVariable) -> SpvReflectResult ---;
+    enumerate_entry_point_push_constant_blocks :: proc(p_module : ^ShaderModule, entry_point : cstring, p_count : ^u32, pp_blocks : [^]^BlockVariable) -> Result ---;
 
     @(link_name="spvReflectGetDescriptorBinding")
-    spv_reflect_get_descriptor_binding :: proc(p_module : ^SpvReflectShaderModule, binding_number : u32, set_number : u32, p_result : ^SpvReflectResult) -> ^SpvReflectDescriptorBinding ---;
+    get_descriptor_binding :: proc(p_module : ^ShaderModule, binding_number : u32, set_number : u32, p_result : ^Result) -> ^DescriptorBinding ---;
 
     @(link_name="spvReflectGetEntryPointDescriptorBinding")
-    spv_reflect_get_entry_point_descriptor_binding :: proc(p_module : ^SpvReflectShaderModule, entry_point : cstring, binding_number : u32, set_number : u32, p_result : ^SpvReflectResult) -> ^SpvReflectDescriptorBinding ---;
+    get_entry_point_descriptor_binding :: proc(p_module : ^ShaderModule, entry_point : cstring, binding_number : u32, set_number : u32, p_result : ^Result) -> ^DescriptorBinding ---;
 
     @(link_name="spvReflectGetDescriptorSet")
-    spv_reflect_get_descriptor_set :: proc(p_module : ^SpvReflectShaderModule, set_number : u32, p_result : ^SpvReflectResult) -> ^SpvReflectDescriptorSet ---;
+    get_descriptor_set :: proc(p_module : ^ShaderModule, set_number : u32, p_result : ^Result) -> ^DescriptorSet ---;
 
     @(link_name="spvReflectGetEntryPointDescriptorSet")
-    spv_reflect_get_entry_point_descriptor_set :: proc(p_module : ^SpvReflectShaderModule, entry_point : cstring, set_number : u32, p_result : ^SpvReflectResult) -> ^SpvReflectDescriptorSet ---;
+    get_entry_point_descriptor_set :: proc(p_module : ^ShaderModule, entry_point : cstring, set_number : u32, p_result : ^Result) -> ^DescriptorSet ---;
 
     @(link_name="spvReflectGetInputVariableByLocation")
-    spv_reflect_get_input_variable_by_location :: proc(p_module : ^SpvReflectShaderModule, location : u32, p_result : ^SpvReflectResult) -> ^SpvReflectInterfaceVariable ---;
+    get_input_variable_by_location :: proc(p_module : ^ShaderModule, location : u32, p_result : ^Result) -> ^InterfaceVariable ---;
 
     @(link_name="spvReflectGetEntryPointInputVariableByLocation")
-    spv_reflect_get_entry_point_input_variable_by_location :: proc(p_module : ^SpvReflectShaderModule, entry_point : cstring, location : u32, p_result : ^SpvReflectResult) -> ^SpvReflectInterfaceVariable ---;
+    get_entry_point_input_variable_by_location :: proc(p_module : ^ShaderModule, entry_point : cstring, location : u32, p_result : ^Result) -> ^InterfaceVariable ---;
 
     @(link_name="spvReflectGetInputVariableBySemantic")
-    spv_reflect_get_input_variable_by_semantic :: proc(p_module : ^SpvReflectShaderModule, semantic : cstring, p_result : ^SpvReflectResult) -> ^SpvReflectInterfaceVariable ---;
+    get_input_variable_by_semantic :: proc(p_module : ^ShaderModule, semantic : cstring, p_result : ^Result) -> ^InterfaceVariable ---;
 
     @(link_name="spvReflectGetEntryPointInputVariableBySemantic")
-    spv_reflect_get_entry_point_input_variable_by_semantic :: proc(p_module : ^SpvReflectShaderModule, entry_point : cstring, semantic : cstring, p_result : ^SpvReflectResult) -> ^SpvReflectInterfaceVariable ---;
+    get_entry_point_input_variable_by_semantic :: proc(p_module : ^ShaderModule, entry_point : cstring, semantic : cstring, p_result : ^Result) -> ^InterfaceVariable ---;
 
     @(link_name="spvReflectGetOutputVariableByLocation")
-    spv_reflect_get_output_variable_by_location :: proc(p_module : ^SpvReflectShaderModule, location : u32, p_result : ^SpvReflectResult) -> ^SpvReflectInterfaceVariable ---;
+    get_output_variable_by_location :: proc(p_module : ^ShaderModule, location : u32, p_result : ^Result) -> ^InterfaceVariable ---;
 
     @(link_name="spvReflectGetEntryPointOutputVariableByLocation")
-    spv_reflect_get_entry_point_output_variable_by_location :: proc(p_module : ^SpvReflectShaderModule, entry_point : cstring, location : u32, p_result : ^SpvReflectResult) -> ^SpvReflectInterfaceVariable ---;
+    get_entry_point_output_variable_by_location :: proc(p_module : ^ShaderModule, entry_point : cstring, location : u32, p_result : ^Result) -> ^InterfaceVariable ---;
 
     @(link_name="spvReflectGetOutputVariableBySemantic")
-    spv_reflect_get_output_variable_by_semantic :: proc(p_module : ^SpvReflectShaderModule, semantic : cstring, p_result : ^SpvReflectResult) -> ^SpvReflectInterfaceVariable ---;
+    get_output_variable_by_semantic :: proc(p_module : ^ShaderModule, semantic : cstring, p_result : ^Result) -> ^InterfaceVariable ---;
 
     @(link_name="spvReflectGetEntryPointOutputVariableBySemantic")
-    spv_reflect_get_entry_point_output_variable_by_semantic :: proc(p_module : ^SpvReflectShaderModule, entry_point : cstring, semantic : cstring, p_result : ^SpvReflectResult) -> ^SpvReflectInterfaceVariable ---;
+    get_entry_point_output_variable_by_semantic :: proc(p_module : ^ShaderModule, entry_point : cstring, semantic : cstring, p_result : ^Result) -> ^InterfaceVariable ---;
 
     @(link_name="spvReflectGetPushConstantBlock")
-    spv_reflect_get_push_constant_block :: proc(p_module : ^SpvReflectShaderModule, index : u32, p_result : ^SpvReflectResult) -> ^SpvReflectBlockVariable ---;
+    get_push_constant_block :: proc(p_module : ^ShaderModule, index : u32, p_result : ^Result) -> ^BlockVariable ---;
 
     @(link_name="spvReflectGetEntryPointPushConstantBlock")
-    spv_reflect_get_entry_point_push_constant_block :: proc(p_module : ^SpvReflectShaderModule, entry_point : cstring, p_result : ^SpvReflectResult) -> ^SpvReflectBlockVariable ---;
+    get_entry_point_push_constant_block :: proc(p_module : ^ShaderModule, entry_point : cstring, p_result : ^Result) -> ^BlockVariable ---;
 
     @(link_name="spvReflectChangeDescriptorBindingNumbers")
-    spv_reflect_change_descriptor_binding_numbers :: proc(p_module : ^SpvReflectShaderModule, p_binding : ^SpvReflectDescriptorBinding, new_binding_number : u32, new_set_number : u32) -> SpvReflectResult ---;
+    change_descriptor_binding_numbers :: proc(p_module : ^ShaderModule, p_binding : ^DescriptorBinding, new_binding_number : u32, new_set_number : u32) -> Result ---;
 
     @(link_name="spvReflectChangeDescriptorSetNumber")
-    spv_reflect_change_descriptor_set_number :: proc(p_module : ^SpvReflectShaderModule, p_set : ^SpvReflectDescriptorSet, new_set_number : u32) -> SpvReflectResult ---;
+    change_descriptor_set_number :: proc(p_module : ^ShaderModule, p_set : ^DescriptorSet, new_set_number : u32) -> Result ---;
 
     @(link_name="spvReflectChangeInputVariableLocation")
-    spv_reflect_change_input_variable_location :: proc(p_module : ^SpvReflectShaderModule, p_input_variable : ^SpvReflectInterfaceVariable, new_location : u32) -> SpvReflectResult ---;
+    change_input_variable_location :: proc(p_module : ^ShaderModule, p_input_variable : ^InterfaceVariable, new_location : u32) -> Result ---;
 
     @(link_name="spvReflectChangeOutputVariableLocation")
-    spv_reflect_change_output_variable_location :: proc(p_module : ^SpvReflectShaderModule, p_output_variable : ^SpvReflectInterfaceVariable, new_location : u32) -> SpvReflectResult ---;
+    change_output_variable_location :: proc(p_module : ^ShaderModule, p_output_variable : ^InterfaceVariable, new_location : u32) -> Result ---;
 
     @(link_name="spvReflectSourceLanguage")
-    spv_reflect_source_language :: proc(source_lang : SpvSourceLanguage) -> cstring ---;
+    source_language :: proc(source_lang : SpvSourceLanguage) -> cstring ---;
 
     @(link_name="spvReflectBlockVariableTypeName")
-    spv_reflect_block_variable_type_name :: proc(p_var : ^SpvReflectBlockVariable) -> cstring ---;
+    block_variable_type_name :: proc(p_var : ^BlockVariable) -> cstring ---;
 
 }

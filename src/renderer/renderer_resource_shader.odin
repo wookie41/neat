@@ -2,18 +2,16 @@ package renderer
 
 //---------------------------------------------------------------------------//
 
-import "core:encoding/json"
+import "core:c"
 import "core:os"
 import "core:log"
-import "core:fmt"
-import "core:strings"
-import "../common"
-import "core:c/libc"
+import "core:encoding/json"
 
+import "../common"
 
 //---------------------------------------------------------------------------//
 
-@(private = "file")
+@(private)
 ShaderJSONEntry :: struct {
 	name: string,
 	path: string,
@@ -23,8 +21,10 @@ ShaderJSONEntry :: struct {
 
 @(private)
 ShaderResource :: struct {
-	name: common.Name,
-	type: ShaderType,
+	ref:                    ShaderRef,
+	name:                   common.Name,
+	type:                   ShaderType,
+	using backend_resource: BackendShaderResource,
 }
 
 //---------------------------------------------------------------------------//
@@ -39,8 +39,24 @@ ShaderType :: enum u8 {
 //---------------------------------------------------------------------------//
 
 
-@(private = "file")
+// @TODO Use a proper ref, with generation and index
+ShaderRef :: u32
+InvalidShaderRef :: ShaderRef(c.UINT32_MAX)
+
+@private
 G_SHADER_RESOURCES: [dynamic]ShaderResource
+
+//---------------------------------------------------------------------------//
+
+@(private)
+find_shader_by_name :: proc(p_name: common.Name) -> ShaderRef {
+	for shader in G_SHADER_RESOURCES {
+		if common.name_equal(p_name, shader.name) {
+			return shader.ref
+		}
+	}
+	return InvalidShaderRef
+}
 
 //---------------------------------------------------------------------------//
 
@@ -70,7 +86,6 @@ load_shaders :: proc() -> bool {
 		}
 	}
 
-
 	// Load the shaders
 	for entry in shader_json_entries {
 
@@ -82,72 +97,11 @@ load_shaders :: proc() -> bool {
 			}
 		}
 
-		shader_bin_path := fmt.aprintf(
-			"app_data/renderer/assets/shaders/bin/%s.sprv",
-			entry.name,
-		)
 
-		// @TODO Uncomment this when we have hot-reload in place
-		// Check if the shader is already compiled
-		// if os.exists(shader_bin_path) {
-		// 	continue
-		// }
-
-		shader_reflect_path := fmt.aprintf(
-			"app_data/renderer/assets/shaders/reflect/%s.ref",
-			entry.name,
-		)
-
-		// Determine shader ttype
-		shader_type: ShaderType
-		compile_target: string
-		if strings.has_suffix(entry.name, ".vert") {
-			shader_type = .VERTEX
-			compile_target = "vs_6_7"
-		} else if strings.has_suffix(entry.name, ".frag") {
-			shader_type = .FRAGMENT
-			compile_target = "ps_6_7"
-		} else if strings.has_suffix(entry.name, ".comp") {
-			shader_type = .COMPUTE
-			compile_target = "cs_6_7"
-
-		} else {
-			log.warnf("Unknown shader type %s...\n", entry.name)
+		next_ref := ShaderRef(len(G_SHADER_RESOURCES))
+		shader_resource, ok := backend_compile_shader(entry, next_ref)
+		if ok == false {
 			continue
-		}
-
-		log.infof("Compiling shader %s...\n", entry.name)
-
-		shader_src_path := fmt.aprintf("app_data/renderer/assets/shaders/%s", entry.path)
-		compile_cmd := fmt.aprintf(
-			"dxc -spirv -Qstrip_reflect -fspv-target-env=vulkan1.3 -HV 2021 -T %s -Fo %s %s",
-			compile_target,
-			shader_bin_path,
-			shader_src_path,
-		)
-
-		if res := libc.system(strings.clone_to_cstring(compile_cmd)); res != 0 {
-			log.warnf("Failed to compile shader %s: error code %d\n", entry.name, res)
-			continue
-		}
-
-		generate_reflection_cmd := fmt.aprintf(
-			"dxc -spirv -fspv-reflect -fspv-target-env=vulkan1.3 -HV 2021 -T %s -Fre %s %s > %s",
-			compile_target,
-			shader_reflect_path,
-			shader_src_path,
-			common.dev_null,
-		)
-
-		if res := libc.system(strings.clone_to_cstring(generate_reflection_cmd)); res != 0 {
-			log.warnf("Failed to generate reflection for shader %s: error code %d\n", entry.name, res)
-			continue
-		}
-
-
-		shader_resource := ShaderResource {
-			name = common.make_name(entry.name),
-			type = shader_type,
 		}
 
 		append(&G_SHADER_RESOURCES, shader_resource)
@@ -155,4 +109,5 @@ load_shaders :: proc() -> bool {
 
 	return true
 }
+
 //---------------------------------------------------------------------------//

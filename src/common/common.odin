@@ -19,22 +19,26 @@ GIGABYTE :: MEGABYTE * 1024
 //---------------------------------------------------------------------------//
 
 make_name :: proc(p_name: string) -> Name {
-    when ODIN_DEBUG {
-        return Name {
-            hash= _hash.crc32(transmute([]u8)p_name),
-            name= p_name,
-        }
-    } else {
-        return Name {
-            hash = _hash.crc32(transmute([]u8)p_name),
-        }
-    }
+	when ODIN_DEBUG {
+		return Name{hash = _hash.crc32(transmute([]u8)p_name), name = p_name}
+	} else {
+		return Name{hash = _hash.crc32(transmute([]u8)p_name)}
+	}
 }
 
 //---------------------------------------------------------------------------//
 
-name_equal :: proc(p_name: Name, p_str: string) -> bool {
-    return p_name.hash == _hash.crc32(transmute([]u8)p_str)
+name_equal :: proc {
+	name_equal_str,
+	name_equal_name,
+}
+
+name_equal_str :: proc(p_name: Name, p_str: string) -> bool {
+	return p_name.hash == _hash.crc32(transmute([]u8)p_str)
+}
+
+name_equal_name :: proc(p_name_1: Name, p_name_2: Name) -> bool {
+	return p_name_1.hash == p_name_2.hash
 }
 
 //---------------------------------------------------------------------------//
