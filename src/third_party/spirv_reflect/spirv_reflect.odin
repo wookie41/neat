@@ -1,6 +1,6 @@
 package spirv_reflect
 
-foreign import "spirv_reflect.lib"
+foreign import spirv_reflect "external/spirv_reflect.lib"
 
 import _c "core:c"
 

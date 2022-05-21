@@ -97,9 +97,41 @@ def build_tinyobj():
 
 #-----------------------------------------------------------------------#
 
+def build_spirv_reflect():
+
+    print("Building SPRIV-Reflect...")
+
+    res = run_command_silent([
+        "clang++",
+        "-c", 
+        "-o src/third_party/spirv_reflect/external/spirv_reflect.o", 
+        "src/third_party/spirv_reflect/external/spirv_reflect.cpp"
+    ])
+
+    if res != 0:
+        print("Failed to build SPIRV-Reflect")
+        exit(-1)
+
+    res = run_command_silent([
+        "llvm-ar",
+        "rc",
+        "src/third_party/spirv_reflect/external/spirv_reflect.lib",
+        "src/third_party/spirv_reflect/external/spirv_reflect.o"
+    ])
+
+    if res != 0:
+        print("Failed to build SPIRV-REFLECT")
+        exit(-1)
+
+    os.remove("src/third_party/spirv_reflect/external/spirv_reflect.o")
+
+    print("SPRIV-Reflect build successfull")
+#-----------------------------------------------------------------------#
+
 def main():
-    build_vma()
-    build_tinyobj()
+    # build_vma()
+    # build_tinyobj()
+    build_spirv_reflect()
 #-----------------------------------------------------------------------#
 
 if __name__ == '__main__':

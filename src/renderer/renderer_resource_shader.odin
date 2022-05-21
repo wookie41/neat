@@ -10,6 +10,7 @@ import "core:strings"
 import "../common"
 import "core:c/libc"
 
+
 //---------------------------------------------------------------------------//
 
 @(private = "file")
@@ -72,7 +73,7 @@ load_shaders :: proc() -> bool {
 
 	// Load the shaders
 	for entry in shader_json_entries {
-		
+
 		// Check for duplicate entries
 		for shader in G_SHADER_RESOURCES {
 			if common.name_equal(shader.name, entry.name) {
@@ -91,6 +92,11 @@ load_shaders :: proc() -> bool {
 		// if os.exists(shader_bin_path) {
 		// 	continue
 		// }
+
+		shader_reflect_path := fmt.aprintf(
+			"app_data/renderer/assets/shaders/reflect/%s.ref",
+			entry.name,
+		)
 
 		// Determine shader ttype
 		shader_type: ShaderType
@@ -114,7 +120,7 @@ load_shaders :: proc() -> bool {
 
 		shader_src_path := fmt.aprintf("app_data/renderer/assets/shaders/%s", entry.path)
 		compile_cmd := fmt.aprintf(
-			"dxc -spirv -HV 2021 -T %s -Fo %s %s",
+			"dxc -spirv -Qstrip_reflect -fspv-target-env=vulkan1.3 -HV 2021 -T %s -Fo %s %s",
 			compile_target,
 			shader_bin_path,
 			shader_src_path,
@@ -124,6 +130,20 @@ load_shaders :: proc() -> bool {
 			log.warnf("Failed to compile shader %s: error code %d\n", entry.name, res)
 			continue
 		}
+
+		generate_reflection_cmd := fmt.aprintf(
+			"dxc -spirv -fspv-reflect -fspv-target-env=vulkan1.3 -HV 2021 -T %s -Fre %s %s > %s",
+			compile_target,
+			shader_reflect_path,
+			shader_src_path,
+			common.dev_null,
+		)
+
+		if res := libc.system(strings.clone_to_cstring(generate_reflection_cmd)); res != 0 {
+			log.warnf("Failed to generate reflection for shader %s: error code %d\n", entry.name, res)
+			continue
+		}
+
 
 		shader_resource := ShaderResource {
 			name = common.make_name(entry.name),

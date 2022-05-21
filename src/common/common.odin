@@ -4,6 +4,14 @@ import _hash "core:hash"
 
 //---------------------------------------------------------------------------//
 
+when ODIN_OS == .Windows {
+	dev_null := "NUL"
+} else {
+	dev_null := "/dev/null"
+}
+
+//---------------------------------------------------------------------------//
+
 KILOBYTE :: 1024
 MEGABYTE :: KILOBYTE * 1024
 GIGABYTE :: MEGABYTE * 1024
