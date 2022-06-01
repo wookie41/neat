@@ -76,7 +76,7 @@ when USE_VULKAN_BACKEND {
 
 		shader_resource = ShaderResource {
 			ref  = p_ref,
-			name = common.make_name(p_shader_entry.name),
+			name = common.create_name(p_shader_entry.name),
 			type = shader_type,
 		}
 
@@ -159,7 +159,7 @@ when USE_VULKAN_BACKEND {
 					for j in 0 ..< des_set.binding_count {
 						des_binding := des_set.bindings[j]
 						shader_resource.descBindings[curr_binding].binding = des_binding.binding
-						shader_resource.descBindings[curr_binding].name = common.make_name(
+						shader_resource.descBindings[curr_binding].name = common.create_name(
 							string(des_binding.name),
 						)
 						shader_resource.descBindings[curr_binding].type = des_binding.descriptor_type

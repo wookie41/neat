@@ -98,8 +98,8 @@ init_vt :: proc() -> bool {
 		vt_create_descriptor_pool()
 		vk_create_descriptor_sets()
 
-		vertex_shader_ref := find_shader_by_name(common.make_name("base.vert"))
-		fragment_shader_ref := find_shader_by_name(common.make_name("base.frag"))
+		vertex_shader_ref := find_shader_by_name(common.create_name("base.vert"))
+		fragment_shader_ref := find_shader_by_name(common.create_name("base.frag"))
 
 		// create stage info for each
 		vertex_stage_info := vk.PipelineShaderStageCreateInfo {

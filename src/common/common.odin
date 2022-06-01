@@ -18,7 +18,7 @@ GIGABYTE :: MEGABYTE * 1024
 
 //---------------------------------------------------------------------------//
 
-make_name :: proc(p_name: string) -> Name {
+create_name :: proc(p_name: string) -> Name {
 	when ODIN_DEBUG {
 		return Name{hash = _hash.crc32(transmute([]u8)p_name), name = p_name}
 	} else {
