@@ -40,24 +40,36 @@ ShaderRef :: distinct Ref
 
 //---------------------------------------------------------------------------//
 
-InvalidShaderRef := ShaderRef {ref = c.UINT64_MAX}
+InvalidShaderRef := ShaderRef {
+	ref = c.UINT64_MAX,
+}
 
 //---------------------------------------------------------------------------//
 
 @(private)
-G_SHADER_RESOURCES: [dynamic]ShaderResource
+G_SHADER_RESOURCES: []ShaderResource
 
 //---------------------------------------------------------------------------//
 
 @(private)
-G_SHADER_REF_ARRAY : RefArray
+G_SHADER_REF_ARRAY: RefArray
+
+//---------------------------------------------------------------------------//
+
+@(private)
+get_shader_res_idx :: #force_inline proc(p_ref: ShaderRef) -> u32 {
+	assert(get_ref_res_type(Ref(p_ref)) == .SHADER)
+	idx := get_ref_idx(Ref(p_ref))
+	assert(G_SHADER_REF_ARRAY.generations[idx] == get_ref_generation(Ref(p_ref)))
+	return idx
+}
 
 //---------------------------------------------------------------------------//
 
 @(private)
 find_shader_by_name :: proc(p_name: common.Name) -> ShaderRef {
 	ref := find_ref_by_name(&G_SHADER_REF_ARRAY, p_name)
-	if  ref == InvalidRef {
+	if ref == InvalidRef {
 		return InvalidShaderRef
 	}
 	return ShaderRef(ref)
@@ -69,6 +81,7 @@ find_shader_by_name :: proc(p_name: common.Name) -> ShaderRef {
 load_shaders :: proc() -> bool {
 
 	G_SHADER_REF_ARRAY = create_ref_array(.SHADER, MAX_SHADERS)
+	G_SHADER_RESOURCES = make([]ShaderResource, MAX_SHADERS)
 
 	context.allocator = G_RENDERER_ALLOCATORS.temp_arena_allocator
 	defer free_all(G_RENDERER_ALLOCATORS.temp_arena_allocator)
@@ -117,7 +130,7 @@ load_shaders :: proc() -> bool {
 			continue
 		}
 
-		append(&G_SHADER_RESOURCES, shader_resource)
+		G_SHADER_RESOURCES[get_ref_idx(Ref(ref))] = shader_resource
 	}
 
 	return true

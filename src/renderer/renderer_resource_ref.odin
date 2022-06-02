@@ -9,6 +9,7 @@ import "../common"
 
 ResourceType :: enum u16 {
 	SHADER,
+	PIPELINE_LAYOUT,
 }
 
 //---------------------------------------------------------------------------//
@@ -37,7 +38,7 @@ InvalidRef := Ref {
 
 //---------------------------------------------------------------------------//
 
-get_ref_idx :: #force_inline proc(p_ref: Ref) -> u32 {
+get_ref_idx :: #force_inline proc(p_ref: $T) -> u32 {
 	return u32(p_ref.ref >> 32)
 }
 

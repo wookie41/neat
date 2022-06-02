@@ -15,8 +15,7 @@ import assimp "../third_party/assimp"
 import "../common"
 
 G_VT: struct {
-	descriptor_set_layout:     vk.DescriptorSetLayout,
-	pipeline_layout:           vk.PipelineLayout,
+	pipeline_layout_ref:       PipelineLayoutRef,
 	pso:                       vk.Pipeline,
 	vertex_shader_module:      vk.ShaderModule,
 	fragment_shader_module:    vk.ShaderModule,
@@ -93,25 +92,29 @@ init_vt :: proc() -> bool {
 
 		start_time = time.now()
 
-		vt_create_descriptor_set_layout()
+		vertex_shader_ref := find_shader_by_name(common.create_name("base.vert"))
+		fragment_shader_ref := find_shader_by_name(common.create_name("base.frag"))
+		pipeline_layout_ref = create_graphics_pipeline_layout(
+			.GRAPHICS,
+			vertex_shader_ref,
+			fragment_shader_ref,
+		)
+
 		vt_create_uniform_buffers()
 		vt_create_descriptor_pool()
 		vk_create_descriptor_sets()
-
-		vertex_shader_ref := find_shader_by_name(common.create_name("base.vert"))
-		fragment_shader_ref := find_shader_by_name(common.create_name("base.frag"))
 
 		// create stage info for each
 		vertex_stage_info := vk.PipelineShaderStageCreateInfo {
 			sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
 			stage = {.VERTEX},
-			module = get_shader_module(vertex_shader_ref),
+			module = G_SHADER_RESOURCES[get_ref_idx(vertex_shader_ref)].shader_module,
 			pName = "main",
 		}
 		fragment_stage_info := vk.PipelineShaderStageCreateInfo {
 			sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
 			stage = {.FRAGMENT},
-			module = get_shader_module(fragment_shader_ref),
+			module = G_SHADER_RESOURCES[get_ref_idx(fragment_shader_ref)].shader_module,
 			pName = "main",
 		}
 
@@ -131,14 +134,14 @@ init_vt :: proc() -> bool {
 
 		// state for assembly
 		input_assembly_info := vk.PipelineInputAssemblyStateCreateInfo {
-			sType                  = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-			topology               = .TRIANGLE_LIST,
+			sType    = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+			topology = .TRIANGLE_LIST,
 		}
 		// state for rasteriser
 		rasteriser := vk.PipelineRasterizationStateCreateInfo {
-			sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+			sType       = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
 			polygonMode = .FILL,
-			lineWidth = 1.0,
+			lineWidth   = 1.0,
 		}
 
 		// state for multisampling
@@ -178,18 +181,6 @@ init_vt :: proc() -> bool {
 			stencilTestEnable = false,
 		}
 
-		// pipeline layout
-		pipeline_layout_info := vk.PipelineLayoutCreateInfo {
-			sType          = .PIPELINE_LAYOUT_CREATE_INFO,
-			pSetLayouts    = &descriptor_set_layout,
-			setLayoutCount = 1,
-		}
-
-		if vk.CreatePipelineLayout(device, &pipeline_layout_info, nil, &pipeline_layout) != .SUCCESS {
-			fmt.eprintln("couldn't create pipeline layout")
-			return false
-		}
-
 		pipeline_rendering_create_info := vk.PipelineRenderingCreateInfo {
 			sType                   = .PIPELINE_RENDERING_CREATE_INFO,
 			colorAttachmentCount    = 1,
@@ -210,6 +201,7 @@ init_vt :: proc() -> bool {
 			viewportCount = 1,
 		}
 
+
 		pipeline_info := vk.GraphicsPipelineCreateInfo {
 			sType               = .GRAPHICS_PIPELINE_CREATE_INFO,
 			pDynamicState       = &dynamic_state_create_info,
@@ -222,7 +214,9 @@ init_vt :: proc() -> bool {
 			pMultisampleState   = &multisampling,
 			pColorBlendState    = &colour_blending,
 			pDepthStencilState  = &depth_stencil,
-			layout              = pipeline_layout,
+			layout              = G_PIPELINE_LAYOUT_RESOURCES[get_ref_idx(
+	                                                     pipeline_layout_ref,
+                                                     )].vk_pipeline_layout,
 			pViewportState      = &viewport_state,
 		}
 
@@ -284,7 +278,6 @@ deinit_vt :: proc() {
 	vk.DestroyImageView(device, texture_image_view, nil)
 	vma.destroy_image(vma_allocator, texture_image, texture_image_allocation)
 	vk.DestroyDescriptorPool(device, descriptor_pool, nil)
-	vk.DestroyDescriptorSetLayout(device, descriptor_set_layout, nil)
 
 	vma.destroy_buffer(vma_allocator, vertex_buffer, vertex_buffer_allocation)
 	vma.destroy_buffer(vma_allocator, index_buffer, index_buffer_allocation)
@@ -298,7 +291,6 @@ deinit_vt :: proc() {
 	vk.DestroyShaderModule(device, vertex_shader_module, nil)
 	vk.DestroyShaderModule(device, fragment_shader_module, nil)
 	vk.DestroyPipeline(device, pso, nil)
-	vk.DestroyPipelineLayout(device, pipeline_layout, nil)
 }
 
 
@@ -411,7 +403,7 @@ vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
 	vk.CmdBindDescriptorSets(
 		cmd,
 		.GRAPHICS,
-		pipeline_layout,
+		G_PIPELINE_LAYOUT_RESOURCES[get_ref_idx(pipeline_layout_ref)].vk_pipeline_layout,
 		0,
 		1,
 		&descriptor_sets[frame_idx],
@@ -546,40 +538,6 @@ vt_copy_buffer :: proc(
 	vt_end_single_time_command_buffer(copy_cmd_buff)
 }
 
-vt_create_descriptor_set_layout :: proc() {
-	using G_RENDERER
-	using G_VT
-
-	ubo_layout_binding := vk.DescriptorSetLayoutBinding {
-		binding = 0,
-		descriptorType = .UNIFORM_BUFFER,
-		descriptorCount = 1,
-		stageFlags = {.VERTEX},
-	}
-
-	sampler_layout_binding := vk.DescriptorSetLayoutBinding {
-		binding = 1,
-		descriptorType = .COMBINED_IMAGE_SAMPLER,
-		descriptorCount = 1,
-		stageFlags = {.FRAGMENT},
-	}
-
-	layout_bindings := []vk.DescriptorSetLayoutBinding{
-		ubo_layout_binding,
-		sampler_layout_binding,
-	}
-
-	layout_info := vk.DescriptorSetLayoutCreateInfo {
-		sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		bindingCount = u32(len(layout_bindings)),
-		pBindings    = raw_data(layout_bindings),
-	}
-
-	if vk.CreateDescriptorSetLayout(device, &layout_info, nil, &descriptor_set_layout) != .SUCCESS {
-		log.warn("Failed to create descriptor set layout")
-	}
-}
-
 vt_create_uniform_buffers :: proc() {
 	using G_RENDERER
 	using G_VT
@@ -671,7 +629,9 @@ vk_create_descriptor_sets :: proc() {
 		context.allocator,
 	)
 	for _, i in set_layouts {
-		set_layouts[i] = descriptor_set_layout
+		set_layouts[i] = G_PIPELINE_LAYOUT_RESOURCES[get_ref_idx(
+	                                               pipeline_layout_ref,
+                                               )].vk_programs_descriptor_set_layout
 	}
 	defer delete(set_layouts)
 

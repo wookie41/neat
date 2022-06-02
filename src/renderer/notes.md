@@ -62,17 +62,19 @@ has something to index into (it has to be large enough not to cause out-of-bound
 
 ### Pipeline handling
 - Descriptor set layout that make up the pipeline layout:
-    - Global for graphics RenderPasses:
-        - Bindless array
-        - Per frame, view, instance uniforms
-        - Immutable samplers
-    - Global for graphics material passess:
-        - Bindless array
-        - Per frame, view, instance uniforms
-        - Material buffer
-        - Immutable samplers
-    - One for the vertex program (reflection)
-    - One for the fragment program (reflection)
+    Graphics pipeline: 
+        - Bindless array        (set = 0, binding = 0)
+        - Immutable samplers    (set = 0, binding = 1)
+        - Per frame             (set = 0, binding = 2)
+        - Per view              (set = 0, binding = 3)
+        - Custom bindings       (set = 1, binding = ...)
+    Global pipeline for MaterialPasses:
+        - Bindless array        (set = 0, binding = 0)
+        - Immutable samplers    (set = 0, binding = 1)
+        - Per frame             (set = 0, binding = 2)
+        - Per view              (set = 0, binding = 3)
+        - Material buffer       (set = 1, binding = 0)
+        - Per instance          (set = 2, binding = 0)
 - Pipeline state: 
     - Created when parsing the RenderPasses, as there we have:
         - vertex program

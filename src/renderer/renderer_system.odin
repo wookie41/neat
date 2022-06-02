@@ -24,6 +24,7 @@ MAX_NUM_FRAMES_IN_FLIGHT :: #config(NUM_FRAMES_IN_FLIGHT, 2)
 
 @(private)
 MAX_SHADERS :: #config(NUM_FRAMES_IN_FLIGHT, 128)
+MAX_PIPELINE_LAYOUTS :: #config(NUM_FRAMES_IN_FLIGHT, 256)
 
 //---------------------------------------------------------------------------//
 
@@ -77,6 +78,8 @@ init :: proc(p_options: InitOptions) -> bool {
 	)
 
 	setup_renderer_context()
+
+	init_pipeline_layouts()
 
 	backend_init(p_options) or_return
 	load_shaders() or_return
