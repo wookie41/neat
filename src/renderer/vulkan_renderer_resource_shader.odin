@@ -75,8 +75,6 @@ when USE_VULKAN_BACKEND {
 		defer delete(shader_reflect_path)
 
 		shader_resource = ShaderResource {
-			ref  = p_ref,
-			name = common.create_name(p_shader_entry.name),
 			type = shader_type,
 		}
 
@@ -85,10 +83,10 @@ when USE_VULKAN_BACKEND {
 			log.infof("Compiling shader %s...", p_shader_entry.name)
 
 			compile_cmd := fmt.aprintf(
-				"dxc -spirv -Qstrip_reflect -fspv-target-env=vulkan1.3 -HV 2021 -T %s -Fre %s -Fo %s %s",
+				"dxc -spirv -fspv-target-env=vulkan1.3 -HV 2021 -T %s -Fre %s -Fo %s %s",
 				compile_target,
-				shader_bin_path,
 				shader_reflect_path,
+				shader_bin_path,
 				shader_src_path,
 			)
 
@@ -101,7 +99,9 @@ when USE_VULKAN_BACKEND {
 		// Use reflection data to gather information about the shader 
 		// that will be later used to create the pipeline layouts
 		{
-			reflect_data, ok := os.read_entire_file(shader_reflect_path)
+			//@TODO Uncomment when compiling and generating reflection data in one command works
+			// reflect_data, ok := os.read_entire_file(shader_reflect_path)
+			reflect_data, ok := os.read_entire_file(shader_bin_path)
 			if ok == false {
 				log.warnf("Failed to read reflection data for shader %s", p_shader_entry.name)
 				return {}, false
@@ -211,8 +211,10 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	get_shader_module :: #force_inline proc(p_ref: ShaderRef) -> vk.ShaderModule {
-		assert(u32(p_ref) < u32(len(G_SHADER_RESOURCES)))
-		return G_SHADER_RESOURCES[u32(p_ref)].shader_module
+		assert(get_ref_res_type(Ref(p_ref)) == .SHADER)
+		idx := get_ref_idx(Ref(p_ref))
+		assert(G_SHADER_REF_ARRAY.generations[idx] == get_ref_generation(Ref(p_ref)))
+		return G_SHADER_RESOURCES[idx].shader_module
 	}
 
 	//---------------------------------------------------------------------------//

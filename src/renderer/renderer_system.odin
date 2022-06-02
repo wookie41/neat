@@ -9,11 +9,21 @@ import "../common"
 
 //---------------------------------------------------------------------------//
 
+
 @(private)
 USE_VULKAN_BACKEND :: #config(USE_VULKAN_BACKEND, true)
 
+//---------------------------------------------------------------------------//
+
 @(private)
 MAX_NUM_FRAMES_IN_FLIGHT :: #config(NUM_FRAMES_IN_FLIGHT, 2)
+
+//---------------------------------------------------------------------------//
+
+// @TODO Move to a config file
+
+@(private)
+MAX_SHADERS :: #config(NUM_FRAMES_IN_FLIGHT, 128)
 
 //---------------------------------------------------------------------------//
 

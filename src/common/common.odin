@@ -30,15 +30,26 @@ create_name :: proc(p_name: string) -> Name {
 
 name_equal :: proc {
 	name_equal_str,
+	name_equal_hash,
 	name_equal_name,
 }
+
+//---------------------------------------------------------------------------//
 
 name_equal_str :: proc(p_name: Name, p_str: string) -> bool {
 	return p_name.hash == _hash.crc32(transmute([]u8)p_str)
 }
 
+//---------------------------------------------------------------------------//
+
 name_equal_name :: proc(p_name_1: Name, p_name_2: Name) -> bool {
 	return p_name_1.hash == p_name_2.hash
+}
+
+//---------------------------------------------------------------------------//
+
+name_equal_hash :: proc(p_name_1: u32, p_name_2: Name) -> bool {
+	return p_name_1 == p_name_2.hash
 }
 
 //---------------------------------------------------------------------------//
