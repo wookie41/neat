@@ -68,11 +68,6 @@ when USE_VULKAN_BACKEND {
 			p_shader_entry.name,
 		)
 		defer delete(shader_bin_path)
-		shader_reflect_path := fmt.aprintf(
-			"app_data/renderer/assets/shaders/reflect/%s.ref",
-			p_shader_entry.name,
-		)
-		defer delete(shader_reflect_path)
 
 		shader_resource = ShaderResource {
 			type = shader_type,
@@ -82,10 +77,11 @@ when USE_VULKAN_BACKEND {
 		{
 			log.infof("Compiling shader %s...", p_shader_entry.name)
 
+			// @TODO replace with a single command when 
+			// https://github.com/microsoft/DirectXShaderCompiler/issues/4496 is fixed
 			compile_cmd := fmt.aprintf(
-				"dxc -spirv -fspv-target-env=vulkan1.3 -HV 2021 -T %s -Fre %s -Fo %s %s",
+				"dxc -spirv -fspv-target-env=vulkan1.3 -HV 2021 -T %s -Fo %s %s",
 				compile_target,
-				shader_reflect_path,
 				shader_bin_path,
 				shader_src_path,
 			)
@@ -119,6 +115,18 @@ when USE_VULKAN_BACKEND {
 					p_shader_entry.name,
 					res,
 				)
+				return {}, false
+			}
+
+			// @TODO remove when https://github.com/microsoft/DirectXShaderCompiler/issues/4496 is fixed
+			strip_reflect_info_cmd := fmt.aprintf(
+				"spirv-opt --strip-nonsemantic %s -o %s",
+				shader_bin_path,
+				shader_bin_path,
+			)
+
+			if res := libc.system(strings.clone_to_cstring(strip_reflect_info_cmd)); res != 0 {
+				log.warnf("Failed to strip reflection info %s: error code %d", p_shader_entry.name, res)
 				return {}, false
 			}
 
