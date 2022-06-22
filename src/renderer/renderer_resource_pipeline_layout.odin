@@ -31,12 +31,12 @@ InvalidPipelineLayoutRef := PipelineLayoutRef {
 
 //---------------------------------------------------------------------------//
 
-@(private)
+@(private="file")
 G_PIPELINE_LAYOUT_RESOURCES: []PipelineLayoutResource
 
 //---------------------------------------------------------------------------//
 
-@(private)
+@(private="file")
 G_PIPELINE_LAYOUT_REF_ARRAY: RefArray
 
 //---------------------------------------------------------------------------//
@@ -67,6 +67,18 @@ create_graphics_pipeline_layout :: proc(
 	)
 
     return ref
+}
+
+//---------------------------------------------------------------------------//
+
+get_pipeline_layout :: proc(p_ref: PipelineLayoutRef) -> ^PipelineLayoutResource {
+	idx := get_ref_idx(p_ref)
+	assert(idx < u32(len(G_PIPELINE_LAYOUT_RESOURCES)))
+
+	gen := get_ref_generation(p_ref)
+	assert(gen == G_PIPELINE_LAYOUT_REF_ARRAY.generations[idx])
+
+	return &G_PIPELINE_LAYOUT_RESOURCES[idx]
 }
 
 //---------------------------------------------------------------------------//

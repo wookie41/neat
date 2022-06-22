@@ -104,17 +104,17 @@ init_vt :: proc() -> bool {
 		vt_create_descriptor_pool()
 		vk_create_descriptor_sets()
 
-		// create stage info for each
+		// create stage info for each shader
 		vertex_stage_info := vk.PipelineShaderStageCreateInfo {
 			sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
 			stage = {.VERTEX},
-			module = G_SHADER_RESOURCES[get_ref_idx(vertex_shader_ref)].shader_module,
+			module = get_shader(vertex_shader_ref).shader_module,
 			pName = "main",
 		}
 		fragment_stage_info := vk.PipelineShaderStageCreateInfo {
 			sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
 			stage = {.FRAGMENT},
-			module = G_SHADER_RESOURCES[get_ref_idx(fragment_shader_ref)].shader_module,
+			module = get_shader(fragment_shader_ref).shader_module,
 			pName = "main",
 		}
 
@@ -214,9 +214,7 @@ init_vt :: proc() -> bool {
 			pMultisampleState   = &multisampling,
 			pColorBlendState    = &colour_blending,
 			pDepthStencilState  = &depth_stencil,
-			layout              = G_PIPELINE_LAYOUT_RESOURCES[get_ref_idx(
-	                                                     pipeline_layout_ref,
-                                                     )].vk_pipeline_layout,
+			layout              = get_pipeline_layout(pipeline_layout_ref).vk_pipeline_layout,
 			pViewportState      = &viewport_state,
 		}
 
@@ -403,7 +401,7 @@ vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
 	vk.CmdBindDescriptorSets(
 		cmd,
 		.GRAPHICS,
-		G_PIPELINE_LAYOUT_RESOURCES[get_ref_idx(pipeline_layout_ref)].vk_pipeline_layout,
+		get_pipeline_layout(pipeline_layout_ref).vk_pipeline_layout,
 		0,
 		1,
 		&descriptor_sets[frame_idx],
@@ -629,9 +627,9 @@ vk_create_descriptor_sets :: proc() {
 		context.allocator,
 	)
 	for _, i in set_layouts {
-		set_layouts[i] = G_PIPELINE_LAYOUT_RESOURCES[get_ref_idx(
-	                                               pipeline_layout_ref,
-                                               )].vk_programs_descriptor_set_layout
+		set_layouts[i] = get_pipeline_layout(
+			pipeline_layout_ref,
+		).vk_programs_descriptor_set_layout
 	}
 	defer delete(set_layouts)
 

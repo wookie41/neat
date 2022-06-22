@@ -44,13 +44,13 @@ get_ref_idx :: #force_inline proc(p_ref: $T) -> u32 {
 
 //---------------------------------------------------------------------------//
 
-get_ref_res_type :: #force_inline proc(p_ref: Ref) -> ResourceType {
+get_ref_res_type ::  #force_inline proc(p_ref: $T) -> ResourceType {
 	return ResourceType(u16(p_ref.ref >> 16))
 }
 
 //---------------------------------------------------------------------------//
 
-get_ref_generation :: #force_inline proc(p_ref: Ref) -> u16 {
+get_ref_generation ::  #force_inline proc(p_ref: $T) -> u16 {
 	return u16(p_ref.ref)
 }
 

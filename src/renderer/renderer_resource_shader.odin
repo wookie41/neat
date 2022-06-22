@@ -46,12 +46,12 @@ InvalidShaderRef := ShaderRef {
 
 //---------------------------------------------------------------------------//
 
-@(private)
+@(private="file")
 G_SHADER_RESOURCES: []ShaderResource
 
 //---------------------------------------------------------------------------//
 
-@(private)
+@(private="file")
 G_SHADER_REF_ARRAY: RefArray
 
 //---------------------------------------------------------------------------//
@@ -135,5 +135,17 @@ load_shaders :: proc() -> bool {
 
 	return true
 }
+//---------------------------------------------------------------------------//
+
+get_shader :: proc(p_ref: ShaderRef) -> ^ShaderResource {
+	idx := get_ref_idx(p_ref)
+	assert(idx < u32(len(G_SHADER_RESOURCES)))
+
+	gen := get_ref_generation(p_ref)
+	assert(gen == G_SHADER_REF_ARRAY.generations[idx])
+
+	return &G_SHADER_RESOURCES[idx]
+}
+
 
 //---------------------------------------------------------------------------//

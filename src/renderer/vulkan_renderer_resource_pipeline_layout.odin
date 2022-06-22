@@ -25,28 +25,28 @@ when USE_VULKAN_BACKEND {
 
 		assert(p_layout_type != .GRAPHICS_MATERIAL) // @TODO Implement
 
-		vert_shader_idx := get_ref_idx(p_vert_shader_ref)
-		frag_shader_idx := get_ref_idx(p_frag_shader_ref)
+		vert_shader := get_shader(p_vert_shader_ref)
+		frag_shader := get_shader(p_frag_shader_ref)
 
 		vk_bindings := make(
 			[]vk.DescriptorSetLayoutBinding,
-			len(G_SHADER_RESOURCES[vert_shader_idx].desc_bindings) +
-			len(G_SHADER_RESOURCES[frag_shader_idx].desc_bindings),
+			len(vert_shader.desc_bindings) +
+			len(frag_shader.desc_bindings),
 			G_RENDERER_ALLOCATORS.temp_arena_allocator,
 		)
 		defer delete(vk_bindings)
 
 		backend_add_shader_bindings(
-			&G_SHADER_RESOURCES[vert_shader_idx].desc_bindings,
+			&vert_shader.desc_bindings,
 			{.VERTEX},
 			0,
 			vk_bindings,
 		)
 
 		backend_add_shader_bindings(
-			&G_SHADER_RESOURCES[frag_shader_idx].desc_bindings,
+			&frag_shader.desc_bindings,
 			{.FRAGMENT},
-			u32(len(G_SHADER_RESOURCES[vert_shader_idx].desc_bindings)),
+			u32(len(vert_shader.desc_bindings)),
 			vk_bindings,
 		)
 
