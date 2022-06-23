@@ -94,11 +94,13 @@ init_vt :: proc() -> bool {
 
 		vertex_shader_ref := find_shader_by_name(common.create_name("base.vert"))
 		fragment_shader_ref := find_shader_by_name(common.create_name("base.frag"))
-		pipeline_layout_ref = create_graphics_pipeline_layout(
-			.GRAPHICS,
-			vertex_shader_ref,
-			fragment_shader_ref,
-		)
+
+		pipeline_layout_desc := PipelineLayoutDesc {
+			layout_type = .GRAPHICS,
+			vert_shader_ref = vertex_shader_ref,
+			frag_shader_ref = fragment_shader_ref,
+		}
+		pipeline_layout_ref = create_graphics_pipeline_layout(pipeline_layout_desc)
 
 		vt_create_uniform_buffers()
 		vt_create_descriptor_pool()
@@ -200,7 +202,6 @@ init_vt :: proc() -> bool {
 			scissorCount  = 1,
 			viewportCount = 1,
 		}
-
 
 		pipeline_info := vk.GraphicsPipelineCreateInfo {
 			sType               = .GRAPHICS_PIPELINE_CREATE_INFO,
@@ -672,7 +673,7 @@ vt_write_descriptor_sets :: proc() {
 
 	image_write := vk.WriteDescriptorSet {
 		sType           = .WRITE_DESCRIPTOR_SET,
-		dstBinding      = 1,
+		dstBinding      = 1, 
 		descriptorCount = 1,
 		descriptorType  = .COMBINED_IMAGE_SAMPLER,
 		pImageInfo      = &image_info,

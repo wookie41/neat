@@ -18,30 +18,22 @@ when USE_VULKAN_BACKEND {
 
 	backend_reflect_pipeline_layout :: proc(
 		p_layout: ^PipelineLayoutResource,
-		p_layout_type: PipelineType,
-		p_vert_shader_ref: ShaderRef,
-		p_frag_shader_ref: ShaderRef,
+		p_pipeline_layout_desc: PipelineLayoutDesc,
 	) -> bool {
 
-		assert(p_layout_type != .GRAPHICS_MATERIAL) // @TODO Implement
+		assert(p_pipeline_layout_desc.layout_type != .GRAPHICS_MATERIAL) // @TODO Implement
 
-		vert_shader := get_shader(p_vert_shader_ref)
-		frag_shader := get_shader(p_frag_shader_ref)
+		vert_shader := get_shader(p_pipeline_layout_desc.vert_shader_ref)
+		frag_shader := get_shader(p_pipeline_layout_desc.frag_shader_ref)
 
 		vk_bindings := make(
 			[]vk.DescriptorSetLayoutBinding,
-			len(vert_shader.desc_bindings) +
-			len(frag_shader.desc_bindings),
+			len(vert_shader.desc_bindings) + len(frag_shader.desc_bindings),
 			G_RENDERER_ALLOCATORS.temp_arena_allocator,
 		)
 		defer delete(vk_bindings)
 
-		backend_add_shader_bindings(
-			&vert_shader.desc_bindings,
-			{.VERTEX},
-			0,
-			vk_bindings,
-		)
+		backend_add_shader_bindings(&vert_shader.desc_bindings, {.VERTEX}, 0, vk_bindings)
 
 		backend_add_shader_bindings(
 			&frag_shader.desc_bindings,
@@ -101,7 +93,7 @@ when USE_VULKAN_BACKEND {
 		p_out_vk_bindings: []vk.DescriptorSetLayoutBinding,
 	) {
 
-        curr_binding := p_bindings_count
+		curr_binding := p_bindings_count
 		for binding in p_bindings {
 
 			desc_binding := &p_out_vk_bindings[curr_binding]
