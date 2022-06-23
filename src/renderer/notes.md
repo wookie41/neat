@@ -37,8 +37,8 @@ has something to index into (it has to be large enough not to cause out-of-bound
 - Code is responsible for registering the RenderTasks with appropirate names, so they can be referenc in the config
 - There will be the following RenderTask types:
     - RenderPass
-        - inputs (resource, stage)
-        - outputs (resource, stage)
+        - inputs to bind (resource, stage)
+        - outputs to bind (resource, stage)
         - vertex shader program
         - fragment shader program
         - uniform buffers (per frame, view, instance)
@@ -65,16 +65,18 @@ has something to index into (it has to be large enough not to cause out-of-bound
     Graphics pipeline: 
         - Bindless array        (set = 0, binding = 0)
         - Immutable samplers    (set = 0, binding = 1)
-        - Per frame             (set = 0, binding = 2)
-        - Per view              (set = 0, binding = 3)
-        - Custom bindings       (set = 1, binding = ...)
+        - Per frame             (set = 1, binding = 0)
+        - Per view              (set = 1, binding = 1)
+        - Per instance          (set = 2, binding = 0)
+        - Custom bindings       (set = 2, binding = 1...n)
     Global pipeline for MaterialPasses:
         - Bindless array        (set = 0, binding = 0)
         - Immutable samplers    (set = 0, binding = 1)
-        - Per frame             (set = 0, binding = 2)
-        - Per view              (set = 0, binding = 3)
-        - Material buffer       (set = 1, binding = 0)
+        - Per frame             (set = 1, binding = 0)
+        - Per view              (set = 1, binding = 1)
         - Per instance          (set = 2, binding = 0)
+        - Material buffer       (set = 2, binding = 1)
+        - Custom bindings       (set = 2, binding = 2...n)
 - Pipeline state: 
     - Created when parsing the RenderPasses, as there we have:
         - vertex program
@@ -118,3 +120,70 @@ All resources support the following interface:
 2. Call the appropriate createResource method
 3. Get a handle back. With this handle, one can call procedures that do something with the resource.
 4. Call destroyResource when we're done with it.
+
+
+Things needed to create a RenderPass:
+    - RenderTargets
+    - PSO
+        - vertex attributes
+        - input assembly
+        - rasterizer 
+            ...
+        - PSO Layout
+            - buffers
+            - images
+            - samplers
+        - Descriptor set layout 
+        - Who binds the descriptor set?
+            - As we're using dynamic_rendering, the PSO holds the formats of the RenderTargets,
+              so a RenderPass should actually store the actual images that we should use.
+              It should also have a way to update them.
+              BaseRenderPass is then an extension of RenderPass that holds he DescriptorSet to bind,
+              same way MaterialRenderPass is an extension of the RenderPass.
+              RenderPass should hold only the images, that is inherited by Base/MaterialRenderPass
+              BaseRenderPass also holds the DescriptorSet, where in case of the MaterialRenderPass, DescriptorSet would
+              be stored on the MaterialInstance.
+            - For material passes, each material instance should have 
+              it's own DescriptorSet if we're not using bindless (textures have to be updated) 
+
+RenderPass:
+    vertexShader: program.vert
+    fragmentShader: program.frag
+    uniformPerFrame: PerFrame
+    uniformPerView: PerView,
+    uniformPerInstance: PerInstance,
+    state overrides: ...
+     ..viewport
+     ..scissors - w need sane default for both, meaning full res, ets
+    Inputs: [
+        {
+            Type: Image,
+            Resource: SomeTexture,
+        },
+        {
+            Type: Buffer,
+            Resource: SomeBuffer 
+        }
+    ]
+    Targets: [
+        { 
+            Type: Color,
+            Resource: MyColorImage,
+        }
+    ]
+
+This gets turned into a RenderPass that holds a reference to:
+    - PSO
+    - DescriptorSet
+    - RenderingAttachments
+
+and then
+
+vkCmdPipelineBarrier 
+vkBeginRendering
+vkBindPipeline
+vkCmdSetViewport <- call at the beginning and only when it changes
+vkCmdSetScissors <- call at the beginning and only when it changes
+vkCmdBindDescriptorSets
+
+draw calls here...

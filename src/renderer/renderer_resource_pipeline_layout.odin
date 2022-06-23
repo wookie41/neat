@@ -58,7 +58,6 @@ PipelineLayoutDesc :: struct
 
 //---------------------------------------------------------------------------//
 
-@(private)
 create_graphics_pipeline_layout :: proc(
 	p_pipeline_layout_desc: PipelineLayoutDesc,
 ) -> PipelineLayoutRef {

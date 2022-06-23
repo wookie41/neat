@@ -16,6 +16,7 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
+	@(private)
 	backend_reflect_pipeline_layout :: proc(
 		p_layout: ^PipelineLayoutResource,
 		p_pipeline_layout_desc: PipelineLayoutDesc,

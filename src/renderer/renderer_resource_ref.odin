@@ -10,6 +10,7 @@ import "../common"
 ResourceType :: enum u16 {
 	SHADER,
 	PIPELINE_LAYOUT,
+	IMAGE,
 }
 
 //---------------------------------------------------------------------------//

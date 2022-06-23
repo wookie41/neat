@@ -64,9 +64,18 @@ when ODIN_DEBUG {
 		hash: u32,
 		name: string,
 	}
+
+	get_name :: proc(p_name: Name) -> string {
+		return p_name.name
+	}
+
 } else {
 	Name :: struct {
 		hash: u32,
+	}
+
+	get_name :: proc(p_name: Name) -> u32 {
+		return p_name.hash
 	}
 }
 //---------------------------------------------------------------------------//
