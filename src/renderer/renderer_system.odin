@@ -26,12 +26,16 @@ MAX_NUM_FRAMES_IN_FLIGHT :: #config(NUM_FRAMES_IN_FLIGHT, 2)
 MAX_SHADERS :: #config(MAX_SHADERS, 128)
 MAX_PIPELINE_LAYOUTS :: #config(MAX_PIPELINE_LAYOUTS, 256)
 MAX_IMAGES :: #config(MAX_IMAGES, 256)
+MAX_BUFFERS :: #config(MAX_PIPELINE_LAYOUTS, 256)
 
 //---------------------------------------------------------------------------//
 
 @(private)
 G_RENDERER: struct {
-	using backend_state: BackendRendererState,
+	using backend_state:        BackendRendererState,
+	num_frames_in_flight:       u32,
+	frame_idx:                  u32,
+	primary_cmd_buffer_handles: []CommandBufferHandle,
 }
 
 @(private)
@@ -54,12 +58,77 @@ InitOptions :: struct {
 
 //---------------------------------------------------------------------------//
 
+MemoryAccessFlagBits :: enum u32 {
+	/////////////////////////////////////////////////////////////////////////////
+	// Read access
+	VertexShaderSampledImageRead, // Read as a sampled image in a vertex shader
+	FragmentShaderSampledImageRead, // Read as a sampled image in a fragment shader
+	ComputeShaderSampledImageRead, // Read as a sampled image in a compute shader
+	ColorAttachmentRead, // Read by standard blending/logic operations or subpass load operations
+	DepthStencilAttachmentRead, // Read by depth/stencil tests or subpass load operations
+	DepthStencilAttachmentReadOnly, // Read by depth/stencil tests or subpass load operations while also being bound as a sampled image
+	// Read access - Buffers
+	IndirectBufferRead, // Read as an indirect buffer for draw/dispatch
+	IndexBufferRead, // Read as an index buffer for draw
+	VertexBufferRead, // Read as a vertex buffer for draw
+	VertexShaderUniformBufferRead, // Read as a uniform buffer in a vertex shader
+	FragmentShaderUniformBufferRead, // Read as a uniform buffer in a fragment shader
+	ComputeShaderUniformBufferRead, // Read as a uniform buffer in a compute shader
+	// Read access - General
+	VertexShaderGeneralRead, // Read as any resource in a vertex shader
+	FragmentShaderGeneralRead, // Read as any resource in a fragment shader
+	ComputeShaderGeneralRead, // Read as any resource in a compute shader
+	TransferRead, // Read as the source of a transfer operation
+	HostRead, // Read on the host
+	// Write access - Images
+	ColorAttachmentWrite, // Written as a color attachment in a draw, or via a subpass store op
+	DepthStencilAttachmentWrite, // Written as a depth/stencil attachment during draw, or via a subpass store op
+	// Write access - General
+	ComputeShaderWrite, // Written as any resource in a compute shader
+	AnyShaderWrite, // Written as any resource in any shader stage
+	TransferWrite, // Written as the destination of a transfer operation
+	HostWrite, // Written on the host
+	/////////////////////////////////////////////////////////////////////////////
+	WriteStart = ColorAttachmentWrite,
+}
+
+MemoryAccessFlags :: distinct bit_set[MemoryAccessFlagBits;u32]
+//---------------------------------------------------------------------------//
+
+@(private="file")
+G_MEMORY_ACCESS_ALL : []MemoryAccessFlagBits {
+	
+}
+
+//---------------------------------------------------------------------------//
+
+ImageBarrierFlagBits :: enum u8 {
+	Discard,
+}
+
+ImageBarrierFlags :: distinct bit_set[ImageBarrierFlagBits;u8]
+
+//---------------------------------------------------------------------------//
+
+ImageBarrier :: struct {
+	image:       ImageRef,
+	base_layer:  u8,
+	layer_count: u8,
+	base_mip:    u8,
+	mip_count:   u8,
+	access:      MemoryAccessFlags,
+	flags:       ImageBarrierFlags,
+	queue_idx:   u32,
+}
+
+//---------------------------------------------------------------------------//
+
 init :: proc(p_options: InitOptions) -> bool {
 	G_RENDERER_LOG = log.create_console_logger()
 
 	// Just take the current context allocator for now
 	G_RENDERER_ALLOCATORS.main_allocator = context.allocator
-	
+
 	// Temp arena
 	mem.init_arena(
 		&G_RENDERER_ALLOCATORS.temp_arena,
@@ -79,11 +148,34 @@ init :: proc(p_options: InitOptions) -> bool {
 	)
 
 	setup_renderer_context()
+	backend_init(p_options) or_return
+
+	init_command_buffers(p_options) or_return
+
+	// Allocate primary command buffer for each frame
+	{
+		G_RENDERER.primary_cmd_buffer_handles = make(
+			[]CommandBufferHandle,
+			G_RENDERER.num_frames_in_flight,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
+		for i in 0 .. G_RENDERER.num_frames_in_flight {
+			handle, succes := allocate_command_buffer(
+				{flags = {.Primary}, thread = 0, frame = u8(i)},
+			)
+			if succes == false {
+				log.error("Failed to allocate command buffer")
+				return false
+			}
+			G_RENDERER.primary_cmd_buffer_handles[i] = handle
+			return true
+		}
+	}
 
 	init_pipeline_layouts()
+	init_buffers()
 	init_images()
 
-	backend_init(p_options) or_return
 	load_shaders() or_return
 
 	init_vt()
@@ -121,4 +213,11 @@ setup_renderer_context :: proc() {
 	context.temp_allocator = G_RENDERER_ALLOCATORS.temp_arena_allocator
 	context.logger = G_RENDERER_LOG
 }
+
+//---------------------------------------------------------------------------//
+
+get_frame_cmd_buffer_handle :: proc() -> CommandBufferHandle {
+	return G_RENDERER.primary_cmd_buffer_handles[G_RENDERER.frame_idx]
+}
+
 //---------------------------------------------------------------------------//

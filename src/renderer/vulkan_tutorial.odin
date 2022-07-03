@@ -19,8 +19,6 @@ G_VT: struct {
 	pso:                       vk.Pipeline,
 	vertex_shader_module:      vk.ShaderModule,
 	fragment_shader_module:    vk.ShaderModule,
-	command_pools:             [dynamic]vk.CommandPool,
-	command_buffers:           [dynamic]vk.CommandBuffer,
 	uniform_buffers:           [dynamic]vk.Buffer,
 	uniform_buffer_allocation: [dynamic]vma.Allocation,
 	vertex_buffer:             vk.Buffer,
@@ -224,39 +222,7 @@ init_vt :: proc() -> bool {
 			return false
 		}
 	}
-
-	{
-		using G_RENDERER
-		using G_VT
-
-		pool_info := vk.CommandPoolCreateInfo {
-			sType = .COMMAND_POOL_CREATE_INFO,
-			queueFamilyIndex = u32(queue_family_graphics_index),
-			flags = {.RESET_COMMAND_BUFFER},
-		}
-
-		resize(&command_pools, int(num_frames_in_flight))
-		resize(&command_buffers, int(num_frames_in_flight))
-
-		for i in 0 ..< num_frames_in_flight {
-			if vk.CreateCommandPool(device, &pool_info, nil, &command_pools[i]) != .SUCCESS {
-				fmt.eprintln("couldn't create command pool")
-				return false
-			}
-			alloc_info := vk.CommandBufferAllocateInfo {
-				sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
-				commandPool        = command_pools[i],
-				level              = .PRIMARY,
-				commandBufferCount = 1,
-			}
-
-			if vk.AllocateCommandBuffers(device, &alloc_info, &command_buffers[i]) != .SUCCESS {
-				fmt.eprintln("couldn't allocate command buffers")
-				return false
-			}
-		}
-	}
-
+	
 	vt_load_model()
 	vt_create_vertex_buffer()
 	vt_create_index_buffer()

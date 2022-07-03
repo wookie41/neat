@@ -14,7 +14,7 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	@private
+	@(private)
 	BackendInitOptions :: struct {
 		window: ^sdl.Window,
 	}
@@ -27,7 +27,7 @@ when USE_VULKAN_BACKEND {
 
 	BackendMiscFlags :: distinct bit_set[BackendMiscFlagBits;u32]
 
-	@private
+	@(private)
 	BackendRendererState :: struct {
 		window:                      ^sdl.Window,
 		windowID:                    u32,
@@ -55,15 +55,13 @@ when USE_VULKAN_BACKEND {
 		render_finished_semaphores:  [dynamic]vk.Semaphore,
 		image_available_semaphores:  [dynamic]vk.Semaphore,
 		frame_fences:                [dynamic]vk.Fence,
-		num_frames_in_flight:        u32,
-		frame_idx:                   u32,
 		vma_allocator:               vma.Allocator,
 		misc_flags:                  BackendMiscFlags,
 	}
 
 	//---------------------------------------------------------------------------//
 
-	@private
+	@(private)
 	backend_init :: proc(p_options: InitOptions) -> bool {
 
 		device_extensions := []cstring{"VK_KHR_swapchain"}
@@ -452,12 +450,12 @@ when USE_VULKAN_BACKEND {
 				log.error("Failed to create VMA allocator")
 				return false
 			}
-		}
+		}	
 
 		return true
 	}
 	//---------------------------------------------------------------------------//
-	@private
+	@(private)
 	backend_deinit :: proc() {
 		using G_RENDERER
 		vma.destroy_allocator(vma_allocator)
@@ -488,7 +486,7 @@ when USE_VULKAN_BACKEND {
 	}
 }
 //---------------------------------------------------------------------------//
-@private
+@(private)
 backend_update :: proc(p_dt: f32) {
 
 	context.logger = G_RENDERER_LOG
@@ -833,3 +831,4 @@ backend_handler_on_window_resized :: proc(p_event: WindowResizedEvent) {
 }
 
 //---------------------------------------------------------------------------//
+
