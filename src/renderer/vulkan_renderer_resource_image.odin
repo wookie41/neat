@@ -53,9 +53,9 @@ when USE_VULKAN_BACKEND {
 
 	@(private = "file")
 	G_IMAGE_ASPECT_MAPPING := map[ImageAspectFlagBits]vk.ImageAspectFlag {
-		.Color  = .COLOR,
-		.Depth  = .DEPTH,
-		.Stencil  = .STENCIL,
+		.Color   = .COLOR,
+		.Depth   = .DEPTH,
+		.Stencil = .STENCIL,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -65,7 +65,6 @@ when USE_VULKAN_BACKEND {
 		// Buffer used to upload the initial contents of the images
 		staging_buffer:        BufferRef,
 		stating_buffer_offset: u32,
-		queued_image_copies:   [dynamic]BufferImageCopy,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -75,10 +74,6 @@ when USE_VULKAN_BACKEND {
 		INTERNAL.staging_buffer = create_buffer(
 			common.create_name("ImageStagingBuffer"),
 			{size = common.MEGABYTE * 128, flags = {.HostWrite, .Mapped}, usage = {.TransferSrc}},
-		)
-		INTERNAL.queued_image_copies = make(
-			[dynamic]QueuedImageCopy,
-			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
 	}
 
@@ -115,7 +110,7 @@ when USE_VULKAN_BACKEND {
 		}
 
 		// Determine usage and aspect
-		image_aspect : vk.ImageAspectFlags
+		image_aspect: ImageAspectFlags
 		usage: vk.ImageUsageFlags = {.SAMPLED, .TRANSFER_SRC, .TRANSFER_DST}
 
 		if .Storage in p_image_desc.flags {
@@ -125,7 +120,7 @@ when USE_VULKAN_BACKEND {
 		if p_image_desc.format > .DepthFormatsStart && p_image_desc.format < .DepthFormatsEnd {
 			usage += {.DEPTH_STENCIL_ATTACHMENT}
 			image_aspect = {.Depth, .Stencil}
-			
+
 		} else {
 			usage += {.COLOR_ATTACHMENT}
 			image_aspect = {.Color}
@@ -175,13 +170,32 @@ when USE_VULKAN_BACKEND {
 		}
 
 
+		buffer_image_copy := BufferImageCopy {
+			buffer  = INTERNAL.staging_buffer,
+			image   = p_image_ref,
+			regions = make(
+				[]ImageCopyRegion,
+				int(p_image_desc.mip_count * p_image_desc.layer_count),
+				G_RENDERER_ALLOCATORS.frame_allocator,
+			),
+		}
+
+		buffer_image_copy.image = p_image_ref
+		buffer_image_copy.buffer = INTERNAL.staging_buffer
+
 		staging_buffer := get_buffer(INTERNAL.staging_buffer)
+
 		// Queue image copies if the user provided data
+		i := 0
 		for layer_data, layer in p_image_desc.data {
 			for mip_data, mip in layer_data {
 
 				// Make sure we have enough space in the staging buffer
-				assert(INTERNAL.stating_buffer_offset + u32(len(mip_data)) < staging_buffer.desc.size)
+				assert(
+					INTERNAL.stating_buffer_offset +
+					u32(len(mip_data)) <
+					staging_buffer.desc.size,
+				)
 
 				mem.copy(
 					mem.ptr_offset(staging_buffer.mapped_ptr, INTERNAL.stating_buffer_offset),
@@ -189,51 +203,35 @@ when USE_VULKAN_BACKEND {
 					len(mip_data),
 				)
 
-				copy := BufferImageCopy {
-					image  = p_image_ref,
-					buffer = INTERNAL.staging_buffer,
-					buffer_offset = INTERNAL.stating_buffer_offset,
-					subresource_range = {
-						aspect = image_aspect,
-						base_layer = u8(layer),
-						layer_count = 1,
-						base_mip = u8(mip),
-						mip_count = 1,
-					},
+				buffer_image_copy.regions[i].buffer_offset = INTERNAL.stating_buffer_offset
+				buffer_image_copy.regions[i].subresource_range = {
+					aspect      = image_aspect,
+					base_layer  = u8(layer),
+					layer_count = 1,
+					mip_level    = u8(mip),
 				}
 
-				append(&INTERNAL.queued_image_copies, copy)
-
+				i += 1
 				INTERNAL.stating_buffer_offset += u32(len(mip_data))
 			}
 		}
+
+		append(&G_RENDERER.queued_image_copies, buffer_image_copy)
 		return true
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	execute_queued_image_copies :: proc() {
-
-		cmd_buff := get_frame_cmd_buffer_handle()
-
-		for queued_copy in INTERNAL.queued_image_copies {
-			cmd_copy_buffer_to_image(cmd_buff, queued_copy)
+	vk_map_image_aspect :: #force_inline proc(
+		p_aspect: ImageAspectFlags,
+	) -> vk.ImageAspectFlags {
+		vk_image_aspect: vk.ImageAspectFlags
+		for aspect in ImageAspectFlagBits {
+			if p_aspect in p_copy.subresource_range.aspect {
+				vk_image_aspect += {G_IMAGE_ASPECT_MAPPING[p_aspect]}
+			}
 		}
-
-		clear(&INTERNAL.queued_image_copies)
-	}
-
-	//---------------------------------------------------------------------------//
-
-	@(private)
-	vk_map_image_aspect :: #force_inline proc(p_aspect: ImageAspectFlags) -> vk.ImageAspectFlags {
-		vk_image_aspect : vk.ImageAspectFlags
-        for aspect in ImageAspectFlagBits {
-            if p_aspect in p_copy.subresource_range.aspect {
-                vk_image_aspect += {G_IMAGE_ASPECT_MAPPING[p_aspect]}
-            }
-        }
 		return vk_image_aspect
 	}
 

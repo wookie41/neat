@@ -36,15 +36,18 @@ G_RENDERER: struct {
 	num_frames_in_flight:       u32,
 	frame_idx:                  u32,
 	primary_cmd_buffer_handles: []CommandBufferHandle,
+	queued_image_copies:        [dynamic]BufferImageCopy,
 }
 
 @(private)
 G_RENDERER_ALLOCATORS: struct {
-	main_allocator:       mem.Allocator,
-	resource_arena:       mem.Arena,
-	resource_allocator:   mem.Allocator,
-	temp_arena:           mem.Arena,
-	temp_arena_allocator: mem.Allocator,
+	main_allocator:     mem.Allocator,
+	resource_arena:     mem.Arena,
+	resource_allocator: mem.Allocator,
+	temp_arena:         mem.Arena,
+	temp_allocator:     mem.Allocator,
+	frame_arena:        mem.Arena,
+	frame_allocator:    mem.Allocator,
 }
 
 @(private)
@@ -93,12 +96,6 @@ MemoryAccessFlagBits :: enum u32 {
 }
 
 MemoryAccessFlags :: distinct bit_set[MemoryAccessFlagBits;u32]
-//---------------------------------------------------------------------------//
-
-@(private="file")
-G_MEMORY_ACCESS_ALL : []MemoryAccessFlagBits {
-	
-}
 
 //---------------------------------------------------------------------------//
 
@@ -134,7 +131,7 @@ init :: proc(p_options: InitOptions) -> bool {
 		&G_RENDERER_ALLOCATORS.temp_arena,
 		make([]byte, common.MEGABYTE * 4, G_RENDERER_ALLOCATORS.main_allocator),
 	)
-	G_RENDERER_ALLOCATORS.temp_arena_allocator = mem.arena_allocator(
+	G_RENDERER_ALLOCATORS.temp_allocator = mem.arena_allocator(
 		&G_RENDERER_ALLOCATORS.temp_arena,
 	)
 
@@ -145,6 +142,15 @@ init :: proc(p_options: InitOptions) -> bool {
 	)
 	G_RENDERER_ALLOCATORS.resource_allocator = mem.arena_allocator(
 		&G_RENDERER_ALLOCATORS.resource_arena,
+	)
+
+	// Frame arena
+	mem.init_arena(
+		&G_RENDERER_ALLOCATORS.frame_arena,
+		make([]byte, common.MEGABYTE * 4, G_RENDERER_ALLOCATORS.main_allocator),
+	)
+	G_RENDERER_ALLOCATORS.frame_allocator = mem.arena_allocator(
+		&G_RENDERER_ALLOCATORS.frame_arena,
 	)
 
 	setup_renderer_context()
@@ -184,8 +190,22 @@ init :: proc(p_options: InitOptions) -> bool {
 //---------------------------------------------------------------------------//
 
 update :: proc(p_dt: f32) {
+
+	G_RENDERER.queued_image_copies = make(
+		[dynamic]BufferImageCopy,
+		G_RENDERER_ALLOCATORS.frame_allocator,
+	)
+
 	setup_renderer_context()
 	backend_update(p_dt)
+
+	// Execute queued image copies
+	{
+		cmd_buff := get_frame_cmd_buffer_handle()
+		cmd_copy_buffer_to_image(cmd_buff, G_RENDERER.queued_image_copies)
+	}
+
+	free_all(G_RENDERER_ALLOCATORS.frame_allocator)
 }
 
 //---------------------------------------------------------------------------//

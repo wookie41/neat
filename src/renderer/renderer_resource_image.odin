@@ -53,8 +53,7 @@ ImageSubresourceRange :: struct {
 	aspect: ImageAspectFlags,
 	base_layer: u8,
 	layer_count: u8,
-	base_mip: u8,
-	mip_count: u8,
+	mip_level: u8,
 }
 
 //---------------------------------------------------------------------------//
