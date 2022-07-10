@@ -12,6 +12,8 @@ ResourceType :: enum u16 {
 	PIPELINE_LAYOUT,
 	IMAGE,
 	BUFFER,
+	RENDER_PASS,
+	PIPELINE,
 }
 
 //---------------------------------------------------------------------------//
@@ -100,7 +102,7 @@ create_ref :: proc(p_ref_array: ^RefArray, p_name: common.Name) -> Ref {
 
 //---------------------------------------------------------------------------//
 
-free_ref :: proc(p_ref_array: ^RefArray, p_ref: Ref) {
+free_ref :: proc(p_ref_array: ^RefArray, p_ref: $T) {
 	assert(p_ref_array.res_type == ResourceType(get_ref_res_type(p_ref)))
 	assert(p_ref_array.num_free_indices < u32(len(p_ref_array.free_indices)))
 	p_ref_array.free_indices[p_ref_array.num_free_indices] = get_ref_idx(p_ref)

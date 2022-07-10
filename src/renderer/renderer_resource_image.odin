@@ -53,8 +53,7 @@ ImageSubresourceRange :: struct {
 	aspect: ImageAspectFlags,
 	base_layer: u8,
 	layer_count: u8,
-	base_mip: u8,
-	mip_count: u8,
+	mip_level: u8,
 }
 
 //---------------------------------------------------------------------------//
@@ -131,7 +130,10 @@ create_image :: proc(p_name: common.Name, p_image_desc: ImageDesc) -> ImageRef {
 
 	image.desc = p_image_desc
 
-	backend_create_image(p_name, p_image_desc, ref, image)
+	if backend_create_image(p_name, p_image_desc, ref, image) == false {
+		free_ref(&G_IMAGE_REF_ARRAY, ref)
+        return InvalidImageRef
+	}
 
     return ref
 }

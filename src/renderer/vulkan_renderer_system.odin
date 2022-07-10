@@ -78,11 +78,11 @@ when USE_VULKAN_BACKEND {
 			using G_RENDERER
 			using G_RENDERER_ALLOCATORS
 
-			defer mem.free_all(temp_arena_allocator)
+			defer mem.free_all(temp_allocator)
 
 			// Specify a list of required extensions and layers
-			required_extensions := make([dynamic]cstring, temp_arena_allocator)
-			required_layers := make([dynamic]cstring, temp_arena_allocator)
+			required_extensions := make([dynamic]cstring, temp_allocator)
+			required_layers := make([dynamic]cstring, temp_allocator)
 
 			// Add SDL extensions
 			{
@@ -199,7 +199,7 @@ when USE_VULKAN_BACKEND {
 			using G_RENDERER
 			using G_RENDERER_ALLOCATORS
 
-			defer mem.free_all(temp_arena_allocator)
+			defer mem.free_all(temp_allocator)
 
 			physical_device_count: u32
 			vk.EnumeratePhysicalDevices(instance, &physical_device_count, nil)
@@ -211,7 +211,7 @@ when USE_VULKAN_BACKEND {
 			physical_devices := make(
 				[]vk.PhysicalDevice,
 				physical_device_count,
-				temp_arena_allocator,
+				temp_allocator,
 			)
 
 			vk.EnumeratePhysicalDevices(
@@ -285,7 +285,7 @@ when USE_VULKAN_BACKEND {
 				queue_families := make(
 					[]vk.QueueFamilyProperties,
 					int(queue_family_count),
-					temp_arena_allocator,
+					temp_allocator,
 				)
 				vk.GetPhysicalDeviceQueueFamilyProperties(
 					pd,
@@ -349,10 +349,10 @@ when USE_VULKAN_BACKEND {
 			using G_RENDERER
 			using G_RENDERER_ALLOCATORS
 
-			defer mem.free_all(temp_arena_allocator)
+			defer mem.free_all(temp_allocator)
 
 			// Avoid creating duplicates
-			queue_families := make(map[u32]int, 3, temp_arena_allocator)
+			queue_families := make(map[u32]int, 3, temp_allocator)
 			queue_families[queue_family_graphics_index] += 1
 			queue_families[queue_family_present_index] += 1
 			queue_families[queue_family_compute_index] += 1
@@ -456,7 +456,7 @@ when USE_VULKAN_BACKEND {
 	}
 	//---------------------------------------------------------------------------//
 	@(private)
-	backend_deinit :: proc() {
+	deinit_backend :: proc() {
 		using G_RENDERER
 		vma.destroy_allocator(vma_allocator)
 		for i in 0 ..< num_frames_in_flight {

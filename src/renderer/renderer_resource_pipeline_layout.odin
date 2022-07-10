@@ -51,6 +51,7 @@ init_pipeline_layouts :: proc() {
 
 PipelineLayoutDesc :: struct 
 {
+	name: common.Name,
 	layout_type: PipelineType,
 	vert_shader_ref: ShaderRef,
 	frag_shader_ref: ShaderRef,
@@ -61,14 +62,17 @@ PipelineLayoutDesc :: struct
 create_graphics_pipeline_layout :: proc(
 	p_pipeline_layout_desc: PipelineLayoutDesc,
 ) -> PipelineLayoutRef {
-	ref := PipelineLayoutRef(create_ref(&G_PIPELINE_LAYOUT_REF_ARRAY, common.EMPTY_NAME))
+	ref := PipelineLayoutRef(create_ref(&G_PIPELINE_LAYOUT_REF_ARRAY, p_pipeline_layout_desc.name))
 	idx := get_ref_idx(ref)
 	pipeline_layout := &G_PIPELINE_LAYOUT_RESOURCES[idx]
 
-	backend_reflect_pipeline_layout(
+	if backend_reflect_pipeline_layout(
 		pipeline_layout,
 		p_pipeline_layout_desc,
-	)
+	) == false {
+		free_ref(&G_PIPELINE_LAYOUT_REF_ARRAY, ref)
+        return InvalidPipelineLayoutRef
+	}
 
     return ref
 }

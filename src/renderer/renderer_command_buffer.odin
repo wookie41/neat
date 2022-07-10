@@ -21,11 +21,17 @@ CommandBufferDesc :: struct {
 
 //---------------------------------------------------------------------------//
 
-BufferImageCopy :: struct {
-	buffer:            BufferRef,
-	image:             ImageRef,
+ImageCopyRegion :: struct {
 	buffer_offset:     u32,
 	subresource_range: ImageSubresourceRange,
+}
+
+//---------------------------------------------------------------------------//
+
+BufferImageCopy :: struct {
+	buffer:  BufferRef,
+	image:   ImageRef,
+	regions: []ImageCopyRegion,
 }
 
 //---------------------------------------------------------------------------//

@@ -99,33 +99,104 @@ when USE_VULKAN_BACKEND {
 
 
 	cmd_copy_buffer_to_image :: proc(
-		p_cmd_buff: CommandBufferEntry,
-		p_copy: BufferImageCopy,
+		p_cmd_buff: CommandBufferHandle,
+		p_copies: [dynamic]BufferImageCopy,
 	) {
 
-        // TODO batch them
-        image := get_image(p_copy.image)
-        buffer := get_buffer(p_copy.buffer)
-        cmd_buff := INTERNAL.command_buffers[u32(p_cmd_buff)]
+		cmd_buff := INTERNAL.command_buffers[u32(p_cmd_buff)]
 
-        copy := vk.BufferImageCopy {
-            bufferOffset = vk.DeviceSize(p_copy.buffer_offset),
-            imageSubresource = {
-                aspectMask = vk_map_image_aspect(p_copy.subresource_range.aspect),
-                baseArrayLayer = p_copy.subresource_range.base_layer,
-                layerCount = p_copy.subresource_range.layer_count,
-                baseMipLevel = p_copy.subresource_range.base_mip,
-                mipLevel = p_copy.subresource_range.mip_count,
-            },
-            imageExtent = {
-                width = image.desc.dimensions[0] << p_copy.subresource_range.base_mip,
-                height = image.desc.dimensions[1] << p_copy.subresource_range.base_mip,
-                depth = 1,
-            },
-        }
+		num_placed_barries := 0
+		image_barriers := make(
+			[]vk.ImageMemoryBarrier,
+			len(p_copies),
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+		defer delete(image_barriers)
 
-        vk.CmdCopyBufferToImage(cmd_buff.cmd_buff, buffer.vk_buffer, image.vk_image, .TRANSFER_DST_OPTIMAL, 0, )
+		// Used to track which images have barriers placed for them already
+		image_with_barriers := make(
+			map[ImageRef]bool,
+			len(p_copies),
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+		defer delete(image_with_barriers)
 
+		for copy in p_copies {
+
+			image := get_image(copy.image)
+			buffer := get_buffer(copy.buffer)
+
+			// @TODO Create a cmd_place_image_barriers command in the command buffer 
+			// so we can track the layout of the image in there
+
+			// For now we just place a barriers for the entire image
+			if (copy.image in image_with_barriers) == false {
+
+				image_barrier := &image_barriers[num_placed_barries]
+				image_barrier.sType = .IMAGE_MEMORY_BARRIER
+				image_barrier.oldLayout = .UNDEFINED // #FIXME ASSUMPTION UNTIL WE HAVE IMAGE LAYOUT TRACKING
+				image_barrier.newLayout = .TRANSFER_DST_OPTIMAL
+				image_barrier.srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED
+				image_barrier.dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED
+				image_barrier.image = image.vk_image
+				image_barrier.subresourceRange.aspectMask = vk_map_image_aspect(
+					copy.regions[0].subresource_range.aspect,
+				)
+				image_barrier.subresourceRange.baseArrayLayer = 0
+				image_barrier.subresourceRange.layerCount = u32(image.desc.layer_count)
+				image_barrier.subresourceRange.baseMipLevel = 0
+				image_barrier.subresourceRange.levelCount = u32(image.desc.mip_count)
+				image_barrier.dstAccessMask = {.TRANSFER_WRITE}
+
+
+				num_placed_barries += 1
+			}
+
+			vk_copies := make(
+				[]vk.BufferImageCopy,
+				len(copy.regions),
+				G_RENDERER_ALLOCATORS.temp_allocator,
+			)
+			defer delete(vk_copies)
+
+			for region, region_idx in copy.regions {
+
+				vk_copies[region_idx].bufferOffset = vk.DeviceSize(region.buffer_offset)
+				vk_copies[region_idx].imageSubresource = {
+					aspectMask     = vk_map_image_aspect(region.subresource_range.aspect),
+					baseArrayLayer = u32(region.subresource_range.base_layer),
+					layerCount     = u32(region.subresource_range.layer_count),
+					mipLevel       = u32(region.subresource_range.mip_level),
+				}
+				vk_copies[region_idx].imageExtent = {
+					width  = image.desc.dimensions[0] << region.subresource_range.mip_level,
+					height = image.desc.dimensions[1] << region.subresource_range.mip_level,
+					depth  = 1,
+				}
+			}
+
+			vk.CmdPipelineBarrier(
+				cmd_buff.cmd_buff,
+				{.TOP_OF_PIPE},
+				{.TRANSFER},
+				nil,
+				0,
+				nil,
+				0,
+				nil,
+				u32(num_placed_barries),
+				&image_barriers[0],
+			)
+
+			vk.CmdCopyBufferToImage(
+				cmd_buff.cmd_buff,
+				buffer.vk_buffer,
+				image.vk_image,
+				.TRANSFER_DST_OPTIMAL,
+				u32(len(vk_copies)),
+				raw_data(vk_copies),
+			)
+		}
 	}
 
 	//---------------------------------------------------------------------------//

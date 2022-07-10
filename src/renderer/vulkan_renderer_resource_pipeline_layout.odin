@@ -30,7 +30,7 @@ when USE_VULKAN_BACKEND {
 		vk_bindings := make(
 			[]vk.DescriptorSetLayoutBinding,
 			len(vert_shader.desc_bindings) + len(frag_shader.desc_bindings),
-			G_RENDERER_ALLOCATORS.temp_arena_allocator,
+			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(vk_bindings)
 

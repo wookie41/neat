@@ -24,9 +24,11 @@ MAX_NUM_FRAMES_IN_FLIGHT :: #config(NUM_FRAMES_IN_FLIGHT, 2)
 
 @(private)
 MAX_SHADERS :: #config(MAX_SHADERS, 128)
-MAX_PIPELINE_LAYOUTS :: #config(MAX_PIPELINE_LAYOUTS, 256)
+MAX_PIPELINE_LAYOUTS :: #config(MAX_PIPELINE_LAYOUTS, 128)
 MAX_IMAGES :: #config(MAX_IMAGES, 256)
-MAX_BUFFERS :: #config(MAX_PIPELINE_LAYOUTS, 256)
+MAX_BUFFERS :: #config(MAX_BUFFERS, 256)
+MAX_RENDER_PASSES :: #config(MAX_RENDER_PASSES, 256)
+MAX_PIPELINES :: #config(MAX_PIPELINES, 128)
 
 //---------------------------------------------------------------------------//
 
@@ -36,15 +38,18 @@ G_RENDERER: struct {
 	num_frames_in_flight:       u32,
 	frame_idx:                  u32,
 	primary_cmd_buffer_handles: []CommandBufferHandle,
+	queued_image_copies:         [dynamic]BufferImageCopy,
 }
 
 @(private)
 G_RENDERER_ALLOCATORS: struct {
-	main_allocator:       mem.Allocator,
-	resource_arena:       mem.Arena,
-	resource_allocator:   mem.Allocator,
-	temp_arena:           mem.Arena,
-	temp_arena_allocator: mem.Allocator,
+	main_allocator:     mem.Allocator,
+	resource_arena:     mem.Arena,
+	resource_allocator: mem.Allocator,
+	temp_arena:         mem.Arena,
+	temp_allocator:     mem.Allocator,
+	frame_arena:        mem.Arena,
+	frame_allocator:    mem.Allocator,
 }
 
 @(private)
@@ -93,12 +98,6 @@ MemoryAccessFlagBits :: enum u32 {
 }
 
 MemoryAccessFlags :: distinct bit_set[MemoryAccessFlagBits;u32]
-//---------------------------------------------------------------------------//
-
-@(private="file")
-G_MEMORY_ACCESS_ALL : []MemoryAccessFlagBits {
-	
-}
 
 //---------------------------------------------------------------------------//
 
@@ -134,7 +133,7 @@ init :: proc(p_options: InitOptions) -> bool {
 		&G_RENDERER_ALLOCATORS.temp_arena,
 		make([]byte, common.MEGABYTE * 4, G_RENDERER_ALLOCATORS.main_allocator),
 	)
-	G_RENDERER_ALLOCATORS.temp_arena_allocator = mem.arena_allocator(
+	G_RENDERER_ALLOCATORS.temp_allocator = mem.arena_allocator(
 		&G_RENDERER_ALLOCATORS.temp_arena,
 	)
 
@@ -145,6 +144,15 @@ init :: proc(p_options: InitOptions) -> bool {
 	)
 	G_RENDERER_ALLOCATORS.resource_allocator = mem.arena_allocator(
 		&G_RENDERER_ALLOCATORS.resource_arena,
+	)
+
+	// Frame arena
+	mem.init_arena(
+		&G_RENDERER_ALLOCATORS.frame_arena,
+		make([]byte, common.MEGABYTE * 4, G_RENDERER_ALLOCATORS.main_allocator),
+	)
+	G_RENDERER_ALLOCATORS.frame_allocator = mem.arena_allocator(
+		&G_RENDERER_ALLOCATORS.frame_arena,
 	)
 
 	setup_renderer_context()
@@ -185,6 +193,10 @@ init :: proc(p_options: InitOptions) -> bool {
 
 update :: proc(p_dt: f32) {
 	setup_renderer_context()
+	// @TODO build command buffer
+	execute_queued_image_copies()
+	clear(&G_RENDERER.queued_image_copies)
+	// @TODO dispatch command buffer
 	backend_update(p_dt)
 }
 
@@ -192,7 +204,8 @@ update :: proc(p_dt: f32) {
 
 deinit :: proc() {
 	setup_renderer_context()
-	backend_deinit()
+	deinit_pipelines()
+	deinit_backend()
 }
 
 //---------------------------------------------------------------------------//
@@ -208,16 +221,29 @@ handler_on_window_resized :: proc(p_event: WindowResizedEvent) {
 
 //---------------------------------------------------------------------------//
 
+@(private)
 setup_renderer_context :: proc() {
 	context.allocator = G_RENDERER_ALLOCATORS.main_allocator
-	context.temp_allocator = G_RENDERER_ALLOCATORS.temp_arena_allocator
+	context.temp_allocator = G_RENDERER_ALLOCATORS.temp_allocator
 	context.logger = G_RENDERER_LOG
 }
 
 //---------------------------------------------------------------------------//
 
+@(private)
 get_frame_cmd_buffer_handle :: proc() -> CommandBufferHandle {
 	return G_RENDERER.primary_cmd_buffer_handles[G_RENDERER.frame_idx]
 }
 
 //---------------------------------------------------------------------------//
+
+@(private)
+execute_queued_image_copies :: proc() {
+	cmd_buff := get_frame_cmd_buffer_handle()
+	cmd_copy_buffer_to_image(cmd_buff, G_RENDERER.queued_image_copies)
+	clear(&G_RENDERER.queued_image_copies)
+}
+
+
+//---------------------------------------------------------------------------//
+

@@ -104,7 +104,7 @@ when USE_VULKAN_BACKEND {
 		}
 
 		if .Mapped in p_buffer_desc.flags {
-			p_buffer.mapped_ptr = alloc_info.pMappedData
+			p_buffer.mapped_ptr = cast(^u8)alloc_info.pMappedData
 		}
 
 		return true

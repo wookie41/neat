@@ -82,7 +82,10 @@ create_buffer :: proc(p_name: common.Name, p_buffer_desc: BufferDesc) -> BufferR
 
 	buffer.desc = p_buffer_desc
 
-	backend_create_buffer(p_name, p_buffer_desc, buffer)
+	if backend_create_buffer(p_name, p_buffer_desc, buffer) == false {
+		free_ref(&G_BUFFER_REF_ARRAY, ref)
+        return InvalidBufferRef
+	}
 
 	return ref
 }
