@@ -155,6 +155,8 @@ init :: proc(p_options: InitOptions) -> bool {
 		&G_RENDERER_ALLOCATORS.frame_arena,
 	)
 
+	G_RENDERER.queued_image_copies = make([dynamic]BufferImageCopy, G_RENDERER_ALLOCATORS.frame_allocator)
+
 	setup_renderer_context()
 	backend_init(p_options) or_return
 
