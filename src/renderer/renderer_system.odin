@@ -38,7 +38,7 @@ G_RENDERER: struct {
 	num_frames_in_flight:       u32,
 	frame_idx:                  u32,
 	primary_cmd_buffer_handles: []CommandBufferHandle,
-	queued_image_copies:         [dynamic]BufferImageCopy,
+	queued_image_copies:        [dynamic]BufferImageCopy,
 }
 
 @(private)
@@ -155,7 +155,10 @@ init :: proc(p_options: InitOptions) -> bool {
 		&G_RENDERER_ALLOCATORS.frame_arena,
 	)
 
-	G_RENDERER.queued_image_copies = make([dynamic]BufferImageCopy, G_RENDERER_ALLOCATORS.frame_allocator)
+	G_RENDERER.queued_image_copies = make(
+		[dynamic]BufferImageCopy,
+		G_RENDERER_ALLOCATORS.frame_allocator,
+	)
 
 	setup_renderer_context()
 	backend_init(p_options) or_return
@@ -248,4 +251,3 @@ execute_queued_image_copies :: proc() {
 
 
 //---------------------------------------------------------------------------//
-

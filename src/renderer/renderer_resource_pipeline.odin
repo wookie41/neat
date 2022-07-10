@@ -104,14 +104,14 @@ deinit_pipelines :: proc() {
 
 //---------------------------------------------------------------------------//
 
-create_pipeline :: proc(
+create_graphics_pipeline :: proc(
 	p_pipeline_desc: PipelineDesc,
 ) -> PipelineRef {
 	ref := PipelineRef(create_ref(&G_PIPELINE_REF_ARRAY, p_pipeline_desc.name))
 	idx := get_ref_idx(ref)
 	pipeline := &G_PIPELINE_RESOURCES[idx]
 
-	res := backend_create_pipeline(
+	res := backend_create_graphics_pipeline(
 		p_pipeline_desc,
 		pipeline,
 	)

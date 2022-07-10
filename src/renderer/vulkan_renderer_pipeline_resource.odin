@@ -176,7 +176,7 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	backend_create_pipeline :: proc(
+	backend_create_graphics_pipeline :: proc(
 		p_pipeline_desc: PipelineDesc,
 		p_pipeline: ^PipelineResource,
 	) -> bool {

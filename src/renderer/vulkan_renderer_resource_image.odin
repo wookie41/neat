@@ -15,9 +15,12 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
+	@(private)
 	BackendImageResource :: struct {
-		vk_image:   vk.Image,
-		allocation: vma.Allocation,
+		vk_image:         vk.Image,
+		all_mips_vk_view: vk.ImageView,
+		per_mip_vk_view:  []vk.ImageView,
+		allocation:       vma.Allocation,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -154,6 +157,73 @@ when USE_VULKAN_BACKEND {
 		}
 
 
+		// Create image view containing all of the mips
+		{
+			view_create_info := vk.ImageViewCreateInfo {
+				sType = .IMAGE_VIEW_CREATE_INFO,
+				image = p_image.vk_image,
+				viewType = vk_image_format,
+				format = vk_image_format,
+				subresourceRange = {
+					aspectMask = image_aspect,
+					levelCount = p_image_desc.mip_count,
+					layerCount = 1,
+				},
+			}
+
+			if vk.CreateImageView(
+				   G_RENDERER.device,
+				   &view_create_info,
+				   nil,
+				   p_image.all_mips_vk_view,
+			   ) != .SUCCESS {
+				vma.destroy_image(G_RENDERER.vma_allocator, p_image.vk_image, p_image.allocation)
+				return false
+			}
+		}
+
+		// Now create image views per mip
+		{
+			p_image.vk_image_views := make(
+				[]vk.ImageView,
+				p_image_desc.mip_count,
+				G_RENDERER.resource_allocator,
+			)
+			num_image_views_created := 0
+
+			view_create_info := vk.ImageViewCreateInfo {
+				sType = .IMAGE_VIEW_CREATE_INFO,
+				image = p_image.vk_image,
+				viewType = vk_image_format,
+				format = vk_image_format,
+				subresourceRange = {aspectMask = image_aspect, levelCount = 1, layerCount = 1},
+			}
+
+			for i in 0 .. p_image_desc.mip_count {
+				view_create_info.subresourceRange.baseMipLevel = i
+				if vk.CreateImageView(
+					   G_RENDERER.device,
+					   &view_create_info,
+					   nil,
+					   &p_image.per_mip_vk_view[i],
+				   ) != .SUCCESS {
+					break
+				}
+				num_image_views_created += 1
+			}
+
+			// Free the created image views if we failed to create any of the mip views
+			if num_image_views_created < p_image_desc.mip_count {
+				vk.DestroyImageView(G_RENDERER.device, p_image.all_mips_vk_view, nil)
+				for i in 0..num_image_views_created {
+					vk.DestroyImageView(G_RENDERER.device, p_image.per_mip_vk_view[i], nil)
+				}
+				// Delete the image itself
+				vma.destroy_image(G_RENDERER.vma_allocator, p_image.vk_image, p_image.allocation)
+				return false
+			}
+		}
+		
 		buffer_image_copy := BufferImageCopy {
 			buffer  = INTERNAL.staging_buffer,
 			image   = p_image_ref,
@@ -171,33 +241,27 @@ when USE_VULKAN_BACKEND {
 
 		// Queue image copies if the user provided data
 		i := 0
-		for layer_data, layer in p_image_desc.data {
-			for mip_data, mip in layer_data {
+		for mip_data, mip in p_image_desc.data_per_mip {
 
-				// Make sure we have enough space in the staging buffer
-				assert(
-					INTERNAL.stating_buffer_offset +
-					u32(len(mip_data)) <
-					staging_buffer.desc.size,
-				)
+			// Make sure we have enough space in the staging buffer
+			assert(INTERNAL.stating_buffer_offset + u32(len(mip_data)) < staging_buffer.desc.size)
 
-				mem.copy(
-					mem.ptr_offset(staging_buffer.mapped_ptr, INTERNAL.stating_buffer_offset),
-					raw_data(mip_data),
-					len(mip_data),
-				)
+			mem.copy(
+				mem.ptr_offset(staging_buffer.mapped_ptr, INTERNAL.stating_buffer_offset),
+				raw_data(mip_data),
+				len(mip_data),
+			)
 
-				buffer_image_copy.regions[i].buffer_offset = INTERNAL.stating_buffer_offset
-				buffer_image_copy.regions[i].subresource_range = {
-					aspect      = image_aspect,
-					base_layer  = u8(layer),
-					layer_count = 1,
-					mip_level    = u8(mip),
-				}
-
-				i += 1
-				INTERNAL.stating_buffer_offset += u32(len(mip_data))
+			buffer_image_copy.regions[i].buffer_offset = INTERNAL.stating_buffer_offset
+			buffer_image_copy.regions[i].subresource_range = {
+				aspect      = image_aspect,
+				base_layer  = 0,
+				layer_count = 1,
+				mip_level   = u8(mip),
 			}
+
+			i += 1
+			INTERNAL.stating_buffer_offset += u32(len(mip_data))
 		}
 
 		append(&G_RENDERER.queued_image_copies, buffer_image_copy)

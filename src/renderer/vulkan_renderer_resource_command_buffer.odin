@@ -7,25 +7,25 @@ when USE_VULKAN_BACKEND {
 	import vk "vendor:vulkan"
 	import "core:log"
 
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	BackendCommandBufferResource :: struct {
+		vk_cmd_buff: vk.CommandBuffer,
+	}
 
 	//---------------------------------------------------------------------------//
 
-	CommandBufferEntry :: struct {
-		desc:     CommandBufferDesc,
-		cmd_buff: vk.CommandBuffer,
-	}
 
 	@(private = "file")
 	INTERNAL: struct {
-		command_buffers:  []CommandBufferEntry,
-		command_pools:    []vk.CommandPool,
-		cmd_buffer_count: u32,
+		command_pools: []vk.CommandPool,
 	}
-
 
 	//---------------------------------------------------------------------------//
 
-	init_command_buffers :: proc(p_options: InitOptions) -> bool {
+	@(private)
+	backend_init_command_buffers :: proc(p_options: InitOptions) -> bool {
 
 		// Create command pools
 		{
@@ -57,53 +57,49 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	allocate_command_buffer :: proc(p_cmd_buffer_desc: CommandBufferDesc) -> (
-		CommandBufferHandle,
-		bool,
-	) {
-		assert(INTERNAL.cmd_buffer_count < u32(len(INTERNAL.command_buffers)))
-
-		idx := INTERNAL.cmd_buffer_count
+	@(private)
+	backend_create_command_buffer :: proc(
+		p_cmd_buff_desc: CommandBufferDesc,
+		p_cmd_buff: ^CommandBufferResource, 
+	) -> bool {
 		alloc_info := vk.CommandBufferAllocateInfo {
 			sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
-			commandPool        = INTERNAL.command_pools[p_cmd_buffer_desc.frame],
-			level              = .PRIMARY if .Primary in p_cmd_buffer_desc.flags else .SECONDARY,
+			commandPool        = INTERNAL.command_pools[p_cmd_buff_desc.frame],
+			level              = .PRIMARY if .Primary in p_cmd_buff_desc.flags else .SECONDARY,
 			commandBufferCount = 1,
 		}
 
 		if vk.AllocateCommandBuffers(
 			   G_RENDERER.device,
 			   &alloc_info,
-			   &INTERNAL.command_buffers[idx].cmd_buff,
+			   &p_cmd_buff.vk_cmd_buff,
 		   ) != .SUCCESS {
-			log.error("Couldn't allocate command buffers")
-			return CommandBufferHandle(0), false
+			return false
 		}
 
-		INTERNAL.command_buffers[idx].desc = p_cmd_buffer_desc
-
-		INTERNAL.cmd_buffer_count += 1
-		return CommandBufferHandle(idx), true
+		return true
 	}
 
 	//---------------------------------------------------------------------------//
 
-	cmd_insert_image_barrier :: proc(
-		p_cmd_buff: CommandBufferHandle,
-		p_image_barrier: ImageBarrier,
+	@(private)
+	backend_cmd_insert_image_barriers :: proc(
+		p_cmd_buff_ref: CommandBufferRef,
+		p_image_barriers: []ImageBarrier,
 	) {
-
+		assert(false)
 	}
 
 	//---------------------------------------------------------------------------//
 
 
-	cmd_copy_buffer_to_image :: proc(
-		p_cmd_buff: CommandBufferHandle,
-		p_copies: [dynamic]BufferImageCopy,
+	@(private)
+	backend_cmd_copy_buffer_to_image :: proc(
+		p_cmd_buff_ref: CommandBufferRef,
+		p_copies: []BufferImageCopy,
 	) {
 
-		cmd_buff := INTERNAL.command_buffers[u32(p_cmd_buff)]
+		cmd_buff := get_command_buffer(p_cmd_buff_ref)
 
 		num_placed_barries := 0
 		image_barriers := make(
@@ -176,7 +172,7 @@ when USE_VULKAN_BACKEND {
 			}
 
 			vk.CmdPipelineBarrier(
-				cmd_buff.cmd_buff,
+				cmd_buff.vk_cmd_buff,
 				{.TOP_OF_PIPE},
 				{.TRANSFER},
 				nil,
@@ -189,7 +185,7 @@ when USE_VULKAN_BACKEND {
 			)
 
 			vk.CmdCopyBufferToImage(
-				cmd_buff.cmd_buff,
+				cmd_buff.vk_cmd_buff,
 				buffer.vk_buffer,
 				image.vk_image,
 				.TRANSFER_DST_OPTIMAL,
@@ -200,6 +196,4 @@ when USE_VULKAN_BACKEND {
 	}
 
 	//---------------------------------------------------------------------------//
-
-
 }
