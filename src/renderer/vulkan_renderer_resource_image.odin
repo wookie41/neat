@@ -13,14 +13,14 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	//---------------------------------------------------------------------------//
-
 	@(private)
 	BackendImageResource :: struct {
-		vk_image:         vk.Image,
-		all_mips_vk_view: vk.ImageView,
-		per_mip_vk_view:  []vk.ImageView,
-		allocation:       vma.Allocation,
+		vk_image:             vk.Image,
+		all_mips_vk_view:     vk.ImageView,
+		per_mip_vk_view:      []vk.ImageView,
+		allocation:           vma.Allocation,
+		current_layout:       []vk.ImageLayout, // per mip
+		current_access_flags: []vk.ImageAspectFlags, // per mip
 	}
 
 	//---------------------------------------------------------------------------//
@@ -30,6 +30,15 @@ when USE_VULKAN_BACKEND {
 		.OneDimensional   = vk.ImageType.D1,
 		.TwoDimensional   = vk.ImageType.D2,
 		.ThreeDimensional = vk.ImageType.D3,
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private = "file")
+	G_IMAGE_VIEW_TYPE_MAPPING := map[ImageType]vk.ImageViewType {
+		.OneDimensional   = vk.ImageViewType.D1,
+		.TwoDimensional   = vk.ImageViewType.D2,
+		.ThreeDimensional = vk.ImageViewType.D3,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -67,12 +76,19 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_create_image :: proc(
+	backend_create_texture_image :: proc(
 		p_name: common.Name,
 		p_image_desc: ImageDesc,
 		p_image_ref: ImageRef,
 		p_image: ^ImageResource,
 	) -> bool {
+
+		assert(
+			p_image_desc.format <
+			.DepthFormatsStart &&
+			p_image_desc.format >
+			.DepthFormatsEnd,
+		)
 
 		// Map vk image type
 		vk_image_type, type_found := G_IMAGE_TYPE_MAPPING[p_image_desc.type]
@@ -84,6 +100,17 @@ when USE_VULKAN_BACKEND {
 			)
 			return false
 		}
+
+		// Map vk image view type
+		vk_image_view_type, view_type_found := G_IMAGE_VIEW_TYPE_MAPPING[p_image_desc.type]
+		if type_found == false {
+			log.warnf(
+				"Failed to create image %s, unsupported type: %s\n",
+				common.get_name(p_name),
+				p_image_desc.type,
+			)
+			return false
+		}		
 
 		// Map vk image format
 		vk_image_format, format_found := G_IMAGE_FORMAT_MAPPING[p_image_desc.format]
@@ -97,20 +124,11 @@ when USE_VULKAN_BACKEND {
 		}
 
 		// Determine usage and aspect
-		image_aspect: ImageAspectFlags
-		usage: vk.ImageUsageFlags = {.SAMPLED, .TRANSFER_SRC, .TRANSFER_DST}
+		image_aspect := ImageAspectFlags {.Color}
+		usage := vk.ImageUsageFlags {.SAMPLED, .TRANSFER_DST}
 
 		if .Storage in p_image_desc.flags {
 			usage += {.STORAGE}
-		}
-
-		if p_image_desc.format > .DepthFormatsStart && p_image_desc.format < .DepthFormatsEnd {
-			usage += {.DEPTH_STENCIL_ATTACHMENT}
-			image_aspect = {.Depth, .Stencil}
-
-		} else {
-			usage += {.COLOR_ATTACHMENT}
-			image_aspect = {.Color}
 		}
 
 		// Determine sample count
@@ -125,7 +143,7 @@ when USE_VULKAN_BACKEND {
 		image_create_info := vk.ImageCreateInfo {
 			sType = .IMAGE_CREATE_INFO,
 			mipLevels = u32(p_image_desc.mip_count),
-			arrayLayers = u32(p_image_desc.layer_count),
+			arrayLayers = 1,
 			extent = {
 				width = p_image_desc.dimensions.x,
 				height = p_image_desc.dimensions.y,
@@ -156,17 +174,16 @@ when USE_VULKAN_BACKEND {
 			return false
 		}
 
-
 		// Create image view containing all of the mips
 		{
 			view_create_info := vk.ImageViewCreateInfo {
 				sType = .IMAGE_VIEW_CREATE_INFO,
 				image = p_image.vk_image,
-				viewType = vk_image_format,
+				viewType = vk_image_view_type,
 				format = vk_image_format,
 				subresourceRange = {
-					aspectMask = image_aspect,
-					levelCount = p_image_desc.mip_count,
+					aspectMask = vk_map_image_aspect(image_aspect),
+					levelCount = u32(p_image_desc.mip_count),
 					layerCount = 1,
 				},
 			}
@@ -175,7 +192,7 @@ when USE_VULKAN_BACKEND {
 				   G_RENDERER.device,
 				   &view_create_info,
 				   nil,
-				   p_image.all_mips_vk_view,
+				   p_image.all_mips_vk_view[0],
 			   ) != .SUCCESS {
 				vma.destroy_image(G_RENDERER.vma_allocator, p_image.vk_image, p_image.allocation)
 				return false
@@ -215,7 +232,7 @@ when USE_VULKAN_BACKEND {
 			// Free the created image views if we failed to create any of the mip views
 			if num_image_views_created < p_image_desc.mip_count {
 				vk.DestroyImageView(G_RENDERER.device, p_image.all_mips_vk_view, nil)
-				for i in 0..num_image_views_created {
+				for i in 0 .. num_image_views_created {
 					vk.DestroyImageView(G_RENDERER.device, p_image.per_mip_vk_view[i], nil)
 				}
 				// Delete the image itself
@@ -223,7 +240,7 @@ when USE_VULKAN_BACKEND {
 				return false
 			}
 		}
-		
+
 		buffer_image_copy := BufferImageCopy {
 			buffer  = INTERNAL.staging_buffer,
 			image   = p_image_ref,
@@ -239,7 +256,7 @@ when USE_VULKAN_BACKEND {
 
 		staging_buffer := get_buffer(INTERNAL.staging_buffer)
 
-		// Queue image copies if the user provided data
+		// Queue image copies
 		i := 0
 		for mip_data, mip in p_image_desc.data_per_mip {
 
@@ -269,4 +286,11 @@ when USE_VULKAN_BACKEND {
 	}
 
 	//---------------------------------------------------------------------------//
+
+
+	@(private)
+	backend_create_swap_images :: proc() {
+
+	}
+
 }

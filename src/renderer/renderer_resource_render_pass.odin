@@ -8,22 +8,44 @@ import "core:math/linalg/glsl"
 
 //---------------------------------------------------------------------------//
 
+RenderPassResolution :: enum u8 {
+	Full,
+	Half,
+	Quarter,
+}
+
+//---------------------------------------------------------------------------//
+
+RenderTargetInfo :: struct {
+	name:   common.Name,
+	format: ImageFormat,
+}
+
+//---------------------------------------------------------------------------//
+
 RenderPassDesc :: struct {
 	name:                     common.Name,
 	vert_shader:              ShaderRef,
 	frag_shader:              ShaderRef,
-	uniform_per_frame:        BufferRef,
-	uniform_per_view:         BufferRef,
-	univorm_per_instance:     BufferRef,
+	uniform_per_frame:        BufferRef, //@TODO
+	uniform_per_view:         BufferRef, //@TODO
+	univorm_per_instance:     BufferRef, //@TODO
 	vertex_layout:            VertexLayout,
 	primitive_type:           PrimitiveType,
-	resterizer_type:          RasterizerType,
+	rasterizer_type:          RasterizerType,
 	multisampling_type:       MultisamplingType,
 	depth_stencil_type:       DepthStencilType,
-	color_attachment_formats: map[common.Name]ImageFormat,
-	color_blend_types:        []ColorBlendType,
+	render_target_infos:      []RenderTargetInfo,
+	render_target_bend_types: []ColorBlendType,
 	depth_format:             ImageFormat,
+	resolution:               RenderPassResolution,
 }
+
+//---------------------------------------------------------------------------//
+
+RenderPassFlagBits :: enum u32 {}
+
+RenderPassFlags :: distinct bit_set[RenderPassFlagBits;u32]
 
 //---------------------------------------------------------------------------//
 
@@ -31,11 +53,12 @@ RenderPassResource :: struct {
 	using backend_render_pass: BackendRenderPassResource,
 	desc:                      RenderPassDesc,
 	pipeline:                  PipelineRef,
+	flags:                     RenderPassFlags,
 }
 
 //---------------------------------------------------------------------------//
 
-RenderPassRef :: distinct Ref
+RenderPassRef :: Ref(RenderPassResource)
 
 //---------------------------------------------------------------------------//
 
@@ -45,13 +68,9 @@ InvalidRenderPassRef := RenderPassRef {
 
 //---------------------------------------------------------------------------//
 
-@(private = "file")
-G_RENDER_PASS_RESOURCES: []RenderPassResource
-
-//---------------------------------------------------------------------------//
 
 @(private = "file")
-G_RENDER_PASS_REF_ARRAY: RefArray
+G_RENDER_PASS_REF_ARRAY: RefArray(RenderPassResource)
 
 //---------------------------------------------------------------------------//
 
@@ -63,38 +82,69 @@ ColorAttachmentFlags :: distinct bit_set[ColorAttachmentInfoFlagBits;u8]
 
 //---------------------------------------------------------------------------//
 
-ColorAttachmentInfo :: struct {
-	flags:           ColorAttachmentInfoFlags,
-	clear_value:     glsl.vec4,
-	image_ref:       ImageRef,
-	image_mip_level: u8,
+RenderTargetUsage :: enum u8 {
+	Undefined,
+	SampledImage,
+	ColorAttachment,
 }
+
+//---------------------------------------------------------------------------//
+
+RenderTarget :: struct {
+	clear_value:   glsl.vec4,
+	image_ref:     ImageRef,
+	image_mip:     u8,
+	current_usage: RenderTargetUsage,
+}
+
+//---------------------------------------------------------------------------//
+
+DepthAttachmentFlagBits :: enum u8 {
+	IsBeingSampled,
+}
+
+DepthAttachmentFlags :: distinct bit_set[DepthAttachmentFlagBits;u8]
+
+//---------------------------------------------------------------------------//
+
+DepthAttachment :: struct {
+	image: ImageRef,
+	flags: DepthAttachmentFlags,
+}
+
+//---------------------------------------------------------------------------//
+
+RenderTargetBinding :: struct {
+	name:   common.Name,
+	target: ^RenderTarget,
+}
+
 //---------------------------------------------------------------------------//
 
 RenderPassBeginInfo :: struct {
-	color_attachments: map[common.Name]ColorAttachmentInfo,
-	depth_attachment:  ImageRef,
+	render_targets_bindings: []RenderTargetBinding,
+	depth_attachment:        DepthAttachment,
 }
 
 //---------------------------------------------------------------------------//
 
 @(private)
 init_render_passes :: proc() {
-	G_RENDER_PASS_REF_ARRAY = create_ref_array(.RENDER_PASS, MAX_RENDER_PASSES)
-	G_RENDER_PASS_RESOURCES = make([]RenderPassResource, MAX_RENDER_PASSES)
+	G_RENDER_PASS_REF_ARRAY = create_ref_array(RenderPassResource, MAX_RENDER_PASSES)
 	backend_init_render_passes()
 }
 
 //---------------------------------------------------------------------------//
 
-@(private)
 create_render_pass :: proc(p_render_pass_desc: RenderPassDesc) -> RenderPassRef {
-	ref := RenderPassRef(create_ref(&G_RENDER_PASS_REF_ARRAY, p_render_pass_desc.name))
+	ref := RenderPassRef(
+		create_ref(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_render_pass_desc.name),
+	)
 	idx := get_ref_idx(ref)
-	render_pass := &G_RENDER_PASS_RESOURCES[idx]
+	render_pass := &G_RENDER_PASS_REF_ARRAY.resource_array[idx]
 
 	if backend_create_render_pass(p_render_pass_desc, render_pass) == false {
-		free_ref(&G_RENDER_PASS_REF_ARRAY, ref)
+		free_ref(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, ref)
 		return InvalidRenderPassRef
 	}
 
@@ -103,17 +153,17 @@ create_render_pass :: proc(p_render_pass_desc: RenderPassDesc) -> RenderPassRef 
 
 //---------------------------------------------------------------------------//
 
-@(private)
 get_render_pass :: proc(p_ref: RenderPassRef) -> ^RenderPassResource {
 	idx := get_ref_idx(p_ref)
-	assert(idx < u32(len(G_RENDER_PASS_RESOURCES)))
+	assert(idx < u32(len(G_RENDER_PASS_REF_ARRAY.resource_array)))
 
 	gen := get_ref_generation(p_ref)
 	assert(gen == G_RENDER_PASS_REF_ARRAY.generations[idx])
 
-	return &G_RENDER_PASS_RESOURCES[idx]
+	return &G_RENDER_PASS_REF_ARRAY.resource_array[idx]
 }
 
+@(private)
 begin_render_pass :: #force_inline proc(
 	p_render_pass_ref: RenderPassRef,
 	p_cmd_buff_ref: CommandBufferRef,
@@ -123,3 +173,10 @@ begin_render_pass :: #force_inline proc(
 }
 
 //---------------------------------------------------------------------------//
+
+end_render_pass :: #force_inline proc(
+	p_render_pass_ref: RenderPassRef,
+	p_cmd_buff_ref: CommandBufferRef,
+) {
+	backend_end_render_pass(p_render_pass_ref, p_cmd_buff_ref)
+}

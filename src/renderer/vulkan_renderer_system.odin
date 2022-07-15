@@ -208,11 +208,7 @@ when USE_VULKAN_BACKEND {
 				return false
 			}
 
-			physical_devices := make(
-				[]vk.PhysicalDevice,
-				physical_device_count,
-				temp_allocator,
-			)
+			physical_devices := make([]vk.PhysicalDevice, physical_device_count, temp_allocator)
 
 			vk.EnumeratePhysicalDevices(
 				instance,
@@ -450,7 +446,7 @@ when USE_VULKAN_BACKEND {
 				log.error("Failed to create VMA allocator")
 				return false
 			}
-		}	
+		}
 
 		return true
 	}
@@ -533,26 +529,27 @@ backend_update :: proc(p_dt: f32) {
 	vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx])
 
 	// Render
-	cmd_buff := vt_update(swap_image_index)
+	assert(false, "Uncomment vt_update queu submit")
+	// cmd_buff := vt_update(swap_image_index)
 
 	// Submit current frame
-	submit_info := vk.SubmitInfo {
-		sType                = .SUBMIT_INFO,
-		waitSemaphoreCount   = 1,
-		pWaitSemaphores      = &G_RENDERER.image_available_semaphores[frame_idx],
-		pWaitDstStageMask    = &vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT},
-		commandBufferCount   = 1,
-		pCommandBuffers      = &cmd_buff,
-		signalSemaphoreCount = 1,
-		pSignalSemaphores    = &G_RENDERER.render_finished_semaphores[frame_idx],
-	}
+	// submit_info := vk.SubmitInfo {
+	// 	sType                = .SUBMIT_INFO,
+	// 	waitSemaphoreCount   = 1,
+	// 	pWaitSemaphores      = &G_RENDERER.image_available_semaphores[frame_idx],
+	// 	pWaitDstStageMask    = &vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT},
+	// 	commandBufferCount   = 0,
+	// 	pCommandBuffers      = &cmd_buff,
+	// 	signalSemaphoreCount = 1,
+	// 	pSignalSemaphores    = &G_RENDERER.render_finished_semaphores[frame_idx],
+	// }
 
-	vk.QueueSubmit(
-		G_RENDERER.graphics_queue,
-		1,
-		&submit_info,
-		G_RENDERER.frame_fences[frame_idx],
-	)
+	// vk.QueueSubmit(
+	// 	G_RENDERER.graphics_queue,
+	// 	1,
+	// 	&submit_info,
+	// 	G_RENDERER.frame_fences[frame_idx],
+	// )
 
 	// Present current frame
 	present_info := vk.PresentInfoKHR {
@@ -832,3 +829,137 @@ backend_handler_on_window_resized :: proc(p_event: WindowResizedEvent) {
 
 //---------------------------------------------------------------------------//
 
+@(private)
+backend_execute_queued_texture_copies :: proc(p_cmd_buff_ref: CommandBufferRef) {
+
+	cmd_buff := get_command_buffer(p_cmd_buff_ref)
+	defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
+
+	VkCopyEntry :: struct {
+		buffer: vk.Buffer,
+		image: vk.Image,
+		mip_copies: []vk.BufferImageCopy,
+	}
+
+	to_transfer_barriers := make(
+		[]vk.ImageMemoryBarrier,
+		len(G_RENDERER.queued_textures_copies),
+		G_RENDERER_ALLOCATORS.temp_allocator,
+	)
+
+	vk_copies := make(
+		[]VkCopyEntry,
+		len(G_RENDERER.queued_textures_copies),
+		G_RENDERER_ALLOCATORS.temp_allocator,
+	)
+
+	to_sample_barriers := make(
+		[]vk.ImageMemoryBarrier,
+		len(G_RENDERER.queued_textures_copies),
+		G_RENDERER_ALLOCATORS.temp_allocator,
+	)
+
+	for texture_copy, i in G_RENDERER.queued_textures_copies {
+
+		image := get_image(texture_copy.image)
+		buffer := get_buffer(texture_copy.buffer)
+
+		// Crate a transfer barrier for the entire texture, including all of it's mips
+		{
+			image_barrier := &to_transfer_barriers[i]
+			image_barrier.sType = .IMAGE_MEMORY_BARRIER
+			image_barrier.oldLayout = .UNDEFINED // #FIXME ASSUMPTION UNTIL WE HAVE IMAGE LAYOUT TRACKING
+			image_barrier.newLayout = .TRANSFER_DST_OPTIMAL
+			image_barrier.srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED
+			image_barrier.dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED
+			image_barrier.image = image.vk_image
+			image_barrier.subresourceRange.aspectMask = {.COLOR}
+			image_barrier.subresourceRange.baseArrayLayer = 0
+			image_barrier.subresourceRange.layerCount = 1
+			image_barrier.subresourceRange.baseMipLevel = 0
+			image_barrier.subresourceRange.levelCount = u32(image.desc.mip_count)
+			image_barrier.dstAccessMask = {.TRANSFER_WRITE}
+		}
+
+		// Create a to-sample barrier for the entire texture, including all of it's mips
+		{
+			image_barrier := &to_sample_barriers[i]
+			image_barrier^ = to_transfer_barriers[i]
+
+			image_barrier.sType = .IMAGE_MEMORY_BARRIER
+			image_barrier.oldLayout = .TRANSFER_DST_OPTIMAL
+			image_barrier.newLayout = .SHADER_READ_ONLY_OPTIMAL
+			image_barrier.dstAccessMask = {.SHADER_READ}
+		}
+
+		vk_copy_entry := VkCopyEntry {
+			buffer = buffer.vk_buffer,
+			image = image.vk_image,
+			mip_copies = make(
+				[]vk.BufferImageCopy, 
+				u32(len(texture_copy.mip_buffer_offset)), 
+				G_RENDERER_ALLOCATORS.temp_allocator),
+		}
+
+		// Create the vulkan copies
+		for offset, mip in texture_copy.mip_buffer_offset {
+
+			vk_copies[i].mip_copies[mip] = {
+				bufferOffset = vk.DeviceSize(offset),
+				imageSubresource = {
+					aspectMask     = { .COLOR },
+					baseArrayLayer = 0,
+					layerCount     = 1,
+					mipLevel       = u32(mip),
+				},
+				imageExtent = {
+					width  = image.desc.dimensions[0] << u32(mip),
+					height = image.desc.dimensions[1] << u32(mip),
+					depth  = 1,
+				},
+			}
+		}
+	}
+
+
+	// Transition the images to transfer
+	vk.CmdPipelineBarrier(
+		cmd_buff.vk_cmd_buff,
+		{.TOP_OF_PIPE},
+		{.TRANSFER},
+		nil,
+		0,
+		nil,
+		0,
+		nil,
+		u32(len(vk_copies)),
+		&to_transfer_barriers[0],
+	)
+
+	// Copy the data image
+	for copy in vk_copies {
+
+		vk.CmdCopyBufferToImage(
+			cmd_buff.vk_cmd_buff,
+			copy.buffer,
+			copy.image,
+			.TRANSFER_DST_OPTIMAL,
+			u32(len(copy.mip_copies)),
+			raw_data(copy.mip_copies),
+		)
+	}
+
+	// Transition the image to sample
+	vk.CmdPipelineBarrier(
+		cmd_buff.vk_cmd_buff,
+		{.TRANSFER},
+		{.VERTEX_SHADER, .FRAGMENT_SHADER, .COMPUTE_SHADER},
+		nil,
+		0,
+		nil,
+		0,
+		nil,
+		u32(len(vk_copies)),
+		&to_sample_barriers[0],
+	)
+}

@@ -29,16 +29,19 @@ MAX_IMAGES :: #config(MAX_IMAGES, 256)
 MAX_BUFFERS :: #config(MAX_BUFFERS, 256)
 MAX_RENDER_PASSES :: #config(MAX_RENDER_PASSES, 256)
 MAX_PIPELINES :: #config(MAX_PIPELINES, 128)
+MAX_COMMAND_BUFFERS :: #config(MAX_PIPELINES, 32)
 
 //---------------------------------------------------------------------------//
 
 @(private)
 G_RENDERER: struct {
-	using backend_state:        BackendRendererState,
-	num_frames_in_flight:       u32,
-	frame_idx:                  u32,
-	primary_cmd_buffer_handles: []CommandBufferHandle,
-	queued_image_copies:        [dynamic]BufferImageCopy,
+	using backend_state:          BackendRendererState,
+	num_frames_in_flight:         u32,
+	frame_idx:                    u32,
+	primary_cmd_buffer_ref:       []CommandBufferRef,
+	queued_textures_copies:       [dynamic]TextureCopy,
+	current_frame_swap_image_idx: u32,
+	swap_image_refs:              []ImageRef,
 }
 
 @(private)
@@ -59,65 +62,6 @@ G_RENDERER_LOG: log.Logger
 
 InitOptions :: struct {
 	using backend_options: BackendInitOptions,
-}
-
-//---------------------------------------------------------------------------//
-
-MemoryAccessFlagBits :: enum u32 {
-	/////////////////////////////////////////////////////////////////////////////
-	// Read access
-	VertexShaderSampledImageRead, // Read as a sampled image in a vertex shader
-	FragmentShaderSampledImageRead, // Read as a sampled image in a fragment shader
-	ComputeShaderSampledImageRead, // Read as a sampled image in a compute shader
-	ColorAttachmentRead, // Read by standard blending/logic operations or subpass load operations
-	DepthStencilAttachmentRead, // Read by depth/stencil tests or subpass load operations
-	DepthStencilAttachmentReadOnly, // Read by depth/stencil tests or subpass load operations while also being bound as a sampled image
-	// Read access - Buffers
-	IndirectBufferRead, // Read as an indirect buffer for draw/dispatch
-	IndexBufferRead, // Read as an index buffer for draw
-	VertexBufferRead, // Read as a vertex buffer for draw
-	VertexShaderUniformBufferRead, // Read as a uniform buffer in a vertex shader
-	FragmentShaderUniformBufferRead, // Read as a uniform buffer in a fragment shader
-	ComputeShaderUniformBufferRead, // Read as a uniform buffer in a compute shader
-	// Read access - General
-	VertexShaderGeneralRead, // Read as any resource in a vertex shader
-	FragmentShaderGeneralRead, // Read as any resource in a fragment shader
-	ComputeShaderGeneralRead, // Read as any resource in a compute shader
-	TransferRead, // Read as the source of a transfer operation
-	HostRead, // Read on the host
-	// Write access - Images
-	ColorAttachmentWrite, // Written as a color attachment in a draw, or via a subpass store op
-	DepthStencilAttachmentWrite, // Written as a depth/stencil attachment during draw, or via a subpass store op
-	// Write access - General
-	ComputeShaderWrite, // Written as any resource in a compute shader
-	AnyShaderWrite, // Written as any resource in any shader stage
-	TransferWrite, // Written as the destination of a transfer operation
-	HostWrite, // Written on the host
-	/////////////////////////////////////////////////////////////////////////////
-	WriteStart = ColorAttachmentWrite,
-}
-
-MemoryAccessFlags :: distinct bit_set[MemoryAccessFlagBits;u32]
-
-//---------------------------------------------------------------------------//
-
-ImageBarrierFlagBits :: enum u8 {
-	Discard,
-}
-
-ImageBarrierFlags :: distinct bit_set[ImageBarrierFlagBits;u8]
-
-//---------------------------------------------------------------------------//
-
-ImageBarrier :: struct {
-	image:       ImageRef,
-	base_layer:  u8,
-	layer_count: u8,
-	base_mip:    u8,
-	mip_count:   u8,
-	access:      MemoryAccessFlags,
-	flags:       ImageBarrierFlags,
-	queue_idx:   u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -155,32 +99,33 @@ init :: proc(p_options: InitOptions) -> bool {
 		&G_RENDERER_ALLOCATORS.frame_arena,
 	)
 
-	G_RENDERER.queued_image_copies = make(
-		[dynamic]BufferImageCopy,
+	G_RENDERER.queued_textures_copies = make(
+		[dynamic]TextureCopy,
 		G_RENDERER_ALLOCATORS.frame_allocator,
 	)
 
 	setup_renderer_context()
 	backend_init(p_options) or_return
+	create_swap_images()
 
 	init_command_buffers(p_options) or_return
 
 	// Allocate primary command buffer for each frame
 	{
-		G_RENDERER.primary_cmd_buffer_handles = make(
-			[]CommandBufferHandle,
+		G_RENDERER.primary_cmd_buffer_ref = make(
+			[]CommandBufferRef,
 			G_RENDERER.num_frames_in_flight,
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
 		for i in 0 .. G_RENDERER.num_frames_in_flight {
-			handle, succes := allocate_command_buffer(
+			cmd_buff_ref := create_command_buffer(
 				{flags = {.Primary}, thread = 0, frame = u8(i)},
 			)
-			if succes == false {
+			if cmd_buff_ref != InvalidCommandBufferRef {
 				log.error("Failed to allocate command buffer")
 				return false
 			}
-			G_RENDERER.primary_cmd_buffer_handles[i] = handle
+			G_RENDERER.primary_cmd_buffer_ref[i] = cmd_buff_ref
 			return true
 		}
 	}
@@ -191,7 +136,8 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	load_shaders() or_return
 
-	init_vt()
+	assert(false, "Uncomment init_vt")
+	//init_vt()
 	return true
 }
 //---------------------------------------------------------------------------//
@@ -199,8 +145,8 @@ init :: proc(p_options: InitOptions) -> bool {
 update :: proc(p_dt: f32) {
 	setup_renderer_context()
 	// @TODO build command buffer
-	execute_queued_image_copies()
-	clear(&G_RENDERER.queued_image_copies)
+	execute_queued_texture_copies()
+	clear(&G_RENDERER.queued_textures_copies)
 	// @TODO dispatch command buffer
 	backend_update(p_dt)
 }
@@ -236,18 +182,16 @@ setup_renderer_context :: proc() {
 //---------------------------------------------------------------------------//
 
 @(private)
-get_frame_cmd_buffer_handle :: proc() -> CommandBufferHandle {
-	return G_RENDERER.primary_cmd_buffer_handles[G_RENDERER.frame_idx]
+get_frame_cmd_buffer :: proc() -> CommandBufferRef {
+	return G_RENDERER.primary_cmd_buffer_ref[G_RENDERER.frame_idx]
 }
 
 //---------------------------------------------------------------------------//
 
 @(private)
-execute_queued_image_copies :: proc() {
-	cmd_buff := get_frame_cmd_buffer_handle()
-	cmd_copy_buffer_to_image(cmd_buff, G_RENDERER.queued_image_copies)
-	clear(&G_RENDERER.queued_image_copies)
+execute_queued_texture_copies :: proc() {
+	cmd_buff_ref := get_frame_cmd_buffer()
+	backend_execute_queued_texture_copies(cmd_buff_ref)
 }
-
 
 //---------------------------------------------------------------------------//

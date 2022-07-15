@@ -214,7 +214,7 @@ when USE_VULKAN_BACKEND {
 			sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
 			vertexBindingDescriptionCount = u32(len(vertex_binding_descriptions)),
 			pVertexBindingDescriptions = &vertex_binding_descriptions[0],
-			vertexAttributeDescriptionCount = u32(len(vertex_attributes_descriptions)),
+			vertexAttributeDescriptionCount = u32(len(vertex_attribute_descriptions)),
 			pVertexAttributeDescriptions = &vertex_attribute_descriptions[0],
 		}
 
@@ -224,15 +224,15 @@ when USE_VULKAN_BACKEND {
 		// Multisampler
 		multisample_state := MULTISAMPLER_STATE_PER_SAMPLE_TYPE[p_pipeline_desc.multisampling_type]
 
-		// Color blending
+		// Color attachments blending
 		color_blend_attachments := make(
 			[]vk.PipelineColorBlendAttachmentState,
-			len(p_pipeline_desc.color_blend_types),
+			len(p_pipeline_desc.render_target_blend_types),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(color_blend_attachments)
 
-		for blend_type, i in p_pipeline_desc.color_blend_types {
+		for blend_type, i in p_pipeline_desc.render_target_blend_types {
 			color_blend_attachments[i] = COLOR_BLEND_PER_TYPE[blend_type]
 		}
 
@@ -263,15 +263,15 @@ when USE_VULKAN_BACKEND {
 			return false
 		}
 
-		// Map color format
+		// Map color attachment formats
 		color_attachment_formats := make(
 			[]vk.Format,
-			len(p_pipeline_desc.color_attachment_formats),
+			len(p_pipeline_desc.render_target_formats),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(color_attachment_formats)
 
-		for format, i in p_pipeline_desc.color_attachment_formats {
+		for format, i in p_pipeline_desc.render_target_formats {
 			color_attachment_formats[i] = G_IMAGE_FORMAT_MAPPING[format]
 		}
 

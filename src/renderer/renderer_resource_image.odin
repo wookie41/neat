@@ -11,12 +11,12 @@ import "../common"
 
 ImageResource :: struct {
 	using backend_image: BackendImageResource,
-	desc: ImageDesc,
+	desc:                ImageDesc,
 }
 
 //---------------------------------------------------------------------------//
 
-ImageRef :: distinct Ref
+ImageRef :: Ref(ImageResource)
 
 //---------------------------------------------------------------------------//
 
@@ -26,18 +26,13 @@ InvalidImageRef := ImageRef {
 
 //---------------------------------------------------------------------------//
 
-@(private="file")
-G_IMAGE_RESOURCES: []ImageResource
+
+@(private = "file")
+G_IMAGE_REF_ARRAY: RefArray(ImageResource)
 
 //---------------------------------------------------------------------------//
 
-@(private="file")
-G_IMAGE_REF_ARRAY: RefArray
-
-//---------------------------------------------------------------------------//
-
-ImageAspectFlagBits :: enum u8 
-{
+ImageAspectFlagBits :: enum u8 {
 	Color,
 	Depth,
 	Stencil,
@@ -49,26 +44,15 @@ ImageAspectFlags :: distinct bit_set[ImageAspectFlagBits;u8]
 
 //---------------------------------------------------------------------------//
 
-ImageSubresourceRange :: struct {
-	aspect: ImageAspectFlags,
-	base_layer: u8,
-	layer_count: u8,
-	mip_level: u8,
-}
-
-//---------------------------------------------------------------------------//
-
 @(private)
 init_images :: proc() {
-	G_IMAGE_REF_ARRAY = create_ref_array(.PIPELINE_LAYOUT, MAX_PIPELINE_LAYOUTS)
-	G_IMAGE_RESOURCES = make([]ImageResource, MAX_PIPELINE_LAYOUTS)
+	G_IMAGE_REF_ARRAY = create_ref_array(ImageResource, MAX_IMAGES)
 	backend_init_images()
 }
 
 //---------------------------------------------------------------------------//
 
-ImageType :: enum u8
-{
+ImageType :: enum u8 {
 	OneDimensional,
 	TwoDimensional,
 	ThreeDimensional,
@@ -76,27 +60,33 @@ ImageType :: enum u8
 
 //---------------------------------------------------------------------------//
 
-ImageFormat :: enum u16
-{
+ImageFormat :: enum u16 {
+	//---------------------//
 	DepthFormatsStart,
+
+	//---------------------//
+	DepthStencilFormatsStart,
+	DepthStencilFormatsEnd,
+	//---------------------//
 	Depth32SFloat,
 	DepthFormatsEnd,
+
+	//---------------------//
 	ColorFormatsStart,
 	ColorFormatsEnd,
+	//---------------------//
 }
 
 //---------------------------------------------------------------------------//
 
-ImageDescFlagBits :: enum u8
-{
+ImageDescFlagBits :: enum u8 {
 	Storage,
 }
 ImageDescFlags :: distinct bit_set[ImageDescFlagBits;u8]
 
 //---------------------------------------------------------------------------//
 
-ImageSampleFlagBits :: enum u8
-{
+ImageSampleFlagBits :: enum u8 {
 	_1,
 	_2,
 	_4,
@@ -109,44 +99,60 @@ ImageSampleCountFlags :: distinct bit_set[ImageSampleFlagBits;u8]
 
 //---------------------------------------------------------------------------//
 
-ImageDesc :: struct 
-{
-	type: ImageType,
-	format: ImageFormat,
-	mip_count: u8,
-	data_per_mip: []u8,
-	dimensions: glsl.uvec3,
-	flags: ImageDescFlags,
+ImageDesc :: struct {
+	type:               ImageType,
+	format:             ImageFormat,
+	mip_count:          u8,
+	data_per_mip:       []u8,
+	dimensions:         glsl.uvec3,
+	flags:              ImageDescFlags,
 	sample_count_flags: ImageSampleCountFlags,
 }
 
 //---------------------------------------------------------------------------//
 
-create_image :: proc(p_name: common.Name, p_image_desc: ImageDesc) -> ImageRef {
-	ref := ImageRef(create_ref(&G_IMAGE_REF_ARRAY, p_name))
-	idx := get_ref_idx(ref)
-	image := &G_IMAGE_RESOURCES[idx]
+allocate_image_ref :: proc(p_name: common.Name) -> ImageRef {
+	ref := ImageRef(create_ref(ImageResource, &G_IMAGE_REF_ARRAY, p_name))
+	return ref
+}
 
+/** Creates an image that can later be used as a sampled image inside a shader */
+create_texture_image :: proc(p_name: common.Name, p_image_desc: ImageDesc) -> ImageRef {
+	ref := allocate_image_ref(p_name)
+	image := &G_IMAGE_REF_ARRAY.resource_array[get_ref_idx(ref)]
 	image.desc = p_image_desc
 
-	if backend_create_image(p_name, p_image_desc, ref, image) == false {
-		free_ref(&G_IMAGE_REF_ARRAY, ref)
-        return InvalidImageRef
+	if backend_create_texture_image(p_name, p_image_desc, ref, image) == false {
+		free_ref(ImageResource, &G_IMAGE_REF_ARRAY, ref)
+		return InvalidImageRef
 	}
 
-    return ref
+	return ref
 }
 
 //---------------------------------------------------------------------------//
 
 get_image :: proc(p_ref: ImageRef) -> ^ImageResource {
 	idx := get_ref_idx(p_ref)
-	assert(idx < u32(len(G_IMAGE_RESOURCES)))
+	assert(idx < u32(len(G_IMAGE_REF_ARRAY.resource_array)))
 
 	gen := get_ref_generation(p_ref)
 	assert(gen == G_IMAGE_REF_ARRAY.generations[idx])
 
-	return &G_IMAGE_RESOURCES[idx]
+	return &G_IMAGE_REF_ARRAY.resource_array[idx]
+}
+
+//---------------------------------------------------------------------------//
+
+create_swap_images :: #force_inline proc() {
+	// G_RENDERER.swap_image_refs = make(
+	// 	[]ImageRef,
+	// 	u32(len(G_RENDERER.backend_state.swapchain_images)),
+	// 	G_RENDERER_ALLOCATORS.resources,
+	// )
+	// for i in len(G_RENDERER.backend_state.swapchain_images) {
+	// 	swap_image_ref = allocate_image_ref()
+	// }
 }
 
 //---------------------------------------------------------------------------//

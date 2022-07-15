@@ -15,7 +15,7 @@ BufferResource :: struct {
 
 //---------------------------------------------------------------------------//
 
-BufferRef :: distinct Ref
+BufferRef :: Ref(BufferResource)
 
 //---------------------------------------------------------------------------//
 
@@ -26,19 +26,13 @@ InvalidBufferRef := BufferRef {
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-G_BUFFER_RESOURCES: []BufferResource
-
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-G_BUFFER_REF_ARRAY: RefArray
+G_BUFFER_REF_ARRAY: RefArray(BufferResource)
 
 //---------------------------------------------------------------------------//
 
 @(private)
 init_buffers :: proc() {
-	G_BUFFER_REF_ARRAY = create_ref_array(.BUFFER, MAX_BUFFERS)
-	G_BUFFER_RESOURCES = make([]BufferResource, MAX_BUFFERS)
+	G_BUFFER_REF_ARRAY = create_ref_array(BufferResource, MAX_BUFFERS)
 	backend_init_buffers()
 }
 
@@ -76,14 +70,14 @@ BufferDesc :: struct {
 //---------------------------------------------------------------------------//
 
 create_buffer :: proc(p_name: common.Name, p_buffer_desc: BufferDesc) -> BufferRef {
-	ref := BufferRef(create_ref(&G_BUFFER_REF_ARRAY, p_name))
+	ref := BufferRef(create_ref(BufferResource, &G_BUFFER_REF_ARRAY, p_name))
 	idx := get_ref_idx(ref)
-	buffer := &G_BUFFER_RESOURCES[idx]
+	buffer := &G_BUFFER_REF_ARRAY.resource_array[idx]
 
 	buffer.desc = p_buffer_desc
 
 	if backend_create_buffer(p_name, p_buffer_desc, buffer) == false {
-		free_ref(&G_BUFFER_REF_ARRAY, ref)
+		free_ref(BufferResource, &G_BUFFER_REF_ARRAY, ref)
         return InvalidBufferRef
 	}
 
@@ -94,12 +88,12 @@ create_buffer :: proc(p_name: common.Name, p_buffer_desc: BufferDesc) -> BufferR
 
 get_buffer :: proc(p_ref: BufferRef) -> ^BufferResource {
 	idx := get_ref_idx(p_ref)
-	assert(idx < u32(len(G_BUFFER_RESOURCES)))
+	assert(idx < u32(len(G_BUFFER_REF_ARRAY.resource_array)))
 
 	gen := get_ref_generation(p_ref)
 	assert(gen == G_BUFFER_REF_ARRAY.generations[idx])
 
-	return &G_BUFFER_RESOURCES[idx]
+	return &G_BUFFER_REF_ARRAY.resource_array[idx]
 }
 
 //---------------------------------------------------------------------------//
