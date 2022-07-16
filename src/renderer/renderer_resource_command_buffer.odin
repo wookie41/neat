@@ -58,7 +58,7 @@ TextureCopy :: struct {
 	buffer: BufferRef,
 	image:  ImageRef,
 	// offsets at which data for each mip is stored in the buffer
-	mip_buffer_offset: []u32,
+	mip_buffer_offsets: []u32,
 }
 
 //---------------------------------------------------------------------------//

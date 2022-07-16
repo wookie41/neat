@@ -897,12 +897,12 @@ backend_execute_queued_texture_copies :: proc(p_cmd_buff_ref: CommandBufferRef) 
 			image = image.vk_image,
 			mip_copies = make(
 				[]vk.BufferImageCopy, 
-				u32(len(texture_copy.mip_buffer_offset)), 
+				u32(len(texture_copy.mip_buffer_offsets)), 
 				G_RENDERER_ALLOCATORS.temp_allocator),
 		}
 
 		// Create the vulkan copies
-		for offset, mip in texture_copy.mip_buffer_offset {
+		for offset, mip in texture_copy.mip_buffer_offsets {
 
 			vk_copies[i].mip_copies[mip] = {
 				bufferOffset = vk.DeviceSize(offset),

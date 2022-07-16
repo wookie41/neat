@@ -36,14 +36,16 @@ RenderPassDesc :: struct {
 	multisampling_type:       MultisamplingType,
 	depth_stencil_type:       DepthStencilType,
 	render_target_infos:      []RenderTargetInfo,
-	render_target_bend_types: []ColorBlendType,
+	render_target_blend_types: []ColorBlendType,
 	depth_format:             ImageFormat,
 	resolution:               RenderPassResolution,
 }
 
 //---------------------------------------------------------------------------//
 
-RenderPassFlagBits :: enum u32 {}
+RenderPassFlagBits :: enum u32 {
+	IsActive,
+}
 
 RenderPassFlags :: distinct bit_set[RenderPassFlagBits;u32]
 
@@ -90,11 +92,21 @@ RenderTargetUsage :: enum u8 {
 
 //---------------------------------------------------------------------------//
 
+RenderTargetFlagBits :: enum u8
+{
+	Clear,
+}
+
+RenderTargetFlags :: distinct bit_set[RenderTargetFlagBits;u8]
+
+//---------------------------------------------------------------------------//
+
 RenderTarget :: struct {
 	clear_value:   glsl.vec4,
 	image_ref:     ImageRef,
 	image_mip:     u8,
 	current_usage: RenderTargetUsage,
+	flags: RenderTargetFlags,
 }
 
 //---------------------------------------------------------------------------//
@@ -123,7 +135,7 @@ RenderTargetBinding :: struct {
 
 RenderPassBeginInfo :: struct {
 	render_targets_bindings: []RenderTargetBinding,
-	depth_attachment:        DepthAttachment,
+	depth_attachment:        ^DepthAttachment,
 }
 
 //---------------------------------------------------------------------------//

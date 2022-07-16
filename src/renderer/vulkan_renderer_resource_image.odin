@@ -103,7 +103,7 @@ when USE_VULKAN_BACKEND {
 
 		// Map vk image view type
 		vk_image_view_type, view_type_found := G_IMAGE_VIEW_TYPE_MAPPING[p_image_desc.type]
-		if type_found == false {
+		if view_type_found == false {
 			log.warnf(
 				"Failed to create image %s, unsupported type: %s\n",
 				common.get_name(p_name),
@@ -192,7 +192,7 @@ when USE_VULKAN_BACKEND {
 				   G_RENDERER.device,
 				   &view_create_info,
 				   nil,
-				   p_image.all_mips_vk_view[0],
+				   &p_image.all_mips_vk_view,
 			   ) != .SUCCESS {
 				vma.destroy_image(G_RENDERER.vma_allocator, p_image.vk_image, p_image.allocation)
 				return false
@@ -201,23 +201,23 @@ when USE_VULKAN_BACKEND {
 
 		// Now create image views per mip
 		{
-			p_image.vk_image_views := make(
+			p_image.per_mip_vk_view = make(
 				[]vk.ImageView,
-				p_image_desc.mip_count,
-				G_RENDERER.resource_allocator,
+				u32(p_image_desc.mip_count),
+				G_RENDERER_ALLOCATORS.resource_allocator,
 			)
 			num_image_views_created := 0
 
 			view_create_info := vk.ImageViewCreateInfo {
 				sType = .IMAGE_VIEW_CREATE_INFO,
 				image = p_image.vk_image,
-				viewType = vk_image_format,
+				viewType = vk_image_view_type,
 				format = vk_image_format,
-				subresourceRange = {aspectMask = image_aspect, levelCount = 1, layerCount = 1},
+				subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
 			}
 
 			for i in 0 .. p_image_desc.mip_count {
-				view_create_info.subresourceRange.baseMipLevel = i
+				view_create_info.subresourceRange.baseMipLevel = u32(i)
 				if vk.CreateImageView(
 					   G_RENDERER.device,
 					   &view_create_info,
@@ -230,7 +230,7 @@ when USE_VULKAN_BACKEND {
 			}
 
 			// Free the created image views if we failed to create any of the mip views
-			if num_image_views_created < p_image_desc.mip_count {
+			if num_image_views_created < int(p_image_desc.mip_count) {
 				vk.DestroyImageView(G_RENDERER.device, p_image.all_mips_vk_view, nil)
 				for i in 0 .. num_image_views_created {
 					vk.DestroyImageView(G_RENDERER.device, p_image.per_mip_vk_view[i], nil)
@@ -241,24 +241,23 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
-		buffer_image_copy := BufferImageCopy {
+		texture_copy := TextureCopy {
 			buffer  = INTERNAL.staging_buffer,
 			image   = p_image_ref,
-			regions = make(
-				[]ImageCopyRegion,
-				int(p_image_desc.mip_count * p_image_desc.layer_count),
+			mip_buffer_offsets = make(
+				[]u32,
+				int(p_image_desc.mip_count),
 				G_RENDERER_ALLOCATORS.frame_allocator,
 			),
 		}
 
-		buffer_image_copy.image = p_image_ref
-		buffer_image_copy.buffer = INTERNAL.staging_buffer
+		texture_copy.image = p_image_ref
+		texture_copy.buffer = INTERNAL.staging_buffer
 
 		staging_buffer := get_buffer(INTERNAL.staging_buffer)
 
 		// Queue image copies
-		i := 0
-		for mip_data, mip in p_image_desc.data_per_mip {
+		for mip_data, i in p_image_desc.data_per_mip {
 
 			// Make sure we have enough space in the staging buffer
 			assert(INTERNAL.stating_buffer_offset + u32(len(mip_data)) < staging_buffer.desc.size)
@@ -269,28 +268,21 @@ when USE_VULKAN_BACKEND {
 				len(mip_data),
 			)
 
-			buffer_image_copy.regions[i].buffer_offset = INTERNAL.stating_buffer_offset
-			buffer_image_copy.regions[i].subresource_range = {
-				aspect      = image_aspect,
-				base_layer  = 0,
-				layer_count = 1,
-				mip_level   = u8(mip),
-			}
+			texture_copy.mip_buffer_offsets[i] = INTERNAL.stating_buffer_offset
 
-			i += 1
 			INTERNAL.stating_buffer_offset += u32(len(mip_data))
 		}
 
-		append(&G_RENDERER.queued_image_copies, buffer_image_copy)
+		append(&G_RENDERER.queued_textures_copies, texture_copy)
 		return true
 	}
 
 	//---------------------------------------------------------------------------//
-
 
 	@(private)
 	backend_create_swap_images :: proc() {
 
 	}
 
+	//---------------------------------------------------------------------------//
 }

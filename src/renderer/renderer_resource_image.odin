@@ -103,7 +103,7 @@ ImageDesc :: struct {
 	type:               ImageType,
 	format:             ImageFormat,
 	mip_count:          u8,
-	data_per_mip:       []u8,
+	data_per_mip:       [][]u8,
 	dimensions:         glsl.uvec3,
 	flags:              ImageDescFlags,
 	sample_count_flags: ImageSampleCountFlags,

@@ -34,17 +34,13 @@ when USE_VULKAN_BACKEND {
 
 		render_target_formats := make(
 			[]ImageFormat,
-			len(p_render_pass_desc.color_attachment_formats),
+			len(p_render_pass_desc.render_target_infos),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(render_target_formats)
 
-		{
-			i := 0
-			for _, format in p_render_pass_desc.color_attachment_formats {
-				color_attachment_formats[i] = format
-				i += 1
-			}
+		for render_target_info, i in p_render_pass_desc.render_target_infos {
+			render_target_formats[i] = render_target_info.format
 		}
 
 		pipeline_desc := PipelineDesc {
@@ -56,7 +52,7 @@ when USE_VULKAN_BACKEND {
 			multisampling_type        = p_render_pass_desc.multisampling_type,
 			depth_stencil_type        = p_render_pass_desc.depth_stencil_type,
 			render_target_formats     = render_target_formats,
-			render_target_blend_types = p_render_pass_desc.color_blend_types,
+			render_target_blend_types = p_render_pass_desc.render_target_blend_types,
 			depth_format              = p_render_pass_desc.depth_format,
 		}
 
@@ -87,7 +83,7 @@ when USE_VULKAN_BACKEND {
 
 		color_attachments := make(
 			[]vk.RenderingAttachmentInfo,
-			len(render_pass.desc.color_attachment_formats),
+			len(render_pass.desc.render_target_infos),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(color_attachments)
@@ -95,7 +91,7 @@ when USE_VULKAN_BACKEND {
 		num_render_target_barriers := 0
 		render_target_barriers := make(
 			[]vk.ImageMemoryBarrier,
-			u32(len(render_pass.desc.render_target_formats)),
+			u32(len(render_pass.desc.render_target_infos)),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(render_target_barriers)
@@ -109,7 +105,7 @@ when USE_VULKAN_BACKEND {
 
 				when ODIN_DEBUG {
 					for binding, index in p_begin_info.render_targets_bindings {
-						if binding.name == render_target_info {
+						if common.name_equal(binding.name, render_target_info.name) {
 							binding_index = index
 							break
 						}
@@ -118,20 +114,20 @@ when USE_VULKAN_BACKEND {
 					assert(binding_index != -1, "Binding for render target not found")
 				}
 
-				binding := p_begin_info.render_targets_bindings[binding_index]
+				render_target_binding := &p_begin_info.render_targets_bindings[binding_index]
 
-				attachment_image := get_image(binding.target.image_ref)
+				attachment_image := get_image(render_target_binding.target.image_ref)
 
 				// Transition image to the .ATTACHMENT_OPTIMAL format if it's not already in one
-				if render_target.current_usage != .ColorAttachment {
+				if render_target_binding.target.current_usage != .ColorAttachment {
 
 					old_layout := vk.ImageLayout.UNDEFINED
-					#partial switch render_target.current_usage {
+					#partial switch render_target_binding.target.current_usage {
 					case .SampledImage:
 						old_layout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL
 					}
 
-					render_target_barriers[num_render_target_barriers] := vk.ImageMemoryBarrier {
+					render_target_barriers[num_render_target_barriers] = vk.ImageMemoryBarrier {
 						sType = .IMAGE_MEMORY_BARRIER,
 						dstAccessMask = {.COLOR_ATTACHMENT_WRITE},
 						oldLayout = old_layout,
@@ -141,12 +137,12 @@ when USE_VULKAN_BACKEND {
 							aspectMask = {.COLOR},
 							baseArrayLayer = 0,
 							layerCount = 1,
-							baseMipLevel = render_target.image_mip,
+							baseMipLevel = u32(render_target_binding.target.image_mip),
 							levelCount = 1,
 						},
 					}
 
-					render_target.current_usage = .ColorAttachment
+					render_target_binding.target.current_usage = .ColorAttachment
 					num_render_target_barriers += 1
 				}
 
@@ -154,10 +150,10 @@ when USE_VULKAN_BACKEND {
 				color_attachments[render_target_index] = {
 					sType = .RENDERING_ATTACHMENT_INFO,
 					pNext = nil,
-					clearValue = {color = {float32 = target_info.clear_value}},
+					clearValue = {color = {float32 = cast([4]f32)render_target_binding.target.clear_value}},
 					imageLayout = .ATTACHMENT_OPTIMAL,
-					imageView = attachment_image.per_mip_vk_view[render_target.image_mip],
-					loadOp = .CLEAR if .Clear in attachment_info.flags else .DONT_CARE,
+					imageView = attachment_image.per_mip_vk_view[render_target_binding.target.image_mip],
+					loadOp = .CLEAR if .Clear in render_target_binding.target.flags else .DONT_CARE,
 					storeOp = .STORE,
 				}
 
@@ -180,13 +176,13 @@ when USE_VULKAN_BACKEND {
 
 			// Depth attachment 
 			depth_attachment := vk.RenderingAttachmentInfo {
-				sType = .RENDERING_INFO,
-				colorAttachmentCount = 1,
-				pDepthAttachment = &p_begin_info.depth_attachment.image,
-				layerCount = 1,
-				viewMask = 0,
-				pColorAttachments = &color_attachment,
-				renderArea = {extent = G_RENDERER.swap_extent},
+				sType = .RENDERING_ATTACHMENT_INFO,
+				pNext = nil,
+				clearValue = {depthStencil = {depth = 1, stencil = 0}},
+				imageLayout = .DEPTH_ATTACHMENT_OPTIMAL,
+				imageView = depth_image.all_mips_vk_view,
+				loadOp = .CLEAR,
+				storeOp = .DONT_CARE,
 			}
 
 			// Check if the depth image was sampled before and thus requires a barrier and issue one if so
@@ -196,18 +192,17 @@ when USE_VULKAN_BACKEND {
 				depth_image := get_image(p_begin_info.depth_attachment.image)
 
 				old_depth_layout := vk.ImageLayout.DEPTH_READ_ONLY_OPTIMAL
-				new_depth_layout := vk.Image.DEPTH_ATTACHMENT_OPTIMAL
+				new_depth_layout := vk.ImageLayout.DEPTH_ATTACHMENT_OPTIMAL
 
 				if depth_image.desc.format > .DepthStencilFormatsStart && depth_image.desc.format < .DepthStencilFormatsEnd {
 					old_depth_layout = .DEPTH_STENCIL_READ_ONLY_OPTIMAL
 					new_depth_layout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-
 				}
 
 				depth_attachment_barrier := vk.ImageMemoryBarrier {
 					sType = .IMAGE_MEMORY_BARRIER,
-					srcAccessMask{.SHADER_READ},
-					dstAccessMask = {DEPTH_STENCIL_ATTACHMENT_READ, .DEPTH_STENCIL_ATTACHMENT_WRITE},
+					srcAccessMask = {.SHADER_READ},
+					dstAccessMask = {.DEPTH_STENCIL_ATTACHMENT_READ, .DEPTH_STENCIL_ATTACHMENT_WRITE},
 					oldLayout = old_depth_layout,
 					newLayout = new_depth_layout,
 					image = depth_image.vk_image,
@@ -252,13 +247,15 @@ when USE_VULKAN_BACKEND {
 		}
 
 		// Prepare the rendering info
-		render_area := G.Render.swap_extent
+		render_area := G_RENDERER.swap_extent
 
-		#partial switch render_area.desc.resolution {
+		#partial switch render_pass.desc.resolution {
 		case .Half:
-			render_area /= 2
+			render_area.width /= 2
+			render_area.height /= 2
 		case .Quarter:
-			render_area /= 4
+			render_area.width /= 4
+			render_area.height /= 4
 		}
 
 		rendering_info := vk.RenderingInfo {
@@ -271,7 +268,7 @@ when USE_VULKAN_BACKEND {
 			renderArea = {extent = render_area},
 		}
 
-		vk_pipeline = get_pipeline(render_pass.backend_render_pass.pipeline).vk_pipeline
+		vk_pipeline := get_pipeline(render_pass.pipeline).vk_pipeline
 
 		viewport := vk.Viewport {
 			x        = 0.0,

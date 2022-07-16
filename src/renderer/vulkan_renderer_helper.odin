@@ -13,7 +13,6 @@ when USE_VULKAN_BACKEND {
 		.Depth32SFloat = vk.Format.D32_SFLOAT,
 	}
 
-
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
