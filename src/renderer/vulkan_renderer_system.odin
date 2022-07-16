@@ -529,27 +529,26 @@ backend_update :: proc(p_dt: f32) {
 	vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx])
 
 	// Render
-	assert(false, "Uncomment vt_update queu submit")
-	// cmd_buff := vt_update(swap_image_index)
+	cmd_buff := vt_update(swap_image_index)
 
-	// Submit current frame
-	// submit_info := vk.SubmitInfo {
-	// 	sType                = .SUBMIT_INFO,
-	// 	waitSemaphoreCount   = 1,
-	// 	pWaitSemaphores      = &G_RENDERER.image_available_semaphores[frame_idx],
-	// 	pWaitDstStageMask    = &vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT},
-	// 	commandBufferCount   = 0,
-	// 	pCommandBuffers      = &cmd_buff,
-	// 	signalSemaphoreCount = 1,
-	// 	pSignalSemaphores    = &G_RENDERER.render_finished_semaphores[frame_idx],
-	// }
+	Submit current frame
+	submit_info := vk.SubmitInfo {
+		sType                = .SUBMIT_INFO,
+		waitSemaphoreCount   = 1,
+		pWaitSemaphores      = &G_RENDERER.image_available_semaphores[frame_idx],
+		pWaitDstStageMask    = &vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT},
+		commandBufferCount   = 0,
+		pCommandBuffers      = &cmd_buff,
+		signalSemaphoreCount = 1,
+		pSignalSemaphores    = &G_RENDERER.render_finished_semaphores[frame_idx],
+	}
 
-	// vk.QueueSubmit(
-	// 	G_RENDERER.graphics_queue,
-	// 	1,
-	// 	&submit_info,
-	// 	G_RENDERER.frame_fences[frame_idx],
-	// )
+	vk.QueueSubmit(
+		G_RENDERER.graphics_queue,
+		1,
+		&submit_info,
+		G_RENDERER.frame_fences[frame_idx],
+	)
 
 	// Present current frame
 	present_info := vk.PresentInfoKHR {

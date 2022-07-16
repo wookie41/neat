@@ -122,9 +122,14 @@ when USE_VULKAN_BACKEND {
 				if render_target_binding.target.current_usage != .ColorAttachment {
 
 					old_layout := vk.ImageLayout.UNDEFINED
-					#partial switch render_target_binding.target.current_usage {
-					case .SampledImage:
-						old_layout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL
+
+					if (.SwapImage in attachment_image.desc.flags) == false {
+						#partial switch render_target_binding.target.current_usage {
+							case .SampledImage:
+								old_layout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL
+							case .SwapImage:
+								old_layout = vk.ImageLayout.UNDEFINED
+							}		
 					}
 
 					render_target_barriers[num_render_target_barriers] = vk.ImageMemoryBarrier {

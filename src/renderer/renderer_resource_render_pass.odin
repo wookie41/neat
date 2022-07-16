@@ -70,7 +70,6 @@ InvalidRenderPassRef := RenderPassRef {
 
 //---------------------------------------------------------------------------//
 
-
 @(private = "file")
 G_RENDER_PASS_REF_ARRAY: RefArray(RenderPassResource)
 

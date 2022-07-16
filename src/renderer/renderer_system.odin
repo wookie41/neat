@@ -42,6 +42,7 @@ G_RENDERER: struct {
 	queued_textures_copies:       [dynamic]TextureCopy,
 	current_frame_swap_image_idx: u32,
 	swap_image_refs:              []ImageRef,
+	depth_buffer_ref: ImageRef,
 }
 
 @(private)
@@ -110,6 +111,20 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	init_command_buffers(p_options) or_return
 
+	// Create depth buffer
+	{
+		dept_buffer_desc := ImageDesc {
+			type = .OneDimensional,
+			format = .Depth32SFloat,
+			mip_count = 1,
+			data_per_mip = nil,
+			sample_count_flags = ._1,
+		}
+
+
+		G_RENDERER.depth_buffer_ref = create_image(depth_buffer_desc)
+	}
+
 	// Allocate primary command buffer for each frame
 	{
 		G_RENDERER.primary_cmd_buffer_ref = make(
@@ -136,8 +151,7 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	load_shaders() or_return
 
-	assert(false, "Uncomment init_vt")
-	//init_vt()
+	init_vt()
 	return true
 }
 //---------------------------------------------------------------------------//

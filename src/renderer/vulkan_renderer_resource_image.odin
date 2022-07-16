@@ -19,8 +19,6 @@ when USE_VULKAN_BACKEND {
 		all_mips_vk_view:     vk.ImageView,
 		per_mip_vk_view:      []vk.ImageView,
 		allocation:           vma.Allocation,
-		current_layout:       []vk.ImageLayout, // per mip
-		current_access_flags: []vk.ImageAspectFlags, // per mip
 	}
 
 	//---------------------------------------------------------------------------//
@@ -281,8 +279,26 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_create_swap_images :: proc() {
+		G_RENDERER.swap_image_refs = make(
+			[]ImageRef, 
+			u32(len(G_RENDERER.swapchain_images)), 
+			G_RENDERER_ALLOCATORS.resource_allocator)
 
+		for vk_swap_image, i in G_RENDERER.swapchain_images {
+			ref := allocate_image_ref()
+
+			swap_image := get_image(ref)
+
+			swap_image.desc.type = .TwoDimensional
+			swap_image.desc.format = G_RENDERER.swapchain_format
+			swap_image.desc.mip_count = 1
+			swap_image.desc.dimensions = { G_RENDERER.swap_extent.widht, G_RENDERER.swap_extent.height }
+			swap_image.desc.flags = { .SwapImage }
+
+			swap_image.vk_image = vk_swap_image
+			swap_image.all_mips_vk_view = G_RENDERER.swapchain_image_views[i]
+
+			G_RENDERER.swap_image_refs[i] = ref
+		}
 	}
-
-	//---------------------------------------------------------------------------//
 }

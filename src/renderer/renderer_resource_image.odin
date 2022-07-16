@@ -81,6 +81,7 @@ ImageFormat :: enum u16 {
 
 ImageDescFlagBits :: enum u8 {
 	Storage,
+	SwapImage,
 }
 ImageDescFlags :: distinct bit_set[ImageDescFlagBits;u8]
 
@@ -145,14 +146,7 @@ get_image :: proc(p_ref: ImageRef) -> ^ImageResource {
 //---------------------------------------------------------------------------//
 
 create_swap_images :: #force_inline proc() {
-	// G_RENDERER.swap_image_refs = make(
-	// 	[]ImageRef,
-	// 	u32(len(G_RENDERER.backend_state.swapchain_images)),
-	// 	G_RENDERER_ALLOCATORS.resources,
-	// )
-	// for i in len(G_RENDERER.backend_state.swapchain_images) {
-	// 	swap_image_ref = allocate_image_ref()
-	// }
+	backend_create_swap_images()
 }
 
 //---------------------------------------------------------------------------//
