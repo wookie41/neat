@@ -28,9 +28,10 @@ G_VT: struct {
 	texture_image_allocation:  vma.Allocation,
 	texture_image_view:        vk.ImageView,
 	texture_sampler:           vk.Sampler,
-	depth_image:               vk.Image,
-
-	render_pass_ref: RenderPassRef,
+	depth_buffer_ref:          ImageRef,
+	render_pass_ref:           RenderPassRef,
+	depth_buffer_attachment:   DepthAttachment,
+	render_target_bindings:    []RenderTargetBinding,
 }
 
 Vertex :: struct {
@@ -85,64 +86,92 @@ init_vt :: proc() -> bool {
 		using G_VT
 
 		start_time = time.now()
+		
+		// Create depth buffer
+		{
+			depth_buffer_desc := ImageDesc {
+				type = .OneDimensional,
+				format = .Depth32SFloat,
+				mip_count = 1,
+				data_per_mip = nil,
+				sample_count_flags = {._1},
+				dimensions = {
+					swap_extent.width,
+					swap_extent.height,
+					1,
+				},
+			}
 
-		vertex_shader_ref := find_shader_by_name(common.create_name("base.vert"))
-		fragment_shader_ref := find_shader_by_name(common.create_name("base.frag"))
 
+			depth_buffer_ref = create_depth_buffer(
+				common.create_name("DepthBuffer"),
+				depth_buffer_desc,
+			)
+
+			depth_buffer_attachment = DepthAttachment {
+				image = depth_buffer_ref,
+			}
+		}
+
+		render_target_bindings = make(
+			[]RenderTargetBinding,
+			u32(len(swap_image_render_targets)),
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
+
+		for _, i in swap_image_render_targets {
+			render_target_bindings[i] = {
+				name   = common.create_name("Color"),
+				target = &swap_image_render_targets[i],
+			}
+		}
+
+		// Create render pass
+		{
+			vertex_shader_ref := find_shader_by_name(common.create_name("base.vert"))
+			fragment_shader_ref := find_shader_by_name(common.create_name("base.frag"))
+	
+			swap_image_format := get_image(G_RENDERER.swap_image_refs[0]).desc.format
+
+			render_pass_desc := RenderPassDesc {
+				name = common.create_name("Vulkan Tutorial Pass"),
+				vert_shader = vertex_shader_ref,
+				frag_shader = fragment_shader_ref,
+				vertex_layout = .Mesh,
+				primitive_type = .TriangleList,
+				rasterizer_type = .Fill,
+				multisampling_type = ._1,
+				depth_stencil_type = .DepthTestWrite,
+				render_target_infos = {
+					{name = common.create_name("Color"), format = swap_image_format},
+				},
+				render_target_blend_types = {.Default},
+				depth_format = get_image(depth_buffer_ref).desc.format,
+				resolution = .Full,
+			}
+
+			render_pass_ref = create_render_pass(render_pass_desc)
+		}
 
 		vt_create_uniform_buffers()
 		vt_create_descriptor_pool()
 		vk_create_descriptor_sets()
+		vt_load_model()
+		vt_create_vertex_buffer()
+		vt_create_index_buffer()
+		vt_create_texture_image()
+		vt_create_texture_image_view()
+		vt_create_texture_sampler()
+		vt_write_descriptor_sets()
 
-		// create render pass
-
-		swap_image_render_target = RenderTarget {
-			clear_value = { 0, 0, 0, 1},
-			image_ref = swap_image_ref,
-			current_usage = .Undefined,
-		}
-
-		swap_image_format := get_image(G_RENDERER.swap_image_refs[0]).desc.format
-
-		render_pass_desc := RenderPassDesc {
-			name               = common.create_name("Vulkan Tutorial Pass"),
-			vert_shader        = vertex_shader_ref,
-			frag_shader        = fragment_shader_ref,
-			vertex_layout      = .Mesh,
-			primitive_type     = .TriangleList,
-			rasterizer_type    = .Fill,
-			multisampling_type = ._1,
-			depth_stencil_type = .DepthTestWrite,
-			render_target_formats = {
-				{
-					name = common.create_name("Color"),
-					format = swap_image_format
-				},
-			},
-			render_target_blend_types = { .Default },
-			depth_format = get_image(G_RENDERER.depth_image_ref).desc.format,
-			resolution = .Full,
-		}
-
-		render_pass_ref = create_render_pass(render_pass_desc)
+		return true
 	}
-
-	vt_load_model()
-	vt_create_vertex_buffer()
-	vt_create_index_buffer()
-	vt_create_texture_image()
-	vt_create_texture_image_view()
-	vt_create_texture_sampler()
-	vt_write_descriptor_sets()
-	vt_create_depth_resources()
-
-	return true
 }
+
 
 deinit_vt :: proc() {
 	using G_VT
 	using G_RENDERER
-
 	vk.DestroySampler(device, texture_sampler, nil)
 	vk.DestroyImageView(device, texture_image_view, nil)
 	vma.destroy_image(vma_allocator, texture_image, texture_image_allocation)
@@ -150,160 +179,46 @@ deinit_vt :: proc() {
 
 	vma.destroy_buffer(vma_allocator, vertex_buffer, vertex_buffer_allocation)
 	vma.destroy_buffer(vma_allocator, index_buffer, index_buffer_allocation)
-
-	for cmd_pool in command_pools {
-		vk.DestroyCommandPool(device, cmd_pool, nil)
-	}
-	for buff, i in uniform_buffers {
-		vma.destroy_buffer(vma_allocator, buff, uniform_buffer_allocation[i])
-	}
-	vk.DestroyShaderModule(device, vertex_shader_module, nil)
-	vk.DestroyShaderModule(device, fragment_shader_module, nil)
-	vk.DestroyPipeline(device, pso, nil)
 }
 
-
-vt_update :: proc(p_image_index: u32) -> vk.CommandBuffer {
+vt_update :: proc(
+	p_frame_idx: u32,
+	p_cmd_buff_ref: CommandBufferRef,
+	p_cmd_buff: ^CommandBufferResource,
+) {
 	using G_VT
-	using G_RENDERER
-
-	color_attachment := vk.RenderingAttachmentInfo {
-		sType = .RENDERING_ATTACHMENT_INFO,
-		pNext = nil,
-		clearValue = {color = {float32 = {0, 0, 0, 1}}},
-		imageLayout = .ATTACHMENT_OPTIMAL,
-		imageView = swapchain_image_views[p_image_index],
-		loadOp = .CLEAR,
-		storeOp = .STORE,
-	}
-
-	depth_attachment := vk.RenderingAttachmentInfo {
-		sType = .RENDERING_ATTACHMENT_INFO,
-		pNext = nil,
-		clearValue = {depthStencil = {depth = 1, stencil = 0}},
-		imageLayout = .DEPTH_ATTACHMENT_OPTIMAL,
-		imageView = depth_image_view,
-		loadOp = .CLEAR,
-		storeOp = .DONT_CARE,
-	}
-
-	rendering_info := vk.RenderingInfo {
-		sType = .RENDERING_INFO,
-		colorAttachmentCount = 1,
-		pDepthAttachment = &depth_attachment,
-		layerCount = 1,
-		viewMask = 0,
-		pColorAttachments = &color_attachment,
-		renderArea = {extent = G_RENDERER.swap_extent},
-	}
-
-	cmd_buffer_begin_info := vk.CommandBufferBeginInfo {
-		sType = .COMMAND_BUFFER_BEGIN_INFO,
-		pNext = nil,
-		flags = {.ONE_TIME_SUBMIT},
-	}
-
-	to_color_barrier := vk.ImageMemoryBarrier {
-		sType = .IMAGE_MEMORY_BARRIER,
-		dstAccessMask = {.COLOR_ATTACHMENT_WRITE},
-		oldLayout = .UNDEFINED,
-		newLayout = .ATTACHMENT_OPTIMAL,
-		image = swapchain_images[p_image_index],
-		subresourceRange = {
-			aspectMask = {.COLOR},
-			baseArrayLayer = 0,
-			layerCount = 1,
-			baseMipLevel = 0,
-			levelCount = 1,
-		},
-	}
-
-	to_present_barrier := vk.ImageMemoryBarrier {
-		sType = .IMAGE_MEMORY_BARRIER,
-		srcAccessMask = {.COLOR_ATTACHMENT_WRITE},
-		oldLayout = .ATTACHMENT_OPTIMAL,
-		newLayout = .PRESENT_SRC_KHR,
-		image = swapchain_images[p_image_index],
-		subresourceRange = {
-			aspectMask = {.COLOR},
-			baseArrayLayer = 0,
-			layerCount = 1,
-			baseMipLevel = 0,
-			levelCount = 1,
-		},
-	}
-
-	// state for viewport
-	viewport := vk.Viewport {
-		x        = 0.0,
-		y        = 0.0,
-		width    = cast(f32)swap_extent.width,
-		height   = cast(f32)swap_extent.height,
-		minDepth = 0.0,
-		maxDepth = 1.0,
-	}
-
-	scissor := vk.Rect2D {
-		offset = {0, 0},
-		extent = swap_extent,
-	}
-
-	cmd := command_buffers[frame_idx]
-	vk.BeginCommandBuffer(cmd, &cmd_buffer_begin_info)
 
 	vt_update_uniform_buffer()
 
-	vk.CmdPipelineBarrier(
-		cmd,
-		{.TOP_OF_PIPE},
-		{.COLOR_ATTACHMENT_OUTPUT},
-		{},
-		0,
-		nil,
-		0,
-		nil,
-		1,
-		&to_color_barrier,
-	)
-	vk.CmdBeginRendering(cmd, &rendering_info)
-	vk.CmdBindPipeline(cmd, .GRAPHICS, pso)
-	vk.CmdSetViewport(cmd, 0, 1, &viewport)
-	vk.CmdSetScissor(cmd, 0, 1, &scissor)
-	vk.CmdBindDescriptorSets(
-		cmd,
-		.GRAPHICS,
-		get_pipeline_layout(pipeline_layout_ref).vk_pipeline_layout,
-		0,
-		1,
-		&descriptor_sets[frame_idx],
-		0,
-		nil,
-	)
+	begin_info := RenderPassBeginInfo {
+		depth_attachment        = &depth_buffer_attachment,
+		render_targets_bindings = render_target_bindings,
+	}
 
-	offset := vk.DeviceSize{}
+	begin_render_pass(render_pass_ref, p_cmd_buff_ref, &begin_info)
+	{
+		render_pass := get_render_pass(render_pass_ref)
+		pipeline := get_pipeline(render_pass.pipeline)
 
-	vk.CmdBindVertexBuffers(cmd, 0, 1, &vertex_buffer, &offset)
-	vk.CmdBindIndexBuffer(cmd, index_buffer, offset, .UINT32)
-	vk.CmdDrawIndexed(cmd, u32(len(g_indices)), 1, 0, 0, 0)
-	// vk.CmdDraw(cmd, u32(len(g_vertices)), 1, 0, 0)
-	vk.CmdEndRendering(cmd)
+		vk.CmdBindDescriptorSets(
+			p_cmd_buff.vk_cmd_buff,
+			.GRAPHICS,
+			get_pipeline_layout(pipeline.pipeline_layout).vk_pipeline_layout,
+			0,
+			1,
+			&descriptor_sets[p_frame_idx],
+			0,
+			nil,
+		)
 
-	vk.CmdPipelineBarrier(
-		cmd,
-		{.COLOR_ATTACHMENT_OUTPUT},
-		{.BOTTOM_OF_PIPE},
-		{},
-		0,
-		nil,
-		0,
-		nil,
-		1,
-		&to_present_barrier,
-	)
+		offset := vk.DeviceSize{}
 
-	vk.EndCommandBuffer(cmd)
-
-	return cmd
+		vk.CmdBindVertexBuffers(p_cmd_buff.vk_cmd_buff, 0, 1, &vertex_buffer, &offset)
+		vk.CmdBindIndexBuffer(p_cmd_buff.vk_cmd_buff, index_buffer, offset, .UINT32)
+		vk.CmdDrawIndexed(p_cmd_buff.vk_cmd_buff, u32(len(g_indices)), 1, 0, 0, 0)
+		// vk.CmdDraw(cmd, u32(len(g_vertices)), 1, 0, 0)
+	}
+	end_render_pass(render_pass_ref, p_cmd_buff_ref)
 }
 
 vt_create_vertex_buffer :: proc() {
@@ -492,17 +407,20 @@ vk_create_descriptor_sets :: proc() {
 
 	resize(&descriptor_sets, int(num_frames_in_flight))
 
+	render_pass := get_render_pass(render_pass_ref)
+	pipeline := get_pipeline(render_pass.pipeline)
+	pipeline_layout := get_pipeline_layout(pipeline.pipeline_layout)
+
+	defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
+
 	set_layouts := make(
 		[dynamic]vk.DescriptorSetLayout,
 		int(num_frames_in_flight),
-		context.allocator,
+		G_RENDERER_ALLOCATORS.temp_allocator,
 	)
 	for _, i in set_layouts {
-		set_layouts[i] = get_pipeline_layout(
-			pipeline_layout_ref,
-		).vk_programs_descriptor_set_layout
+		set_layouts[i] = pipeline_layout.vk_programs_descriptor_set_layout
 	}
-	defer delete(set_layouts)
 
 	descriptor_sets_alloc_info := vk.DescriptorSetAllocateInfo {
 		sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -652,7 +570,7 @@ vt_begin_single_time_command_buffer :: proc() -> vk.CommandBuffer {
 	alloc_info := vk.CommandBufferAllocateInfo {
 		sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
 		level              = .PRIMARY,
-		commandPool        = command_pools[0],
+		commandPool        = INTERNAL.command_pools[0],
 		commandBufferCount = 1,
 	}
 	cmd_buff: vk.CommandBuffer
@@ -797,43 +715,6 @@ vt_create_texture_sampler :: proc() {
 	if vk.CreateSampler(device, &sampler_create_info, nil, &texture_sampler) != .SUCCESS {
 		log.warn("Failed to create sampler")
 	}
-}
-
-
-vt_create_depth_resources :: proc() {
-	using G_RENDERER
-	using G_VT
-
-
-	depth_image_create_info := vk.ImageCreateInfo {
-		sType = .IMAGE_CREATE_INFO,
-		imageType = .D2,
-		extent = {width = swap_extent.width, height = swap_extent.height, depth = 1},
-		mipLevels = 1,
-		arrayLayers = 1,
-		format = .D32_SFLOAT,
-		tiling = .OPTIMAL,
-		initialLayout = .UNDEFINED,
-		usage = {.DEPTH_STENCIL_ATTACHMENT},
-		sharingMode = .EXCLUSIVE,
-		samples = {._1},
-	}
-	alloc_create_info := vma.AllocationCreateInfo {
-		usage = .AUTO,
-	}
-
-	if vma.create_image(
-		   vma_allocator,
-		   &depth_image_create_info,
-		   &alloc_create_info,
-		   &depth_image,
-		   &depth_image_allocation,
-		   nil,
-	   ) != .SUCCESS {
-		log.warn("Failed to create an image")
-	}
-
-	depth_image_view = vt_create_image_view(depth_image, .D32_SFLOAT, {.DEPTH})
 }
 
 vt_load_model :: proc() {

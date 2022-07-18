@@ -62,12 +62,10 @@ when USE_VULKAN_BACKEND {
 			"app_data/renderer/assets/shaders/%s",
 			p_shader_entry.path,
 		)
-		defer delete(shader_src_path)
 		shader_bin_path := fmt.aprintf(
 			"app_data/renderer/assets/shaders/bin/%s.sprv",
 			p_shader_entry.name,
 		)
-		defer delete(shader_bin_path)
 
 		shader_resource = ShaderResource {
 			type = shader_type,
@@ -102,7 +100,6 @@ when USE_VULKAN_BACKEND {
 				log.warnf("Failed to read reflection data for shader %s", p_shader_entry.name)
 				return {}, false
 			}
-			defer delete(reflect_data)
 
 			shader_module: spirv_reflect.ShaderModule
 			if res := spirv_reflect.create_shader_module(
@@ -135,7 +132,6 @@ when USE_VULKAN_BACKEND {
 			num_descriptor_sets: u32 = 0
 			spirv_reflect.enumerate_descriptor_sets(&shader_module, &num_descriptor_sets, nil)
 			descriptor_sets := make([]^spirv_reflect.DescriptorSet, num_descriptor_sets)
-			defer delete(descriptor_sets)
 			spirv_reflect.enumerate_descriptor_sets(
 				&shader_module,
 				&num_descriptor_sets,

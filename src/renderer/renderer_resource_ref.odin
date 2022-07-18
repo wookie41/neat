@@ -59,6 +59,7 @@ get_ref_generation :: #force_inline proc(p_ref: $T) -> u16 {
 
 create_ref_array :: proc($R: typeid, p_capacity: u32) -> RefArray(R) {
 	return RefArray(R){
+		resource_array = make([]R, p_capacity),
 		free_indices = make([]u32, p_capacity),
 		generations = make([]u16, p_capacity),
 		names = make([]u32, p_capacity),
@@ -71,6 +72,7 @@ create_ref_array :: proc($R: typeid, p_capacity: u32) -> RefArray(R) {
 
 create_ref_array_soa :: proc($R: typeid, p_capacity: u32) -> RefArray(R) {
 	return RefArraySOA(R){
+		resource_array = make([]R, p_capacity),
 		free_indices = make([]u32, p_capacity),
 		generations = make([]u16, p_capacity),
 		names = make([]u32, p_capacity),

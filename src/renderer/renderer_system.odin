@@ -42,7 +42,7 @@ G_RENDERER: struct {
 	queued_textures_copies:       [dynamic]TextureCopy,
 	current_frame_swap_image_idx: u32,
 	swap_image_refs:              []ImageRef,
-	depth_buffer_ref: ImageRef,
+	swap_image_render_targets:    []RenderTarget,
 }
 
 @(private)
@@ -76,7 +76,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	// Temp arena
 	mem.init_arena(
 		&G_RENDERER_ALLOCATORS.temp_arena,
-		make([]byte, common.MEGABYTE * 4, G_RENDERER_ALLOCATORS.main_allocator),
+		make([]byte, common.MEGABYTE * 8, G_RENDERER_ALLOCATORS.main_allocator),
 	)
 	G_RENDERER_ALLOCATORS.temp_allocator = mem.arena_allocator(
 		&G_RENDERER_ALLOCATORS.temp_arena,
@@ -85,7 +85,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	// Resource arena
 	mem.init_arena(
 		&G_RENDERER_ALLOCATORS.resource_arena,
-		make([]byte, common.MEGABYTE * 4, G_RENDERER_ALLOCATORS.main_allocator),
+		make([]byte, common.MEGABYTE * 8, G_RENDERER_ALLOCATORS.main_allocator),
 	)
 	G_RENDERER_ALLOCATORS.resource_allocator = mem.arena_allocator(
 		&G_RENDERER_ALLOCATORS.resource_arena,
@@ -94,7 +94,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	// Frame arena
 	mem.init_arena(
 		&G_RENDERER_ALLOCATORS.frame_arena,
-		make([]byte, common.MEGABYTE * 4, G_RENDERER_ALLOCATORS.main_allocator),
+		make([]byte, common.MEGABYTE * 8, G_RENDERER_ALLOCATORS.main_allocator),
 	)
 	G_RENDERER_ALLOCATORS.frame_allocator = mem.arena_allocator(
 		&G_RENDERER_ALLOCATORS.frame_arena,
@@ -107,22 +107,35 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	setup_renderer_context()
 	backend_init(p_options) or_return
+
+	init_pipeline_layouts()
+	init_pipelines()
+	init_render_passes()
+	init_buffers()
+ 	init_images()
+	init_command_buffers(p_options) or_return
+	
+	load_shaders() or_return
 	create_swap_images()
 
-	init_command_buffers(p_options) or_return
-
-	// Create depth buffer
+	// Create RenderTargets for each swap image
 	{
-		dept_buffer_desc := ImageDesc {
-			type = .OneDimensional,
-			format = .Depth32SFloat,
-			mip_count = 1,
-			data_per_mip = nil,
-			sample_count_flags = ._1,
+		G_RENDERER.swap_image_render_targets = make(
+			[]RenderTarget,
+			u32(len(G_RENDERER.swap_image_refs)),
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
+		
+		for swap_image_ref, i in G_RENDERER.swap_image_refs {
+			G_RENDERER.swap_image_render_targets[i] = RenderTarget {
+				clear_value = {0, 0, 0, 1},
+				current_usage = .Undefined,
+				flags = {.Clear},
+				image_mip = -1,
+				image_ref = swap_image_ref,
+			}
 		}
 
-
-		G_RENDERER.depth_buffer_ref = create_image(depth_buffer_desc)
 	}
 
 	// Allocate primary command buffer for each frame
@@ -132,25 +145,17 @@ init :: proc(p_options: InitOptions) -> bool {
 			G_RENDERER.num_frames_in_flight,
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
-		for i in 0 .. G_RENDERER.num_frames_in_flight {
-			cmd_buff_ref := create_command_buffer(
-				{flags = {.Primary}, thread = 0, frame = u8(i)},
-			)
-			if cmd_buff_ref != InvalidCommandBufferRef {
+		for i in 0 ..< G_RENDERER.num_frames_in_flight {
+			cmd_buff_ref := create_command_buffer({flags = {.Primary}, thread = 0, frame = u8(i)})
+			if cmd_buff_ref == InvalidCommandBufferRef {
 				log.error("Failed to allocate command buffer")
 				return false
 			}
 			G_RENDERER.primary_cmd_buffer_ref[i] = cmd_buff_ref
-			return true
 		}
 	}
 
-	init_pipeline_layouts()
-	init_buffers()
-	init_images()
-
-	load_shaders() or_return
-
+	setup_renderer_context()
 	init_vt()
 	return true
 }
@@ -205,7 +210,9 @@ get_frame_cmd_buffer :: proc() -> CommandBufferRef {
 @(private)
 execute_queued_texture_copies :: proc() {
 	cmd_buff_ref := get_frame_cmd_buffer()
-	backend_execute_queued_texture_copies(cmd_buff_ref)
+	if len(G_RENDERER.queued_textures_copies) > 0 {
+		backend_execute_queued_texture_copies(cmd_buff_ref)
+	}
 }
 
 //---------------------------------------------------------------------------//

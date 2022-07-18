@@ -10,7 +10,15 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	G_IMAGE_FORMAT_MAPPING := map[ImageFormat]vk.Format {
-		.Depth32SFloat = vk.Format.D32_SFLOAT,
+		.Depth32SFloat = .D32_SFLOAT,
+		.B8G8R8A8_SRGB = .B8G8R8A8_SRGB,
+
+	}
+
+	@(private)
+	G_IMAGE_FORMAT_MAPPING_VK := map[vk.Format]ImageFormat {
+		.D32_SFLOAT = .Depth32SFloat,
+		.B8G8R8A8_SRGB = .B8G8R8A8_SRGB,
 	}
 
 	//---------------------------------------------------------------------------//

@@ -14,7 +14,6 @@ when USE_VULKAN_BACKEND {
 
 	@(private = "file")
 	INTERNAL: struct {
-		active_render_pass_ref: RenderPassRef,
 	}
 
 	@(private)
@@ -32,12 +31,13 @@ when USE_VULKAN_BACKEND {
 		p_render_pass: ^RenderPassResource,
 	) -> bool {
 
+		defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
+
 		render_target_formats := make(
 			[]ImageFormat,
 			len(p_render_pass_desc.render_target_infos),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
-		defer delete(render_target_formats)
 
 		for render_target_info, i in p_render_pass_desc.render_target_infos {
 			render_target_formats[i] = render_target_info.format
@@ -74,10 +74,11 @@ when USE_VULKAN_BACKEND {
 	backend_begin_render_pass :: proc(
 		p_render_pass_ref: RenderPassRef,
 		p_cmd_buff_ref: CommandBufferRef,
-		p_begin_info: RenderPassBeginInfo,
+		p_begin_info: ^RenderPassBeginInfo,
 	) {
 		render_pass := get_render_pass(p_render_pass_ref)
 		assert((.IsActive in render_pass.flags) == false)
+		defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
 
 		render_pass.flags += {.IsActive}
 
@@ -86,15 +87,13 @@ when USE_VULKAN_BACKEND {
 			len(render_pass.desc.render_target_infos),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
-		defer delete(color_attachments)
 
 		num_render_target_barriers := 0
 		render_target_barriers := make(
 			[]vk.ImageMemoryBarrier,
-			u32(len(render_pass.desc.render_target_infos)),
+			len(render_pass.desc.render_target_infos),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
-		defer delete(render_target_barriers)
 
 		// Check compability of render targets, build the Vulkan color attachments and prepare barrier
 		{
@@ -127,8 +126,6 @@ when USE_VULKAN_BACKEND {
 						#partial switch render_target_binding.target.current_usage {
 							case .SampledImage:
 								old_layout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL
-							case .SwapImage:
-								old_layout = vk.ImageLayout.UNDEFINED
 							}		
 					}
 
@@ -152,12 +149,16 @@ when USE_VULKAN_BACKEND {
 				}
 
 				// Create the Vulkan attachment
+				image_view := attachment_image.all_mips_vk_view
+				if render_target_binding.target.image_mip > -1 {
+					image_view = attachment_image.per_mip_vk_view[render_target_binding.target.image_mip]
+				}
 				color_attachments[render_target_index] = {
 					sType = .RENDERING_ATTACHMENT_INFO,
 					pNext = nil,
 					clearValue = {color = {float32 = cast([4]f32)render_target_binding.target.clear_value}},
 					imageLayout = .ATTACHMENT_OPTIMAL,
-					imageView = attachment_image.per_mip_vk_view[render_target_binding.target.image_mip],
+					imageView = image_view,
 					loadOp = .CLEAR if .Clear in render_target_binding.target.flags else .DONT_CARE,
 					storeOp = .STORE,
 				}
@@ -302,7 +303,10 @@ when USE_VULKAN_BACKEND {
 		p_render_pass_ref: RenderPassRef,
 		p_cmd_buff_ref: CommandBufferRef,
 	) {
-		assert(INTERNAL.active_render_pass_ref == p_render_pass_ref)
+		render_pass := get_render_pass(p_render_pass_ref)
+		assert(.IsActive in render_pass.flags)
+		render_pass.flags -= {.IsActive}
+
 
 		cmd_buf := get_command_buffer(p_cmd_buff_ref)
 		vk.CmdEndRendering(cmd_buf.vk_cmd_buff)

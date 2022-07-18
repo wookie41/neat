@@ -23,6 +23,7 @@ when USE_VULKAN_BACKEND {
 	) -> bool {
 
 		assert(p_pipeline_layout_desc.layout_type != .GRAPHICS_MATERIAL) // @TODO Implement
+		defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
 
 		vert_shader := get_shader(p_pipeline_layout_desc.vert_shader_ref)
 		frag_shader := get_shader(p_pipeline_layout_desc.frag_shader_ref)
@@ -32,7 +33,6 @@ when USE_VULKAN_BACKEND {
 			len(vert_shader.desc_bindings) + len(frag_shader.desc_bindings),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
-		defer delete(vk_bindings)
 
 		backend_add_shader_bindings(&vert_shader.desc_bindings, {.VERTEX}, 0, vk_bindings)
 

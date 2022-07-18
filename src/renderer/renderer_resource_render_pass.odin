@@ -24,21 +24,21 @@ RenderTargetInfo :: struct {
 //---------------------------------------------------------------------------//
 
 RenderPassDesc :: struct {
-	name:                     common.Name,
-	vert_shader:              ShaderRef,
-	frag_shader:              ShaderRef,
-	uniform_per_frame:        BufferRef, //@TODO
-	uniform_per_view:         BufferRef, //@TODO
-	univorm_per_instance:     BufferRef, //@TODO
-	vertex_layout:            VertexLayout,
-	primitive_type:           PrimitiveType,
-	rasterizer_type:          RasterizerType,
-	multisampling_type:       MultisamplingType,
-	depth_stencil_type:       DepthStencilType,
-	render_target_infos:      []RenderTargetInfo,
+	name:                      common.Name,
+	vert_shader:               ShaderRef,
+	frag_shader:               ShaderRef,
+	uniform_per_frame:         BufferRef, //@TODO
+	uniform_per_view:          BufferRef, //@TODO
+	univorm_per_instance:      BufferRef, //@TODO
+	vertex_layout:             VertexLayout,
+	primitive_type:            PrimitiveType,
+	rasterizer_type:           RasterizerType,
+	multisampling_type:        MultisamplingType,
+	depth_stencil_type:        DepthStencilType,
+	render_target_infos:       []RenderTargetInfo,
 	render_target_blend_types: []ColorBlendType,
-	depth_format:             ImageFormat,
-	resolution:               RenderPassResolution,
+	depth_format:              ImageFormat,
+	resolution:                RenderPassResolution,
 }
 
 //---------------------------------------------------------------------------//
@@ -91,8 +91,7 @@ RenderTargetUsage :: enum u8 {
 
 //---------------------------------------------------------------------------//
 
-RenderTargetFlagBits :: enum u8
-{
+RenderTargetFlagBits :: enum u8 {
 	Clear,
 }
 
@@ -103,9 +102,9 @@ RenderTargetFlags :: distinct bit_set[RenderTargetFlagBits;u8]
 RenderTarget :: struct {
 	clear_value:   glsl.vec4,
 	image_ref:     ImageRef,
-	image_mip:     u8,
+	image_mip:     i16,
 	current_usage: RenderTargetUsage,
-	flags: RenderTargetFlags,
+	flags:         RenderTargetFlags,
 }
 
 //---------------------------------------------------------------------------//
@@ -153,6 +152,17 @@ create_render_pass :: proc(p_render_pass_desc: RenderPassDesc) -> RenderPassRef 
 	)
 	idx := get_ref_idx(ref)
 	render_pass := &G_RENDER_PASS_REF_ARRAY.resource_array[idx]
+	render_pass.desc = p_render_pass_desc
+
+	render_pass.desc.render_target_infos = make(
+		[]RenderTargetInfo,
+		len(p_render_pass_desc.render_target_infos),
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
+
+	for rt_info, i in p_render_pass_desc.render_target_infos {
+		render_pass.desc.render_target_infos[i] = rt_info
+	}
 
 	if backend_create_render_pass(p_render_pass_desc, render_pass) == false {
 		free_ref(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, ref)
@@ -178,7 +188,7 @@ get_render_pass :: proc(p_ref: RenderPassRef) -> ^RenderPassResource {
 begin_render_pass :: #force_inline proc(
 	p_render_pass_ref: RenderPassRef,
 	p_cmd_buff_ref: CommandBufferRef,
-	p_begin_info: RenderPassBeginInfo,
+	p_begin_info: ^RenderPassBeginInfo,
 ) {
 	backend_begin_render_pass(p_render_pass_ref, p_cmd_buff_ref, p_begin_info)
 }

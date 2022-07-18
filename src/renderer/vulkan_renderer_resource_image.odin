@@ -15,10 +15,10 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	BackendImageResource :: struct {
-		vk_image:             vk.Image,
-		all_mips_vk_view:     vk.ImageView,
-		per_mip_vk_view:      []vk.ImageView,
-		allocation:           vma.Allocation,
+		vk_image:         vk.Image,
+		all_mips_vk_view: vk.ImageView,
+		per_mip_vk_view:  []vk.ImageView,
+		allocation:       vma.Allocation,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -82,10 +82,7 @@ when USE_VULKAN_BACKEND {
 	) -> bool {
 
 		assert(
-			p_image_desc.format <
-			.DepthFormatsStart &&
-			p_image_desc.format >
-			.DepthFormatsEnd,
+			p_image_desc.format < .DepthFormatsStart && p_image_desc.format > .DepthFormatsEnd,
 		)
 
 		// Map vk image type
@@ -108,7 +105,7 @@ when USE_VULKAN_BACKEND {
 				p_image_desc.type,
 			)
 			return false
-		}		
+		}
 
 		// Map vk image format
 		vk_image_format, format_found := G_IMAGE_FORMAT_MAPPING[p_image_desc.format]
@@ -122,8 +119,8 @@ when USE_VULKAN_BACKEND {
 		}
 
 		// Determine usage and aspect
-		image_aspect := ImageAspectFlags {.Color}
-		usage := vk.ImageUsageFlags {.SAMPLED, .TRANSFER_DST}
+		image_aspect := ImageAspectFlags{.Color}
+		usage := vk.ImageUsageFlags{.SAMPLED, .TRANSFER_DST}
 
 		if .Storage in p_image_desc.flags {
 			usage += {.STORAGE}
@@ -240,8 +237,8 @@ when USE_VULKAN_BACKEND {
 		}
 
 		texture_copy := TextureCopy {
-			buffer  = INTERNAL.staging_buffer,
-			image   = p_image_ref,
+			buffer             = INTERNAL.staging_buffer,
+			image              = p_image_ref,
 			mip_buffer_offsets = make(
 				[]u32,
 				int(p_image_desc.mip_count),
@@ -280,20 +277,25 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_create_swap_images :: proc() {
 		G_RENDERER.swap_image_refs = make(
-			[]ImageRef, 
-			u32(len(G_RENDERER.swapchain_images)), 
-			G_RENDERER_ALLOCATORS.resource_allocator)
+			[]ImageRef,
+			u32(len(G_RENDERER.swapchain_images)),
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
 
 		for vk_swap_image, i in G_RENDERER.swapchain_images {
-			ref := allocate_image_ref()
+			ref := allocate_image_ref(common.create_name("SwapImage"))
 
 			swap_image := get_image(ref)
 
 			swap_image.desc.type = .TwoDimensional
-			swap_image.desc.format = G_RENDERER.swapchain_format
+			swap_image.desc.format = G_IMAGE_FORMAT_MAPPING_VK[G_RENDERER.swapchain_format.format]
 			swap_image.desc.mip_count = 1
-			swap_image.desc.dimensions = { G_RENDERER.swap_extent.widht, G_RENDERER.swap_extent.height }
-			swap_image.desc.flags = { .SwapImage }
+			swap_image.desc.dimensions = {
+				G_RENDERER.swap_extent.width,
+				G_RENDERER.swap_extent.height,
+				1,
+			}
+			swap_image.desc.flags = {.SwapImage}
 
 			swap_image.vk_image = vk_swap_image
 			swap_image.all_mips_vk_view = G_RENDERER.swapchain_image_views[i]
@@ -301,4 +303,77 @@ when USE_VULKAN_BACKEND {
 			G_RENDERER.swap_image_refs[i] = ref
 		}
 	}
+
+
+	@(private)
+	backend_create_depth_buffer :: proc(
+		p_name: common.Name,
+		p_depth_buffer_desc: ImageDesc,
+		p_image_ref: ImageRef,
+		p_depth_image: ^ImageResource,
+	) -> bool {
+
+		assert(
+			p_depth_buffer_desc.format >
+			.DepthFormatsStart &&
+			p_depth_buffer_desc.format <
+			.DepthFormatsEnd,
+		)
+
+		depth_image_create_info := vk.ImageCreateInfo {
+			sType = .IMAGE_CREATE_INFO,
+			imageType = .D2,
+			extent = {
+				p_depth_buffer_desc.dimensions.x,
+				p_depth_buffer_desc.dimensions.y,
+				p_depth_buffer_desc.dimensions.z,
+			},
+			mipLevels = 1,
+			arrayLayers = 1,
+			format = G_IMAGE_FORMAT_MAPPING[p_depth_buffer_desc.format],
+			tiling = .OPTIMAL,
+			initialLayout = .UNDEFINED,
+			usage = {.DEPTH_STENCIL_ATTACHMENT},
+			sharingMode = .EXCLUSIVE,
+			samples = {._1},
+		}
+
+		alloc_create_info := vma.AllocationCreateInfo {
+			usage = .AUTO,
+		}
+
+		if vma.create_image(
+			   G_RENDERER.vma_allocator,
+			   &depth_image_create_info,
+			   &alloc_create_info,
+			   &p_depth_image.vk_image,
+			   &p_depth_image.allocation,
+			   nil,
+		   ) != .SUCCESS {
+			log.warn("Failed to create depth buffer")
+			return false
+		}
+
+		view_create_info := vk.ImageViewCreateInfo {
+			sType = .IMAGE_VIEW_CREATE_INFO,
+			image = p_depth_image.vk_image,
+			viewType = .D2,
+			format = G_IMAGE_FORMAT_MAPPING[p_depth_buffer_desc.format],
+			subresourceRange = {
+				aspectMask = {.DEPTH}, 
+				levelCount = 1, 
+				layerCount = 1,
+			},
+		}
+
+		if vk.CreateImageView(G_RENDERER.device, &view_create_info, nil, &p_depth_image.all_mips_vk_view) != .SUCCESS {
+			log.warn("Failed to create image view")
+			return false
+		}
+
+		return true
+	}
+
 }
+
+//---------------------------------------------------------------------------//

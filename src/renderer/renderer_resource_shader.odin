@@ -85,7 +85,6 @@ load_shaders :: proc() -> bool {
 
 	// Parse the file
 	{
-		defer delete(shaders_json_data)
 		if err := json.unmarshal(shaders_json_data, &shader_json_entries); err != nil {
 			log.errorf("Failed to unmarshal shaders json: %s\n", err)
 			delete(shaders_json_data)

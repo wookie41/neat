@@ -529,16 +529,53 @@ backend_update :: proc(p_dt: f32) {
 	vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx])
 
 	// Render
-	cmd_buff := vt_update(swap_image_index)
+	cmd_buff_ref := get_frame_cmd_buffer()
+	cmd_buff := get_command_buffer(cmd_buff_ref)
 
-	Submit current frame
+	begin_command_buffer(cmd_buff_ref)
+
+	vt_update(frame_idx, cmd_buff_ref, cmd_buff)
+	
+	// Transition command buffer to present 
+	to_present_barrier := vk.ImageMemoryBarrier {
+		sType = .IMAGE_MEMORY_BARRIER,
+		srcAccessMask = {.COLOR_ATTACHMENT_WRITE},
+		oldLayout = .ATTACHMENT_OPTIMAL,
+		newLayout = .PRESENT_SRC_KHR,
+		image = G_RENDERER.swapchain_images[frame_idx],
+		subresourceRange = {
+			aspectMask = {.COLOR},
+			baseArrayLayer = 0,
+			layerCount = 1,
+			baseMipLevel = 0,
+			levelCount = 1,
+		},
+	}
+
+	vk.CmdPipelineBarrier(
+		cmd_buff.vk_cmd_buff,
+		{.COLOR_ATTACHMENT_OUTPUT},
+		{.BOTTOM_OF_PIPE},
+		{},
+		0,
+		nil,
+		0,
+		nil,
+		1,
+		&to_present_barrier,
+	)
+
+	end_command_buffer(cmd_buff_ref)
+
+
+	//Submit current frame
 	submit_info := vk.SubmitInfo {
 		sType                = .SUBMIT_INFO,
 		waitSemaphoreCount   = 1,
 		pWaitSemaphores      = &G_RENDERER.image_available_semaphores[frame_idx],
 		pWaitDstStageMask    = &vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT},
 		commandBufferCount   = 0,
-		pCommandBuffers      = &cmd_buff,
+		pCommandBuffers      = &cmd_buff.vk_cmd_buff,
 		signalSemaphoreCount = 1,
 		pSignalSemaphores    = &G_RENDERER.render_finished_semaphores[frame_idx],
 	}
@@ -919,7 +956,6 @@ backend_execute_queued_texture_copies :: proc(p_cmd_buff_ref: CommandBufferRef) 
 			}
 		}
 	}
-
 
 	// Transition the images to transfer
 	vk.CmdPipelineBarrier(

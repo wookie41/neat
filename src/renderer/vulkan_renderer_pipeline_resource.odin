@@ -154,6 +154,8 @@ when USE_VULKAN_BACKEND {
 	backend_deinit_pipelines :: proc() {
 		cache_size: int
 
+		defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
+		
 		vk.GetPipelineCacheData(
 			G_RENDERER.device,
 			INTERNAL.vk_pipeline_cache,
@@ -162,7 +164,6 @@ when USE_VULKAN_BACKEND {
 		)
 		
 		cache_data := make([]u8, cache_size, G_RENDERER_ALLOCATORS.temp_allocator)
-		defer delete(cache_data)
 		
 		vk.GetPipelineCacheData(
 			G_RENDERER.device,
@@ -180,6 +181,7 @@ when USE_VULKAN_BACKEND {
 		p_pipeline_desc: PipelineDesc,
 		p_pipeline: ^PipelineResource,
 	) -> bool {
+		defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
 
 		vert_shader := get_shader(p_pipeline_desc.vert_shader)
 		frag_shader := get_shader(p_pipeline_desc.frag_shader)
@@ -230,7 +232,6 @@ when USE_VULKAN_BACKEND {
 			len(p_pipeline_desc.render_target_blend_types),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
-		defer delete(color_blend_attachments)
 
 		for blend_type, i in p_pipeline_desc.render_target_blend_types {
 			color_blend_attachments[i] = COLOR_BLEND_PER_TYPE[blend_type]
@@ -269,7 +270,6 @@ when USE_VULKAN_BACKEND {
 			len(p_pipeline_desc.render_target_formats),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
-		defer delete(color_attachment_formats)
 
 		for format, i in p_pipeline_desc.render_target_formats {
 			color_attachment_formats[i] = G_IMAGE_FORMAT_MAPPING[format]

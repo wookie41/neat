@@ -74,7 +74,6 @@ init_command_buffers :: #force_inline proc(p_options: InitOptions) -> bool {
 
 //---------------------------------------------------------------------------//
 
-@(private)
 create_command_buffer :: #force_inline proc(
 	p_cmd_buff_desc: CommandBufferDesc,
 ) -> CommandBufferRef {
@@ -94,7 +93,6 @@ create_command_buffer :: #force_inline proc(
 
 //---------------------------------------------------------------------------//
 
-@(private)
 get_command_buffer :: proc(p_ref: CommandBufferRef) -> ^CommandBufferResource {
 	idx := get_ref_idx(p_ref)
 	assert(idx < u32(len(G_COMMAND_BUFFER_REF_ARRAY.resource_array)))
@@ -103,6 +101,21 @@ get_command_buffer :: proc(p_ref: CommandBufferRef) -> ^CommandBufferResource {
 	assert(gen == G_COMMAND_BUFFER_REF_ARRAY.generations[idx])
 
 	return &G_COMMAND_BUFFER_REF_ARRAY.resource_array[idx]
+}
+
+
+//---------------------------------------------------------------------------//
+
+begin_command_buffer :: #force_inline proc(p_ref: CommandBufferRef) {
+	cmd_buff := get_command_buffer(p_ref)
+	backend_begin_command_buffer(p_ref, cmd_buff)
+}
+
+//---------------------------------------------------------------------------//
+
+end_command_buffer :: #force_inline proc(p_ref: CommandBufferRef) {
+	cmd_buff := get_command_buffer(p_ref)
+	backend_end_command_buffer(p_ref, cmd_buff)
 }
 
 //---------------------------------------------------------------------------//
