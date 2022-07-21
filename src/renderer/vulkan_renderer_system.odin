@@ -509,8 +509,6 @@ backend_update :: proc(p_dt: f32) {
 		0,
 		&swap_image_index,
 	)
-
-
 	// Check if we need to recreate the swapchain
 	should_recreate_swapchain := .WINDOW_RESIZED in G_RENDERER.misc_flags
 	G_RENDERER.misc_flags -= {.WINDOW_RESIZED}
@@ -528,21 +526,24 @@ backend_update :: proc(p_dt: f32) {
 
 	vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx])
 
+	// Reset the swap chain render target that we'll use this frame
+	G_RENDERER.swap_image_render_targets[swap_image_index].current_usage = .Undefined
+
 	// Render
 	cmd_buff_ref := get_frame_cmd_buffer()
 	cmd_buff := get_command_buffer(cmd_buff_ref)
 
 	begin_command_buffer(cmd_buff_ref)
 
-	vt_update(frame_idx, cmd_buff_ref, cmd_buff)
+	vt_update(frame_idx, swap_image_index, cmd_buff_ref, cmd_buff)
 	
-	// Transition command buffer to present 
+	// Transition the swapchain to present 
 	to_present_barrier := vk.ImageMemoryBarrier {
 		sType = .IMAGE_MEMORY_BARRIER,
 		srcAccessMask = {.COLOR_ATTACHMENT_WRITE},
 		oldLayout = .ATTACHMENT_OPTIMAL,
 		newLayout = .PRESENT_SRC_KHR,
-		image = G_RENDERER.swapchain_images[frame_idx],
+		image = G_RENDERER.swapchain_images[swap_image_index],
 		subresourceRange = {
 			aspectMask = {.COLOR},
 			baseArrayLayer = 0,
@@ -567,14 +568,13 @@ backend_update :: proc(p_dt: f32) {
 
 	end_command_buffer(cmd_buff_ref)
 
-
 	//Submit current frame
 	submit_info := vk.SubmitInfo {
 		sType                = .SUBMIT_INFO,
 		waitSemaphoreCount   = 1,
 		pWaitSemaphores      = &G_RENDERER.image_available_semaphores[frame_idx],
 		pWaitDstStageMask    = &vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT},
-		commandBufferCount   = 0,
+		commandBufferCount   = 1,
 		pCommandBuffers      = &cmd_buff.vk_cmd_buff,
 		signalSemaphoreCount = 1,
 		pSignalSemaphores    = &G_RENDERER.render_finished_semaphores[frame_idx],

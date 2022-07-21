@@ -86,7 +86,7 @@ ColorAttachmentFlags :: distinct bit_set[ColorAttachmentInfoFlagBits;u8]
 RenderTargetUsage :: enum u8 {
 	Undefined,
 	SampledImage,
-	ColorAttachment,
+	Attachment,
 }
 
 //---------------------------------------------------------------------------//
@@ -109,17 +109,9 @@ RenderTarget :: struct {
 
 //---------------------------------------------------------------------------//
 
-DepthAttachmentFlagBits :: enum u8 {
-	IsBeingSampled,
-}
-
-DepthAttachmentFlags :: distinct bit_set[DepthAttachmentFlagBits;u8]
-
-//---------------------------------------------------------------------------//
-
 DepthAttachment :: struct {
 	image: ImageRef,
-	flags: DepthAttachmentFlags,
+	usage: RenderTargetUsage,
 }
 
 //---------------------------------------------------------------------------//
@@ -153,16 +145,6 @@ create_render_pass :: proc(p_render_pass_desc: RenderPassDesc) -> RenderPassRef 
 	idx := get_ref_idx(ref)
 	render_pass := &G_RENDER_PASS_REF_ARRAY.resource_array[idx]
 	render_pass.desc = p_render_pass_desc
-
-	render_pass.desc.render_target_infos = make(
-		[]RenderTargetInfo,
-		len(p_render_pass_desc.render_target_infos),
-		G_RENDERER_ALLOCATORS.resource_allocator,
-	)
-
-	for rt_info, i in p_render_pass_desc.render_target_infos {
-		render_pass.desc.render_target_infos[i] = rt_info
-	}
 
 	if backend_create_render_pass(p_render_pass_desc, render_pass) == false {
 		free_ref(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, ref)

@@ -1,6 +1,5 @@
 package renderer
 
-import "core:fmt"
 import "core:math/linalg/glsl"
 import "core:mem"
 import "core:log"
@@ -54,13 +53,13 @@ vertex_attributes_descriptions := []vk.VertexInputAttributeDescription{
 		offset = u32(offset_of(Vertex, position)),
 	},
 	{
-		binding = 0,
+		binding = 1,
 		location = 1,
 		format = .R32G32B32_SFLOAT,
 		offset = u32(offset_of(Vertex, color)),
 	},
 	{
-		binding = 0,
+		binding = 2,
 		location = 2,
 		format = .R32G32_SFLOAT,
 		offset = u32(offset_of(Vertex, uv)),
@@ -86,7 +85,7 @@ init_vt :: proc() -> bool {
 		using G_VT
 
 		start_time = time.now()
-		
+
 		// Create depth buffer
 		{
 			depth_buffer_desc := ImageDesc {
@@ -95,11 +94,7 @@ init_vt :: proc() -> bool {
 				mip_count = 1,
 				data_per_mip = nil,
 				sample_count_flags = {._1},
-				dimensions = {
-					swap_extent.width,
-					swap_extent.height,
-					1,
-				},
+				dimensions = {swap_extent.width, swap_extent.height, 1},
 			}
 
 
@@ -115,22 +110,17 @@ init_vt :: proc() -> bool {
 
 		render_target_bindings = make(
 			[]RenderTargetBinding,
-			u32(len(swap_image_render_targets)),
+			1,
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
 
-		for _, i in swap_image_render_targets {
-			render_target_bindings[i] = {
-				name   = common.create_name("Color"),
-				target = &swap_image_render_targets[i],
-			}
-		}
+		render_target_bindings[0].name = common.create_name("Color")
 
 		// Create render pass
 		{
 			vertex_shader_ref := find_shader_by_name(common.create_name("base.vert"))
 			fragment_shader_ref := find_shader_by_name(common.create_name("base.frag"))
-	
+
 			swap_image_format := get_image(G_RENDERER.swap_image_refs[0]).desc.format
 
 			render_pass_desc := RenderPassDesc {
@@ -142,12 +132,20 @@ init_vt :: proc() -> bool {
 				rasterizer_type = .Fill,
 				multisampling_type = ._1,
 				depth_stencil_type = .DepthTestWrite,
-				render_target_infos = {
-					{name = common.create_name("Color"), format = swap_image_format},
-				},
 				render_target_blend_types = {.Default},
 				depth_format = get_image(depth_buffer_ref).desc.format,
 				resolution = .Full,
+			}
+
+			render_pass_desc.render_target_infos = make(
+				[]RenderTargetInfo,
+				1,
+				G_RENDERER_ALLOCATORS.resource_allocator,
+			)
+
+			render_pass_desc.render_target_infos[0] = {
+				name = common.create_name("Color"), 
+				format = swap_image_format,
 			}
 
 			render_pass_ref = create_render_pass(render_pass_desc)
@@ -183,12 +181,15 @@ deinit_vt :: proc() {
 
 vt_update :: proc(
 	p_frame_idx: u32,
+	p_image_idx: u32,
 	p_cmd_buff_ref: CommandBufferRef,
 	p_cmd_buff: ^CommandBufferResource,
 ) {
 	using G_VT
 
 	vt_update_uniform_buffer()
+
+	render_target_bindings[0].target = &G_RENDERER.swap_image_render_targets[p_image_idx]
 
 	begin_info := RenderPassBeginInfo {
 		depth_attachment        = &depth_buffer_attachment,
@@ -225,7 +226,7 @@ vt_create_vertex_buffer :: proc() {
 	using G_RENDERER
 	using G_VT
 
-	buff_size := vk.DeviceSize(len(g_vertices) * size_of(Vertex))
+	buff_size := vk.DeviceSize(len(g_vertices) * size_of(MeshVertexLayout))
 	vertex_buffer, vertex_buffer_allocation = vt_create_buffer(
 		buff_size,
 		{.VERTEX_BUFFER, .TRANSFER_DST},
@@ -741,7 +742,6 @@ vt_load_model :: proc() {
 	import_ctx: ImportContext
 
 	vt_assimp_load_node(scene, scene.mRootNode, &import_ctx)
-	fmt.println(import_ctx.curr_idx)
 }
 
 ImportContext :: struct {

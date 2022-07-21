@@ -4,13 +4,20 @@ package renderer
 
 import "../common"
 import c "core:c"
+import "core:math/linalg/glsl"
+
+//---------------------------------------------------------------------------//
+
+MeshVertexLayout :: struct
+{
+	position: glsl.vec3,
+	color: glsl.vec3,
+	uv: glsl.vec2,
+}
 
 //---------------------------------------------------------------------------//
 
 VertexLayout :: enum {
-	// position
-	// normal
-	// uv
 	Mesh,
 }
 
@@ -107,6 +114,7 @@ create_graphics_pipeline :: proc(p_pipeline_desc: PipelineDesc) -> PipelineRef {
 	)
 	idx := get_ref_idx(ref)
 	pipeline := &G_PIPELINE_REF_ARRAY.resource_array[idx]
+	pipeline.desc = p_pipeline_desc
 
 	res := backend_create_graphics_pipeline(p_pipeline_desc, pipeline)
 

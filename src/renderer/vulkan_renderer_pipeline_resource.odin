@@ -7,7 +7,7 @@ when USE_VULKAN_BACKEND {
 	import vk "vendor:vulkan"
 	import os "core:os"
 	import log "core:log"
-	import "core:math/linalg/glsl"
+	// import "core:math/linalg/glsl"
 
 	//---------------------------------------------------------------------------//
 
@@ -20,9 +20,10 @@ when USE_VULKAN_BACKEND {
 	@(private = "file")
 	VERTEX_BINDINGS_PER_TYPE := map[VertexLayout][]vk.VertexInputBindingDescription {
 		.Mesh = {
-			{binding = 0, stride = size_of(glsl.vec3), inputRate = .VERTEX},
-			{binding = 1, stride = size_of(glsl.vec3), inputRate = .VERTEX},
-			{binding = 2, stride = size_of(glsl.vec2), inputRate = .VERTEX},
+			// {binding = 0, stride = size_of(glsl.vec3), inputRate = .VERTEX},
+			// {binding = 1, stride = size_of(glsl.vec3), inputRate = .VERTEX},
+			// {binding = 2, stride = size_of(glsl.vec2), inputRate = .VERTEX},
+			{binding = 0, stride = size_of(MeshVertexLayout), inputRate = .VERTEX},
 		},
 	}
 
@@ -31,9 +32,12 @@ when USE_VULKAN_BACKEND {
 	@(private = "file")
 	VERTEX_ATTRIBUTES_PER_TYPE := map[VertexLayout][]vk.VertexInputAttributeDescription {
 		.Mesh = {
-			{binding = 0, location = 0, format = .R32G32B32_SFLOAT, offset = 0},
-			{binding = 1, location = 1, format = .R32G32B32_SFLOAT, offset = 0},
-			{binding = 2, location = 2, format = .R32G32_SFLOAT, offset = 0},
+			// {binding = 0, location = 0, format = .R32G32B32_SFLOAT, offset = 0},
+			// {binding = 1, location = 1, format = .R32G32B32_SFLOAT, offset = 0},
+			// {binding = 2, location = 2, format = .R32G32_SFLOAT, offset = 0},
+			{binding = 0, location = 0, format = .R32G32B32_SFLOAT, offset = u32(offset_of(MeshVertexLayout, position))},
+			{binding = 0, location = 1, format = .R32G32B32_SFLOAT, offset = u32(offset_of(MeshVertexLayout, color))},
+			{binding = 0, location = 2, format = .R32G32_SFLOAT, offset = u32(offset_of(MeshVertexLayout, uv))},
 		},
 	}
 

@@ -13,8 +13,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	INTERNAL: struct {
-	}
+	INTERNAL: struct {}
 
 	@(private)
 	BackendRenderPassResource :: struct {}
@@ -31,12 +30,10 @@ when USE_VULKAN_BACKEND {
 		p_render_pass: ^RenderPassResource,
 	) -> bool {
 
-		defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
-
 		render_target_formats := make(
 			[]ImageFormat,
 			len(p_render_pass_desc.render_target_infos),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
 
 		for render_target_info, i in p_render_pass_desc.render_target_infos {
@@ -118,15 +115,15 @@ when USE_VULKAN_BACKEND {
 				attachment_image := get_image(render_target_binding.target.image_ref)
 
 				// Transition image to the .ATTACHMENT_OPTIMAL format if it's not already in one
-				if render_target_binding.target.current_usage != .ColorAttachment {
+				if render_target_binding.target.current_usage != .Attachment {
 
 					old_layout := vk.ImageLayout.UNDEFINED
 
 					if (.SwapImage in attachment_image.desc.flags) == false {
 						#partial switch render_target_binding.target.current_usage {
-							case .SampledImage:
-								old_layout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL
-							}		
+						case .SampledImage:
+							old_layout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL
+						}
 					}
 
 					render_target_barriers[num_render_target_barriers] = vk.ImageMemoryBarrier {
@@ -139,12 +136,12 @@ when USE_VULKAN_BACKEND {
 							aspectMask = {.COLOR},
 							baseArrayLayer = 0,
 							layerCount = 1,
-							baseMipLevel = u32(render_target_binding.target.image_mip),
+							baseMipLevel = u32(max(render_target_binding.target.image_mip, 0)),
 							levelCount = 1,
 						},
 					}
 
-					render_target_binding.target.current_usage = .ColorAttachment
+					render_target_binding.target.current_usage = .Attachment
 					num_render_target_barriers += 1
 				}
 
@@ -156,7 +153,9 @@ when USE_VULKAN_BACKEND {
 				color_attachments[render_target_index] = {
 					sType = .RENDERING_ATTACHMENT_INFO,
 					pNext = nil,
-					clearValue = {color = {float32 = cast([4]f32)render_target_binding.target.clear_value}},
+					clearValue = {
+						color = {float32 = cast([4]f32)render_target_binding.target.clear_value},
+					},
 					imageLayout = .ATTACHMENT_OPTIMAL,
 					imageView = image_view,
 					loadOp = .CLEAR if .Clear in render_target_binding.target.flags else .DONT_CARE,
@@ -181,7 +180,7 @@ when USE_VULKAN_BACKEND {
 			)
 
 			// Depth attachment 
-			depth_attachment := vk.RenderingAttachmentInfo {
+			depth_attachment = vk.RenderingAttachmentInfo {
 				sType = .RENDERING_ATTACHMENT_INFO,
 				pNext = nil,
 				clearValue = {depthStencil = {depth = 1, stencil = 0}},
@@ -191,18 +190,25 @@ when USE_VULKAN_BACKEND {
 				storeOp = .DONT_CARE,
 			}
 
-			// Check if the depth image was sampled before and thus requires a barrier and issue one if so
-			if .IsBeingSampled in p_begin_info.depth_attachment.flags {
-				p_begin_info.depth_attachment.flags -= {.IsBeingSampled}
+			// Check if the depth image requires any barriers
+			if p_begin_info.depth_attachment.usage == .Undefined || p_begin_info.depth_attachment.usage ==
+			   .SampledImage {
 
-				depth_image := get_image(p_begin_info.depth_attachment.image)
-
-				old_depth_layout := vk.ImageLayout.DEPTH_READ_ONLY_OPTIMAL
+				old_depth_layout := vk.ImageLayout.UNDEFINED
 				new_depth_layout := vk.ImageLayout.DEPTH_ATTACHMENT_OPTIMAL
 
-				if depth_image.desc.format > .DepthStencilFormatsStart && depth_image.desc.format < .DepthStencilFormatsEnd {
-					old_depth_layout = .DEPTH_STENCIL_READ_ONLY_OPTIMAL
-					new_depth_layout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+				has_stencil_component := 
+					depth_image.desc.format > .DepthStencilFormatsStart && 
+					depth_image.desc.format < .DepthStencilFormatsEnd
+					
+				if p_begin_info.depth_attachment.usage == .SampledImage {
+
+					old_depth_layout = .DEPTH_READ_ONLY_OPTIMAL
+
+					if has_stencil_component {
+						old_depth_layout = .DEPTH_STENCIL_READ_ONLY_OPTIMAL
+						new_depth_layout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+					}
 				}
 
 				depth_attachment_barrier := vk.ImageMemoryBarrier {
@@ -213,12 +219,16 @@ when USE_VULKAN_BACKEND {
 					newLayout = new_depth_layout,
 					image = depth_image.vk_image,
 					subresourceRange = {
-						aspectMask = {.COLOR},
+						aspectMask = {.DEPTH},
 						baseArrayLayer = 0,
 						layerCount = 1,
 						baseMipLevel = 0,
 						levelCount = 1,
 					},
+				}
+
+				if has_stencil_component {
+					depth_attachment_barrier.subresourceRange.aspectMask += {.STENCIL}
 				}
 
 				vk.CmdPipelineBarrier(
@@ -233,8 +243,11 @@ when USE_VULKAN_BACKEND {
 					1,
 					&depth_attachment_barrier,
 				)
+
+				p_begin_info.depth_attachment.usage = .Attachment
 			}
 		}
+
 
 		// Insert the attachment barriers
 		if len(render_target_barriers) > 0 {
