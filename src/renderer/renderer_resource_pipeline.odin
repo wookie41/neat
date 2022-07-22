@@ -3,6 +3,7 @@ package renderer
 //---------------------------------------------------------------------------//
 
 import "../common"
+import "core:log"
 import c "core:c"
 import "core:math/linalg/glsl"
 
@@ -119,6 +120,7 @@ create_graphics_pipeline :: proc(p_pipeline_desc: PipelineDesc) -> PipelineRef {
 	res := backend_create_graphics_pipeline(p_pipeline_desc, pipeline)
 
 	if res == false {
+		log.warn("Failed to create pipeline")
 		free_ref(PipelineResource, &G_PIPELINE_REF_ARRAY, ref)
 		return InvalidPipelineRef
 	}

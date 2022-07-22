@@ -194,29 +194,11 @@ when USE_VULKAN_BACKEND {
 			if p_begin_info.depth_attachment.usage == .Undefined || p_begin_info.depth_attachment.usage ==
 			   .SampledImage {
 
-				old_depth_layout := vk.ImageLayout.UNDEFINED
-				new_depth_layout := vk.ImageLayout.DEPTH_ATTACHMENT_OPTIMAL
-
-				has_stencil_component := 
-					depth_image.desc.format > .DepthStencilFormatsStart && 
-					depth_image.desc.format < .DepthStencilFormatsEnd
-					
-				if p_begin_info.depth_attachment.usage == .SampledImage {
-
-					old_depth_layout = .DEPTH_READ_ONLY_OPTIMAL
-
-					if has_stencil_component {
-						old_depth_layout = .DEPTH_STENCIL_READ_ONLY_OPTIMAL
-						new_depth_layout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-					}
-				}
-
 				depth_attachment_barrier := vk.ImageMemoryBarrier {
 					sType = .IMAGE_MEMORY_BARRIER,
-					srcAccessMask = {.SHADER_READ},
 					dstAccessMask = {.DEPTH_STENCIL_ATTACHMENT_READ, .DEPTH_STENCIL_ATTACHMENT_WRITE},
-					oldLayout = old_depth_layout,
-					newLayout = new_depth_layout,
+					oldLayout = .UNDEFINED,
+					newLayout = .DEPTH_ATTACHMENT_OPTIMAL,
 					image = depth_image.vk_image,
 					subresourceRange = {
 						aspectMask = {.DEPTH},
@@ -227,13 +209,28 @@ when USE_VULKAN_BACKEND {
 					},
 				}
 
+				has_stencil_component := 
+					depth_image.desc.format > .DepthStencilFormatsStart && 
+					depth_image.desc.format < .DepthStencilFormatsEnd
+					
+				if p_begin_info.depth_attachment.usage == .SampledImage {
+
+					depth_attachment_barrier.srcAccessMask += {.SHADER_READ}
+					depth_attachment_barrier.oldLayout = .DEPTH_READ_ONLY_OPTIMAL
+
+					if has_stencil_component {
+						depth_attachment_barrier.oldLayout = .DEPTH_STENCIL_READ_ONLY_OPTIMAL
+						depth_attachment_barrier.newLayout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+					}
+				}
+
 				if has_stencil_component {
 					depth_attachment_barrier.subresourceRange.aspectMask += {.STENCIL}
 				}
 
 				vk.CmdPipelineBarrier(
 					cmd_buff.vk_cmd_buff,
-					{.BOTTOM_OF_PIPE},
+					{.TOP_OF_PIPE},
 					{.EARLY_FRAGMENT_TESTS},
 					{},
 					0,

@@ -504,7 +504,7 @@ backend_update :: proc(p_dt: f32) {
 	acquire_result := vk.AcquireNextImageKHR(
 		G_RENDERER.device,
 		G_RENDERER.swapchain,
-		max(u64),
+		c.UINT64_MAX,
 		G_RENDERER.image_available_semaphores[frame_idx],
 		0,
 		&swap_image_index,
@@ -534,7 +534,7 @@ backend_update :: proc(p_dt: f32) {
 	cmd_buff := get_command_buffer(cmd_buff_ref)
 
 	begin_command_buffer(cmd_buff_ref)
-
+	
 	vt_update(frame_idx, swap_image_index, cmd_buff_ref, cmd_buff)
 	
 	// Transition the swapchain to present 
