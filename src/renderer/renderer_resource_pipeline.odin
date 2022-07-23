@@ -131,13 +131,17 @@ create_graphics_pipeline :: proc(p_pipeline_desc: PipelineDesc) -> PipelineRef {
 //---------------------------------------------------------------------------//
 
 get_pipeline :: proc(p_ref: PipelineRef) -> ^PipelineResource {
-	idx := get_ref_idx(p_ref)
-	assert(idx < u32(len(G_PIPELINE_REF_ARRAY.resource_array)))
+	return get_resource(PipelineResource, &G_PIPELINE_REF_ARRAY, p_ref)
+}
 
-	gen := get_ref_generation(p_ref)
-	assert(gen == G_PIPELINE_REF_ARRAY.generations[idx])
+//---------------------------------------------------------------------------//
 
-	return &G_PIPELINE_REF_ARRAY.resource_array[idx]
+destroy_pipeline :: proc(p_ref: PipelineRef) {
+	pipeline := get_pipeline(p_ref)
+	delete(pipeline.desc.render_target_formats)
+	delete(pipeline.desc.render_target_blend_types)
+	backend_destroy_pipeline(pipeline)
+	free_ref(PipelineResource, &G_PIPELINE_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//

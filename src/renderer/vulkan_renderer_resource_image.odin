@@ -359,14 +359,15 @@ when USE_VULKAN_BACKEND {
 			image = p_depth_image.vk_image,
 			viewType = .D2,
 			format = G_IMAGE_FORMAT_MAPPING[p_depth_buffer_desc.format],
-			subresourceRange = {
-				aspectMask = {.DEPTH}, 
-				levelCount = 1, 
-				layerCount = 1,
-			},
+			subresourceRange = {aspectMask = {.DEPTH}, levelCount = 1, layerCount = 1},
 		}
 
-		if vk.CreateImageView(G_RENDERER.device, &view_create_info, nil, &p_depth_image.all_mips_vk_view) != .SUCCESS {
+		if vk.CreateImageView(
+			   G_RENDERER.device,
+			   &view_create_info,
+			   nil,
+			   &p_depth_image.all_mips_vk_view,
+		   ) != .SUCCESS {
 			log.warn("Failed to create image view")
 			return false
 		}
@@ -374,6 +375,17 @@ when USE_VULKAN_BACKEND {
 		return true
 	}
 
-}
+	//---------------------------------------------------------------------------//
 
-//---------------------------------------------------------------------------//
+	backend_destroy_image :: proc(p_image: ^ImageResource) {
+		vk.DestroyImageView(G_RENDERER.device, p_image.all_mips_vk_view, nil)
+		for image_view in p_image.per_mip_vk_view {
+			vk.DestroyImageView(G_RENDERER.device, image_view, nil)
+		}
+		vma.destroy_image(G_RENDERER.vma_allocator, p_image.vk_image, nil)
+		delete(p_image.per_mip_vk_view)
+	}
+
+	//---------------------------------------------------------------------------//
+
+}

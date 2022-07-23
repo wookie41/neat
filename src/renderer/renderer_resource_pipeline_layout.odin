@@ -79,13 +79,14 @@ create_graphics_pipeline_layout :: proc(
 //---------------------------------------------------------------------------//
 
 get_pipeline_layout :: proc(p_ref: PipelineLayoutRef) -> ^PipelineLayoutResource {
-	idx := get_ref_idx(p_ref)
-	assert(idx < u32(len(G_PIPELINE_LAYOUT_REF_ARRAY.resource_array)))
+	return get_resource(PipelineLayoutResource, &G_PIPELINE_LAYOUT_REF_ARRAY, p_ref)
+}
 
-	gen := get_ref_generation(p_ref)
-	assert(gen == G_PIPELINE_LAYOUT_REF_ARRAY.generations[idx])
+//---------------------------------------------------------------------------//
 
-	return &G_PIPELINE_LAYOUT_REF_ARRAY.resource_array[idx]
+destroy_pipeline_layout :: proc(p_ref: PipelineLayoutRef) {
+	free_ref(PipelineLayoutResource, &G_PIPELINE_LAYOUT_REF_ARRAY, p_ref)
+	backend_destroy_pipeline_layout(p_ref)
 }
 
 //---------------------------------------------------------------------------//

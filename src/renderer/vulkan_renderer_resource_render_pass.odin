@@ -68,6 +68,13 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//	
 
 	@(private)
+	backend_destroy_render_pass :: proc(p_render_pass: ^RenderPassResource) {
+		// nothing to do
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
 	backend_begin_render_pass :: proc(
 		p_render_pass_ref: RenderPassRef,
 		p_cmd_buff_ref: CommandBufferRef,
@@ -75,7 +82,6 @@ when USE_VULKAN_BACKEND {
 	) {
 		render_pass := get_render_pass(p_render_pass_ref)
 		assert((.IsActive in render_pass.flags) == false)
-		defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
 
 		render_pass.flags += {.IsActive}
 
@@ -84,6 +90,7 @@ when USE_VULKAN_BACKEND {
 			len(render_pass.desc.render_target_infos),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
+		defer delete(color_attachments, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		num_render_target_barriers := 0
 		render_target_barriers := make(
@@ -91,6 +98,7 @@ when USE_VULKAN_BACKEND {
 			len(render_pass.desc.render_target_infos),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
+		defer delete(render_target_barriers, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		// Check compability of render targets, build the Vulkan color attachments and prepare barrier
 		{
@@ -209,10 +217,9 @@ when USE_VULKAN_BACKEND {
 					},
 				}
 
-				has_stencil_component := 
-					depth_image.desc.format > .DepthStencilFormatsStart && 
-					depth_image.desc.format < .DepthStencilFormatsEnd
-					
+				has_stencil_component := depth_image.desc.format > .DepthStencilFormatsStart && depth_image.desc.format <
+                             .DepthStencilFormatsEnd
+
 				if p_begin_info.depth_attachment.usage == .SampledImage {
 
 					depth_attachment_barrier.srcAccessMask += {.SHADER_READ}

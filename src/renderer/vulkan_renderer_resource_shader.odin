@@ -30,16 +30,18 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	BackendShaderResource :: struct {
-		desc_bindings: []VulkanShaderBinding,
-		shader_module: vk.ShaderModule,
+		vk_bindings: []VulkanShaderBinding,
+		vk_module:   vk.ShaderModule,
 	}
 
 	//---------------------------------------------------------------------------//
 
-	backend_compile_shader :: proc(p_shader_entry: ShaderJSONEntry, p_ref: ShaderRef) -> (
-		shader_resource: ShaderResource,
-		compile_result: bool,
-	) {
+	backend_compile_shader :: proc(
+		p_shader_entry: ShaderJSONEntry,
+		p_ref: ShaderRef,
+		shader_resource: ^ShaderResource,
+	) -> (compile_result: bool) {
+
 		// Determine shader type
 		shader_type: ShaderType
 		compile_target: string
@@ -55,7 +57,7 @@ when USE_VULKAN_BACKEND {
 
 		} else {
 			log.warnf("Unknown shader type %s...", p_shader_entry.name)
-			return {}, false
+			return false
 		}
 
 		shader_src_path := fmt.aprintf(
@@ -66,10 +68,6 @@ when USE_VULKAN_BACKEND {
 			"app_data/renderer/assets/shaders/bin/%s.sprv",
 			p_shader_entry.name,
 		)
-
-		shader_resource = ShaderResource {
-			type = shader_type,
-		}
 
 		// Compile the shader
 		{
@@ -86,7 +84,7 @@ when USE_VULKAN_BACKEND {
 
 			if res := libc.system(strings.clone_to_cstring(compile_cmd)); res != 0 {
 				log.warnf("Failed to compile shader %s: error code %d", p_shader_entry.name, res)
-				return {}, false
+				return false
 			}
 		}
 
@@ -98,7 +96,7 @@ when USE_VULKAN_BACKEND {
 			reflect_data, ok := os.read_entire_file(shader_bin_path)
 			if ok == false {
 				log.warnf("Failed to read reflection data for shader %s", p_shader_entry.name)
-				return {}, false
+				return false
 			}
 
 			shader_module: spirv_reflect.ShaderModule
@@ -112,7 +110,7 @@ when USE_VULKAN_BACKEND {
 					p_shader_entry.name,
 					res,
 				)
-				return {}, false
+				return false
 			}
 
 			// @TODO remove when https://github.com/microsoft/DirectXShaderCompiler/issues/4496 is fixed
@@ -123,15 +121,26 @@ when USE_VULKAN_BACKEND {
 			)
 
 			if res := libc.system(strings.clone_to_cstring(strip_reflect_info_cmd)); res != 0 {
-				log.warnf("Failed to strip reflection info %s: error code %d", p_shader_entry.name, res)
-				return {}, false
+				log.warnf(
+					"Failed to strip reflection info %s: error code %d",
+					p_shader_entry.name,
+					res,
+				)
+				return false
 			}
 
 			defer spirv_reflect.destroy_shader_module(&shader_module)
 
 			num_descriptor_sets: u32 = 0
 			spirv_reflect.enumerate_descriptor_sets(&shader_module, &num_descriptor_sets, nil)
-			descriptor_sets := make([]^spirv_reflect.DescriptorSet, num_descriptor_sets)
+
+			descriptor_sets := make(
+				[]^spirv_reflect.DescriptorSet,
+				num_descriptor_sets,
+				G_RENDERER_ALLOCATORS.temp_allocator,
+			)
+			defer delete(descriptor_sets)
+
 			spirv_reflect.enumerate_descriptor_sets(
 				&shader_module,
 				&num_descriptor_sets,
@@ -144,14 +153,14 @@ when USE_VULKAN_BACKEND {
 				for i in 0 ..< num_descriptor_sets {
 					total_bindings += descriptor_sets[i].binding_count
 				}
-				shader_resource.desc_bindings = make(
+				shader_resource.vk_bindings = make(
 					[]VulkanShaderBinding,
 					total_bindings,
 					G_RENDERER_ALLOCATORS.resource_allocator,
 				)
 
 				defer if compile_result == false {
-					delete(shader_resource.desc_bindings)
+					delete(shader_resource.vk_bindings)
 				}
 			}
 
@@ -162,7 +171,7 @@ when USE_VULKAN_BACKEND {
 					des_set := descriptor_sets[i]
 					for j in 0 ..< des_set.binding_count {
 						des_binding := des_set.bindings[j]
-						shader_binding := &shader_resource.desc_bindings[curr_binding]
+						shader_binding := &shader_resource.vk_bindings[curr_binding]
 
 						shader_binding.binding = des_binding.binding
 						shader_binding.name = common.create_name(string(des_binding.name))
@@ -199,7 +208,7 @@ when USE_VULKAN_BACKEND {
 
 				when ODIN_DEBUG {
 					defer if compile_result == false {
-						for binding in shader_resource.desc_bindings {
+						for binding in shader_resource.vk_bindings {
 							delete(binding.name.name)
 						}
 					}
@@ -212,7 +221,7 @@ when USE_VULKAN_BACKEND {
 			shader_code, ok := os.read_entire_file(shader_bin_path)
 			if ok == false {
 				log.warnf("Failed to read shader code for shader %s", p_shader_entry.name)
-				return {}, false
+				return false
 			}
 			module_create_info := vk.ShaderModuleCreateInfo {
 				sType    = .SHADER_MODULE_CREATE_INFO,
@@ -223,19 +232,28 @@ when USE_VULKAN_BACKEND {
 				   G_RENDERER.device,
 				   &module_create_info,
 				   nil,
-				   &shader_resource.shader_module,
+				   &shader_resource.vk_module,
 			   ); create_res != .SUCCESS {
 				log.warnf(
 					"Failed to create module for shader %s: %s",
 					p_shader_entry.name,
 					create_res,
 				)
-				return {}, false
+				return false
 			}
 		}
 
-		return shader_resource, true
+		return true
 	}
 
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_destroy_shader :: proc(p_ref: ShaderRef) {
+		shader := get_shader(p_ref)
+		delete(shader.vk_bindings)
+		vk.DestroyShaderModule(G_RENDERER.device, shader.vk_module, nil)
+	}
+	
 	//---------------------------------------------------------------------------//
 }

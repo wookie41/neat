@@ -149,6 +149,7 @@ free_ref_aos :: proc($R: typeid, p_ref_array: ^RefArray(R), p_ref: Ref(R)) {
 	p_ref_array.generations[p_ref_array.num_free_indices] = get_ref_generation(p_ref)
 	p_ref_array.num_free_indices += 1
 	p_ref_array.names[get_ref_idx(p_ref)] = 0
+	common.destroy_name(p_ref.name)
 }
 
 //---------------------------------------------------------------------------//
@@ -160,9 +161,38 @@ free_ref_soa :: proc($R :typeid, p_ref_array: ^RefArraySOA(R), p_ref: Ref(R)) {
 	p_ref_array.generations[p_ref_array.num_free_indices] = get_ref_generation(p_ref)
 	p_ref_array.num_free_indices += 1
 	p_ref_array.names[get_ref_idx(p_ref)] = 0
+	common.destroy_name(p_ref.name)
 }
 
 //---------------------------------------------------------------------------//
+
+@(private="file")
+get_resource_aos :: proc($R: typeid, p_ref_array: ^RefArray(R), p_ref: Ref(R)) -> ^R {
+	idx := get_ref_idx(p_ref)
+	assert(idx < p_ref_array.next_idx)
+
+	gen := get_ref_generation(p_ref)
+	assert(gen == p_ref_array.generations[idx])
+
+	return &p_ref_array.resource_array[idx]
+}
+
+
+//---------------------------------------------------------------------------//
+
+@(private="file")
+get_resource_soa :: proc($R: typeid, p_ref_array: ^RefArraySOA(R), p_ref: Ref(R)) -> ^R {
+	idx := get_ref_idx(p_ref)
+	assert(idx < p_ref_array.next_idx)
+
+	gen := get_ref_generation(p_ref)
+	assert(gen == p_ref_array.generations[idx])
+
+	return &p_ref_array.resource_array[idx]
+}
+
+//---------------------------------------------------------------------------//
+
 
 @(private = "file")
 find_ref_by_name_aos :: proc($R: typeid, p_ref_array: ^RefArray(R), p_name: common.Name) -> Ref(R) {
@@ -198,6 +228,7 @@ create_ref :: proc {
 	create_ref_aos,
 	create_ref_soa,
 }
+
 free_ref :: proc {
 	free_ref_aos,
 	free_ref_soa,
@@ -205,6 +236,11 @@ free_ref :: proc {
 find_ref_by_name :: proc {
 	find_ref_by_name_aos,
 	find_ref_by_name_soa,
+}
+
+get_resource :: proc {
+	get_resource_aos,
+	get_resource_soa,
 }
 
 //---------------------------------------------------------------------------//

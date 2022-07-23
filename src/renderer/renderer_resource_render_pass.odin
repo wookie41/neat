@@ -157,13 +157,17 @@ create_render_pass :: proc(p_render_pass_desc: RenderPassDesc) -> RenderPassRef 
 //---------------------------------------------------------------------------//
 
 get_render_pass :: proc(p_ref: RenderPassRef) -> ^RenderPassResource {
-	idx := get_ref_idx(p_ref)
-	assert(idx < u32(len(G_RENDER_PASS_REF_ARRAY.resource_array)))
+	return get_resource(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_ref)
+}
 
-	gen := get_ref_generation(p_ref)
-	assert(gen == G_RENDER_PASS_REF_ARRAY.generations[idx])
+//---------------------------------------------------------------------------//
 
-	return &G_RENDER_PASS_REF_ARRAY.resource_array[idx]
+destroy_render_pass :: proc(p_ref: RenderPassRef) {
+	render_pass := get_render_pass(p_ref)
+	delete(render_pass.desc.render_target_infos)
+	delete(render_pass.desc.render_target_blend_types)
+	backend_destroy_render_pass(render_pass)
+	free_ref(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_ref)
 }
 
 @(private)

@@ -187,7 +187,7 @@ vt_update :: proc(
 ) {
 	using G_VT
 
-	// vt_update_uniform_buffer()
+	vt_update_uniform_buffer()
 
 	render_target_bindings[0].target = &G_RENDERER.swap_image_render_targets[p_image_idx]
 
@@ -198,25 +198,25 @@ vt_update :: proc(
 
 	begin_render_pass(render_pass_ref, p_cmd_buff_ref, &begin_info)
 	{
-		// render_pass := get_render_pass(render_pass_ref)
-		// pipeline := get_pipeline(render_pass.pipeline)
+		render_pass := get_render_pass(render_pass_ref)
+		pipeline := get_pipeline(render_pass.pipeline)
 
-		// vk.CmdBindDescriptorSets(
-		// 	p_cmd_buff.vk_cmd_buff,
-		// 	.GRAPHICS,
-		// 	get_pipeline_layout(pipeline.pipeline_layout).vk_pipeline_layout,
-		// 	0,
-		// 	1,
-		// 	&descriptor_sets[p_frame_idx],
-		// 	0,
-		// 	nil,
-		// )
+		vk.CmdBindDescriptorSets(
+			p_cmd_buff.vk_cmd_buff,
+			.GRAPHICS,
+			get_pipeline_layout(pipeline.pipeline_layout).vk_pipeline_layout,
+			0,
+			1,
+			&descriptor_sets[p_frame_idx],
+			0,
+			nil,
+		)
 
-		// offset := vk.DeviceSize{}
+		offset := vk.DeviceSize{}
 
-		// vk.CmdBindVertexBuffers(p_cmd_buff.vk_cmd_buff, 0, 1, &vertex_buffer, &offset)
-		// vk.CmdBindIndexBuffer(p_cmd_buff.vk_cmd_buff, index_buffer, offset, .UINT32)
-		// vk.CmdDrawIndexed(p_cmd_buff.vk_cmd_buff, u32(len(g_indices)), 1, 0, 0, 0)
+		vk.CmdBindVertexBuffers(p_cmd_buff.vk_cmd_buff, 0, 1, &vertex_buffer, &offset)
+		vk.CmdBindIndexBuffer(p_cmd_buff.vk_cmd_buff, index_buffer, offset, .UINT32)
+		vk.CmdDrawIndexed(p_cmd_buff.vk_cmd_buff, u32(len(g_indices)), 1, 0, 0, 0)
 		// vk.CmdDraw(cmd, u32(len(g_vertices)), 1, 0, 0)
 	}
 	end_render_pass(render_pass_ref, p_cmd_buff_ref)

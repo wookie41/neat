@@ -21,8 +21,8 @@ ShaderJSONEntry :: struct {
 
 @(private)
 ShaderResource :: struct {
-	type:                   ShaderType,
 	using backend_resource: BackendShaderResource,
+	type:                   ShaderType,
 }
 
 //---------------------------------------------------------------------------//
@@ -97,12 +97,10 @@ load_shaders :: proc() -> bool {
 
 		name := common.create_name(entry.name)
 		ref := ShaderRef(create_ref(ShaderResource, &G_SHADER_REF_ARRAY, name))
-		shader_resource, ok := backend_compile_shader(entry, ref)
-		if ok == false {
+		shader_resource := &G_SHADER_REF_ARRAY.resource_array[get_ref_idx(ref)]
+		if backend_compile_shader(entry, ref, shader_resource) == false {
 			continue
-		}
-
-		G_SHADER_REF_ARRAY.resource_array[get_ref_idx(ref)] = shader_resource
+		} 
 	}
 
 	return true
@@ -110,24 +108,24 @@ load_shaders :: proc() -> bool {
 //---------------------------------------------------------------------------//
 
 get_shader :: proc(p_ref: ShaderRef) -> ^ShaderResource {
-	idx := get_ref_idx(p_ref)
-	assert(idx < u32(len(G_SHADER_REF_ARRAY.resource_array)))
-
-	gen := get_ref_generation(p_ref)
-	assert(gen == G_SHADER_REF_ARRAY.generations[idx])
-
-	return &G_SHADER_REF_ARRAY.resource_array[idx]
+	return get_resource(ShaderResource, &G_SHADER_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//
 
-@(private)
 find_shader_by_name :: proc(p_name: common.Name) -> ShaderRef {
 	ref := find_ref_by_name(ShaderResource, &G_SHADER_REF_ARRAY, p_name)
 	if ref == InvalidShaderRef {
 		return InvalidShaderRef
 	}
 	return ShaderRef(ref)
+}
+
+//---------------------------------------------------------------------------//
+
+destroy_shader :: proc(p_ref: ShaderRef) {
+	backend_destroy_shader(p_ref)
+	free_ref(ShaderResource, &G_SHADER_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//

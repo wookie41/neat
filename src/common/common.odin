@@ -28,6 +28,18 @@ create_name :: proc(p_name: string) -> Name {
 
 //---------------------------------------------------------------------------//
 
+when ODIN_DEBUG {
+	destroy_name :: #force_inline proc(p_name: Name) {
+		delete(p_name.name)
+	}
+} else {
+	destroy_name :: #force_inline proc(p_name: Name) {
+	}	
+}
+
+
+//---------------------------------------------------------------------------//
+
 EMPTY_NAME := create_name("")
 
 //---------------------------------------------------------------------------//

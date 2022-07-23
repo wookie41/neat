@@ -9,10 +9,8 @@ import "../common"
 
 //---------------------------------------------------------------------------//
 
-ImageResource :: struct {
-	using backend_image: BackendImageResource,
-	desc:                ImageDesc,
-}
+@(private = "file")
+G_IMAGE_REF_ARRAY: RefArray(ImageResource)
 
 //---------------------------------------------------------------------------//
 
@@ -26,12 +24,6 @@ InvalidImageRef := ImageRef {
 
 //---------------------------------------------------------------------------//
 
-
-@(private = "file")
-G_IMAGE_REF_ARRAY: RefArray(ImageResource)
-
-//---------------------------------------------------------------------------//
-
 ImageAspectFlagBits :: enum u8 {
 	Color,
 	Depth,
@@ -41,14 +33,6 @@ ImageAspectFlagBits :: enum u8 {
 //---------------------------------------------------------------------------//
 
 ImageAspectFlags :: distinct bit_set[ImageAspectFlagBits;u8]
-
-//---------------------------------------------------------------------------//
-
-@(private)
-init_images :: proc() {
-	G_IMAGE_REF_ARRAY = create_ref_array(ImageResource, MAX_IMAGES)
-	backend_init_images()
-}
 
 //---------------------------------------------------------------------------//
 
@@ -113,6 +97,21 @@ ImageDesc :: struct {
 
 //---------------------------------------------------------------------------//
 
+ImageResource :: struct {
+	using backend_image: BackendImageResource,
+	desc:                ImageDesc,
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
+init_images :: proc() {
+	G_IMAGE_REF_ARRAY = create_ref_array(ImageResource, MAX_IMAGES)
+	backend_init_images()
+}
+
+//---------------------------------------------------------------------------//
+
 allocate_image_ref :: proc(p_name: common.Name) -> ImageRef {
 	ref := ImageRef(create_ref(ImageResource, &G_IMAGE_REF_ARRAY, p_name))
 	return ref
@@ -148,13 +147,7 @@ create_depth_buffer :: proc(p_name: common.Name, p_depth_buffer_desc: ImageDesc)
 //---------------------------------------------------------------------------//
 
 get_image :: proc(p_ref: ImageRef) -> ^ImageResource {
-	idx := get_ref_idx(p_ref)
-	assert(idx < u32(len(G_IMAGE_REF_ARRAY.resource_array)))
-
-	gen := get_ref_generation(p_ref)
-	assert(gen == G_IMAGE_REF_ARRAY.generations[idx])
-
-	return &G_IMAGE_REF_ARRAY.resource_array[idx]
+	return get_resource(ImageResource, &G_IMAGE_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//
@@ -164,3 +157,9 @@ create_swap_images :: #force_inline proc() {
 }
 
 //---------------------------------------------------------------------------//
+
+destroy_image :: proc(p_ref: ImageRef) {
+	image := get_image(p_ref)
+	backend_destroy_image(image)
+	free_ref(ImageResource, &G_IMAGE_REF_ARRAY, p_ref)
+}

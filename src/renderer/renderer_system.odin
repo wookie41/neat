@@ -54,6 +54,8 @@ G_RENDERER_ALLOCATORS: struct {
 	temp_allocator:     mem.Allocator,
 	frame_arena:        mem.Arena,
 	frame_allocator:    mem.Allocator,
+	string_area:        mem.Arena,
+	string_allocator:   mem.Allocator,
 }
 
 @(private)
@@ -100,6 +102,15 @@ init :: proc(p_options: InitOptions) -> bool {
 		&G_RENDERER_ALLOCATORS.frame_arena,
 	)
 
+	// String arena
+	mem.init_arena(
+		&G_RENDERER_ALLOCATORS.string_area,
+		make([]byte, common.MEGABYTE * 8, G_RENDERER_ALLOCATORS.main_allocator),
+	)
+	G_RENDERER_ALLOCATORS.string_allocator = mem.arena_allocator(
+		&G_RENDERER_ALLOCATORS.string_area,
+	)
+
 	G_RENDERER.queued_textures_copies = make(
 		[dynamic]TextureCopy,
 		G_RENDERER_ALLOCATORS.frame_allocator,
@@ -112,9 +123,9 @@ init :: proc(p_options: InitOptions) -> bool {
 	init_pipelines()
 	init_render_passes()
 	init_buffers()
- 	init_images()
+	init_images()
 	init_command_buffers(p_options) or_return
-	
+
 	load_shaders() or_return
 	create_swap_images()
 
@@ -125,7 +136,7 @@ init :: proc(p_options: InitOptions) -> bool {
 			u32(len(G_RENDERER.swap_image_refs)),
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
-		
+
 		for swap_image_ref, i in G_RENDERER.swap_image_refs {
 			G_RENDERER.swap_image_render_targets[i] = RenderTarget {
 				clear_value = {0, 0, 0, 1},

@@ -7,6 +7,37 @@ import "../common"
 
 //---------------------------------------------------------------------------//
 
+BufferDescFlagBits :: enum u8 {
+	PreferHost,
+	HostWrite,
+	HostRead,
+	Mapped,
+	Dedicated,
+}
+BufferDescFlags :: distinct bit_set[BufferDescFlagBits;u8]
+
+//---------------------------------------------------------------------------//
+
+BufferUsageFlagBits :: enum u8 {
+	TransferSrc,
+	TransferDst,
+	UniformBuffer,
+	IndexBuffer,
+	VertexBuffer,
+	Storagebuffer,
+}
+BufferUsageFlags :: distinct bit_set[BufferUsageFlagBits;u8]
+
+//---------------------------------------------------------------------------//
+
+BufferDesc :: struct {
+	size:  u32,
+	flags: BufferDescFlags,
+	usage: BufferUsageFlags,
+}
+
+//---------------------------------------------------------------------------//
+
 BufferResource :: struct {
 	using backend_buffer: BackendBufferResource,
 	desc:                 BufferDesc,
@@ -38,37 +69,6 @@ init_buffers :: proc() {
 
 //---------------------------------------------------------------------------//
 
-BufferUsageFlagBits :: enum u8 {
-	TransferSrc,
-	TransferDst,
-	UniformBuffer,
-	IndexBuffer,
-	VertexBuffer,
-	Storagebuffer,
-}
-BufferUsageFlags :: distinct bit_set[BufferUsageFlagBits;u8]
-
-//---------------------------------------------------------------------------//
-
-BufferDescFlagBits :: enum u8 {
-	PreferHost,
-	HostWrite,
-	HostRead,
-	Mapped,
-	Dedicated,
-}
-BufferDescFlags :: distinct bit_set[BufferDescFlagBits;u8]
-
-//---------------------------------------------------------------------------//
-
-BufferDesc :: struct {
-	size:  u32,
-	flags: BufferDescFlags,
-	usage: BufferUsageFlags,
-}
-
-//---------------------------------------------------------------------------//
-
 create_buffer :: proc(p_name: common.Name, p_buffer_desc: BufferDesc) -> BufferRef {
 	ref := BufferRef(create_ref(BufferResource, &G_BUFFER_REF_ARRAY, p_name))
 	idx := get_ref_idx(ref)
@@ -87,13 +87,16 @@ create_buffer :: proc(p_name: common.Name, p_buffer_desc: BufferDesc) -> BufferR
 //---------------------------------------------------------------------------//
 
 get_buffer :: proc(p_ref: BufferRef) -> ^BufferResource {
-	idx := get_ref_idx(p_ref)
-	assert(idx < u32(len(G_BUFFER_REF_ARRAY.resource_array)))
+	return get_resource(BufferResource, &G_BUFFER_REF_ARRAY, p_ref)
+}
 
-	gen := get_ref_generation(p_ref)
-	assert(gen == G_BUFFER_REF_ARRAY.generations[idx])
+//---------------------------------------------------------------------------//
 
-	return &G_BUFFER_REF_ARRAY.resource_array[idx]
+destroy_buffer :: proc(p_ref: BufferRef) {
+	buffer := get_buffer(p_ref)
+	buffer.mapped_ptr = nil
+	backend_destroy_buffer(buffer)
+	free_ref(BufferResource, &G_BUFFER_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//

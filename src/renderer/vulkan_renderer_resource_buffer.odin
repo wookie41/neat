@@ -89,16 +89,16 @@ when USE_VULKAN_BACKEND {
 			flags = alloc_flags,
 		}
 
-		alloc_info := vma.AllocationInfo {}
+		alloc_info := vma.AllocationInfo{}
 
 		if res := vma.create_buffer(
-			G_RENDERER.vma_allocator,
-			&buffer_create_info,
-			&alloc_create_info,
-			&p_buffer.vk_buffer,
-			&p_buffer.allocation,
-			&alloc_info,
-		); res != .SUCCESS {
+			   G_RENDERER.vma_allocator,
+			   &buffer_create_info,
+			   &alloc_create_info,
+			   &p_buffer.vk_buffer,
+			   &p_buffer.allocation,
+			   &alloc_info,
+		   ); res != .SUCCESS {
 			log.warnf("Failed to create buffer %s", res)
 			return false
 		}
@@ -109,5 +109,13 @@ when USE_VULKAN_BACKEND {
 
 		return true
 	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_destroy_buffer :: proc(p_buffer: ^BufferResource) {
+		vma.destroy_buffer(G_RENDERER.vma_allocator, p_buffer.vk_buffer, p_buffer.allocation)
+	}
+
 	//---------------------------------------------------------------------------//
 }

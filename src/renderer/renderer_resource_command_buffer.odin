@@ -94,15 +94,16 @@ create_command_buffer :: #force_inline proc(
 //---------------------------------------------------------------------------//
 
 get_command_buffer :: proc(p_ref: CommandBufferRef) -> ^CommandBufferResource {
-	idx := get_ref_idx(p_ref)
-	assert(idx < u32(len(G_COMMAND_BUFFER_REF_ARRAY.resource_array)))
-
-	gen := get_ref_generation(p_ref)
-	assert(gen == G_COMMAND_BUFFER_REF_ARRAY.generations[idx])
-
-	return &G_COMMAND_BUFFER_REF_ARRAY.resource_array[idx]
+	return get_resource(CommandBufferResource, &G_COMMAND_BUFFER_REF_ARRAY, p_ref)
 }
 
+//---------------------------------------------------------------------------//
+
+destroy_command_buffer :: proc(p_ref: CommandBufferRef) {
+	cmd_buff := get_command_buffer(p_ref)
+	backend_destroy_command_buffer(cmd_buff)
+	free_ref(CommandBufferResource, &G_COMMAND_BUFFER_REF_ARRAY, p_ref)
+}
 
 //---------------------------------------------------------------------------//
 

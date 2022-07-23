@@ -106,4 +106,17 @@ when USE_VULKAN_BACKEND {
 	}
 
 	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_destroy_command_buffer :: proc(p_cmd_buff: ^CommandBufferResource) {
+		vk.FreeCommandBuffers(
+			G_RENDERER.device,
+			INTERNAL.command_pools[p_cmd_buff.desc.thread],
+			1,
+			&p_cmd_buff.vk_cmd_buff,
+		)
+	}
+
+
+	//---------------------------------------------------------------------------//
 }
