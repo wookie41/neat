@@ -90,7 +90,7 @@ when USE_VULKAN_BACKEND {
 		if type_found == false {
 			log.warnf(
 				"Failed to create image %s, unsupported type: %s\n",
-				common.get_name(p_name),
+				common.get_string(p_name),
 				p_image_desc.type,
 			)
 			return false
@@ -101,7 +101,7 @@ when USE_VULKAN_BACKEND {
 		if view_type_found == false {
 			log.warnf(
 				"Failed to create image %s, unsupported type: %s\n",
-				common.get_name(p_name),
+				common.get_string(p_name),
 				p_image_desc.type,
 			)
 			return false
@@ -112,7 +112,7 @@ when USE_VULKAN_BACKEND {
 		if format_found == false {
 			log.warnf(
 				"Failed to create image %s, unsupported format: %s\n",
-				common.get_name(p_name),
+				common.get_string(p_name),
 				p_image_desc.type,
 			)
 			return false
@@ -383,7 +383,7 @@ when USE_VULKAN_BACKEND {
 			vk.DestroyImageView(G_RENDERER.device, image_view, nil)
 		}
 		vma.destroy_image(G_RENDERER.vma_allocator, p_image.vk_image, nil)
-		delete(p_image.per_mip_vk_view)
+		delete(p_image.per_mip_vk_view, G_RENDERER_ALLOCATORS.resource_allocator)
 	}
 
 	//---------------------------------------------------------------------------//

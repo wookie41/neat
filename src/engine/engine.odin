@@ -6,6 +6,8 @@ import sdl "vendor:sdl2"
 
 import "core:log"
 import "../renderer"
+import "core:mem"
+import "../common"
 
 //---------------------------------------------------------------------------//
 
@@ -22,6 +24,8 @@ InitOptions :: struct {
 
 G_ENGINE: struct {
 	window: ^sdl.Window,
+	string_area:        mem.Arena,
+	string_allocator:   mem.Allocator,
 }
 
 //---------------------------------------------------------------------------//
@@ -35,6 +39,17 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	G_ENGINE_LOG = log.create_console_logger()
 	context.logger = G_ENGINE_LOG
+
+	// String arena
+	mem.init_arena(
+		&G_ENGINE.string_area,
+		make([]byte, common.MEGABYTE * 8, context.allocator),
+	)
+	G_ENGINE.string_allocator = mem.arena_allocator(
+		&G_ENGINE.string_area,
+	)
+
+	common.init_names(G_ENGINE.string_allocator)
 
 	// Initialize SDL2
 	if sdl.Init(sdl.INIT_VIDEO) != 0 {

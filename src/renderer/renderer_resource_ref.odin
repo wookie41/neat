@@ -24,7 +24,7 @@ RefArray :: struct(ResourceType: typeid) {
 	num_free_indices: u32,
 	free_indices:     []u32,
 	generations:      []u16,
-	names:            []u32,
+	names:            []common.Name,
 }
 
 RefArraySOA :: struct(ResourceType: typeid) {
@@ -62,7 +62,7 @@ create_ref_array :: proc($R: typeid, p_capacity: u32) -> RefArray(R) {
 		resource_array = make([]R, p_capacity),
 		free_indices = make([]u32, p_capacity),
 		generations = make([]u16, p_capacity),
-		names = make([]u32, p_capacity),
+		names = make([]common.Name, p_capacity),
 		next_idx = 0,
 		num_free_indices = 0,
 	}
@@ -108,7 +108,7 @@ create_ref_aos :: proc($R: typeid, p_ref_array: ^RefArray(R), p_name: common.Nam
 		p_ref_array.next_idx += 1
 	}
 
-	p_ref_array.names[idx] = p_name.hash
+	p_ref_array.names[idx] = p_name
 
 	return Ref(R){name = p_name, ref = u64(idx) << 32 | generation}
 }

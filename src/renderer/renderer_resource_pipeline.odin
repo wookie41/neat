@@ -9,11 +9,10 @@ import "core:math/linalg/glsl"
 
 //---------------------------------------------------------------------------//
 
-MeshVertexLayout :: struct
-{
+MeshVertexLayout :: struct {
 	position: glsl.vec3,
-	color: glsl.vec3,
-	uv: glsl.vec2,
+	color:    glsl.vec3,
+	uv:       glsl.vec2,
 }
 
 //---------------------------------------------------------------------------//
@@ -138,8 +137,8 @@ get_pipeline :: proc(p_ref: PipelineRef) -> ^PipelineResource {
 
 destroy_pipeline :: proc(p_ref: PipelineRef) {
 	pipeline := get_pipeline(p_ref)
-	delete(pipeline.desc.render_target_formats)
-	delete(pipeline.desc.render_target_blend_types)
+	delete(pipeline.desc.render_target_formats, G_RENDERER_ALLOCATORS.resource_allocator)
+	delete(pipeline.desc.render_target_blend_types, G_RENDERER_ALLOCATORS.resource_allocator)
 	backend_destroy_pipeline(pipeline)
 	free_ref(PipelineResource, &G_PIPELINE_REF_ARRAY, p_ref)
 }

@@ -28,10 +28,18 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
+	FragmentOutput :: struct {
+		name: common.Name,
+		location: u32,
+	}
+
+	//---------------------------------------------------------------------------//
+
 	@(private)
 	BackendShaderResource :: struct {
 		vk_bindings: []VulkanShaderBinding,
 		vk_module:   vk.ShaderModule,
+		fragment_outputs: []FragmentOutput,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -160,7 +168,7 @@ when USE_VULKAN_BACKEND {
 				)
 
 				defer if compile_result == false {
-					delete(shader_resource.vk_bindings)
+					delete(shader_resource.vk_bindings, G_RENDERER_ALLOCATORS.resource_allocator)
 				}
 			}
 
@@ -209,7 +217,7 @@ when USE_VULKAN_BACKEND {
 				when ODIN_DEBUG {
 					defer if compile_result == false {
 						for binding in shader_resource.vk_bindings {
-							delete(binding.name.name)
+							common.destroy_name(binding.name)
 						}
 					}
 				}
@@ -251,7 +259,12 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_destroy_shader :: proc(p_ref: ShaderRef) {
 		shader := get_shader(p_ref)
-		delete(shader.vk_bindings)
+		if len(shader.vk_bindings) > 0 {
+			delete(shader.vk_bindings, G_RENDERER_ALLOCATORS.resource_allocator)
+		}
+		if len(shader.fragment_outputs) > 0 {
+			delete(shader.fragment_outputs, G_RENDERER_ALLOCATORS.resource_allocator)
+		}
 		vk.DestroyShaderModule(G_RENDERER.device, shader.vk_module, nil)
 	}
 	

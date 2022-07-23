@@ -54,8 +54,6 @@ G_RENDERER_ALLOCATORS: struct {
 	temp_allocator:     mem.Allocator,
 	frame_arena:        mem.Arena,
 	frame_allocator:    mem.Allocator,
-	string_area:        mem.Arena,
-	string_allocator:   mem.Allocator,
 }
 
 @(private)
@@ -100,15 +98,6 @@ init :: proc(p_options: InitOptions) -> bool {
 	)
 	G_RENDERER_ALLOCATORS.frame_allocator = mem.arena_allocator(
 		&G_RENDERER_ALLOCATORS.frame_arena,
-	)
-
-	// String arena
-	mem.init_arena(
-		&G_RENDERER_ALLOCATORS.string_area,
-		make([]byte, common.MEGABYTE * 8, G_RENDERER_ALLOCATORS.main_allocator),
-	)
-	G_RENDERER_ALLOCATORS.string_allocator = mem.arena_allocator(
-		&G_RENDERER_ALLOCATORS.string_area,
 	)
 
 	G_RENDERER.queued_textures_copies = make(

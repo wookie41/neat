@@ -57,7 +57,7 @@ when USE_VULKAN_BACKEND {
 		if p_render_pass.pipeline == InvalidPipelineRef {
 			log.warnf(
 				"Failed to create the pipeline when initializing render pass: %s",
-				common.get_name(p_render_pass_desc.name),
+				common.get_string(p_render_pass_desc.name),
 			)
 			return false
 		}

@@ -164,8 +164,13 @@ get_render_pass :: proc(p_ref: RenderPassRef) -> ^RenderPassResource {
 
 destroy_render_pass :: proc(p_ref: RenderPassRef) {
 	render_pass := get_render_pass(p_ref)
-	delete(render_pass.desc.render_target_infos)
-	delete(render_pass.desc.render_target_blend_types)
+	delete(
+		render_pass.desc.render_target_infos, 
+		G_RENDERER_ALLOCATORS.resource_allocator)
+	delete(
+		render_pass.desc.render_target_blend_types,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
 	backend_destroy_render_pass(render_pass)
 	free_ref(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_ref)
 }
