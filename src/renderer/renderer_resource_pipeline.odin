@@ -137,6 +137,7 @@ get_pipeline :: proc(p_ref: PipelineRef) -> ^PipelineResource {
 
 destroy_pipeline :: proc(p_ref: PipelineRef) {
 	pipeline := get_pipeline(p_ref)
+	destroy_pipeline_layout(pipeline.pipeline_layout)
 	delete(pipeline.desc.render_target_formats, G_RENDERER_ALLOCATORS.resource_allocator)
 	delete(pipeline.desc.render_target_blend_types, G_RENDERER_ALLOCATORS.resource_allocator)
 	backend_destroy_pipeline(pipeline)

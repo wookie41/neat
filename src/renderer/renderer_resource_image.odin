@@ -57,7 +57,27 @@ ImageFormat :: enum u16 {
 
 	//---------------------//
 	ColorFormatsStart,
+	RFormatsStart,
+	R32UInt,
+	R32Int,
+	R32SFloat,
+	RFormatsEnd,
+	RGFormatsStart,
+	RG32UInt,
+	RG32Int,
+	RG32SFloat,
+	RGFormatsEnd,
+	RGBFormatsStart,
+	RGB32UInt,
+	RGB32Int,
+	RGB32SFloat,
+	RGBFormatsEnd,
+	RGBAFormatsStart,
+	RGBA32UInt,
+	RGBA32Int,
+	RGBA32SFloat,
 	B8G8R8A8_SRGB,
+	RGBAFormatsEnd,
 	ColorFormatsEnd,
 	//---------------------//
 }
@@ -131,7 +151,10 @@ create_texture_image :: proc(p_name: common.Name, p_image_desc: ImageDesc) -> Im
 	return ref
 }
 
-create_depth_buffer :: proc(p_name: common.Name, p_depth_buffer_desc: ImageDesc) -> ImageRef {
+create_depth_buffer :: proc(
+	p_name: common.Name,
+	p_depth_buffer_desc: ImageDesc,
+) -> ImageRef {
 	ref := allocate_image_ref(p_name)
 	image := &G_IMAGE_REF_ARRAY.resource_array[get_ref_idx(ref)]
 	image.desc = p_depth_buffer_desc

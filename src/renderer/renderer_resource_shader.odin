@@ -6,6 +6,7 @@ import "core:c"
 import "core:os"
 import "core:log"
 import "core:encoding/json"
+import "core:strings"
 
 import "../common"
 
@@ -98,7 +99,21 @@ load_shaders :: proc() -> bool {
 		name := common.create_name(entry.name)
 		ref := ShaderRef(create_ref(ShaderResource, &G_SHADER_REF_ARRAY, name))
 		shader_resource := &G_SHADER_REF_ARRAY.resource_array[get_ref_idx(ref)]
+		
+		if strings.has_suffix(entry.name, ".vert") {
+			shader_resource.type = .VERTEX
+		} else if strings.has_suffix(entry.name, ".frag") {
+			shader_resource.type = .FRAGMENT
+		} else if strings.has_suffix(entry.name, ".comp") {
+			shader_resource.type = .COMPUTE
+		} else {
+			log.warnf("Unknown shader type %s...", entry.name)
+			free_ref(ShaderResource, &G_SHADER_REF_ARRAY, ref)
+			return false
+		}
+
 		if backend_compile_shader(entry, ref, shader_resource) == false {
+			free_ref(ShaderResource, &G_SHADER_REF_ARRAY, ref)
 			continue
 		} 
 	}

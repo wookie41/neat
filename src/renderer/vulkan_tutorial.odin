@@ -114,8 +114,6 @@ init_vt :: proc() -> bool {
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
 
-		render_target_bindings[0].name = common.create_name("Color")
-
 		// Create render pass
 		{
 			vertex_shader_ref := find_shader_by_name(common.create_name("base.vert"))
@@ -137,17 +135,13 @@ init_vt :: proc() -> bool {
 				resolution = .Full,
 			}
 
-			render_pass_desc.render_target_infos = make(
-				[]RenderTargetInfo,
+			render_pass_desc.render_target_formats = make(
+				[]ImageFormat,
 				1,
 				G_RENDERER_ALLOCATORS.resource_allocator,
 			)
-
-			render_pass_desc.render_target_infos[0] = {
-				name = common.create_name("Color"), 
-				format = swap_image_format,
-			}
-
+			
+			render_pass_desc.render_target_formats[0] = swap_image_format
 			render_pass_ref = create_render_pass(render_pass_desc)
 		}
 

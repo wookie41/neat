@@ -16,13 +16,6 @@ RenderPassResolution :: enum u8 {
 
 //---------------------------------------------------------------------------//
 
-RenderTargetInfo :: struct {
-	name:   common.Name,
-	format: ImageFormat,
-}
-
-//---------------------------------------------------------------------------//
-
 RenderPassDesc :: struct {
 	name:                      common.Name,
 	vert_shader:               ShaderRef,
@@ -35,7 +28,7 @@ RenderPassDesc :: struct {
 	rasterizer_type:           RasterizerType,
 	multisampling_type:        MultisamplingType,
 	depth_stencil_type:        DepthStencilType,
-	render_target_infos:       []RenderTargetInfo,
+	render_target_formats:     []ImageFormat,
 	render_target_blend_types: []ColorBlendType,
 	depth_format:              ImageFormat,
 	resolution:                RenderPassResolution,
@@ -117,7 +110,6 @@ DepthAttachment :: struct {
 //---------------------------------------------------------------------------//
 
 RenderTargetBinding :: struct {
-	name:   common.Name,
 	target: ^RenderTarget,
 }
 
@@ -164,13 +156,7 @@ get_render_pass :: proc(p_ref: RenderPassRef) -> ^RenderPassResource {
 
 destroy_render_pass :: proc(p_ref: RenderPassRef) {
 	render_pass := get_render_pass(p_ref)
-	delete(
-		render_pass.desc.render_target_infos, 
-		G_RENDERER_ALLOCATORS.resource_allocator)
-	delete(
-		render_pass.desc.render_target_blend_types,
-		G_RENDERER_ALLOCATORS.resource_allocator,
-	)
+	destroy_pipeline(render_pass.pipeline)
 	backend_destroy_render_pass(render_pass)
 	free_ref(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_ref)
 }

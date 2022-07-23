@@ -30,16 +30,6 @@ when USE_VULKAN_BACKEND {
 		p_render_pass: ^RenderPassResource,
 	) -> bool {
 
-		render_target_formats := make(
-			[]ImageFormat,
-			len(p_render_pass_desc.render_target_infos),
-			G_RENDERER_ALLOCATORS.resource_allocator,
-		)
-
-		for render_target_info, i in p_render_pass_desc.render_target_infos {
-			render_target_formats[i] = render_target_info.format
-		}
-
 		pipeline_desc := PipelineDesc {
 			name                      = p_render_pass_desc.name,
 			vert_shader               = p_render_pass_desc.vert_shader,
@@ -48,7 +38,7 @@ when USE_VULKAN_BACKEND {
 			primitive_type            = p_render_pass_desc.primitive_type,
 			multisampling_type        = p_render_pass_desc.multisampling_type,
 			depth_stencil_type        = p_render_pass_desc.depth_stencil_type,
-			render_target_formats     = render_target_formats,
+			render_target_formats     = p_render_pass_desc.render_target_formats,
 			render_target_blend_types = p_render_pass_desc.render_target_blend_types,
 			depth_format              = p_render_pass_desc.depth_format,
 		}
@@ -87,7 +77,7 @@ when USE_VULKAN_BACKEND {
 
 		color_attachments := make(
 			[]vk.RenderingAttachmentInfo,
-			len(render_pass.desc.render_target_infos),
+			len(render_pass.desc.render_target_formats),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(color_attachments, G_RENDERER_ALLOCATORS.temp_allocator)
@@ -95,7 +85,7 @@ when USE_VULKAN_BACKEND {
 		num_render_target_barriers := 0
 		render_target_barriers := make(
 			[]vk.ImageMemoryBarrier,
-			len(render_pass.desc.render_target_infos),
+			len(render_pass.desc.render_target_formats),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(render_target_barriers, G_RENDERER_ALLOCATORS.temp_allocator)
@@ -103,24 +93,12 @@ when USE_VULKAN_BACKEND {
 		// Check compability of render targets, build the Vulkan color attachments and prepare barrier
 		{
 			render_target_index := 0
-			for render_target_info in render_pass.desc.render_target_infos {
+			for render_target_format, i in render_pass.desc.render_target_formats {
 
-				binding_index := -1
-
-				when ODIN_DEBUG {
-					for binding, index in p_begin_info.render_targets_bindings {
-						if common.name_equal(binding.name, render_target_info.name) {
-							binding_index = index
-							break
-						}
-					}
-
-					assert(binding_index != -1, "Binding for render target not found")
-				}
-
-				render_target_binding := &p_begin_info.render_targets_bindings[binding_index]
+				render_target_binding := &p_begin_info.render_targets_bindings[i]
 
 				attachment_image := get_image(render_target_binding.target.image_ref)
+				assert(attachment_image.desc.format == render_target_format)
 
 				// Transition image to the .ATTACHMENT_OPTIMAL format if it's not already in one
 				if render_target_binding.target.current_usage != .Attachment {

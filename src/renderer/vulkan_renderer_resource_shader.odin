@@ -29,7 +29,6 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	FragmentOutput :: struct {
-		name: common.Name,
 		location: u32,
 	}
 
@@ -37,8 +36,8 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	BackendShaderResource :: struct {
-		vk_bindings: []VulkanShaderBinding,
-		vk_module:   vk.ShaderModule,
+		vk_bindings:      []VulkanShaderBinding,
+		vk_module:        vk.ShaderModule,
 		fragment_outputs: []FragmentOutput,
 	}
 
@@ -48,24 +47,22 @@ when USE_VULKAN_BACKEND {
 		p_shader_entry: ShaderJSONEntry,
 		p_ref: ShaderRef,
 		shader_resource: ^ShaderResource,
-	) -> (compile_result: bool) {
+	) -> (
+		compile_result: bool,
+	) {
 
-		// Determine shader type
-		shader_type: ShaderType
+		// Determine compile target
 		compile_target: string
-		if strings.has_suffix(p_shader_entry.name, ".vert") {
-			shader_type = .VERTEX
+		switch shader_resource.type {
+		case .VERTEX:
 			compile_target = "vs_6_7"
-		} else if strings.has_suffix(p_shader_entry.name, ".frag") {
-			shader_type = .FRAGMENT
+
+		case .FRAGMENT:
 			compile_target = "ps_6_7"
-		} else if strings.has_suffix(p_shader_entry.name, ".comp") {
-			shader_type = .COMPUTE
+
+		case .COMPUTE:
 			compile_target = "cs_6_7"
 
-		} else {
-			log.warnf("Unknown shader type %s...", p_shader_entry.name)
-			return false
 		}
 
 		shader_src_path := fmt.aprintf(
@@ -267,6 +264,6 @@ when USE_VULKAN_BACKEND {
 		}
 		vk.DestroyShaderModule(G_RENDERER.device, shader.vk_module, nil)
 	}
-	
+
 	//---------------------------------------------------------------------------//
 }
