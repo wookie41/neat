@@ -64,7 +64,7 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_init :: proc(p_options: InitOptions) -> bool {
 
-		device_extensions := []cstring{"VK_KHR_swapchain"}
+		device_extensions := []cstring{vk.KHR_SWAPCHAIN_EXTENSION_NAME}
 
 		G_RENDERER.window = p_options.window
 		G_RENDERER.windowID = sdl.GetWindowID(p_options.window)
@@ -165,6 +165,7 @@ when USE_VULKAN_BACKEND {
 				engineVersion      = vk.MAKE_VERSION(0, 0, 1),
 				apiVersion         = vk.API_VERSION_1_3,
 			}
+			
 
 			instance_info := vk.InstanceCreateInfo {
 				sType                   = .INSTANCE_CREATE_INFO,
@@ -534,9 +535,9 @@ backend_update :: proc(p_dt: f32) {
 	cmd_buff := get_command_buffer(cmd_buff_ref)
 
 	begin_command_buffer(cmd_buff_ref)
-	
+
 	vt_update(frame_idx, swap_image_index, cmd_buff_ref, cmd_buff)
-	
+
 	// Transition the swapchain to present 
 	to_present_barrier := vk.ImageMemoryBarrier {
 		sType = .IMAGE_MEMORY_BARRIER,
@@ -872,8 +873,8 @@ backend_execute_queued_texture_copies :: proc(p_cmd_buff_ref: CommandBufferRef) 
 	defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
 
 	VkCopyEntry :: struct {
-		buffer: vk.Buffer,
-		image: vk.Image,
+		buffer:     vk.Buffer,
+		image:      vk.Image,
 		mip_copies: []vk.BufferImageCopy,
 	}
 
@@ -929,12 +930,13 @@ backend_execute_queued_texture_copies :: proc(p_cmd_buff_ref: CommandBufferRef) 
 		}
 
 		vk_copy_entry := VkCopyEntry {
-			buffer = buffer.vk_buffer,
-			image = image.vk_image,
+			buffer     = buffer.vk_buffer,
+			image      = image.vk_image,
 			mip_copies = make(
-				[]vk.BufferImageCopy, 
-				u32(len(texture_copy.mip_buffer_offsets)), 
-				G_RENDERER_ALLOCATORS.temp_allocator),
+				[]vk.BufferImageCopy,
+				u32(len(texture_copy.mip_buffer_offsets)),
+				G_RENDERER_ALLOCATORS.temp_allocator,
+			),
 		}
 
 		// Create the vulkan copies
@@ -943,15 +945,15 @@ backend_execute_queued_texture_copies :: proc(p_cmd_buff_ref: CommandBufferRef) 
 			vk_copies[i].mip_copies[mip] = {
 				bufferOffset = vk.DeviceSize(offset),
 				imageSubresource = {
-					aspectMask     = { .COLOR },
+					aspectMask = {.COLOR},
 					baseArrayLayer = 0,
-					layerCount     = 1,
-					mipLevel       = u32(mip),
+					layerCount = 1,
+					mipLevel = u32(mip),
 				},
 				imageExtent = {
-					width  = image.desc.dimensions[0] << u32(mip),
+					width = image.desc.dimensions[0] << u32(mip),
 					height = image.desc.dimensions[1] << u32(mip),
-					depth  = 1,
+					depth = 1,
 				},
 			}
 		}

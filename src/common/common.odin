@@ -19,16 +19,21 @@ GIGABYTE :: MEGABYTE * 1024
 
 //---------------------------------------------------------------------------//
 
+StringTableEntry :: struct {
+	str: string,
+	ref_count: u32,
+}
+
 @(private = "file")
 INTERNAL: struct {
-	string_table: map[Name]string,
+	string_table: map[Name]StringTableEntry,
 }
 
 //---------------------------------------------------------------------------//
 
 init_names :: proc(p_string_allocator: mem.Allocator) {
 	context.allocator = p_string_allocator
-	INTERNAL.string_table = make(map[Name]string)
+	INTERNAL.string_table = make(map[Name]StringTableEntry)
 }
 
 //---------------------------------------------------------------------------//
@@ -41,8 +46,16 @@ create_name :: proc(p_name: string) -> Name {
 	} else {
 		name = Name(hash.crc32(transmute([]u8)p_name))
 	}
-	INTERNAL.string_table[name] = p_name
-	return name
+	if name in INTERNAL.string_table {
+		entry := &INTERNAL.string_table[name]
+		entry.ref_count += 1
+		return name
+	}
+	INTERNAL.string_table[name] = {
+		str = p_name,
+		ref_count = 0,
+	}
+	return name	 
 }
 
 //---------------------------------------------------------------------------//
@@ -50,7 +63,11 @@ create_name :: proc(p_name: string) -> Name {
 when ODIN_DEBUG {
 	destroy_name :: #force_inline proc(p_name: Name) {
 		assert(p_name in INTERNAL.string_table)
-		delete_key(&INTERNAL.string_table, p_name)
+		entry := &INTERNAL.string_table[p_name]
+		if entry.ref_count == 0 {
+			delete_key(&INTERNAL.string_table, p_name)
+		}
+		entry.ref_count -= 1
 	}
 } else {
 	destroy_name :: #force_inline proc(p_name: Name) {
@@ -76,7 +93,7 @@ Name :: distinct u32
 get_string :: proc(p_name: Name) -> string {
 	when ODIN_DEBUG {
 		assert(p_name in INTERNAL.string_table)
-		return INTERNAL.string_table[p_name]
+		return INTERNAL.string_table[p_name].str
 	}
 	return ""
 }

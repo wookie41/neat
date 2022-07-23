@@ -100,3 +100,16 @@ destroy_buffer :: proc(p_ref: BufferRef) {
 }
 
 //---------------------------------------------------------------------------//
+
+map_buffer :: proc(p_ref: BufferRef) -> rawptr {
+	buffer := get_buffer(p_ref)
+	return backend_map_buffer(buffer)
+}
+
+//---------------------------------------------------------------------------//
+
+unmap_buffer :: proc(p_ref: BufferRef){
+	buffer := get_buffer(p_ref)
+	backend_unmap_buffer(buffer)
+}
+//---------------------------------------------------------------------------//

@@ -8,6 +8,7 @@ when USE_VULKAN_BACKEND {
 	import vk "vendor:vulkan"
 	import vma "../third_party/vma"
 	import "../common"
+	import "core:strings"
 
 	//---------------------------------------------------------------------------//
 
@@ -51,7 +52,7 @@ when USE_VULKAN_BACKEND {
 
 		vk_usage: vk.BufferUsageFlags
 		for usage in BufferUsageFlagBits {
-			if usage in p_buffer_desc.usage {
+			if usage in p_buffer.desc.usage {
 				vk_usage += {G_BUFFER_USAGE_MAPPING[usage]}
 			}
 		}
@@ -95,7 +96,7 @@ when USE_VULKAN_BACKEND {
 			   G_RENDERER.vma_allocator,
 			   &buffer_create_info,
 			   &alloc_create_info,
-			   &p_buffer.vk_buffer,
+			   &p_buffer.vk_buffer	,
 			   &p_buffer.allocation,
 			   &alloc_info,
 		   ); res != .SUCCESS {
@@ -104,8 +105,24 @@ when USE_VULKAN_BACKEND {
 		}
 
 		if .Mapped in p_buffer_desc.flags {
+			assert(alloc_info.pMappedData != nil)
 			p_buffer.mapped_ptr = cast(^u8)alloc_info.pMappedData
 		}
+
+		vk_name := strings.clone_to_cstring(
+			common.get_string(p_name),
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+		defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator) 
+		
+		name_info := vk.DebugUtilsObjectNameInfoEXT {
+			sType = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			objectHandle = u64(p_buffer.vk_buffer),
+			objectType = .BUFFER,
+			pObjectName = vk_name,
+		}
+
+		vk.SetDebugUtilsObjectNameEXT(G_RENDERER.device, &name_info)
 
 		return true
 	}
@@ -118,4 +135,21 @@ when USE_VULKAN_BACKEND {
 	}
 
 	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_map_buffer :: proc(p_buffer: ^BufferResource) -> rawptr {
+		mapped_ptr: rawptr
+		vma.map_memory(G_RENDERER.vma_allocator, p_buffer.allocation, &mapped_ptr)
+		return mapped_ptr
+	}
+
+	//---------------------------------------------------------------------------//
+	
+	@(private)
+	backend_unmap_buffer :: proc(p_buffer: ^BufferResource){
+		vma.unmap_memory(G_RENDERER.vma_allocator, p_buffer.allocation)
+	}
+
+	//---------------------------------------------------------------------------//
+
 }

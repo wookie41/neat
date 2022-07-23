@@ -14,23 +14,20 @@ import assimp "../third_party/assimp"
 import "../common"
 
 G_VT: struct {
-	uniform_buffers:           [dynamic]vk.Buffer,
-	uniform_buffer_allocation: [dynamic]vma.Allocation,
-	vertex_buffer:             vk.Buffer,
-	vertex_buffer_allocation:  vma.Allocation,
-	index_buffer:              vk.Buffer,
-	index_buffer_allocation:   vma.Allocation,
-	start_time:                time.Time,
-	descriptor_pool:           vk.DescriptorPool,
-	descriptor_sets:           [dynamic]vk.DescriptorSet,
-	texture_image:             vk.Image,
-	texture_image_allocation:  vma.Allocation,
-	texture_image_view:        vk.ImageView,
-	texture_sampler:           vk.Sampler,
-	depth_buffer_ref:          ImageRef,
-	render_pass_ref:           RenderPassRef,
-	depth_buffer_attachment:   DepthAttachment,
-	render_target_bindings:    []RenderTargetBinding,
+	ubo_refs:                 []BufferRef,
+	vertex_buffer_ref:        BufferRef,
+	index_buffer_ref:         BufferRef,
+	start_time:               time.Time,
+	descriptor_pool:          vk.DescriptorPool,
+	descriptor_sets:          [dynamic]vk.DescriptorSet,
+	texture_image:            vk.Image,
+	texture_image_allocation: vma.Allocation,
+	texture_image_view:       vk.ImageView,
+	texture_sampler:          vk.Sampler,
+	depth_buffer_ref:         ImageRef,
+	render_pass_ref:          RenderPassRef,
+	depth_buffer_attachment:  DepthAttachment,
+	render_target_bindings:   []RenderTargetBinding,
 }
 
 Vertex :: struct {
@@ -140,7 +137,7 @@ init_vt :: proc() -> bool {
 				1,
 				G_RENDERER_ALLOCATORS.resource_allocator,
 			)
-			
+
 			render_pass_desc.render_target_formats[0] = swap_image_format
 			render_pass_ref = create_render_pass(render_pass_desc)
 		}
@@ -168,9 +165,11 @@ deinit_vt :: proc() {
 	vk.DestroyImageView(device, texture_image_view, nil)
 	vma.destroy_image(vma_allocator, texture_image, texture_image_allocation)
 	vk.DestroyDescriptorPool(device, descriptor_pool, nil)
-
-	vma.destroy_buffer(vma_allocator, vertex_buffer, vertex_buffer_allocation)
-	vma.destroy_buffer(vma_allocator, index_buffer, index_buffer_allocation)
+	for ubo_ref in ubo_refs {
+		destroy_buffer(ubo_ref)
+	}
+	destroy_buffer(vertex_buffer_ref)
+	destroy_buffer(index_buffer_ref)
 }
 
 vt_update :: proc(
@@ -208,8 +207,10 @@ vt_update :: proc(
 
 		offset := vk.DeviceSize{}
 
-		vk.CmdBindVertexBuffers(p_cmd_buff.vk_cmd_buff, 0, 1, &vertex_buffer, &offset)
-		vk.CmdBindIndexBuffer(p_cmd_buff.vk_cmd_buff, index_buffer, offset, .UINT32)
+		vertex_buffer := get_buffer(vertex_buffer_ref)
+		index_buffer := get_buffer(index_buffer_ref)
+		vk.CmdBindVertexBuffers(p_cmd_buff.vk_cmd_buff, 0, 1, &vertex_buffer.vk_buffer, &offset)
+		vk.CmdBindIndexBuffer(p_cmd_buff.vk_cmd_buff, index_buffer.vk_buffer, offset, .UINT32)
 		vk.CmdDrawIndexed(p_cmd_buff.vk_cmd_buff, u32(len(g_indices)), 1, 0, 0, 0)
 		// vk.CmdDraw(cmd, u32(len(g_vertices)), 1, 0, 0)
 	}
@@ -220,56 +221,68 @@ vt_create_vertex_buffer :: proc() {
 	using G_RENDERER
 	using G_VT
 
-	buff_size := vk.DeviceSize(len(g_vertices) * size_of(MeshVertexLayout))
-	vertex_buffer, vertex_buffer_allocation = vt_create_buffer(
-		buff_size,
-		{.VERTEX_BUFFER, .TRANSFER_DST},
-		.AUTO,
-		nil,
-	)
-	staging_buffer, staging_buffer_allocaction := vt_create_buffer(
-		buff_size,
-		{.TRANSFER_SRC},
-		.AUTO_PREFER_HOST,
-		{.HOST_ACCESS_SEQUENTIAL_WRITE},
+	vert_buffer_desc := BufferDesc {
+		size = u32(len(g_vertices) * size_of(MeshVertexLayout)),
+		usage = {.VertexBuffer, .TransferDst},
+		flags = {.Dedicated},
+	}
+	vertex_buffer_ref = create_buffer(common.create_name("VertexBuffer"), vert_buffer_desc)
+
+	staging_buffer_desc := BufferDesc {
+		size = u32(len(g_vertices) * size_of(MeshVertexLayout)),
+		usage = {.TransferSrc},
+		flags = {.HostWrite},
+	}
+	staging_buffer_ref := create_buffer(
+		common.create_name("StagingVertexBuffer"),
+		staging_buffer_desc,
 	)
 
-	vertex_data: rawptr
-	vma.map_memory(vma_allocator, staging_buffer_allocaction, &vertex_data)
+	vertex_data := map_buffer(staging_buffer_ref)
 	mem.copy(vertex_data, raw_data(g_vertices), len(g_vertices) * size_of(Vertex))
-	vma.unmap_memory(vma_allocator, staging_buffer_allocaction)
+	unmap_buffer(staging_buffer_ref)
 
-	vt_copy_buffer(staging_buffer, vertex_buffer, buff_size)
+	vt_copy_buffer(
+		get_buffer(staging_buffer_ref).vk_buffer,
+		get_buffer(vertex_buffer_ref).vk_buffer,
+		vk.DeviceSize(vert_buffer_desc.size),
+	)
 
-	vma.destroy_buffer(vma_allocator, staging_buffer, staging_buffer_allocaction)
+	destroy_buffer(staging_buffer_ref)
 }
 
 vt_create_index_buffer :: proc() {
 	using G_RENDERER
 	using G_VT
 
-	buff_size := vk.DeviceSize(len(g_indices) * size_of(g_indices[0]))
-	index_buffer, index_buffer_allocation = vt_create_buffer(
-		buff_size,
-		{.INDEX_BUFFER, .TRANSFER_DST},
-		.AUTO,
-		nil,
+	index_buffer_desc := BufferDesc {
+		size  = u32(len(g_indices) * size_of(g_indices[0])),
+		usage = {.IndexBuffer, .TransferDst},
+		flags = {.Dedicated},
+	}
+	index_buffer_ref = create_buffer(common.create_name("IndexBuffer"), index_buffer_desc)
+
+	staging_buffer_desc := BufferDesc {
+		size = u32(len(g_indices) * size_of(g_indices[0])),
+		usage = {.TransferSrc},
+		flags = {.HostWrite},
+	}
+	staging_buffer_ref := create_buffer(
+		common.create_name("StagingIndexBuffer"),
+		staging_buffer_desc,
 	)
-	staging_buffer, staging_buffer_allocaction := vt_create_buffer(
-		buff_size,
-		{.TRANSFER_SRC},
-		.AUTO_PREFER_HOST,
-		{.HOST_ACCESS_SEQUENTIAL_WRITE},
+
+	index_data := map_buffer(staging_buffer_ref)
+	mem.copy(index_data, raw_data(g_indices), int(staging_buffer_desc.size))
+	unmap_buffer(staging_buffer_ref)
+
+	vt_copy_buffer(
+		get_buffer(staging_buffer_ref).vk_buffer,
+		get_buffer(index_buffer_ref).vk_buffer,
+		vk.DeviceSize(index_buffer_desc.size),
 	)
 
-	index_data: rawptr
-	vma.map_memory(vma_allocator, staging_buffer_allocaction, &index_data)
-	mem.copy(index_data, raw_data(g_indices), len(g_indices) * size_of(g_indices[0]))
-	vma.unmap_memory(vma_allocator, staging_buffer_allocaction)
-
-	vt_copy_buffer(staging_buffer, index_buffer, buff_size)
-
-	vma.destroy_buffer(vma_allocator, staging_buffer, staging_buffer_allocaction)
+	destroy_buffer(staging_buffer_ref)
 }
 
 vt_create_buffer :: proc(
@@ -295,7 +308,16 @@ vt_create_buffer :: proc(
 
 	buffer: vk.Buffer
 	alloc: vma.Allocation
-	if vma.create_buffer(vma_allocator, &buffer_info, &alloc_info, &buffer, &alloc, nil) != .SUCCESS {
+	alloc_infos: vma.AllocationInfo
+	res := vma.create_buffer(
+		vma_allocator,
+		&buffer_info,
+		&alloc_info,
+		&buffer,
+		&alloc,
+		&alloc_infos,
+	)
+	if res != .SUCCESS {
 		log.warn("Failed to create buffer")
 		return 0, nil
 	}
@@ -321,19 +343,16 @@ vt_create_uniform_buffers :: proc() {
 	using G_RENDERER
 	using G_VT
 
-	buff_size := vk.DeviceSize(size_of(UniformBufferObject))
+	ubo_refs = make([]BufferRef, num_frames_in_flight, G_RENDERER_ALLOCATORS.main_allocator)
 
-	resize(&uniform_buffers, int(num_frames_in_flight))
-	resize(&uniform_buffer_allocation, int(num_frames_in_flight))
+	ubo_desc := BufferDesc {
+		flags = {.HostWrite, .Mapped},
+		size = size_of(UniformBufferObject),
+		usage = {.UniformBuffer},
+	}
 
 	for i in 0 ..< num_frames_in_flight {
-		uniform_buffers[i], uniform_buffer_allocation[i] = vt_create_buffer(
-			buff_size,
-			{.UNIFORM_BUFFER},
-			.AUTO,
-			{.HOST_ACCESS_SEQUENTIAL_WRITE},
-		)
-
+		ubo_refs[i] = create_buffer(common.create_name("UBO"), ubo_desc)
 	}
 
 }
@@ -360,10 +379,8 @@ vt_update_uniform_buffer :: proc() {
 		),
 	}
 
-	ubo_data: rawptr
-	vma.map_memory(vma_allocator, uniform_buffer_allocation[frame_idx], &ubo_data)
-	mem.copy(ubo_data, &ubo, size_of(UniformBufferObject))
-	vma.unmap_memory(vma_allocator, uniform_buffer_allocation[frame_idx])
+	uniform_buffer := get_buffer(ubo_refs[frame_idx])
+	mem.copy(uniform_buffer.mapped_ptr, &ubo, size_of(UniformBufferObject))
 }
 
 vt_create_descriptor_pool :: proc() {
@@ -464,7 +481,8 @@ vt_write_descriptor_sets :: proc() {
 
 
 	for i in 0 ..< num_frames_in_flight {
-		ubo_info.buffer = uniform_buffers[i]
+		uniform_buffer := get_buffer(ubo_refs[i])
+		ubo_info.buffer = uniform_buffer.vk_buffer
 		ubo_write.dstSet = descriptor_sets[i]
 		image_write.dstSet = descriptor_sets[i]
 		descriptor_writes := []vk.WriteDescriptorSet{ubo_write, image_write}

@@ -1,6 +1,7 @@
 package renderer
 
 import "core:mem"
+import "core:strings"
 
 when USE_VULKAN_BACKEND {
 
@@ -169,6 +170,23 @@ when USE_VULKAN_BACKEND {
 			return false
 		}
 
+
+		vk_name := strings.clone_to_cstring(
+			common.get_string(p_name),
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+		defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
+
+		name_info := vk.DebugUtilsObjectNameInfoEXT {
+			sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			objectHandle = u64(p_image.vk_image),
+			objectType   = .IMAGE,
+			pObjectName  = vk_name,
+		}
+
+		vk.SetDebugUtilsObjectNameEXT(G_RENDERER.device, &name_info)
+
+
 		// Create image view containing all of the mips
 		{
 			view_create_info := vk.ImageViewCreateInfo {
@@ -192,6 +210,23 @@ when USE_VULKAN_BACKEND {
 				vma.destroy_image(G_RENDERER.vma_allocator, p_image.vk_image, p_image.allocation)
 				return false
 			}
+
+
+			vk_name := strings.clone_to_cstring(
+				common.get_string(p_name),
+				G_RENDERER_ALLOCATORS.temp_allocator,
+			)
+			defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
+
+			name_info := vk.DebugUtilsObjectNameInfoEXT {
+				sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+				objectHandle = u64(p_image.all_mips_vk_view),
+				objectType   = .IMAGE_VIEW,
+				pObjectName  = vk_name,
+			}
+
+			vk.SetDebugUtilsObjectNameEXT(G_RENDERER.device, &name_info)
+
 		}
 
 		// Now create image views per mip
@@ -221,6 +256,23 @@ when USE_VULKAN_BACKEND {
 				   ) != .SUCCESS {
 					break
 				}
+
+				vk_name := strings.clone_to_cstring(
+					common.get_string(p_name),
+					G_RENDERER_ALLOCATORS.temp_allocator,
+				)
+				defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
+
+				name_info := vk.DebugUtilsObjectNameInfoEXT {
+					sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+					objectHandle = u64(p_image.per_mip_vk_view[i]),
+					objectType   = .IMAGE_VIEW,
+					pObjectName  = vk_name,
+				}
+
+				vk.SetDebugUtilsObjectNameEXT(G_RENDERER.device, &name_info)
+
+
 				num_image_views_created += 1
 			}
 
@@ -269,6 +321,7 @@ when USE_VULKAN_BACKEND {
 		}
 
 		append(&G_RENDERER.queued_textures_copies, texture_copy)
+
 		return true
 	}
 
@@ -354,6 +407,22 @@ when USE_VULKAN_BACKEND {
 			return false
 		}
 
+		vk_name := strings.clone_to_cstring(
+			common.get_string(p_name),
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+		defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
+
+		name_info := vk.DebugUtilsObjectNameInfoEXT {
+			sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			objectHandle = u64(p_depth_image.vk_image),
+			objectType   = .IMAGE,
+			pObjectName  = vk_name,
+		}
+
+		vk.SetDebugUtilsObjectNameEXT(G_RENDERER.device, &name_info)
+
+
 		view_create_info := vk.ImageViewCreateInfo {
 			sType = .IMAGE_VIEW_CREATE_INFO,
 			image = p_depth_image.vk_image,
@@ -371,6 +440,15 @@ when USE_VULKAN_BACKEND {
 			log.warn("Failed to create image view")
 			return false
 		}
+
+		name_info = vk.DebugUtilsObjectNameInfoEXT {
+			sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			objectHandle = u64(p_depth_image.all_mips_vk_view),
+			objectType   = .IMAGE_VIEW,
+			pObjectName  = vk_name,
+		}
+
+		vk.SetDebugUtilsObjectNameEXT(G_RENDERER.device, &name_info)
 
 		return true
 	}

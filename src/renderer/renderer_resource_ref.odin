@@ -102,7 +102,8 @@ create_ref_aos :: proc($R: typeid, p_ref_array: ^RefArray(R), p_name: common.Nam
 	if p_ref_array.num_free_indices > 0 {
 		p_ref_array.num_free_indices -= 1
 		idx = p_ref_array.free_indices[p_ref_array.num_free_indices]
-		generation = u64(p_ref_array.generations[p_ref_array.num_free_indices] + 1)
+		p_ref_array.generations[idx] += 1
+		generation = u64(p_ref_array.generations[idx])
 	} else {
 		idx = p_ref_array.next_idx
 		p_ref_array.next_idx += 1
@@ -129,7 +130,8 @@ create_ref_soa :: proc($R: typeid, p_ref_array: ^RefArraySOA(R), p_name: common.
 	if p_ref_array.num_free_indices > 0 {
 		p_ref_array.num_free_indices -= 1
 		idx = p_ref_array.free_indices[p_ref_array.num_free_indices]
-		generation = u64(p_ref_array.generations[p_ref_array.num_free_indices] + 1)
+		p_ref_array.generations[idx] += 1
+		generation = u64(p_ref_array.generations[idx])
 	} else {
 		idx = p_ref_array.next_idx
 		p_ref_array.next_idx += 1

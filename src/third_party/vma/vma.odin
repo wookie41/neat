@@ -68,20 +68,20 @@ MemoryUsage :: enum i32 {
 
 AllocationCreateFlags :: distinct bit_set[AllocationCreateFlagBits; u32]
 AllocationCreateFlagBits :: enum u32 {
-	DEDICATED_MEMORY                   = 1,
-	NEVER_ALLOCATE                     = 2,
-	CREATE_MAPPED                      = 3,
-	USER_DATA_COPY_STRING              = 6,
-	UPPER_ADDRESS                      = 7,
-	DONT_BIND                          = 8,
-	WITHIN_BUDGET                      = 9,
-	CAN_ALIAS                          = 10,
-	HOST_ACCESS_SEQUENTIAL_WRITE       = 11,
-	HOST_ACCESS_RANDOM                 = 12,
-	HOST_ACCESS_ALLOW_TRANSFER_INSTEAD = 13,
-	STRATEGY_MIN_MEMORY                = 17,
-	STRATEGY_MIN_TIME                  = 18,
-	STRATEGY_MIN_OFFSET                = 19,
+	DEDICATED_MEMORY                   = 0,
+	NEVER_ALLOCATE                     = 1,
+	CREATE_MAPPED                      = 2,
+	USER_DATA_COPY_STRING              = 5,
+	UPPER_ADDRESS                      = 6,
+	DONT_BIND                          = 7,
+	WITHIN_BUDGET                      = 8,
+	CAN_ALIAS                          = 11,
+	HOST_ACCESS_SEQUENTIAL_WRITE       = 10,
+	HOST_ACCESS_RANDOM                 = 11,
+	HOST_ACCESS_ALLOW_TRANSFER_INSTEAD = 12,
+	STRATEGY_MIN_MEMORY                = 16,
+	STRATEGY_MIN_TIME                  = 17,
+	STRATEGY_MIN_OFFSET                = 18,
 	STRATEGY_BEST_FIT                  = STRATEGY_MIN_MEMORY,
 	STRATEGY_FIRST_FIT                 = STRATEGY_MIN_TIME,
 	STRATEGY_MASK                      = STRATEGY_MIN_MEMORY | STRATEGY_MIN_TIME | STRATEGY_MIN_OFFSET,
@@ -96,10 +96,10 @@ PoolCreateFlagBits :: enum u32 {
 
 DefragmentationFlags :: distinct bit_set[DefragmentationFlagBits; u32]
 DefragmentationFlagBits :: enum u32 {
-	FAST      = 1,
-	BALANCED  = 2,
-	FULL      = 3,
-	EXTENSIVE = 4,
+	FAST      = 0,
+	BALANCED  = 1,
+	FULL      = 2,
+	EXTENSIVE = 3,
 	MASK      = FAST | BALANCED | FULL | EXTENSIVE,
 }
 
