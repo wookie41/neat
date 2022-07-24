@@ -96,7 +96,7 @@ when USE_VULKAN_BACKEND {
 			   G_RENDERER.vma_allocator,
 			   &buffer_create_info,
 			   &alloc_create_info,
-			   &p_buffer.vk_buffer	,
+			   &p_buffer.vk_buffer,
 			   &p_buffer.allocation,
 			   &alloc_info,
 		   ); res != .SUCCESS {
@@ -113,13 +113,13 @@ when USE_VULKAN_BACKEND {
 			common.get_string(p_name),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
-		defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator) 
-		
+		defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
+
 		name_info := vk.DebugUtilsObjectNameInfoEXT {
-			sType = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
 			objectHandle = u64(p_buffer.vk_buffer),
-			objectType = .BUFFER,
-			pObjectName = vk_name,
+			objectType   = .BUFFER,
+			pObjectName  = vk_name,
 		}
 
 		vk.SetDebugUtilsObjectNameEXT(G_RENDERER.device, &name_info)
@@ -144,10 +144,19 @@ when USE_VULKAN_BACKEND {
 	}
 
 	//---------------------------------------------------------------------------//
-	
+
 	@(private)
-	backend_unmap_buffer :: proc(p_buffer: ^BufferResource){
+	backend_unmap_buffer :: proc(p_buffer: ^BufferResource) {
 		vma.unmap_memory(G_RENDERER.vma_allocator, p_buffer.allocation)
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_update_staged_buffer :: proc(
+		p_staging_buffer: ^BufferResource,
+		p_device_buffer: ^BufferResource,
+	) {
 	}
 
 	//---------------------------------------------------------------------------//

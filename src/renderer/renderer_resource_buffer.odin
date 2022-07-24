@@ -3,6 +3,7 @@ package renderer
 //---------------------------------------------------------------------------//
 
 import "core:c"
+import "core:log"
 import "../common"
 
 //---------------------------------------------------------------------------//
@@ -16,6 +17,7 @@ BufferDescFlagBits :: enum u8 {
 }
 BufferDescFlags :: distinct bit_set[BufferDescFlagBits;u8]
 
+
 //---------------------------------------------------------------------------//
 
 BufferUsageFlagBits :: enum u8 {
@@ -26,6 +28,7 @@ BufferUsageFlagBits :: enum u8 {
 	VertexBuffer,
 	Storagebuffer,
 }
+
 BufferUsageFlags :: distinct bit_set[BufferUsageFlagBits;u8]
 
 //---------------------------------------------------------------------------//
@@ -78,7 +81,7 @@ create_buffer :: proc(p_name: common.Name, p_buffer_desc: BufferDesc) -> BufferR
 
 	if backend_create_buffer(p_name, p_buffer_desc, buffer) == false {
 		free_ref(BufferResource, &G_BUFFER_REF_ARRAY, ref)
-        return InvalidBufferRef
+		return InvalidBufferRef
 	}
 
 	return ref
@@ -108,8 +111,87 @@ map_buffer :: proc(p_ref: BufferRef) -> rawptr {
 
 //---------------------------------------------------------------------------//
 
-unmap_buffer :: proc(p_ref: BufferRef){
+unmap_buffer :: proc(p_ref: BufferRef) {
 	buffer := get_buffer(p_ref)
 	backend_unmap_buffer(buffer)
 }
+
+//---------------------------------------------------------------------------//
+
+StagedBufferDesc :: struct {
+	size:  u32,
+	usage: BufferUsageFlagBits,
+	// stages in which the buffer is going to be read,
+	// used to determine barrier placement
+	stages: PipelineStageFlags,
+}
+
+//---------------------------------------------------------------------------//
+
+StagedBuffer :: struct {
+	device_buffer_ref:  BufferRef,
+	staging_buffer_ref: BufferRef,
+}
+
+//---------------------------------------------------------------------------//
+
+create_staged_buffer :: proc(p_name: common.Name, p_buffer_desc: StagedBufferDesc) -> (
+	StagedBuffer,
+	bool,
+) {
+	assert(p_buffer_desc.usage > .TransferDst)
+
+	staging_buffer_desc := BufferDesc {
+		size = p_buffer_desc.size,
+		usage = {.TransferSrc},
+		flags = {.HostWrite},
+	}
+
+	staging_buffer_ref := create_buffer(p_name, staging_buffer_desc)
+
+	if staging_buffer_ref == InvalidBufferRef {
+		log.debugf(
+			"Failed to create staging buffer when creating buffer %s",
+			common.get_string(p_name),
+		)
+		return {}, false
+	}
+
+	device_buffer_desc := BufferDesc {
+		size = p_buffer_desc.size,
+		usage = {p_buffer_desc.usage, .TransferDst},
+		flags = {.Dedicated},
+	}
+
+	device_buffer_ref := create_buffer(p_name, device_buffer_desc)
+	if device_buffer_ref == InvalidBufferRef {
+		destroy_buffer(staging_buffer_ref)
+		log.debugf(
+			"Failed to create staging buffer when creating buffer %s",
+			common.get_string(p_name),
+		)
+		return {}, false
+	}
+	
+	return StagedBuffer {
+		staging_buffer_ref = staging_buffer_ref,
+		device_buffer_ref = device_buffer_ref,
+	}, true
+}
+
+//---------------------------------------------------------------------------//
+
+destroy_staged_buffer :: proc(p_staged_buffer: StagedBuffer) {
+	destroy_buffer(p_staged_buffer.staging_buffer_ref)
+	destroy_buffer(p_staged_buffer.device_buffer_ref)
+}
+
+//---------------------------------------------------------------------------//
+
+update_staged_buffer :: proc(p_staged_buffer: StagedBuffer, p_data: []u8) {
+	staging_buffer := get_buffer(p_staged_buffer.staging_buffer_ref)
+	device_buffer := get_buffer(p_staged_buffer.device_buffer_ref)
+	backend_update_staged_buffer(staging_buffer, device_buffer)
+}
+
 //---------------------------------------------------------------------------//

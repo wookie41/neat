@@ -89,6 +89,27 @@ InvalidPipelineRef := PipelineRef {
 
 //---------------------------------------------------------------------------//
 
+PipelineStageFlagBits :: enum u16 {
+	TopOfPipe,
+	DrawIndirect,
+	VertexInput,
+	VertexShader,
+	GeometryShader,
+	FragmentShader,
+	EarlyFragmentTests,
+	LateFragmentTests,
+	ComputeShader,
+	Transfer,
+	BottomOfPipe,
+	Host,
+	AllGraphics,
+	AllCompute,
+}
+
+PipelineStageFlags :: distinct bit_set[PipelineStageFlagBits;u16]
+
+//---------------------------------------------------------------------------//
+
 @(private = "file")
 G_PIPELINE_REF_ARRAY: RefArray(PipelineResource)
 
