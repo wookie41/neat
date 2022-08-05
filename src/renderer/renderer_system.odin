@@ -37,7 +37,8 @@ MAX_COMMAND_BUFFERS :: #config(MAX_PIPELINES, 32)
 G_RENDERER: struct {
 	using backend_state:          BackendRendererState,
 	num_frames_in_flight:         u32,
-	frame_idx:                    u32,
+	frame_id:                     u32,
+	frame_idx:                    u32, // frame_id % num_frames_in_flight 
 	primary_cmd_buffer_ref:       []CommandBufferRef,
 	queued_textures_copies:       [dynamic]TextureCopy,
 	current_frame_swap_image_idx: u32,
@@ -117,6 +118,7 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	load_shaders() or_return
 	create_swap_images()
+	init_buffer_streaming() or_return
 
 	// Create RenderTargets for each swap image
 	{
@@ -163,11 +165,13 @@ init :: proc(p_options: InitOptions) -> bool {
 
 update :: proc(p_dt: f32) {
 	setup_renderer_context()
-	// @TODO build command buffer
+	// @TODO build command buffers
 	execute_queued_texture_copies()
 	clear(&G_RENDERER.queued_textures_copies)
-	// @TODO dispatch command buffer
 	backend_update(p_dt)
+	run_streaming_requests()
+	// @TODO submit command buffers
+	INTERNAL.frame_id += 1
 }
 
 //---------------------------------------------------------------------------//

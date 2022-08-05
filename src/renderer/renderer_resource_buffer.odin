@@ -14,6 +14,7 @@ BufferDescFlagBits :: enum u8 {
 	HostRead,
 	Mapped,
 	Dedicated,
+	SharingModeConcurrent, // Defaults to exclusive
 }
 BufferDescFlags :: distinct bit_set[BufferDescFlagBits;u8]
 

@@ -40,11 +40,12 @@ when USE_VULKAN_BACKEND {
 		queue_family_graphics_index: u32,
 		queue_family_present_index:  u32,
 		queue_family_compute_index:  u32,
-		supports_compute:            bool,
+		queue_family_transfer_index: u32,
 		device:                      vk.Device,
 		graphics_queue:              vk.Queue,
 		present_queue:               vk.Queue,
 		compute_queue:               vk.Queue,
+		transfer_queue:              vk.Queue,
 		surface:                     vk.SurfaceKHR,
 		swapchain_format:            vk.SurfaceFormatKHR,
 		present_mode:                vk.PresentModeKHR,
@@ -165,7 +166,7 @@ when USE_VULKAN_BACKEND {
 				engineVersion      = vk.MAKE_VERSION(0, 0, 1),
 				apiVersion         = vk.API_VERSION_1_3,
 			}
-			
+
 
 			instance_info := vk.InstanceCreateInfo {
 				sType                   = .INSTANCE_CREATE_INFO,
@@ -293,11 +294,16 @@ when USE_VULKAN_BACKEND {
 				graphics_index := -1
 				present_index := -1
 				compute_index := -1
+				transfer_index := -1
 				for qf, i in &queue_families {
 					if graphics_index == -1 && .GRAPHICS in qf.queueFlags {
 						graphics_index = i
-					} else if compute_index == -1 && .COMPUTE in qf.queueFlags {
+					}  
+					if compute_index == -1 && .COMPUTE in qf.queueFlags {
 						compute_index = i
+					} 
+					if transfer_index == -1 && .TRANSFER in qf.queueFlags {
+						transfer_index = i
 					}
 
 					present_support: b32
@@ -306,7 +312,8 @@ when USE_VULKAN_BACKEND {
 						present_index = i
 					}
 
-					if graphics_index != -1 && present_index != -1 && compute_index != -1 {
+					if graphics_index != -1 && (!present_support || (present_support && present_index !=
+					   -1)) && compute_index != -1 && transfer_index != -1 {
 						break
 					}
 				}
@@ -314,12 +321,17 @@ when USE_VULKAN_BACKEND {
 				device_props: vk.PhysicalDeviceProperties
 				vk.GetPhysicalDeviceProperties(pd, &device_props)
 
-				if graphics_index != -1 && present_index != -1 && device_props.deviceType != .CPU {
+				log.infof(
+					"Found device %s, queues indices:\n - graphics: %d\n - present: %d\n - compute: %d\n - transfer: %d",
+					device_props.deviceName,
+					graphics_index,
+					present_index,
+					compute_index,
+					transfer_index,
+				)
 
-					if compute_index != -1 {
-						supports_compute = true
-						queue_family_compute_index = u32(compute_index)
-					}
+				if graphics_index != -1 && present_index != -1 && compute_index != -1 && transfer_index !=
+				   -1 && device_props.deviceType != .CPU {
 
 					log.infof("Picked device: %s\n ", device_props.deviceName)
 
@@ -329,6 +341,8 @@ when USE_VULKAN_BACKEND {
 					swapchain_present_modes = present_modes
 					queue_family_graphics_index = u32(graphics_index)
 					queue_family_present_index = u32(present_index)
+					queue_family_compute_index = u32(compute_index)
+					queue_family_transfer_index = u32(transfer_index)
 					break
 				}
 			}
@@ -412,12 +426,16 @@ when USE_VULKAN_BACKEND {
 				return false
 			}
 
-			if supports_compute {
-				vk.GetDeviceQueue(device, u32(queue_family_compute_index), 0, &compute_queue)
-				if compute_queue == nil {
-					log.error("Couldn't create compute queue")
-					return false
-				}
+			vk.GetDeviceQueue(device, u32(queue_family_compute_index), 0, &compute_queue)
+			if compute_queue == nil {
+				log.error("Couldn't create compute queue")
+				return false
+			}
+
+			vk.GetDeviceQueue(device, u32(queue_family_transfer_index), 0, &transfer_queue)
+			if transfer_queue == nil {
+				log.error("Couldn't create transfer queue")
+				return false
 			}
 		}
 

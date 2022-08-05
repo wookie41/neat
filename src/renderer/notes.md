@@ -187,3 +187,34 @@ vkCmdSetScissors <- call at the beginning and only when it changes
 vkCmdBindDescriptorSets
 
 draw calls here...
+
+
+----- 
+
+Buffers
+
+- Uniform buffers
+    - updated from the CPU with different frequency
+        - per frame
+        - per view
+        - per instance
+    - we'll probably just map them and write from the CPU
+- Storage buffers
+    - same as uniform buffers, but can be written by/have variable sized arr ays
+
+Patterns:
+    - Wrote by the CPU every frame, read by the GPU
+    - Wrote by the GPU and used by the GPU
+
+Update strategies:
+    - directly written from the CPU via a mapped buffer
+        - have to be submitted at the end of the current frame/beginning of
+          the next frame
+    - written by the CPU to a mapped buffer, then transfered to the GPU
+        - those can be submited mid frame and have a barrier placed for them
+          so the next frame doesn't try to use it 
+
+Usage patterns:
+    - uniform/storage data
+    - vertex buffers (streaming candidate - populated with )
+    - index buffers (streaming)

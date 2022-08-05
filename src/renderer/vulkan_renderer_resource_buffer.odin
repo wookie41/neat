@@ -20,7 +20,8 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	INTERNAL: struct {}
+	INTERNAL: struct {
+	}
 
 	//---------------------------------------------------------------------------//
 
@@ -61,7 +62,7 @@ when USE_VULKAN_BACKEND {
 			sType       = .BUFFER_CREATE_INFO,
 			size        = vk.DeviceSize(p_buffer_desc.size),
 			usage       = vk_usage,
-			sharingMode = .EXCLUSIVE,
+			sharingMode = .CONCURRENT if .SharingModeConcurrent in p_buffer_desc.flags else .EXCLUSIVE,
 		}
 
 		alloc_usage: vma.MemoryUsage = .AUTO
