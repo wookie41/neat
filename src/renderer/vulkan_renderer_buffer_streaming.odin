@@ -4,10 +4,10 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	import "core:log"
-	import "core:mem"
+	// import "core:log"
+	// import "core:mem"
 
-	import "../common"
+	// import "../common"
 
 	//---------------------------------------------------------------------------//
 

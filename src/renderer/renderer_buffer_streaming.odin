@@ -7,7 +7,19 @@ import "core:mem"
 
 import "../common"
 
+/*
+	Streaming works by getting a pointer into the staging buffer at which 
+	the data should be uploaded by the user,  by calling request_streaming(), 
+	Later, at the end of the current frame, all of the data in the 
+	staging buffer will be transfered to the appropriate buffers, specified 
+	by the dst_buff in the StreamingRequest Ref and appropriate barriers
+	will be placed for synchronization.
+	If the request can't be satisfied in the current frame, request_streaming()
+	will return a nullptr.
+ */
+
 //---------------------------------------------------------------------------//
+
 
 @(private)
 StreamingRequest :: struct {
@@ -42,13 +54,20 @@ INTERNAL: struct {
 
 //---------------------------------------------------------------------------//
 
+StreamingInitOptions :: struct 
+{
+	staging_buffer_size: u32,
+}
+
+//---------------------------------------------------------------------------//
+
 @(private)
-init_buffer_streaming :: proc() -> bool {
+init_buffer_streaming :: proc(p_options: StreamingInitOptions) -> bool {
 
 	// Create the staging buffers used as upload src
 	{
 		buffer_desc := BufferDesc {
-			size = 64 * common.MEGABYTE,
+			size = p_options.staging_buffer_size,
 			flags = {.HostWrite, .Mapped},
 			usage = {.TransferSrc},
 		}

@@ -118,7 +118,14 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	load_shaders() or_return
 	create_swap_images()
-	init_buffer_streaming() or_return
+
+	{
+		streaming_options := StreamingInitOptions {
+			staging_buffer_size = 64 * common.MEGABYTE,
+		}
+		init_buffer_streaming(streaming_options) or_return
+	}
+
 
 	// Create RenderTargets for each swap image
 	{
@@ -166,12 +173,12 @@ init :: proc(p_options: InitOptions) -> bool {
 update :: proc(p_dt: f32) {
 	setup_renderer_context()
 	// @TODO build command buffers
-	execute_queued_texture_copies()
 	clear(&G_RENDERER.queued_textures_copies)
 	backend_update(p_dt)
+	execute_queued_texture_copies()
 	run_streaming_requests()
 	// @TODO submit command buffers
-	INTERNAL.frame_id += 1
+	G_RENDERER.frame_id += 1
 }
 
 //---------------------------------------------------------------------------//

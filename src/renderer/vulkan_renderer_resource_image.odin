@@ -246,7 +246,7 @@ when USE_VULKAN_BACKEND {
 				subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
 			}
 
-			for i in 0 .. p_image_desc.mip_count {
+			for i in 0 ..=p_image_desc.mip_count {
 				view_create_info.subresourceRange.baseMipLevel = u32(i)
 				if vk.CreateImageView(
 					   G_RENDERER.device,
@@ -279,7 +279,7 @@ when USE_VULKAN_BACKEND {
 			// Free the created image views if we failed to create any of the mip views
 			if num_image_views_created < int(p_image_desc.mip_count) {
 				vk.DestroyImageView(G_RENDERER.device, p_image.all_mips_vk_view, nil)
-				for i in 0 .. num_image_views_created {
+				for i in 0 ..=num_image_views_created {
 					vk.DestroyImageView(G_RENDERER.device, p_image.per_mip_vk_view[i], nil)
 				}
 				// Delete the image itself
