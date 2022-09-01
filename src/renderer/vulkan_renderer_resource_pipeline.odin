@@ -19,11 +19,11 @@ when USE_VULKAN_BACKEND {
 
 	@(private = "file")
 	VERTEX_BINDINGS_PER_TYPE := map[VertexLayout][]vk.VertexInputBindingDescription {
-		.Mesh = {{
-			// {binding = 0, stride = size_of(glsl.vec3), inputRate = .VERTEX},
-			// {binding = 1, stride = size_of(glsl.vec3), inputRate = .VERTEX},
-			// {binding = 2, stride = size_of(glsl.vec2), inputRate = .VERTEX},
-			binding = 0, stride = size_of(MeshVertexLayout), inputRate = .VERTEX}},
+		.Mesh = {
+		// {binding = 0, stride = size_of(glsl.vec3), inputRate = .VERTEX},
+		// {binding = 1, stride = size_of(glsl.vec3), inputRate = .VERTEX},
+		// {binding = 2, stride = size_of(glsl.vec2), inputRate = .VERTEX},
+		{binding = 0, stride = size_of(MeshVertexLayout,), inputRate = .VERTEX}},
 	}
 
 	//---------------------------------------------------------------------------//
@@ -34,7 +34,7 @@ when USE_VULKAN_BACKEND {
 			// {binding = 0, location = 0, format = .R32G32B32_SFLOAT, offset = 0},
 			// {binding = 1, location = 1, format = .R32G32B32_SFLOAT, offset = 0},
 			// {binding = 2, location = 2, format = .R32G32_SFLOAT, offset = 0},
-			{
+			{ 
 				binding = 0, 
 				location = 0, 
 				format = .R32G32B32_SFLOAT, 
@@ -45,8 +45,7 @@ when USE_VULKAN_BACKEND {
 				location = 1,
 				format = .R32G32B32_SFLOAT,
 				offset = u32(offset_of(MeshVertexLayout, color)),
-			}, 
-			{
+			}, {
 				binding = 0,
 				location = 2,
 				format = .R32G32_SFLOAT,
@@ -57,7 +56,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	INPUT_ASSEMBLY_PER_PRIMITIVE_TYPE := map[PrimitiveType]vk.PipelineInputAssemblyStateCreateInfo {
+	INPUT_ASSEMBLY_PER_PRIMITIVE_TYPE := map[PrimitiveType]vk.PipelineInputAssemblyStateCreateInfo{
 		.TriangleList = {
 			sType = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
 			topology = .TRIANGLE_LIST,
@@ -78,14 +77,14 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	MULTISAMPLER_STATE_PER_SAMPLE_TYPE := map[MultisamplingType]vk.PipelineMultisampleStateCreateInfo {
+	MULTISAMPLER_STATE_PER_SAMPLE_TYPE := map[MultisamplingType]vk.PipelineMultisampleStateCreateInfo{
 		._1 = {sType = .PIPELINE_MULTISAMPLE_STATE_CREATE_INFO, rasterizationSamples = {._1}},
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	DEPTH_STENCIL_STATE_PER_TYPE := map[DepthStencilType]vk.PipelineDepthStencilStateCreateInfo {
+	DEPTH_STENCIL_STATE_PER_TYPE := map[DepthStencilType]vk.PipelineDepthStencilStateCreateInfo{
 		.None = {
 			sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
 			depthTestEnable = false,
@@ -176,10 +175,11 @@ when USE_VULKAN_BACKEND {
 	backend_deinit_pipelines :: proc() {
 		cache_size: int
 
+
 		vk.GetPipelineCacheData(G_RENDERER.device, INTERNAL.vk_pipeline_cache, &cache_size, nil)
 
 		cache_data := make([]u8, cache_size, G_RENDERER_ALLOCATORS.temp_allocator)
-		defer delete(cache_data, G_RENDERER_ALLOCATORS.temp_allocator)
+		defer delete(color_blend_attachments, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		vk.GetPipelineCacheData(
 			G_RENDERER.device,
@@ -351,10 +351,38 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
+
+	@(private = "file")
+	vk_pipeline_stages_mapping := []vk.PipelineStageFlag{
+		.TOP_OF_PIPE,
+		.DRAW_INDIRECT,
+		.VERTEX_INPUT,
+		.VERTEX_SHADER,
+		.GEOMETRY_SHADER,
+		.FRAGMENT_SHADER,
+		.EARLY_FRAGMENT_TESTS,
+		.LATE_FRAGMENT_TESTS,
+		.COLOR_ATTACHMENT_OUTPUT,
+		.COMPUTE_SHADER,
+		.TRANSFER,
+		.BOTTOM_OF_PIPE,
+		.HOST,
+		.ALL_GRAPHICS,
+		.ALL_COMMANDS,
+	}
+
+	backend_map_pipeline_stage :: proc(
+		p_stage: PipelineStageFlagBits,
+	) -> vk.PipelineStageFlag {
+		return vk_pipeline_stages_mapping[int(p_stage)]
+	}
+
+	//---------------------------------------------------------------------------//
+
 	@(private)
 	backend_destroy_pipeline :: proc(p_pipeline: ^PipelineResource) {
 		vk.DestroyPipeline(G_RENDERER.device, p_pipeline.vk_pipeline, nil)
 	}
-
+	
 	//---------------------------------------------------------------------------//
 }

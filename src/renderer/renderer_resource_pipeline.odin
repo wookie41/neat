@@ -98,6 +98,7 @@ PipelineStageFlagBits :: enum u16 {
 	FragmentShader,
 	EarlyFragmentTests,
 	LateFragmentTests,
+	AttachmentOutput,
 	ComputeShader,
 	Transfer,
 	BottomOfPipe,

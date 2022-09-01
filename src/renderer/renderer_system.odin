@@ -66,6 +66,14 @@ InitOptions :: struct {
 	using backend_options: BackendInitOptions,
 }
 
+
+@(private)
+DeviceQueueType :: enum {
+	Graphics,
+	Compute,
+	Transfer,
+}
+
 //---------------------------------------------------------------------------//
 
 init :: proc(p_options: InitOptions) -> bool {
@@ -120,10 +128,11 @@ init :: proc(p_options: InitOptions) -> bool {
 	create_swap_images()
 
 	{
-		streaming_options := StreamingInitOptions {
+		buffer_upload_options := BufferUploadInitOptions {
 			staging_buffer_size = 64 * common.MEGABYTE,
+			num_staging_regions = 2,
 		}
-		init_buffer_streaming(streaming_options) or_return
+		init_buffer_upload(buffer_upload_options) or_return
 	}
 
 
@@ -174,9 +183,10 @@ update :: proc(p_dt: f32) {
 	setup_renderer_context()
 	// @TODO build command buffers
 	clear(&G_RENDERER.queued_textures_copies)
+	buffer_upload_begin_frame()
 	backend_update(p_dt)
 	execute_queued_texture_copies()
-	run_streaming_requests()
+	run_buffer_upload_requests()
 	// @TODO submit command buffers
 	G_RENDERER.frame_id += 1
 }

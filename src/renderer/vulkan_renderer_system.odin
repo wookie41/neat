@@ -854,7 +854,6 @@ recreate_swapchain :: proc() {
 	// @TODO Make it better, use pOldSwapchain when recreating the swapchain 
 	vk.DeviceWaitIdle(device)
 
-	log.debug("Recreating swapchain!")
 	for image_view in swapchain_image_views {
 		vk.DestroyImageView(device, image_view, nil)
 	}
