@@ -146,8 +146,6 @@ init_vt :: proc() -> bool {
 		vt_create_descriptor_pool()
 		vk_create_descriptor_sets()
 		vt_load_model()
-		vt_create_vertex_buffer()
-		vt_create_index_buffer()
 		vt_create_texture_image()
 		vt_create_texture_image_view()
 		vt_create_texture_sampler()
@@ -155,6 +153,11 @@ init_vt :: proc() -> bool {
 
 		return true
 	}
+}
+
+vt_pre_render :: proc() {
+	vt_create_vertex_buffer()
+	vt_create_index_buffer()
 }
 
 
@@ -228,27 +231,17 @@ vt_create_vertex_buffer :: proc() {
 	}
 	vertex_buffer_ref = create_buffer(common.create_name("VertexBuffer"), vert_buffer_desc)
 
-	staging_buffer_desc := BufferDesc {
-		size = u32(len(g_vertices) * size_of(MeshVertexLayout)),
-		usage = {.TransferSrc},
-		flags = {.HostWrite},
+	upload_request := BufferUploadRequest {
+		dst_buff = vertex_buffer_ref,
+		dst_buff_offset = 0,
+		dst_queue_usage = .Graphics,
+		first_usage_stage = .VertexInput,
+		size = vert_buffer_desc.size,
 	}
-	staging_buffer_ref := create_buffer(
-		common.create_name("StagingVertexBuffer"),
-		staging_buffer_desc,
-	)
+	response := request_buffer_upload(upload_request)
+	assert(response.ptr != nil)
 
-	vertex_data := map_buffer(staging_buffer_ref)
-	mem.copy(vertex_data, raw_data(g_vertices), len(g_vertices) * size_of(Vertex))
-	unmap_buffer(staging_buffer_ref)
-
-	vt_copy_buffer(
-		get_buffer(staging_buffer_ref).vk_buffer,
-		get_buffer(vertex_buffer_ref).vk_buffer,
-		vk.DeviceSize(vert_buffer_desc.size),
-	)
-
-	destroy_buffer(staging_buffer_ref)
+	mem.copy(response.ptr, raw_data(g_vertices), len(g_vertices) * size_of(Vertex))
 }
 
 vt_create_index_buffer :: proc() {
@@ -261,28 +254,16 @@ vt_create_index_buffer :: proc() {
 		flags = {.Dedicated},
 	}
 	index_buffer_ref = create_buffer(common.create_name("IndexBuffer"), index_buffer_desc)
-
-	staging_buffer_desc := BufferDesc {
-		size = u32(len(g_indices) * size_of(g_indices[0])),
-		usage = {.TransferSrc},
-		flags = {.HostWrite},
+	upload_request := BufferUploadRequest {
+		dst_buff = index_buffer_ref,
+		dst_buff_offset = 0,
+		dst_queue_usage = .Graphics,
+		first_usage_stage = .VertexInput,
+		size = index_buffer_desc.size,
 	}
-	staging_buffer_ref := create_buffer(
-		common.create_name("StagingIndexBuffer"),
-		staging_buffer_desc,
-	)
-
-	index_data := map_buffer(staging_buffer_ref)
-	mem.copy(index_data, raw_data(g_indices), int(staging_buffer_desc.size))
-	unmap_buffer(staging_buffer_ref)
-
-	vt_copy_buffer(
-		get_buffer(staging_buffer_ref).vk_buffer,
-		get_buffer(index_buffer_ref).vk_buffer,
-		vk.DeviceSize(index_buffer_desc.size),
-	)
-
-	destroy_buffer(staging_buffer_ref)
+	response := request_buffer_upload(upload_request)
+	assert(response.ptr != nil)
+	mem.copy(response.ptr, raw_data(g_indices), int(index_buffer_desc.size))
 }
 
 vt_create_buffer :: proc(
@@ -379,7 +360,7 @@ vt_update_uniform_buffer :: proc() {
 		),
 	}
 
-	uniform_buffer := get_buffer(ubo_refs[frame_idx])
+	uniform_buffer := get_buffer(ubo_refs[get_frame_idx()])
 	mem.copy(uniform_buffer.mapped_ptr, &ubo, size_of(UniformBufferObject))
 }
 

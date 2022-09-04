@@ -33,12 +33,18 @@ MAX_COMMAND_BUFFERS :: #config(MAX_PIPELINES, 32)
 
 //---------------------------------------------------------------------------//
 
+@(private = "file")
+INTERNAL: struct {
+	frame_id:  u32,
+	frame_idx: u32, // frame_id % num_frames_in_flight 
+}
+
+//---------------------------------------------------------------------------//
+
 @(private)
 G_RENDERER: struct {
 	using backend_state:          BackendRendererState,
 	num_frames_in_flight:         u32,
-	frame_id:                     u32,
-	frame_idx:                    u32, // frame_id % num_frames_in_flight 
 	primary_cmd_buffer_ref:       []CommandBufferRef,
 	queued_textures_copies:       [dynamic]TextureCopy,
 	current_frame_swap_image_idx: u32,
@@ -114,6 +120,9 @@ init :: proc(p_options: InitOptions) -> bool {
 		G_RENDERER_ALLOCATORS.frame_allocator,
 	)
 
+	INTERNAL.frame_idx = 0
+	INTERNAL.frame_id = 0
+
 	setup_renderer_context()
 	backend_init(p_options) or_return
 
@@ -173,25 +182,84 @@ init :: proc(p_options: InitOptions) -> bool {
 		}
 	}
 
-	setup_renderer_context()
 	init_vt()
+
+	setup_renderer_context()
+
+	// Iterate over RenderTasks and call pre_render() for all of them
+	// This is the initial frame, where everything inside the renderer 
+	// is guaranteed to be created and so things like transfers can be requested 
+	{
+		cmd_buff := get_frame_cmd_buffer()
+		begin_command_buffer(cmd_buff)
+		vt_pre_render()
+		//execute_queued_texture_copies()
+		run_buffer_upload_requests()
+		end_command_buffer(cmd_buff)
+		submit_pre_render(cmd_buff)
+
+		advance_frame_idx()
+	}
+
 	return true
 }
 //---------------------------------------------------------------------------//
 
 update :: proc(p_dt: f32) {
 	setup_renderer_context()
-	// @TODO build command buffers
+
 	clear(&G_RENDERER.queued_textures_copies)
+	cmd_buff := get_frame_cmd_buffer()
+
 	buffer_upload_begin_frame()
 	backend_update(p_dt)
+
 	execute_queued_texture_copies()
 	run_buffer_upload_requests()
-	// @TODO submit command buffers
-	G_RENDERER.frame_id += 1
+
+	end_command_buffer(cmd_buff)
+
+	submit_current_frame(cmd_buff)
+
+	advance_frame_idx()
 }
 
 //---------------------------------------------------------------------------//
+
+get_frame_idx :: #force_inline proc() -> u32 {
+	return INTERNAL.frame_idx
+}
+
+//---------------------------------------------------------------------------//
+
+get_frame_id :: #force_inline proc() -> u32 {
+	return INTERNAL.frame_id
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+advance_frame_idx :: proc() {
+	INTERNAL.frame_id += 1
+	INTERNAL.frame_idx = (INTERNAL.frame_idx + 1) % G_RENDERER.num_frames_in_flight
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
+submit_pre_render :: proc(p_cmd_buff_ref: CommandBufferRef) {
+	backend_submit_pre_render(p_cmd_buff_ref)
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
+submit_current_frame :: proc(p_cmd_buff_ref: CommandBufferRef) {
+	backend_submit_current_frame(p_cmd_buff_ref)
+}
+
+//---------------------------------------------------------------------------//
+
 
 deinit :: proc() {
 	setup_renderer_context()
@@ -223,7 +291,7 @@ setup_renderer_context :: proc() {
 
 @(private)
 get_frame_cmd_buffer :: proc() -> CommandBufferRef {
-	return G_RENDERER.primary_cmd_buffer_ref[G_RENDERER.frame_idx]
+	return G_RENDERER.primary_cmd_buffer_ref[get_frame_idx()]
 }
 
 //---------------------------------------------------------------------------//

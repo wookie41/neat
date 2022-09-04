@@ -4,11 +4,6 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	// import "core:log"
-	// import "core:mem"
-
-	// import "../common"
-
 	import vk "vendor:vulkan"
 
 	//---------------------------------------------------------------------------//
@@ -16,17 +11,21 @@ when USE_VULKAN_BACKEND {
 	@(private = "file")
 	INTERNAL: struct {
 		transfer_fences: []vk.Fence,
+		had_requests_prev_frame: bool,
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
 	backend_buffer_upload_begin_frame :: proc() {
+		if !INTERNAL.had_requests_prev_frame {
+			return
+		}
 		// Make sure that the GPU is no longer reading the current staging buffer region
 		vk.WaitForFences(
 			G_RENDERER.device,
 			1,
-			&INTERNAL.transfer_fences[G_RENDERER.frame_idx],
+			&INTERNAL.transfer_fences[get_frame_idx()],
 			true,
 			max(u64),
 		)
@@ -73,6 +72,13 @@ when USE_VULKAN_BACKEND {
 		p_staging_buffer_ref: BufferRef,
 		p_upload_requests: [dynamic]PendingBufferUploadRequest,
 	) {
+
+		if len(p_upload_requests) == 0 {
+			INTERNAL.had_requests_prev_frame = false
+			return
+		}
+
+		INTERNAL.had_requests_prev_frame = true
 
 		cmd_buff_ref := get_frame_cmd_buffer()
 		cmd_buff := get_command_buffer(cmd_buff_ref)
@@ -139,7 +145,7 @@ when USE_VULKAN_BACKEND {
 			)
 		}
 
-		vk.ResetFences(G_RENDERER.device, 1, &INTERNAL.transfer_fences[G_RENDERER.frame_idx])
+		vk.ResetFences(G_RENDERER.device, 1, &INTERNAL.transfer_fences[get_frame_idx()])
 	}
 	//---------------------------------------------------------------------------//
 }

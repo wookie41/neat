@@ -127,7 +127,7 @@ request_buffer_upload :: proc(p_request: BufferUploadRequest) -> BufferUploadRes
 
 	pending_request := PendingBufferUploadRequest {
 		request               = p_request,
-		staging_buffer_offset = INTERNAL.single_staging_region_size * G_RENDERER.frame_idx + INTERNAL.staging_buffer_offset,
+		staging_buffer_offset = INTERNAL.single_staging_region_size * get_frame_idx() + INTERNAL.staging_buffer_offset,
 	}
 
 	append(&INTERNAL.pending_requests, pending_request)

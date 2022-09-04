@@ -175,11 +175,9 @@ when USE_VULKAN_BACKEND {
 	backend_deinit_pipelines :: proc() {
 		cache_size: int
 
-
 		vk.GetPipelineCacheData(G_RENDERER.device, INTERNAL.vk_pipeline_cache, &cache_size, nil)
 
 		cache_data := make([]u8, cache_size, G_RENDERER_ALLOCATORS.temp_allocator)
-		defer delete(color_blend_attachments, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		vk.GetPipelineCacheData(
 			G_RENDERER.device,

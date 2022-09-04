@@ -82,6 +82,7 @@ create_command_buffer :: #force_inline proc(
 	)
 	idx := get_ref_idx(ref)
 	cmd_buff := &G_COMMAND_BUFFER_REF_ARRAY.resource_array[idx]
+	cmd_buff.desc = p_cmd_buff_desc
 
 	if backend_create_command_buffer(p_cmd_buff_desc, cmd_buff) == false {
 		free_ref(CommandBufferResource, &G_COMMAND_BUFFER_REF_ARRAY, ref)
