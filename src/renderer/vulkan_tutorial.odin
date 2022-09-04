@@ -20,7 +20,7 @@ G_VT: struct {
 	start_time:               time.Time,
 	descriptor_pool:          vk.DescriptorPool,
 	descriptor_sets:          [dynamic]vk.DescriptorSet,
-	texture_image:            vk.Image,
+	texture_image_ref:        ImageRef,
 	texture_image_allocation: vma.Allocation,
 	texture_image_view:       vk.ImageView,
 	texture_sampler:          vk.Sampler,
@@ -146,10 +146,6 @@ init_vt :: proc() -> bool {
 		vt_create_descriptor_pool()
 		vk_create_descriptor_sets()
 		vt_load_model()
-		vt_create_texture_image()
-		vt_create_texture_image_view()
-		vt_create_texture_sampler()
-		vt_write_descriptor_sets()
 
 		return true
 	}
@@ -158,6 +154,10 @@ init_vt :: proc() -> bool {
 vt_pre_render :: proc() {
 	vt_create_vertex_buffer()
 	vt_create_index_buffer()
+	vt_create_texture_image()
+	vt_create_texture_image_view()
+	vt_create_texture_sampler()
+	vt_write_descriptor_sets()
 }
 
 
@@ -166,7 +166,7 @@ deinit_vt :: proc() {
 	using G_RENDERER
 	vk.DestroySampler(device, texture_sampler, nil)
 	vk.DestroyImageView(device, texture_image_view, nil)
-	vma.destroy_image(vma_allocator, texture_image, texture_image_allocation)
+	destroy_image(texture_image_ref)
 	vk.DestroyDescriptorPool(device, descriptor_pool, nil)
 	for ubo_ref in ubo_refs {
 		destroy_buffer(ubo_ref)
@@ -232,11 +232,11 @@ vt_create_vertex_buffer :: proc() {
 	vertex_buffer_ref = create_buffer(common.create_name("VertexBuffer"), vert_buffer_desc)
 
 	upload_request := BufferUploadRequest {
-		dst_buff = vertex_buffer_ref,
-		dst_buff_offset = 0,
-		dst_queue_usage = .Graphics,
+		dst_buff          = vertex_buffer_ref,
+		dst_buff_offset   = 0,
+		dst_queue_usage   = .Graphics,
 		first_usage_stage = .VertexInput,
-		size = vert_buffer_desc.size,
+		size              = vert_buffer_desc.size,
 	}
 	response := request_buffer_upload(upload_request)
 	assert(response.ptr != nil)
@@ -249,17 +249,17 @@ vt_create_index_buffer :: proc() {
 	using G_VT
 
 	index_buffer_desc := BufferDesc {
-		size  = u32(len(g_indices) * size_of(g_indices[0])),
+		size = u32(len(g_indices) * size_of(g_indices[0])),
 		usage = {.IndexBuffer, .TransferDst},
 		flags = {.Dedicated},
 	}
 	index_buffer_ref = create_buffer(common.create_name("IndexBuffer"), index_buffer_desc)
 	upload_request := BufferUploadRequest {
-		dst_buff = index_buffer_ref,
-		dst_buff_offset = 0,
-		dst_queue_usage = .Graphics,
+		dst_buff          = index_buffer_ref,
+		dst_buff_offset   = 0,
+		dst_queue_usage   = .Graphics,
 		first_usage_stage = .VertexInput,
-		size = index_buffer_desc.size,
+		size              = index_buffer_desc.size,
 	}
 	response := request_buffer_upload(upload_request)
 	assert(response.ptr != nil)
@@ -495,65 +495,17 @@ vt_create_texture_image :: proc() {
 		log.debug("Failed to load image")
 	}
 
-	image_size := vk.DeviceSize(image_width * image_height * 4)
+	texture_desc := ImageDesc {
+		type = .TwoDimensional,
+		format = .RGBA8_SRGB,
+		mip_count = 1,
+		data_per_mip = {pixels[0:image_width * image_height * 4]},
+		dimensions = {u32(image_width), u32(image_height), 1},
+		sample_count_flags = {._1},
+	}
 
-	staging_buffer, staging_buffer_alloc := vt_create_buffer(
-		image_size,
-		{.TRANSFER_SRC},
-		.AUTO_PREFER_HOST,
-		{.HOST_ACCESS_SEQUENTIAL_WRITE},
-	)
-
-	defer vma.destroy_buffer(vma_allocator, staging_buffer, staging_buffer_alloc)
-
-	mapped_data: rawptr
-	vma.map_memory(vma_allocator, staging_buffer_alloc, &mapped_data)
-	mem.copy(mapped_data, pixels, int(image_size * size_of(u8)))
-	vma.unmap_memory(vma_allocator, staging_buffer_alloc)
-
+	texture_image_ref = create_texture_image(common.create_name("VikingRoom"), texture_desc)
 	stb_image.image_free(pixels)
-
-	image_create_info := vk.ImageCreateInfo {
-		sType = .IMAGE_CREATE_INFO,
-		imageType = .D2,
-		extent = {width = u32(image_width), height = u32(image_height), depth = 1},
-		mipLevels = 1,
-		arrayLayers = 1,
-		format = .R8G8B8A8_SRGB,
-		tiling = .OPTIMAL,
-		initialLayout = .UNDEFINED,
-		usage = {.TRANSFER_DST, .SAMPLED},
-		sharingMode = .EXCLUSIVE,
-		samples = {._1},
-	}
-	alloc_create_info := vma.AllocationCreateInfo {
-		usage = .AUTO,
-	}
-
-	if vma.create_image(
-		   vma_allocator,
-		   &image_create_info,
-		   &alloc_create_info,
-		   &texture_image,
-		   &texture_image_allocation,
-		   nil,
-	   ) != .SUCCESS {
-		log.warn("Failed to create an image")
-	}
-
-
-	vt_transition_image_layout(texture_image, .UNDEFINED, .TRANSFER_DST_OPTIMAL)
-	vt_copy_buffer_to_image(
-		staging_buffer,
-		texture_image,
-		u32(image_width),
-		u32(image_height),
-	)
-	vt_transition_image_layout(
-		texture_image,
-		.TRANSFER_DST_OPTIMAL,
-		.SHADER_READ_ONLY_OPTIMAL,
-	)
 }
 
 
@@ -658,8 +610,9 @@ vt_copy_buffer_to_image :: proc(
 }
 
 vt_create_texture_image_view :: proc() {
+	texture_image := get_image(G_VT.texture_image_ref)
 	G_VT.texture_image_view = vt_create_image_view(
-		G_VT.texture_image,
+		texture_image.vk_image,
 		.R8G8B8A8_SRGB,
 		{.COLOR},
 	)

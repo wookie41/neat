@@ -193,7 +193,7 @@ init :: proc(p_options: InitOptions) -> bool {
 		cmd_buff := get_frame_cmd_buffer()
 		begin_command_buffer(cmd_buff)
 		vt_pre_render()
-		//execute_queued_texture_copies()
+		execute_queued_texture_copies()
 		run_buffer_upload_requests()
 		end_command_buffer(cmd_buff)
 		submit_pre_render(cmd_buff)

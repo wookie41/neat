@@ -76,8 +76,13 @@ ImageFormat :: enum u16 {
 	RGBA32UInt,
 	RGBA32Int,
 	RGBA32SFloat,
-	B8G8R8A8_SRGB,
 	RGBAFormatsEnd,
+
+	SRGB_FormatsStart,
+	RGBA8_SRGB,
+	BGRA8_SRGB,
+	SRGB_FormatsEnd,
+	
 	ColorFormatsEnd,
 	//---------------------//
 }
@@ -109,7 +114,7 @@ ImageDesc :: struct {
 	type:               ImageType,
 	format:             ImageFormat,
 	mip_count:          u8,
-	data_per_mip:       [][]u8,
+	data_per_mip:       [][]byte,
 	dimensions:         glsl.uvec3,
 	flags:              ImageDescFlags,
 	sample_count_flags: ImageSampleCountFlags,
@@ -139,6 +144,10 @@ allocate_image_ref :: proc(p_name: common.Name) -> ImageRef {
 
 /** Creates an image that can later be used as a sampled image inside a shader */
 create_texture_image :: proc(p_name: common.Name, p_image_desc: ImageDesc) -> ImageRef {
+	assert(
+		p_image_desc.format > .ColorFormatsStart && p_image_desc.format < .ColorFormatsEnd,
+	)
+
 	ref := allocate_image_ref(p_name)
 	image := &G_IMAGE_REF_ARRAY.resource_array[get_ref_idx(ref)]
 	image.desc = p_image_desc
@@ -186,3 +195,5 @@ destroy_image :: proc(p_ref: ImageRef) {
 	backend_destroy_image(image)
 	free_ref(ImageResource, &G_IMAGE_REF_ARRAY, p_ref)
 }
+
+//---------------------------------------------------------------------------//

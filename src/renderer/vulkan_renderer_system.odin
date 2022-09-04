@@ -946,8 +946,9 @@ backend_execute_queued_texture_copies :: proc(p_cmd_buff_ref: CommandBufferRef) 
 		G_RENDERER_ALLOCATORS.temp_allocator,
 	)
 
-	for texture_copy, i in G_RENDERER.queued_textures_copies {
+	for _, i in G_RENDERER.queued_textures_copies {
 
+		texture_copy := G_RENDERER.queued_textures_copies[i]
 		image := get_image(texture_copy.image)
 		buffer := get_buffer(texture_copy.buffer)
 
@@ -992,7 +993,7 @@ backend_execute_queued_texture_copies :: proc(p_cmd_buff_ref: CommandBufferRef) 
 		// Create the vulkan copies
 		for offset, mip in texture_copy.mip_buffer_offsets {
 
-			vk_copies[i].mip_copies[mip] = {
+			vk_copy_entry.mip_copies[mip] = {
 				bufferOffset = vk.DeviceSize(offset),
 				imageSubresource = {
 					aspectMask = {.COLOR},
@@ -1007,6 +1008,8 @@ backend_execute_queued_texture_copies :: proc(p_cmd_buff_ref: CommandBufferRef) 
 				},
 			}
 		}
+
+		vk_copies[i] = vk_copy_entry
 	}
 
 	// Transition the images to transfer

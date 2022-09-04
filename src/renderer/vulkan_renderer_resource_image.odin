@@ -81,11 +81,6 @@ when USE_VULKAN_BACKEND {
 		p_image_ref: ImageRef,
 		p_image: ^ImageResource,
 	) -> bool {
-
-		assert(
-			p_image_desc.format < .DepthFormatsStart && p_image_desc.format > .DepthFormatsEnd,
-		)
-
 		// Map vk image type
 		vk_image_type, type_found := G_IMAGE_TYPE_MAPPING[p_image_desc.type]
 		if type_found == false {
@@ -246,7 +241,7 @@ when USE_VULKAN_BACKEND {
 				subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
 			}
 
-			for i in 0 ..=p_image_desc.mip_count {
+			for i in 0 ..< p_image_desc.mip_count {
 				view_create_info.subresourceRange.baseMipLevel = u32(i)
 				if vk.CreateImageView(
 					   G_RENDERER.device,
