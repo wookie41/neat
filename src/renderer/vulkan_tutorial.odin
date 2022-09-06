@@ -516,7 +516,7 @@ vt_begin_single_time_command_buffer :: proc() -> vk.CommandBuffer {
 	alloc_info := vk.CommandBufferAllocateInfo {
 		sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
 		level              = .PRIMARY,
-		commandPool        = INTERNAL.command_pools[0],
+		commandPool        = INTERNAL.graphics_command_pools[0],
 		commandBufferCount = 1,
 	}
 	cmd_buff: vk.CommandBuffer

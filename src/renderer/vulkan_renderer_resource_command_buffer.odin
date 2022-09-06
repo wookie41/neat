@@ -19,7 +19,12 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	INTERNAL: struct {
-		command_pools: []vk.CommandPool,
+		graphics_command_pools: []vk.CommandPool,
+		transfer_command_pools: []vk.CommandPool,
+		compute_command_pools:  []vk.CommandPool,
+
+		transfer_cmd_buffers: []vk.CommandBuffer,
+		compute_cmd_buffers: []vk.CommandBuffer,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -27,30 +32,104 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_init_command_buffers :: proc(p_options: InitOptions) -> bool {
 
-		pool_info := vk.CommandPoolCreateInfo {
-			sType = .COMMAND_POOL_CREATE_INFO,
-			queueFamilyIndex = u32(G_RENDERER.queue_family_graphics_index),
-			flags = {.RESET_COMMAND_BUFFER},
-		}
-
-		INTERNAL.command_pools = make(
+		// Create graphics command pools
+		INTERNAL.graphics_command_pools = make(
 			[]vk.CommandPool,
 			int(G_RENDERER.num_frames_in_flight),
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
 
+		create_command_pools(
+			u32(G_RENDERER.queue_family_graphics_index),
+			false,
+			INTERNAL.graphics_command_pools,
+			nil,
+		) or_return
+
+		// Create command pools for transfer queue if the GPU has a dedicated one
+		if G_RENDERER.queue_family_transfer_index != G_RENDERER.queue_family_graphics_index {
+			INTERNAL.transfer_command_pools = make(
+				[]vk.CommandPool,
+				int(G_RENDERER.num_frames_in_flight),
+				G_RENDERER_ALLOCATORS.resource_allocator,
+			)
+			INTERNAL.transfer_cmd_buffers = make(
+				[]vk.CommandBuffer,
+				int(G_RENDERER.num_frames_in_flight),
+				G_RENDERER_ALLOCATORS.resource_allocator,
+			)
+			create_command_pools(
+				u32(G_RENDERER.queue_family_transfer_index),
+				true,
+				INTERNAL.transfer_command_pools,
+				INTERNAL.transfer_cmd_buffers,
+			) or_return
+		}
+
+		// Create command pools for compute queue if the GPU has a dedicated one
+		if G_RENDERER.queue_family_transfer_index != G_RENDERER.queue_family_graphics_index {
+			INTERNAL.compute_command_pools = make(
+				[]vk.CommandPool,
+				int(G_RENDERER.num_frames_in_flight),
+				G_RENDERER_ALLOCATORS.resource_allocator,
+			)
+			INTERNAL.compute_cmd_buffers = make(
+				[]vk.CommandBuffer,
+				int(G_RENDERER.num_frames_in_flight),
+				G_RENDERER_ALLOCATORS.resource_allocator,
+			)
+			create_command_pools(
+				u32(G_RENDERER.queue_family_compute_index),
+				true,
+				INTERNAL.compute_command_pools,
+				INTERNAL.compute_cmd_buffers,
+			) or_return
+		}
+
+		return true
+	}
+
+
+	@(private = "file")
+	create_command_pools :: proc(
+		p_queue_family_idx: u32,
+		p_allocate_command_buffers: bool,
+		p_cmd_pools: []vk.CommandPool,
+		p_cmd_buffers: []vk.CommandBuffer,
+	) -> bool {
+
+		pool_info := vk.CommandPoolCreateInfo {
+			sType = .COMMAND_POOL_CREATE_INFO,
+			queueFamilyIndex = p_queue_family_idx,
+			flags = {.RESET_COMMAND_BUFFER},
+		}
+
 		for i in 0 ..< G_RENDERER.num_frames_in_flight {
-			if vk.CreateCommandPool(
-				   G_RENDERER.device,
-				   &pool_info,
-				   nil,
-				   &INTERNAL.command_pools[i],
-			   ) != .SUCCESS {
+			if vk.CreateCommandPool(G_RENDERER.device, &pool_info, nil, &p_cmd_pools[i]) != .SUCCESS {
 				log.error("Couldn't create command pool")
 				return false
 			}
 		}
 
+		if p_allocate_command_buffers {
+			for cmd_pool, i in p_cmd_pools {
+				alloc_info := vk.CommandBufferAllocateInfo {
+					sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
+					commandPool        = cmd_pool,
+					level              = .PRIMARY,
+					commandBufferCount = 1,
+				}
+
+				if vk.AllocateCommandBuffers(
+					   G_RENDERER.device,
+					   &alloc_info,
+					   &p_cmd_buffers[i],
+				   ) != .SUCCESS {
+					return false
+				}
+
+			}
+		}
 		return true
 	}
 
@@ -63,7 +142,7 @@ when USE_VULKAN_BACKEND {
 	) -> bool {
 		alloc_info := vk.CommandBufferAllocateInfo {
 			sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
-			commandPool        = INTERNAL.command_pools[p_cmd_buff_desc.frame],
+			commandPool        = INTERNAL.graphics_command_pools[p_cmd_buff_desc.frame],
 			level              = .PRIMARY if .Primary in p_cmd_buff_desc.flags else .SECONDARY,
 			commandBufferCount = 1,
 		}
@@ -111,7 +190,7 @@ when USE_VULKAN_BACKEND {
 	backend_destroy_command_buffer :: proc(p_cmd_buff: ^CommandBufferResource) {
 		vk.FreeCommandBuffers(
 			G_RENDERER.device,
-			INTERNAL.command_pools[p_cmd_buff.desc.thread],
+			INTERNAL.graphics_command_pools[p_cmd_buff.desc.thread],
 			1,
 			&p_cmd_buff.vk_cmd_buff,
 		)

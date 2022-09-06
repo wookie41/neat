@@ -14,8 +14,8 @@ when USE_VULKAN_BACKEND {
 
 	//--------------------------------------------------------------------------//
 
-	@(private="file")
-	INTERNAL : struct {
+	@(private = "file")
+	INTERNAL: struct {
 		swap_img_idx: u32,
 	}
 
@@ -302,14 +302,22 @@ when USE_VULKAN_BACKEND {
 				present_index := -1
 				compute_index := -1
 				transfer_index := -1
-				for qf, i in &queue_families {
+				for qf, i in queue_families {
 					if graphics_index == -1 && .GRAPHICS in qf.queueFlags {
 						graphics_index = i
-					}
-					if compute_index == -1 && .COMPUTE in qf.queueFlags {
+						// Use the graphics queue as compute and transfer only if the GPU 
+						// doesn't have seprate queues for those purposes or we didn't find one yet
+						if compute_index == -1 && .COMPUTE in qf.queueFlags {
+							compute_index = i
+						}
+						if transfer_index == -1 && .TRANSFER in qf.queueFlags {
+							transfer_index = i
+						}
+					} else if .COMPUTE in qf.queueFlags {
+						// Found a compute-only queue
 						compute_index = i
-					}
-					if transfer_index == -1 && .TRANSFER in qf.queueFlags {
+					} else if .TRANSFER in qf.queueFlags {
+						// Found a transfer-only queue
 						transfer_index = i
 					}
 
@@ -318,11 +326,11 @@ when USE_VULKAN_BACKEND {
 					if present_index == -1 && present_support {
 						present_index = i
 					}
+				}
 
-					if graphics_index != -1 && (!present_support || (present_support && present_index !=
-					   -1)) && compute_index != -1 && transfer_index != -1 {
-						break
-					}
+				if graphics_index == -1 || present_index == -1 || compute_index == -1 || transfer_index ==
+				   -1 {
+					continue
 				}
 
 				device_props: vk.PhysicalDeviceProperties
@@ -370,10 +378,11 @@ when USE_VULKAN_BACKEND {
 			defer mem.free_all(temp_allocator)
 
 			// Avoid creating duplicates
-			queue_families := make(map[u32]int, 3, temp_allocator)
+			queue_families := make(map[u32]int, 4, temp_allocator)
 			queue_families[queue_family_graphics_index] += 1
 			queue_families[queue_family_present_index] += 1
 			queue_families[queue_family_compute_index] += 1
+			queue_families[queue_family_transfer_index] += 1
 
 			queue_priorities := make([]f32, len(queue_families))
 			for qfc in 0 ..< len(queue_families) {
@@ -597,9 +606,9 @@ backend_update :: proc(p_dt: f32) {
 backend_submit_pre_render :: proc(p_cmd_buff_ref: CommandBufferRef) {
 	cmd_buff := get_command_buffer(p_cmd_buff_ref)
 	submit_info := vk.SubmitInfo {
-		sType                = .SUBMIT_INFO,
-		commandBufferCount   = 1,
-		pCommandBuffers      = &cmd_buff.vk_cmd_buff,
+		sType              = .SUBMIT_INFO,
+		commandBufferCount = 1,
+		pCommandBuffers    = &cmd_buff.vk_cmd_buff,
 	}
 	vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[get_frame_idx()])
 
