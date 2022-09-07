@@ -193,12 +193,16 @@ init :: proc(p_options: InitOptions) -> bool {
 		cmd_buff := get_frame_cmd_buffer()
 		begin_command_buffer(cmd_buff)
 		vt_pre_render()
+		run_buffer_upload_requests(true)
 		execute_queued_texture_copies()
-		run_buffer_upload_requests()
 		end_command_buffer(cmd_buff)
 		submit_pre_render(cmd_buff)
-
-		advance_frame_idx()
+		
+		// Advance the frame index when using unified queues, as we don't want to wait for the 0th
+		// command buffer to finish before we start recording the frame
+		if G_RENDERER.queue_family_graphics_index == G_RENDERER.queue_family_transfer_index {
+			advance_frame_idx()
+		}
 	}
 
 	return true
@@ -209,17 +213,20 @@ update :: proc(p_dt: f32) {
 	setup_renderer_context()
 
 	clear(&G_RENDERER.queued_textures_copies)
-	cmd_buff := get_frame_cmd_buffer()
+	cmd_buff_ref := get_frame_cmd_buffer()
+
+	backend_wait_for_frame_resources()
+	begin_command_buffer(cmd_buff_ref)
 
 	buffer_upload_begin_frame()
 	backend_update(p_dt)
 
 	execute_queued_texture_copies()
-	run_buffer_upload_requests()
+	run_buffer_upload_requests(true)
 
-	end_command_buffer(cmd_buff)
+	end_command_buffer(cmd_buff_ref)
 
-	submit_current_frame(cmd_buff)
+	submit_current_frame(cmd_buff_ref)
 
 	advance_frame_idx()
 }

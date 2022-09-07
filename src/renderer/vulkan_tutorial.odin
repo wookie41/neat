@@ -184,7 +184,8 @@ vt_update :: proc(
 	using G_VT
 
 	vt_update_uniform_buffer()
-
+	vt_upload_vertex_data()
+	
 	render_target_bindings[0].target = &G_RENDERER.swap_image_render_targets[p_image_idx]
 
 	begin_info := RenderPassBeginInfo {
@@ -230,14 +231,21 @@ vt_create_vertex_buffer :: proc() {
 		flags = {.Dedicated},
 	}
 	vertex_buffer_ref = create_buffer(common.create_name("VertexBuffer"), vert_buffer_desc)
+	vt_upload_vertex_data()
+}
+
+vt_upload_vertex_data :: proc() {
+	using G_RENDERER
+	using G_VT
 
 	upload_request := BufferUploadRequest {
 		dst_buff          = vertex_buffer_ref,
 		dst_buff_offset   = 0,
 		dst_queue_usage   = .Graphics,
 		first_usage_stage = .VertexInput,
-		size              = vert_buffer_desc.size,
+		size              = u32(len(g_vertices) * size_of(Vertex)),
 	}
+	
 	response := request_buffer_upload(upload_request)
 	assert(response.ptr != nil)
 

@@ -10,17 +10,19 @@ when USE_VULKAN_BACKEND {
 
 	@(private = "file")
 	INTERNAL: struct {
-		transfer_fences: []vk.Fence,
+		transfer_fences:         []vk.Fence,
 		had_requests_prev_frame: bool,
 	}
 
 	//---------------------------------------------------------------------------//
 
+
 	@(private)
 	backend_buffer_upload_begin_frame :: proc() {
-		if !INTERNAL.had_requests_prev_frame {
+		if !INTERNAL.had_requests_prev_frame || G_RENDERER.queue_family_transfer_index == G_RENDERER.queue_family_graphics_index {
 			return
 		}
+
 		// Make sure that the GPU is no longer reading the current staging buffer region
 		vk.WaitForFences(
 			G_RENDERER.device,
@@ -71,6 +73,7 @@ when USE_VULKAN_BACKEND {
 	backend_run_buffer_upload_requests :: proc(
 		p_staging_buffer_ref: BufferRef,
 		p_upload_requests: [dynamic]PendingBufferUploadRequest,
+		p_pre_render: bool,
 	) {
 
 		if len(p_upload_requests) == 0 {
@@ -79,30 +82,20 @@ when USE_VULKAN_BACKEND {
 		}
 
 		INTERNAL.had_requests_prev_frame = true
+		transfer_cmd_buff := get_frame_transfer_cmd_buffer()
 
-		cmd_buff_ref := get_frame_cmd_buffer()
-		cmd_buff := get_command_buffer(cmd_buff_ref)
+		if G_RENDERER.queue_family_transfer_index != G_RENDERER.queue_family_graphics_index {
+			begin_info := vk.CommandBufferBeginInfo {
+				sType = .COMMAND_BUFFER_BEGIN_INFO,
+				flags = {.ONE_TIME_SUBMIT},
+			}
+			vk.BeginCommandBuffer(transfer_cmd_buff, &begin_info)
+		}
 
 		staging_buff := get_buffer(p_staging_buffer_ref)
 
 		for request in p_upload_requests {
 			dst_buffer := get_buffer(request.dst_buff)
-			// @TODO Group buffers by dst_buffer so we can issue one CmdCopyBuffer with multiple regions
-			region := vk.BufferCopy {
-				srcOffset = vk.DeviceSize(request.staging_buffer_offset),
-				dstOffset = vk.DeviceSize(request.dst_buff_offset),
-				size      = vk.DeviceSize(request.size),
-			}
-			vk.CmdCopyBuffer(
-				cmd_buff.vk_cmd_buff,
-				staging_buff.vk_buffer,
-				dst_buffer.vk_buffer,
-				1,
-				&region,
-			)
-			// Issue the barrier based on the usage declared by the request
-			dst_stages := vk.PipelineStageFlags{}
-			dst_stages += {backend_map_pipeline_stage(request.first_usage_stage)}
 
 			access_mask := vk.AccessFlags{}
 			if .VertexBuffer in dst_buffer.desc.usage {
@@ -118,21 +111,92 @@ when USE_VULKAN_BACKEND {
 				assert(false)
 			}
 
-			// @TODO For now, using the graphics queue for transfer, so synchronization is easer
+			dst_stages := vk.PipelineStageFlags{}
+			dst_stages += {backend_map_pipeline_stage(request.first_usage_stage)}
+
+			if !p_pre_render {
+				// Issue an acquire barrier for the dst buffer if we're using a dedicated transfer queue
+				if G_RENDERER.queue_family_transfer_index != G_RENDERER.queue_family_graphics_index {
+					acquire_barrier := vk.BufferMemoryBarrier {
+						sType = .BUFFER_MEMORY_BARRIER,
+						pNext = nil,
+						size = vk.DeviceSize(request.size),
+						offset = vk.DeviceSize(request.dst_buff_offset),
+						buffer = dst_buffer.vk_buffer,
+						dstAccessMask = {.TRANSFER_WRITE},
+						srcQueueFamilyIndex = G_RENDERER.queue_family_graphics_index,
+						dstQueueFamilyIndex = G_RENDERER.queue_family_transfer_index,
+					}
+					vk.CmdPipelineBarrier(
+						transfer_cmd_buff,
+						{.BOTTOM_OF_PIPE},
+						{.TRANSFER},
+						nil,
+						0,
+						nil,
+						1,
+						&acquire_barrier,
+						0,
+						nil,
+					)
+				}
+			}
+
+
+			// @TODO Group buffers by dst_buffer so we can issue one CmdCopyBuffer with multiple regions
+
+			// Run the copy
+			region := vk.BufferCopy {
+				srcOffset = vk.DeviceSize(request.staging_buffer_offset),
+				dstOffset = vk.DeviceSize(request.dst_buff_offset),
+				size      = vk.DeviceSize(request.size),
+			}
+			vk.CmdCopyBuffer(
+				transfer_cmd_buff,
+				staging_buff.vk_buffer,
+				dst_buffer.vk_buffer,
+				1,
+				&region,
+			)
+
 			buffer_barrier := vk.BufferMemoryBarrier {
 				sType = .BUFFER_MEMORY_BARRIER,
 				pNext = nil,
 				size = vk.DeviceSize(request.size),
 				offset = vk.DeviceSize(request.dst_buff_offset),
 				buffer = dst_buffer.vk_buffer,
-				dstAccessMask = access_mask,
 				srcAccessMask = {.TRANSFER_WRITE},
 				srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
 				dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
 			}
 
+			graphics_cmd_buff_ref := get_frame_cmd_buffer()
+			graphics_cmd_buff := get_command_buffer(graphics_cmd_buff_ref).vk_cmd_buff
+
+			// Turn the barrier into a a release barrier for the dst buffer if we're using a dedicated transfer queue
+			if G_RENDERER.queue_family_transfer_index != G_RENDERER.queue_family_graphics_index {
+				buffer_barrier.srcQueueFamilyIndex = G_RENDERER.queue_family_transfer_index
+				buffer_barrier.dstQueueFamilyIndex = G_RENDERER.queue_family_graphics_index
+
+				vk.CmdPipelineBarrier(
+					transfer_cmd_buff,
+					{.TRANSFER},
+					{.BOTTOM_OF_PIPE},
+					nil,
+					0,
+					nil,
+					1,
+					&buffer_barrier,
+					0,
+					nil,
+				)
+			}
+
+			buffer_barrier.srcQueueFamilyIndex = G_RENDERER.queue_family_transfer_index
+			buffer_barrier.dstQueueFamilyIndex = G_RENDERER.queue_family_graphics_index
+
 			vk.CmdPipelineBarrier(
-				cmd_buff.vk_cmd_buff,
+				graphics_cmd_buff,
 				{.TRANSFER},
 				dst_stages,
 				nil,
@@ -145,7 +209,30 @@ when USE_VULKAN_BACKEND {
 			)
 		}
 
-		vk.ResetFences(G_RENDERER.device, 1, &INTERNAL.transfer_fences[get_frame_idx()])
+		// Now we have to submit the transfer if we're using a dedicated transfer queue
+		if G_RENDERER.queue_family_transfer_index != G_RENDERER.queue_family_graphics_index {
+
+			G_RENDERER.should_wait_on_transfer_semaphore = true
+
+			vk.ResetFences(G_RENDERER.device, 1, &INTERNAL.transfer_fences[get_frame_idx()])
+
+			vk.EndCommandBuffer(transfer_cmd_buff)
+
+			submit_info := vk.SubmitInfo {
+				sType                = .SUBMIT_INFO,
+				commandBufferCount   = 1,
+				pCommandBuffers      = &transfer_cmd_buff,
+				signalSemaphoreCount = 1,
+				pSignalSemaphores    = &G_RENDERER.transfer_finished_semaphores[get_frame_idx()],
+			}
+
+			vk.QueueSubmit(
+				G_RENDERER.transfer_queue,
+				1,
+				&submit_info,
+				INTERNAL.transfer_fences[get_frame_idx()],
+			)
+		}
 	}
 	//---------------------------------------------------------------------------//
 }

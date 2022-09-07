@@ -196,6 +196,17 @@ when USE_VULKAN_BACKEND {
 		)
 	}
 
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	get_frame_transfer_cmd_buffer :: proc() -> vk.CommandBuffer {
+		if G_RENDERER.queue_family_transfer_index != G_RENDERER.queue_family_graphics_index {
+			return INTERNAL.transfer_cmd_buffers[get_frame_idx()]
+		}
+		cmd_buff_ref := get_frame_cmd_buffer()
+		return get_command_buffer(cmd_buff_ref).vk_cmd_buff
+	}
+
 
 	//---------------------------------------------------------------------------//
 }

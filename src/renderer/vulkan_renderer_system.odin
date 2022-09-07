@@ -37,35 +37,37 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	BackendRendererState :: struct {
-		window:                      ^sdl.Window,
-		windowID:                    u32,
-		instance:                    vk.Instance,
-		physical_device:             vk.PhysicalDevice,
-		surface_capabilities:        vk.SurfaceCapabilitiesKHR,
-		device_properties:           vk.PhysicalDeviceProperties,
-		swapchain_formats:           []vk.SurfaceFormatKHR,
-		swapchain_present_modes:     []vk.PresentModeKHR,
-		queue_family_graphics_index: u32,
-		queue_family_present_index:  u32,
-		queue_family_compute_index:  u32,
-		queue_family_transfer_index: u32,
-		device:                      vk.Device,
-		graphics_queue:              vk.Queue,
-		present_queue:               vk.Queue,
-		compute_queue:               vk.Queue,
-		transfer_queue:              vk.Queue,
-		surface:                     vk.SurfaceKHR,
-		swapchain_format:            vk.SurfaceFormatKHR,
-		present_mode:                vk.PresentModeKHR,
-		swap_extent:                 vk.Extent2D,
-		swapchain:                   vk.SwapchainKHR,
-		swapchain_images:            [dynamic]vk.Image,
-		swapchain_image_views:       [dynamic]vk.ImageView,
-		render_finished_semaphores:  [dynamic]vk.Semaphore,
-		image_available_semaphores:  [dynamic]vk.Semaphore,
-		frame_fences:                [dynamic]vk.Fence,
-		vma_allocator:               vma.Allocator,
-		misc_flags:                  BackendMiscFlags,
+		window:                            ^sdl.Window,
+		windowID:                          u32,
+		instance:                          vk.Instance,
+		physical_device:                   vk.PhysicalDevice,
+		surface_capabilities:              vk.SurfaceCapabilitiesKHR,
+		device_properties:                 vk.PhysicalDeviceProperties,
+		swapchain_formats:                 []vk.SurfaceFormatKHR,
+		swapchain_present_modes:           []vk.PresentModeKHR,
+		queue_family_graphics_index:       u32,
+		queue_family_present_index:        u32,
+		queue_family_compute_index:        u32,
+		queue_family_transfer_index:       u32,
+		device:                            vk.Device,
+		graphics_queue:                    vk.Queue,
+		present_queue:                     vk.Queue,
+		compute_queue:                     vk.Queue,
+		transfer_queue:                    vk.Queue,
+		surface:                           vk.SurfaceKHR,
+		swapchain_format:                  vk.SurfaceFormatKHR,
+		present_mode:                      vk.PresentModeKHR,
+		swap_extent:                       vk.Extent2D,
+		swapchain:                         vk.SwapchainKHR,
+		swapchain_images:                  [dynamic]vk.Image,
+		swapchain_image_views:             [dynamic]vk.ImageView,
+		render_finished_semaphores:        [dynamic]vk.Semaphore,
+		image_available_semaphores:        [dynamic]vk.Semaphore,
+		transfer_finished_semaphores:      [dynamic]vk.Semaphore,
+		frame_fences:                      [dynamic]vk.Fence,
+		vma_allocator:                     vma.Allocator,
+		misc_flags:                        BackendMiscFlags,
+		should_wait_on_transfer_semaphore: bool,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -494,6 +496,7 @@ when USE_VULKAN_BACKEND {
 			vk.DestroyFence(device, frame_fences[i], nil)
 			vk.DestroySemaphore(device, render_finished_semaphores[i], nil)
 			vk.DestroySemaphore(device, image_available_semaphores[i], nil)
+			vk.DestroySemaphore(device, transfer_finished_semaphores[i], nil)
 		}
 		for swap_image_view in swapchain_image_views {
 			vk.DestroyImageView(device, swap_image_view, nil)
@@ -517,6 +520,19 @@ when USE_VULKAN_BACKEND {
 	}
 }
 //---------------------------------------------------------------------------//
+
+@(private)
+backend_wait_for_frame_resources :: proc() {
+	vk.WaitForFences(
+		G_RENDERER.device,
+		1,
+		&G_RENDERER.frame_fences[get_frame_idx()],
+		true,
+		max(u64),
+	)
+}
+//---------------------------------------------------------------------------//
+
 @(private)
 backend_update :: proc(p_dt: f32) {
 
@@ -524,14 +540,6 @@ backend_update :: proc(p_dt: f32) {
 
 	// Wait until frame resources will not be used anymore
 	frame_idx := get_frame_idx()
-
-	vk.WaitForFences(
-		G_RENDERER.device,
-		1,
-		&G_RENDERER.frame_fences[frame_idx],
-		true,
-		max(u64),
-	)
 
 	// Acquire the index of the image we'll present to
 	// @TODO Move this after recording the command buffer to save some performance
@@ -558,7 +566,6 @@ backend_update :: proc(p_dt: f32) {
 		return
 	}
 
-
 	vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx])
 
 	// Reset the swap chain render target that we'll use this frame
@@ -566,8 +573,6 @@ backend_update :: proc(p_dt: f32) {
 
 	cmd_buff_ref := get_frame_cmd_buffer()
 	cmd_buff := get_command_buffer(cmd_buff_ref)
-
-	begin_command_buffer(cmd_buff_ref)
 
 	// Render Vulkan tutorial
 	vt_update(frame_idx, INTERNAL.swap_img_idx, cmd_buff_ref, cmd_buff)
@@ -630,13 +635,24 @@ backend_submit_current_frame :: proc(p_cmd_buff_ref: CommandBufferRef) {
 
 	// Submit
 	{
+		wait_semaphores := []vk.Semaphore{
+			G_RENDERER.image_available_semaphores[get_frame_idx()],
+			G_RENDERER.transfer_finished_semaphores[get_frame_idx()],
+		}
+
+		wait_semaphore_count : u32 = 1
+		if G_RENDERER.should_wait_on_transfer_semaphore {
+			G_RENDERER.should_wait_on_transfer_semaphore = false
+			wait_semaphore_count = 2
+		}
+
 		submit_info := vk.SubmitInfo {
 			sType                = .SUBMIT_INFO,
-			waitSemaphoreCount   = 1,
-			pWaitSemaphores      = &G_RENDERER.image_available_semaphores[get_frame_idx()],
 			pWaitDstStageMask    = &vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT},
 			commandBufferCount   = 1,
 			pCommandBuffers      = &cmd_buff.vk_cmd_buff,
+			waitSemaphoreCount   = wait_semaphore_count,
+			pWaitSemaphores      = raw_data(wait_semaphores),
 			signalSemaphoreCount = 1,
 			pSignalSemaphores    = &G_RENDERER.render_finished_semaphores[get_frame_idx()],
 		}
@@ -823,6 +839,7 @@ create_synchronization_primitives :: proc() {
 
 	resize(&render_finished_semaphores, int(num_frames_in_flight))
 	resize(&image_available_semaphores, int(num_frames_in_flight))
+	resize(&transfer_finished_semaphores, int(num_frames_in_flight))
 	resize(&frame_fences, int(num_frames_in_flight))
 
 	fence_create_info := vk.FenceCreateInfo {
@@ -838,6 +855,12 @@ create_synchronization_primitives :: proc() {
 		vk.CreateFence(device, &fence_create_info, nil, &frame_fences[i])
 		vk.CreateSemaphore(device, &semaphore_create_info, nil, &render_finished_semaphores[i])
 		vk.CreateSemaphore(device, &semaphore_create_info, nil, &image_available_semaphores[i])
+		vk.CreateSemaphore(
+			device,
+			&semaphore_create_info,
+			nil,
+			&transfer_finished_semaphores[i],
+		)
 	}
 }
 
