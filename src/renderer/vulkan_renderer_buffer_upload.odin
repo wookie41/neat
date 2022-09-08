@@ -19,7 +19,10 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_buffer_upload_begin_frame :: proc() {
-		if !INTERNAL.had_requests_prev_frame || G_RENDERER.queue_family_transfer_index == G_RENDERER.queue_family_graphics_index {
+		if
+		   !INTERNAL.had_requests_prev_frame ||
+		   G_RENDERER.queue_family_transfer_index ==
+			   G_RENDERER.queue_family_graphics_index {
 			return
 		}
 
@@ -52,12 +55,14 @@ when USE_VULKAN_BACKEND {
 			}
 
 			for i in 0 ..< p_options.num_staging_regions {
-				if vk.CreateFence(
+				if
+				   vk.CreateFence(
 					   G_RENDERER.device,
 					   &fence_create_info,
 					   nil,
 					   &INTERNAL.transfer_fences[i],
-				   ) != .SUCCESS {
+				   ) !=
+				   .SUCCESS {
 					// Not bothering to destroy the already created fences here, as we'll shutdown the application
 					return false
 				}
@@ -73,7 +78,6 @@ when USE_VULKAN_BACKEND {
 	backend_run_buffer_upload_requests :: proc(
 		p_staging_buffer_ref: BufferRef,
 		p_upload_requests: [dynamic]PendingBufferUploadRequest,
-		p_pre_render: bool,
 	) {
 
 		if len(p_upload_requests) == 0 {
@@ -84,7 +88,7 @@ when USE_VULKAN_BACKEND {
 		INTERNAL.had_requests_prev_frame = true
 		transfer_cmd_buff := get_frame_transfer_cmd_buffer()
 
-		if G_RENDERER.queue_family_transfer_index != G_RENDERER.queue_family_graphics_index {
+		if .DedicatedTransferQueue in G_RENDERER.device_hints {
 			begin_info := vk.CommandBufferBeginInfo {
 				sType = .COMMAND_BUFFER_BEGIN_INFO,
 				flags = {.ONE_TIME_SUBMIT},
@@ -114,34 +118,39 @@ when USE_VULKAN_BACKEND {
 			dst_stages := vk.PipelineStageFlags{}
 			dst_stages += {backend_map_pipeline_stage(request.first_usage_stage)}
 
-			if !p_pre_render {
-				// Issue an acquire barrier for the dst buffer if we're using a dedicated transfer queue
-				if G_RENDERER.queue_family_transfer_index != G_RENDERER.queue_family_graphics_index {
-					acquire_barrier := vk.BufferMemoryBarrier {
-						sType = .BUFFER_MEMORY_BARRIER,
-						pNext = nil,
-						size = vk.DeviceSize(request.size),
-						offset = vk.DeviceSize(request.dst_buff_offset),
-						buffer = dst_buffer.vk_buffer,
-						dstAccessMask = {.TRANSFER_WRITE},
-						srcQueueFamilyIndex = G_RENDERER.queue_family_graphics_index,
-						dstQueueFamilyIndex = G_RENDERER.queue_family_transfer_index,
-					}
-					vk.CmdPipelineBarrier(
-						transfer_cmd_buff,
-						{.BOTTOM_OF_PIPE},
-						{.TRANSFER},
-						nil,
-						0,
-						nil,
-						1,
-						&acquire_barrier,
-						0,
-						nil,
-					)
-				}
-			}
+			// Issue an acquire barrier for the dst buffer if we're using a dedicated transfer queue
+			is_not_first_usage := dst_buffer.owning_queue_family_idx != max(u32)
+			not_owning_buffer :=
+				dst_buffer.owning_queue_family_idx !=
+				G_RENDERER.queue_family_transfer_index
+			if
+			   (is_not_first_usage && not_owning_buffer) &&
+			   .DedicatedTransferQueue in G_RENDERER.device_hints {
 
+				acquire_barrier := vk.BufferMemoryBarrier {
+					sType = .BUFFER_MEMORY_BARRIER,
+					pNext = nil,
+					size = vk.DeviceSize(request.size),
+					offset = vk.DeviceSize(request.dst_buff_offset),
+					buffer = dst_buffer.vk_buffer,
+					dstAccessMask = {.TRANSFER_WRITE},
+					srcQueueFamilyIndex = G_RENDERER.queue_family_graphics_index,
+					dstQueueFamilyIndex = G_RENDERER.queue_family_transfer_index,
+				}
+
+				vk.CmdPipelineBarrier(
+					transfer_cmd_buff,
+					{.BOTTOM_OF_PIPE},
+					{.TRANSFER},
+					nil,
+					0,
+					nil,
+					1,
+					&acquire_barrier,
+					0,
+					nil,
+				)
+			}
 
 			// @TODO Group buffers by dst_buffer so we can issue one CmdCopyBuffer with multiple regions
 
@@ -170,13 +179,19 @@ when USE_VULKAN_BACKEND {
 				dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
 			}
 
-			graphics_cmd_buff_ref := get_frame_cmd_buffer()
-			graphics_cmd_buff := get_command_buffer(graphics_cmd_buff_ref).vk_cmd_buff
+			// Issue a release barrier for the dst buffer if we're using a dedicated transfer queue
+			if .DedicatedTransferQueue in G_RENDERER.device_hints {
+				
+				// @TODO This should check to which queue this buffer belongs to hand back
+				// ownership to the appropriate queue
+				graphics_cmd_buff_ref := get_frame_cmd_buffer()
+				graphics_cmd_buff :=
+					get_command_buffer(graphics_cmd_buff_ref).vk_cmd_buff
 
-			// Turn the barrier into a a release barrier for the dst buffer if we're using a dedicated transfer queue
-			if G_RENDERER.queue_family_transfer_index != G_RENDERER.queue_family_graphics_index {
-				buffer_barrier.srcQueueFamilyIndex = G_RENDERER.queue_family_transfer_index
-				buffer_barrier.dstQueueFamilyIndex = G_RENDERER.queue_family_graphics_index
+				buffer_barrier.srcQueueFamilyIndex =
+					G_RENDERER.queue_family_transfer_index
+				buffer_barrier.dstQueueFamilyIndex =
+					G_RENDERER.queue_family_graphics_index
 
 				vk.CmdPipelineBarrier(
 					transfer_cmd_buff,
@@ -190,31 +205,34 @@ when USE_VULKAN_BACKEND {
 					0,
 					nil,
 				)
+			} else {
+				// Otherwise issue a standard memory barrier
+				buffer_barrier.dstAccessMask = access_mask
+				vk.CmdPipelineBarrier(
+					transfer_cmd_buff,
+					{.TRANSFER},
+					dst_stages,
+					nil,
+					0,
+					nil,
+					1,
+					&buffer_barrier,
+					0,
+					nil,
+				)
 			}
-
-			buffer_barrier.srcQueueFamilyIndex = G_RENDERER.queue_family_transfer_index
-			buffer_barrier.dstQueueFamilyIndex = G_RENDERER.queue_family_graphics_index
-
-			vk.CmdPipelineBarrier(
-				graphics_cmd_buff,
-				{.TRANSFER},
-				dst_stages,
-				nil,
-				0,
-				nil,
-				1,
-				&buffer_barrier,
-				0,
-				nil,
-			)
 		}
 
 		// Now we have to submit the transfer if we're using a dedicated transfer queue
-		if G_RENDERER.queue_family_transfer_index != G_RENDERER.queue_family_graphics_index {
+		if .DedicatedTransferQueue in G_RENDERER.device_hints {
 
 			G_RENDERER.should_wait_on_transfer_semaphore = true
 
-			vk.ResetFences(G_RENDERER.device, 1, &INTERNAL.transfer_fences[get_frame_idx()])
+			vk.ResetFences(
+				G_RENDERER.device,
+				1,
+				&INTERNAL.transfer_fences[get_frame_idx()],
+			)
 
 			vk.EndCommandBuffer(transfer_cmd_buff)
 
@@ -223,7 +241,9 @@ when USE_VULKAN_BACKEND {
 				commandBufferCount   = 1,
 				pCommandBuffers      = &transfer_cmd_buff,
 				signalSemaphoreCount = 1,
-				pSignalSemaphores    = &G_RENDERER.transfer_finished_semaphores[get_frame_idx()],
+				pSignalSemaphores    = &G_RENDERER.transfer_finished_semaphores[get_frame_idx(
+	                                                                                
+                                                                                )],
 			}
 
 			vk.QueueSubmit(

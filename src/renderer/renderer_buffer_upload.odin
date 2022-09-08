@@ -135,15 +135,13 @@ request_buffer_upload :: proc(p_request: BufferUploadRequest) -> BufferUploadRes
 
 	return BufferUploadResponse{ptr = upload_ptr}
 }
-
 //---------------------------------------------------------------------------//
 
 @(private)
-run_buffer_upload_requests :: #force_inline proc(p_pre_render: bool) {
+run_buffer_upload_requests :: #force_inline proc() {
 	backend_run_buffer_upload_requests(
 		INTERNAL.staging_buffer_ref,
 		INTERNAL.pending_requests,
-		p_pre_render,
 	)
 	clear(&INTERNAL.pending_requests)
 	INTERNAL.staging_buffer_offset = 0

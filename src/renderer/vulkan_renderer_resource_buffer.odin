@@ -15,6 +15,7 @@ when USE_VULKAN_BACKEND {
 	BackendBufferResource :: struct {
 		vk_buffer:  vk.Buffer,
 		allocation: vma.Allocation,
+		owning_queue_family_idx: u32,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -50,6 +51,8 @@ when USE_VULKAN_BACKEND {
 		p_buffer_desc: BufferDesc,
 		p_buffer: ^BufferResource,
 	) -> bool {
+
+		p_buffer.owning_queue_family_idx = vk.QUEUE_FAMILY_IGNORED
 
 		vk_usage: vk.BufferUsageFlags
 		for usage in BufferUsageFlagBits {
