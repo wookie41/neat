@@ -18,14 +18,14 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_reflect_pipeline_layout :: proc(
+		p_ref: PipelineLayoutRef,
 		p_layout: ^PipelineLayoutResource,
-		p_pipeline_layout_desc: PipelineLayoutDesc,
 	) -> bool {
 
-		assert(p_pipeline_layout_desc.layout_type != .GRAPHICS_MATERIAL) // @TODO Implement
+		assert(p_layout.desc.layout_type != .GRAPHICS_MATERIAL) // @TODO Implement
 
-		vert_shader := get_shader(p_pipeline_layout_desc.vert_shader_ref)
-		frag_shader := get_shader(p_pipeline_layout_desc.frag_shader_ref)
+		vert_shader := get_shader(p_layout.desc.vert_shader_ref)
+		frag_shader := get_shader(p_layout.desc.frag_shader_ref)
 
 		vk_bindings := make(
 			[]vk.DescriptorSetLayoutBinding,
@@ -51,12 +51,14 @@ when USE_VULKAN_BACKEND {
 				pBindings    = raw_data(vk_bindings),
 			}
 
-			if vk.CreateDescriptorSetLayout(
+			if
+			   vk.CreateDescriptorSetLayout(
 				   G_RENDERER.device,
 				   &create_info,
 				   nil,
 				   &p_layout.vk_programs_descriptor_set_layout,
-			   ) != .SUCCESS {
+			   ) !=
+			   .SUCCESS {
 				log.warn("Failed to create descriptor set layout")
 				return false
 			}
@@ -71,12 +73,14 @@ when USE_VULKAN_BACKEND {
 				setLayoutCount = 1,
 			}
 
-			if vk.CreatePipelineLayout(
+			if
+			   vk.CreatePipelineLayout(
 				   G_RENDERER.device,
 				   &create_info,
 				   nil,
 				   &p_layout.vk_pipeline_layout,
-			   ) != .SUCCESS {
+			   ) !=
+			   .SUCCESS {
 				log.warn("Failed to create pipeline layout")
 				return false
 			}

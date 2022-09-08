@@ -15,8 +15,18 @@ PipelineType :: enum u8 {
 
 //---------------------------------------------------------------------------//
 
+PipelineLayoutDesc :: struct {
+	name:            common.Name,
+	layout_type:     PipelineType,
+	vert_shader_ref: ShaderRef,
+	frag_shader_ref: ShaderRef,
+}
+
+//---------------------------------------------------------------------------//
+
 PipelineLayoutResource :: struct {
 	using backend_layout: BackendPipelineLayoutResource,
+	desc:                 PipelineLayoutDesc,
 }
 
 //---------------------------------------------------------------------------//
@@ -46,34 +56,32 @@ init_pipeline_layouts :: proc() {
 
 //---------------------------------------------------------------------------//
 
-PipelineLayoutDesc :: struct {
-	name:            common.Name,
-	layout_type:     PipelineType,
-	vert_shader_ref: ShaderRef,
-	frag_shader_ref: ShaderRef,
+allocate_pipeline_layout_ref :: proc(p_name: common.Name) -> PipelineLayoutRef {
+	ref := PipelineLayoutRef(
+		create_ref(
+			PipelineLayoutResource,
+			&G_PIPELINE_LAYOUT_REF_ARRAY,
+			p_name,
+		),
+	)
+	get_pipeline_layout(ref).desc.name = p_name
+	return ref
 }
 
 //---------------------------------------------------------------------------//
 
 create_graphics_pipeline_layout :: proc(
-	p_pipeline_layout_desc: PipelineLayoutDesc,
-) -> PipelineLayoutRef {
-	ref := PipelineLayoutRef(
-		create_ref(
-			PipelineLayoutResource,
-			&G_PIPELINE_LAYOUT_REF_ARRAY,
-			p_pipeline_layout_desc.name,
-		),
-	)
-	idx := get_ref_idx(ref)
-	pipeline_layout := &G_PIPELINE_LAYOUT_REF_ARRAY.resource_array[idx]
-
-	if backend_reflect_pipeline_layout(pipeline_layout, p_pipeline_layout_desc) == false {
-		free_ref(PipelineLayoutResource, &G_PIPELINE_LAYOUT_REF_ARRAY, ref)
-		return InvalidPipelineLayoutRef
+	p_ref: PipelineLayoutRef,
+) -> bool {
+	pipeline_layout := get_pipeline_layout(p_ref)
+	if
+	   backend_reflect_pipeline_layout(p_ref, pipeline_layout) ==
+	   false {
+		free_ref(PipelineLayoutResource, &G_PIPELINE_LAYOUT_REF_ARRAY, p_ref)
+		return false
 	}
 
-	return ref
+	return true
 }
 
 //---------------------------------------------------------------------------//

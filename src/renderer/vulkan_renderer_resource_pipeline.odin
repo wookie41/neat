@@ -264,16 +264,15 @@ when USE_VULKAN_BACKEND {
 		depth_stencil := DEPTH_STENCIL_STATE_PER_TYPE[p_pipeline_desc.depth_stencil_type]
 
 		// Pipeline layout
-		pipeline_layout_desc := PipelineLayoutDesc {
-			name            = p_pipeline_desc.name,
-			layout_type     = .GRAPHICS,
-			vert_shader_ref = p_pipeline_desc.vert_shader,
-			frag_shader_ref = p_pipeline_desc.frag_shader,
-		}
+		p_pipeline.pipeline_layout = allocate_pipeline_layout_ref(p_pipeline_desc.name)
+		pipeline_layout := get_pipeline_layout(p_pipeline.pipeline_layout)
 
-		p_pipeline.pipeline_layout = create_graphics_pipeline_layout(pipeline_layout_desc)
+		pipeline_layout.desc.name            = p_pipeline_desc.name
+		pipeline_layout.desc.layout_type     = .GRAPHICS
+		pipeline_layout.desc.vert_shader_ref = p_pipeline_desc.vert_shader
+		pipeline_layout.desc.frag_shader_ref = p_pipeline_desc.frag_shader
 
-		if p_pipeline.pipeline_layout == InvalidPipelineLayoutRef {
+		if !create_graphics_pipeline_layout(p_pipeline.pipeline_layout) {
 			log.warnf("Failed to create pipeline layout when creating the pipeline")
 			return false
 		}
