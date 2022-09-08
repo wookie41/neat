@@ -111,6 +111,7 @@ ImageSampleCountFlags :: distinct bit_set[ImageSampleFlagBits;u8]
 //---------------------------------------------------------------------------//
 
 ImageDesc :: struct {
+	name: 				common.Name,
 	type:               ImageType,
 	format:             ImageFormat,
 	mip_count:          u8,
@@ -139,25 +140,23 @@ init_images :: proc() {
 
 allocate_image_ref :: proc(p_name: common.Name) -> ImageRef {
 	ref := ImageRef(create_ref(ImageResource, &G_IMAGE_REF_ARRAY, p_name))
+	get_image(ref).desc.name = p_name
 	return ref
 }
 
 /** Creates an image that can later be used as a sampled image inside a shader */
-create_texture_image :: proc(p_name: common.Name, p_image_desc: ImageDesc) -> ImageRef {
+create_texture_image :: proc(p_ref: ImageRef) -> bool {
+	image := get_image(p_ref)
 	assert(
-		p_image_desc.format > .ColorFormatsStart && p_image_desc.format < .ColorFormatsEnd,
+		image.desc.format > .ColorFormatsStart && image.desc.format < .ColorFormatsEnd
 	)
 
-	ref := allocate_image_ref(p_name)
-	image := &G_IMAGE_REF_ARRAY.resource_array[get_ref_idx(ref)]
-	image.desc = p_image_desc
-
-	if backend_create_texture_image(p_name, p_image_desc, ref, image) == false {
-		free_ref(ImageResource, &G_IMAGE_REF_ARRAY, ref)
-		return InvalidImageRef
+	if backend_create_texture_image(p_ref, image) == false {
+		free_ref(ImageResource, &G_IMAGE_REF_ARRAY, p_ref)
+		return false
 	}
 
-	return ref
+	return true
 }
 
 create_depth_buffer :: proc(
