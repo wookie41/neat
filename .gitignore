@@ -1,3 +1,5 @@
 bin/
 generate_bindings.exe
 temp/
+*.exe
+*.pdb
