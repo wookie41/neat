@@ -127,26 +127,29 @@ deinit_pipelines :: proc() {
 
 //---------------------------------------------------------------------------//
 
-create_graphics_pipeline :: proc(p_pipeline_desc: PipelineDesc) -> PipelineRef {
+allocte_pipeline_ref :: proc(p_name: common.Name) -> PipelineRef {
+	ref := PipelineRef(
+		create_ref(PipelineResource, &G_PIPELINE_REF_ARRAY, p_name),
+	)
+	get_pipeline(ref).desc.name = p_name
+	return ref
+}
+
+create_graphics_pipeline :: proc(p_ref: PipelineRef) -> bool {
 
 	// @TODO Create a hash based on the description's hash
 
-	ref := PipelineRef(
-		create_ref(PipelineResource, &G_PIPELINE_REF_ARRAY, p_pipeline_desc.name),
-	)
-	idx := get_ref_idx(ref)
-	pipeline := &G_PIPELINE_REF_ARRAY.resource_array[idx]
-	pipeline.desc = p_pipeline_desc
+	pipeline := get_pipeline(p_ref)
 
-	res := backend_create_graphics_pipeline(p_pipeline_desc, pipeline)
+	res := backend_create_graphics_pipeline(p_ref, pipeline)
 
 	if res == false {
 		log.warn("Failed to create pipeline")
-		free_ref(PipelineResource, &G_PIPELINE_REF_ARRAY, ref)
-		return InvalidPipelineRef
+		free_ref(PipelineResource, &G_PIPELINE_REF_ARRAY, p_ref)
+		return false
 	}
 
-	return ref
+	return true
 }
 
 //---------------------------------------------------------------------------//

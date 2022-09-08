@@ -30,21 +30,19 @@ when USE_VULKAN_BACKEND {
 		p_render_pass: ^RenderPassResource,
 	) -> bool {
 
-		pipeline_desc := PipelineDesc {
-			name                      = p_render_pass_desc.name,
-			vert_shader               = p_render_pass_desc.vert_shader,
-			frag_shader               = p_render_pass_desc.frag_shader,
-			vertex_layout             = p_render_pass_desc.vertex_layout,
-			primitive_type            = p_render_pass_desc.primitive_type,
-			multisampling_type        = p_render_pass_desc.multisampling_type,
-			depth_stencil_type        = p_render_pass_desc.depth_stencil_type,
-			render_target_formats     = p_render_pass_desc.render_target_formats,
-			render_target_blend_types = p_render_pass_desc.render_target_blend_types,
-			depth_format              = p_render_pass_desc.depth_format,
-		}
+		p_render_pass.pipeline = allocte_pipeline_ref(p_render_pass.desc.name)
+		pipeline := get_pipeline(p_render_pass.pipeline)
+		pipeline.desc.vert_shader               = p_render_pass_desc.vert_shader
+		pipeline.desc.frag_shader               = p_render_pass_desc.frag_shader
+		pipeline.desc.vertex_layout             = p_render_pass_desc.vertex_layout
+		pipeline.desc.primitive_type            = p_render_pass_desc.primitive_type
+		pipeline.desc.multisampling_type        = p_render_pass_desc.multisampling_type
+		pipeline.desc.depth_stencil_type        = p_render_pass_desc.depth_stencil_type
+		pipeline.desc.render_target_formats     = p_render_pass_desc.render_target_formats
+		pipeline.desc.render_target_blend_types = p_render_pass_desc.render_target_blend_types
+		pipeline.desc.depth_format              = p_render_pass_desc.depth_format
 
-		p_render_pass.pipeline = create_graphics_pipeline(pipeline_desc)
-		if p_render_pass.pipeline == InvalidPipelineRef {
+		if !create_graphics_pipeline(p_render_pass.pipeline) {
 			log.warnf(
 				"Failed to create the pipeline when initializing render pass: %s",
 				common.get_string(p_render_pass_desc.name),
