@@ -70,21 +70,19 @@ init_buffer_upload :: proc(p_options: BufferUploadInitOptions) -> bool {
 
 	// Create the staging buffer used as upload src
 	{
-		buffer_desc := BufferDesc {
-			// make the buffer n-times large, so we can upload data from the CPU while the GPU is still doing the transfer
-			size = p_options.staging_buffer_size * p_options.num_staging_regions,
-			flags = {.HostWrite, .Mapped},
-			usage = {.TransferSrc},
-		}
-
 		INTERNAL.single_staging_region_size = p_options.staging_buffer_size
 
-		INTERNAL.staging_buffer_ref = create_buffer(
+		INTERNAL.staging_buffer_ref = allocate_buffer_ref(
 			common.create_name("UploadStagingBuffer"),
-			buffer_desc,
 		)
+		staging_buffer := get_buffer(INTERNAL.staging_buffer_ref)
+		// make the buffer n-times large, so we can upload data from the CPU while the GPU is still doing the transfer
+		staging_buffer.desc.size =
+			p_options.staging_buffer_size * p_options.num_staging_regions
+		staging_buffer.desc.flags = {.HostWrite, .Mapped}
+		staging_buffer.desc.usage = {.TransferSrc}
 
-		if INTERNAL.staging_buffer_ref == InvalidBufferRef {
+		if !create_buffer(INTERNAL.staging_buffer_ref) {
 			log.error("Failed to create the staging buffer for upload")
 			return false
 		}
@@ -116,18 +114,24 @@ request_buffer_upload :: proc(p_request: BufferUploadRequest) -> BufferUploadRes
 	// Check if this request will stil fit in the staging buffer 
 	// or do we have to delay it to the next frame
 	{
-		will_request_fit := INTERNAL.staging_buffer_offset + p_request.size <= INTERNAL.single_staging_region_size
+		will_request_fit :=
+			INTERNAL.staging_buffer_offset + p_request.size <=
+			INTERNAL.single_staging_region_size
 
 		if !will_request_fit {
 			return BufferUploadResponse{ptr = nil}
 		}
 	}
 
-	upload_ptr := mem.ptr_offset(staging_buffer.mapped_ptr, INTERNAL.staging_buffer_offset)
+	upload_ptr := mem.ptr_offset(
+		staging_buffer.mapped_ptr,
+		INTERNAL.staging_buffer_offset,
+	)
 
 	pending_request := PendingBufferUploadRequest {
 		request               = p_request,
-		staging_buffer_offset = INTERNAL.single_staging_region_size * get_frame_idx() + INTERNAL.staging_buffer_offset,
+		staging_buffer_offset = INTERNAL.single_staging_region_size *
+			get_frame_idx() + INTERNAL.staging_buffer_offset,
 	}
 
 	append(&INTERNAL.pending_requests, pending_request)

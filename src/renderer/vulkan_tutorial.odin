@@ -224,12 +224,14 @@ vt_create_vertex_buffer :: proc() {
 	using G_RENDERER
 	using G_VT
 
-	vert_buffer_desc := BufferDesc {
-		size = u32(len(g_vertices) * size_of(MeshVertexLayout)),
-		usage = {.VertexBuffer, .TransferDst},
-		flags = {.Dedicated},
-	}
-	vertex_buffer_ref = create_buffer(common.create_name("VertexBuffer"), vert_buffer_desc)
+	vertex_buffer_ref = allocate_buffer_ref(common.create_name("VertexBuffer"))
+	vertex_buffer := get_buffer(vertex_buffer_ref)
+
+	vertex_buffer.desc.size = u32(len(g_vertices) * size_of(MeshVertexLayout))
+	vertex_buffer.desc.usage = {.VertexBuffer, .TransferDst}
+	vertex_buffer.desc.flags = {.Dedicated}
+	create_buffer(vertex_buffer_ref)
+
 	upload_request := BufferUploadRequest {
 		dst_buff          = vertex_buffer_ref,
 		dst_buff_offset   = 0,
@@ -248,22 +250,23 @@ vt_create_index_buffer :: proc() {
 	using G_RENDERER
 	using G_VT
 
-	index_buffer_desc := BufferDesc {
-		size = u32(len(g_indices) * size_of(g_indices[0])),
-		usage = {.IndexBuffer, .TransferDst},
-		flags = {.Dedicated},
-	}
-	index_buffer_ref = create_buffer(common.create_name("IndexBuffer"), index_buffer_desc)
+	index_buffer_ref = allocate_buffer_ref(common.create_name("IndexBuffer"))
+	index_buffer := get_buffer(index_buffer_ref)
+	index_buffer.desc.size = u32(len(g_indices) * size_of(g_indices[0]))
+	index_buffer.desc.usage = {.IndexBuffer, .TransferDst}
+	index_buffer.desc.flags = {.Dedicated}
+	create_buffer(index_buffer_ref)
+
 	upload_request := BufferUploadRequest {
 		dst_buff          = index_buffer_ref,
 		dst_buff_offset   = 0,
 		dst_queue_usage   = .Graphics,
 		first_usage_stage = .VertexInput,
-		size              = index_buffer_desc.size,
+		size              = index_buffer.desc.size,
 	}
 	response := request_buffer_upload(upload_request)
 	assert(response.ptr != nil)
-	mem.copy(response.ptr, raw_data(g_indices), int(index_buffer_desc.size))
+	mem.copy(response.ptr, raw_data(g_indices), int(index_buffer.desc.size))
 }
 
 vt_create_buffer :: proc(
@@ -326,14 +329,15 @@ vt_create_uniform_buffers :: proc() {
 
 	ubo_refs = make([]BufferRef, num_frames_in_flight, G_RENDERER_ALLOCATORS.main_allocator)
 
-	ubo_desc := BufferDesc {
-		flags = {.HostWrite, .Mapped},
-		size = size_of(UniformBufferObject),
-		usage = {.UniformBuffer},
-	}
-
 	for i in 0 ..< num_frames_in_flight {
-		ubo_refs[i] = create_buffer(common.create_name("UBO"), ubo_desc)
+		ubo_refs[i] = allocate_buffer_ref(common.create_name("UBO"))
+		ubo := get_buffer(ubo_refs[i])
+
+		ubo.desc.flags = {.HostWrite, .Mapped}
+		ubo.desc.size = size_of(UniformBufferObject)
+		ubo.desc.usage = {.UniformBuffer}
+
+		create_buffer(ubo_refs[i])
 	}
 
 }

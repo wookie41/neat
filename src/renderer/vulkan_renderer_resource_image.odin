@@ -66,10 +66,12 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_init_images :: proc() {
-		INTERNAL.staging_buffer = create_buffer(
-			common.create_name("ImageStagingBuffer"),
-			{size = common.MEGABYTE * 128, flags = {.HostWrite, .Mapped}, usage = {.TransferSrc}},
-		)
+		INTERNAL.staging_buffer = allocate_buffer_ref(common.create_name("ImageStagingBuffer"))
+		staging_buffer := get_buffer(INTERNAL.staging_buffer)
+		staging_buffer.desc.size = common.MEGABYTE * 128
+		staging_buffer.desc.flags = {.HostWrite, .Mapped}
+		staging_buffer.desc.usage = {.TransferSrc}
+		create_buffer(INTERNAL.staging_buffer)
 	}
 
 	//---------------------------------------------------------------------------//

@@ -3,7 +3,6 @@ package renderer
 //---------------------------------------------------------------------------//
 
 import "core:c"
-import "core:log"
 import "../common"
 
 //---------------------------------------------------------------------------//
@@ -35,6 +34,7 @@ BufferUsageFlags :: distinct bit_set[BufferUsageFlagBits;u8]
 //---------------------------------------------------------------------------//
 
 BufferDesc :: struct {
+	name:  common.Name,
 	size:  u32,
 	flags: BufferDescFlags,
 	usage: BufferUsageFlags,
@@ -73,19 +73,23 @@ init_buffers :: proc() {
 
 //---------------------------------------------------------------------------//
 
-create_buffer :: proc(p_name: common.Name, p_buffer_desc: BufferDesc) -> BufferRef {
+allocate_buffer_ref :: proc(p_name: common.Name) -> BufferRef {
 	ref := BufferRef(create_ref(BufferResource, &G_BUFFER_REF_ARRAY, p_name))
-	idx := get_ref_idx(ref)
-	buffer := &G_BUFFER_REF_ARRAY.resource_array[idx]
+	get_buffer(ref).desc.name = p_name
+	return ref
+}
 
-	buffer.desc = p_buffer_desc
+//---------------------------------------------------------------------------//
 
-	if backend_create_buffer(p_name, p_buffer_desc, buffer) == false {
-		free_ref(BufferResource, &G_BUFFER_REF_ARRAY, ref)
-		return InvalidBufferRef
+create_buffer :: proc(p_ref: BufferRef) -> bool {
+	buffer := get_buffer(p_ref)
+
+	if backend_create_buffer(p_ref, buffer) == false {
+		free_ref(BufferResource, &G_BUFFER_REF_ARRAY, p_ref)
+		return false
 	}
 
-	return ref
+	return true
 }
 
 //---------------------------------------------------------------------------//
@@ -120,79 +124,11 @@ unmap_buffer :: proc(p_ref: BufferRef) {
 //---------------------------------------------------------------------------//
 
 StagedBufferDesc :: struct {
-	size:  u32,
-	usage: BufferUsageFlagBits,
+	size:   u32,
+	usage:  BufferUsageFlagBits,
 	// stages in which the buffer is going to be read,
 	// used to determine barrier placement
 	stages: PipelineStageFlags,
-}
-
-//---------------------------------------------------------------------------//
-
-StagedBuffer :: struct {
-	device_buffer_ref:  BufferRef,
-	staging_buffer_ref: BufferRef,
-}
-
-//---------------------------------------------------------------------------//
-
-create_staged_buffer :: proc(p_name: common.Name, p_buffer_desc: StagedBufferDesc) -> (
-	StagedBuffer,
-	bool,
-) {
-	assert(p_buffer_desc.usage > .TransferDst)
-
-	staging_buffer_desc := BufferDesc {
-		size = p_buffer_desc.size,
-		usage = {.TransferSrc},
-		flags = {.HostWrite},
-	}
-
-	staging_buffer_ref := create_buffer(p_name, staging_buffer_desc)
-
-	if staging_buffer_ref == InvalidBufferRef {
-		log.debugf(
-			"Failed to create staging buffer when creating buffer %s",
-			common.get_string(p_name),
-		)
-		return {}, false
-	}
-
-	device_buffer_desc := BufferDesc {
-		size = p_buffer_desc.size,
-		usage = {p_buffer_desc.usage, .TransferDst},
-		flags = {.Dedicated},
-	}
-
-	device_buffer_ref := create_buffer(p_name, device_buffer_desc)
-	if device_buffer_ref == InvalidBufferRef {
-		destroy_buffer(staging_buffer_ref)
-		log.debugf(
-			"Failed to create staging buffer when creating buffer %s",
-			common.get_string(p_name),
-		)
-		return {}, false
-	}
-	
-	return StagedBuffer {
-		staging_buffer_ref = staging_buffer_ref,
-		device_buffer_ref = device_buffer_ref,
-	}, true
-}
-
-//---------------------------------------------------------------------------//
-
-destroy_staged_buffer :: proc(p_staged_buffer: StagedBuffer) {
-	destroy_buffer(p_staged_buffer.staging_buffer_ref)
-	destroy_buffer(p_staged_buffer.device_buffer_ref)
-}
-
-//---------------------------------------------------------------------------//
-
-update_staged_buffer :: proc(p_staged_buffer: StagedBuffer, p_data: []u8) {
-	staging_buffer := get_buffer(p_staged_buffer.staging_buffer_ref)
-	device_buffer := get_buffer(p_staged_buffer.device_buffer_ref)
-	backend_update_staged_buffer(staging_buffer, device_buffer)
 }
 
 //---------------------------------------------------------------------------//

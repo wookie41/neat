@@ -47,8 +47,7 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_create_buffer :: proc(
-		p_name: common.Name,
-		p_buffer_desc: BufferDesc,
+		p_buffer_ref: BufferRef,
 		p_buffer: ^BufferResource,
 	) -> bool {
 
@@ -63,29 +62,29 @@ when USE_VULKAN_BACKEND {
 
 		buffer_create_info := vk.BufferCreateInfo {
 			sType       = .BUFFER_CREATE_INFO,
-			size        = vk.DeviceSize(p_buffer_desc.size),
+			size        = vk.DeviceSize(p_buffer.desc.size),
 			usage       = vk_usage,
 			sharingMode = .EXCLUSIVE,
 		}
 
 		alloc_usage: vma.MemoryUsage = .AUTO
-		if .PreferHost in p_buffer_desc.flags {
+		if .PreferHost in p_buffer.desc.flags {
 			alloc_usage = .AUTO_PREFER_HOST
 		}
 
 		alloc_flags: vma.AllocationCreateFlags
 
-		if .HostWrite in p_buffer_desc.flags {
+		if .HostWrite in p_buffer.desc.flags {
 			alloc_flags += {.HOST_ACCESS_SEQUENTIAL_WRITE}
-		} else if .HostRead in p_buffer_desc.flags {
+		} else if .HostRead in p_buffer.desc.flags {
 			alloc_flags += {.HOST_ACCESS_RANDOM}
 		}
 
-		if .Mapped in p_buffer_desc.flags {
+		if .Mapped in p_buffer.desc.flags {
 			alloc_flags += {.CREATE_MAPPED}
 		}
 
-		if .Dedicated in p_buffer_desc.flags {
+		if .Dedicated in p_buffer.desc.flags {
 			alloc_flags += {.DEDICATED_MEMORY}
 		}
 
@@ -108,13 +107,13 @@ when USE_VULKAN_BACKEND {
 			return false
 		}
 
-		if .Mapped in p_buffer_desc.flags {
+		if .Mapped in p_buffer.desc.flags {
 			assert(alloc_info.pMappedData != nil)
 			p_buffer.mapped_ptr = cast(^u8)alloc_info.pMappedData
 		}
 
 		vk_name := strings.clone_to_cstring(
-			common.get_string(p_name),
+			common.get_string(p_buffer.desc.name),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
