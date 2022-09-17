@@ -148,7 +148,7 @@ allocate_image_ref :: proc(p_name: common.Name) -> ImageRef {
 create_texture_image :: proc(p_ref: ImageRef) -> bool {
 	image := get_image(p_ref)
 	assert(
-		image.desc.format > .ColorFormatsStart && image.desc.format < .ColorFormatsEnd
+		image.desc.format > .ColorFormatsStart && image.desc.format < .ColorFormatsEnd,
 	)
 
 	if backend_create_texture_image(p_ref, image) == false {

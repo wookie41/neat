@@ -173,10 +173,19 @@ init :: proc(p_options: InitOptions) -> bool {
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
 		for i in 0 ..< G_RENDERER.num_frames_in_flight {
-			cmd_buff_ref := create_command_buffer({flags = {.Primary}, thread = 0, frame = u8(i)})
+			cmd_buff_ref := allocate_command_buffer_ref(common.create_name("CmdBuffer"))
 			if cmd_buff_ref == InvalidCommandBufferRef {
 				log.error("Failed to allocate command buffer")
 				return false
+			}
+			get_command_buffer(cmd_buff_ref).desc = {
+				flags = {.Primary}, 
+				thread = 0, 
+				frame = u8(i),
+			}
+			if create_command_buffer(cmd_buff_ref) == false {
+				log.error("Failed to create command buffer")
+				return false				
 			}
 			G_RENDERER.primary_cmd_buffer_ref[i] = cmd_buff_ref
 		}

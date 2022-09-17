@@ -137,13 +137,13 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_create_command_buffer :: proc(
-		p_cmd_buff_desc: CommandBufferDesc,
+		p_ref: CommandBufferRef,
 		p_cmd_buff: ^CommandBufferResource,
 	) -> bool {
 		alloc_info := vk.CommandBufferAllocateInfo {
 			sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
-			commandPool        = INTERNAL.graphics_command_pools[p_cmd_buff_desc.frame],
-			level              = .PRIMARY if .Primary in p_cmd_buff_desc.flags else .SECONDARY,
+			commandPool        = INTERNAL.graphics_command_pools[p_cmd_buff.desc.frame],
+			level              = .PRIMARY if .Primary in p_cmd_buff.desc.flags else .SECONDARY,
 			commandBufferCount = 1,
 		}
 

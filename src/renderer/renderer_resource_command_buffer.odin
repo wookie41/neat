@@ -8,6 +8,7 @@ import "../common"
 //---------------------------------------------------------------------------//
 
 CommandBufferDesc :: struct {
+	name:   common.Name,
 	flags:  CommandBufferFlags,
 	thread: u8,
 	frame:  u8,
@@ -55,8 +56,8 @@ G_COMMAND_BUFFER_REF_ARRAY: RefArray(CommandBufferResource)
 
 @(private)
 TextureCopy :: struct {
-	buffer: BufferRef,
-	image:  ImageRef,
+	buffer:             BufferRef,
+	image:              ImageRef,
 	// offsets at which data for each mip is stored in the buffer
 	mip_buffer_offsets: []u32,
 }
@@ -65,31 +66,33 @@ TextureCopy :: struct {
 
 @(private)
 init_command_buffers :: #force_inline proc(p_options: InitOptions) -> bool {
-	G_COMMAND_BUFFER_REF_ARRAY = create_ref_array(
-		CommandBufferResource,
-		MAX_COMMAND_BUFFERS,
-	)
+	G_COMMAND_BUFFER_REF_ARRAY = create_ref_array(CommandBufferResource, MAX_COMMAND_BUFFERS)
 	return backend_init_command_buffers(p_options)
 }
 
 //---------------------------------------------------------------------------//
 
-create_command_buffer :: #force_inline proc(
-	p_cmd_buff_desc: CommandBufferDesc,
-) -> CommandBufferRef {
+allocate_command_buffer_ref :: proc(p_name: common.Name) -> CommandBufferRef {
 	ref := CommandBufferRef(
-		create_ref(CommandBufferResource, &G_COMMAND_BUFFER_REF_ARRAY, common.EMPTY_NAME),
+		create_ref(CommandBufferResource, &G_COMMAND_BUFFER_REF_ARRAY, p_name),
 	)
-	idx := get_ref_idx(ref)
-	cmd_buff := &G_COMMAND_BUFFER_REF_ARRAY.resource_array[idx]
-	cmd_buff.desc = p_cmd_buff_desc
+	get_command_buffer(ref).desc.name = p_name
+	return ref
+}
 
-	if backend_create_command_buffer(p_cmd_buff_desc, cmd_buff) == false {
-		free_ref(CommandBufferResource, &G_COMMAND_BUFFER_REF_ARRAY, ref)
-		return InvalidCommandBufferRef
+//---------------------------------------------------------------------------//
+
+create_command_buffer :: #force_inline proc(
+	p_ref: CommandBufferRef,
+) -> bool {
+	cmd_buff := get_command_buffer(p_ref)
+
+	if backend_create_command_buffer(p_ref, cmd_buff) == false {
+		free_ref(CommandBufferResource, &G_COMMAND_BUFFER_REF_ARRAY, p_ref)
+		return false
 	}
 
-	return ref
+	return true
 }
 
 //---------------------------------------------------------------------------//
