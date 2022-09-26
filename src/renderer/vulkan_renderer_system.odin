@@ -38,6 +38,7 @@ when USE_VULKAN_BACKEND {
 	DeviceHintsBits :: enum u8 {
 		DedicatedTransferQueue,
 		DedicatedComputeQueue,
+		IntegratedGPU,
 	}
 
 	DeviceHints :: distinct bit_set[DeviceHintsBits;u8]
@@ -395,6 +396,10 @@ when USE_VULKAN_BACKEND {
 				   device_props.deviceType != .CPU {
 
 					log.infof("Picked device: %s\n ", device_props.deviceName)
+
+					if device_props.deviceType == .INTEGRATED_GPU {
+						G_RENDERER.device_hints += { .IntegratedGPU }
+					}
 
 					physical_device = pd
 					surface_capabilities = capabilities

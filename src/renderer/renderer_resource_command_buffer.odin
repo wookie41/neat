@@ -16,12 +16,6 @@ CommandBufferDesc :: struct {
 
 //---------------------------------------------------------------------------//
 
-
-@(private)
-CommandBuffer :: distinct u32
-
-//---------------------------------------------------------------------------//
-
 @(private)
 CommandBufferFlagBits :: enum u8 {
 	Primary,
@@ -51,16 +45,6 @@ InvalidCommandBufferRef := CommandBufferRef {
 
 @(private = "file")
 G_COMMAND_BUFFER_REF_ARRAY: RefArray(CommandBufferResource)
-
-//---------------------------------------------------------------------------//
-
-@(private)
-TextureCopy :: struct {
-	buffer:             BufferRef,
-	image:              ImageRef,
-	// offsets at which data for each mip is stored in the buffer
-	mip_buffer_offsets: []u32,
-}
 
 //---------------------------------------------------------------------------//
 

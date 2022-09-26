@@ -22,8 +22,6 @@ when USE_VULKAN_BACKEND {
 		p_layout: ^PipelineLayoutResource,
 	) -> bool {
 
-		assert(p_layout.desc.layout_type != .GRAPHICS_MATERIAL) // @TODO Implement
-
 		vert_shader := get_shader(p_layout.desc.vert_shader_ref)
 		frag_shader := get_shader(p_layout.desc.frag_shader_ref)
 

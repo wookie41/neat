@@ -131,6 +131,16 @@ ImageResource :: struct {
 //---------------------------------------------------------------------------//
 
 @(private)
+TextureCopy :: struct {
+	buffer:             BufferRef,
+	image:              ImageRef,
+	// offsets at which data for each mip is stored in the buffer
+	mip_buffer_offsets: []u32,
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
 init_images :: proc() {
 	G_IMAGE_REF_ARRAY = create_ref_array(ImageResource, MAX_IMAGES)
 	backend_init_images()

@@ -10,7 +10,6 @@ import "../common"
 
 PipelineType :: enum u8 {
 	GRAPHICS,
-	GRAPHICS_MATERIAL,
 }
 
 //---------------------------------------------------------------------------//
