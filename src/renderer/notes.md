@@ -65,9 +65,11 @@ has something to index into (it has to be large enough not to cause out-of-bound
     Graphics pipeline: 
         - Bindless array        (set = 0, binding = 0)
         - Immutable samplers    (set = 0, binding = 1)
-        - Per frame             (set = 1, binding = 0)
-        - Per view              (set = 1, binding = 1)
-        - Per instance          (set = 2, binding = 0)
+
+        - Per frame             (set = 1, binding = 0) (dynamic offset bound)
+        - Per view              (set = 1, binding = 1) (dynamic offset bound)
+        - Per draw              (set = 2, binding = 0) (dynamic offset bound)
+        
         - Custom bindings       (set = 2, binding = 1...n)
     Global pipeline for MaterialPasses:
         - Bindless array        (set = 0, binding = 0)
@@ -218,3 +220,6 @@ Usage patterns:
     - uniform/storage data
     - vertex buffers (streaming candidate - populated with )
     - index buffers (streaming)
+
+
+Descriptor

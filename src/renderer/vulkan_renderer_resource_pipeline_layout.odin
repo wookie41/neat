@@ -9,7 +9,30 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
+	@(private)
+	BackendPipelineLayoutUsedDescriptorsFlagBits :: enum u16 {
+		VertexBindlessTextureArray,
+		VertexSamplers,
+		FragmentBindlessTextureArray,
+		FragmentSamplers,
+		VertexPerFrameUniform,
+		VertexPerViewUniform,
+		VertexPerRenderPassUniform,
+		VertexPerInstanceUniform,
+		FragmentPerFrameUniform,
+		FragmentPerViewUniform,
+		FragmentPerRenderPassUniform,
+		FragmentPerInstanceUniform,
+	}
+
+	@(private)
+	BackendPipelineLayoutUsedDescriptorsFlags :: distinct bit_set[BackendPipelineLayoutUsedDescriptorsFlagBits;u16]
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
 	BackendPipelineLayoutResource :: struct {
+		used_descriptors_flags:            BackendPipelineLayoutUsedDescriptorsFlags,
 		vk_programs_descriptor_set_layout: vk.DescriptorSetLayout,
 		vk_pipeline_layout:                vk.PipelineLayout,
 	}
@@ -31,6 +54,33 @@ when USE_VULKAN_BACKEND {
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(vk_bindings, G_RENDERER_ALLOCATORS.temp_allocator)
+
+		// Determine which of the global descriptors are being used in the pipeline
+		{
+			// Vertex shader
+			for binding in vert_shader.vk_bindings {
+				// Set 0
+				if binding.set == 0 {
+					if binding.binding == 0 {
+						p_layout.used_descriptors_flags += {.VertexBindlessTextureArray}
+					} else if binding.binding == 1 {
+						p_layout.used_descriptors_flags += {.VertexSamplers}
+
+					}
+				}
+				// Set 1
+				if binding.set == 1 {
+					if binding.binding == 0 {
+						p_layout.used_descriptors_flags += {.VertexPerFrameUniform}
+					} else if binding.binding == 1 {
+						p_layout.used_descriptors_flags += {.VertexPerViewUniform}
+					} else if binding.binding == 2 {
+						p_layout.used_descriptors_flags += {.VertexPerRenderPassUniform}
+					}
+				}
+			}
+
+		}
 
 		backend_add_shader_bindings(&vert_shader.vk_bindings, {.VERTEX}, 0, vk_bindings)
 

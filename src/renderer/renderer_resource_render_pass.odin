@@ -20,9 +20,6 @@ RenderPassDesc :: struct {
 	name:                      common.Name,
 	vert_shader:               ShaderRef,
 	frag_shader:               ShaderRef,
-	uniform_per_frame:         BufferRef, //@TODO
-	uniform_per_view:          BufferRef, //@TODO
-	univorm_per_instance:      BufferRef, //@TODO
 	vertex_layout:             VertexLayout,
 	primitive_type:            PrimitiveType,
 	rasterizer_type:           RasterizerType,
