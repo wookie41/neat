@@ -184,7 +184,7 @@ vt_update :: proc(
 	using G_VT
 
 	vt_update_uniform_buffer()
-	
+
 	render_target_bindings[0].target = &G_RENDERER.swap_image_render_targets[p_image_idx]
 
 	begin_info := RenderPassBeginInfo {
@@ -239,7 +239,7 @@ vt_create_vertex_buffer :: proc() {
 		first_usage_stage = .VertexInput,
 		size              = u32(len(g_vertices) * size_of(Vertex)),
 	}
-	
+
 	response := request_buffer_upload(upload_request)
 	assert(response.ptr != nil)
 
@@ -416,7 +416,7 @@ vk_create_descriptor_sets :: proc() {
 		G_RENDERER_ALLOCATORS.temp_allocator,
 	)
 	for _, i in set_layouts {
-		set_layouts[i] = pipeline_layout.vk_programs_descriptor_set_layout
+		set_layouts[i] = pipeline_layout.vk_descriptor_set_layouts[0].layout
 	}
 
 	descriptor_sets_alloc_info := vk.DescriptorSetAllocateInfo {
@@ -445,6 +445,7 @@ vt_write_descriptor_sets :: proc() {
 	ubo_write := vk.WriteDescriptorSet {
 		sType           = .WRITE_DESCRIPTOR_SET,
 		dstBinding      = 0,
+		dstSet          = 0,
 		descriptorCount = 1,
 		descriptorType  = .UNIFORM_BUFFER,
 		pBufferInfo     = &ubo_info,
@@ -458,6 +459,7 @@ vt_write_descriptor_sets :: proc() {
 
 	image_write := vk.WriteDescriptorSet {
 		sType           = .WRITE_DESCRIPTOR_SET,
+		dstSet          = 0,
 		dstBinding      = 1,
 		descriptorCount = 1,
 		descriptorType  = .COMBINED_IMAGE_SAMPLER,
@@ -507,9 +509,9 @@ vt_create_texture_image :: proc() {
 	texture_image.desc.data_per_mip = {pixels[0:image_width * image_height * 4]}
 	texture_image.desc.dimensions = {u32(image_width), u32(image_height), 1}
 	texture_image.desc.sample_count_flags = {._1}
-	
+
 	create_texture_image(texture_image_ref)
-	
+
 	stb_image.image_free(pixels)
 }
 

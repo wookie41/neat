@@ -71,14 +71,6 @@ has something to index into (it has to be large enough not to cause out-of-bound
         - Per draw              (set = 2, binding = 0) (dynamic offset bound)
         
         - Custom bindings       (set = 2, binding = 1...n)
-    Global pipeline for MaterialPasses:
-        - Bindless array        (set = 0, binding = 0)
-        - Immutable samplers    (set = 0, binding = 1)
-        - Per frame             (set = 1, binding = 0)
-        - Per view              (set = 1, binding = 1)
-        - Per instance          (set = 2, binding = 0)
-        - Material buffer       (set = 2, binding = 1)
-        - Custom bindings       (set = 2, binding = 2...n)
 - Pipeline state: 
     - Created when parsing the RenderPasses, as there we have:
         - vertex program

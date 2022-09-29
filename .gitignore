@@ -3,3 +3,4 @@ generate_bindings.exe
 temp/
 *.exe
 *.pdb
+ols.json

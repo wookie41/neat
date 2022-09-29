@@ -6,6 +6,7 @@ import "core:c"
 
 import "../common"
 
+
 //---------------------------------------------------------------------------//
 
 PipelineType :: enum u8 {
@@ -57,11 +58,7 @@ init_pipeline_layouts :: proc() {
 
 allocate_pipeline_layout_ref :: proc(p_name: common.Name) -> PipelineLayoutRef {
 	ref := PipelineLayoutRef(
-		create_ref(
-			PipelineLayoutResource,
-			&G_PIPELINE_LAYOUT_REF_ARRAY,
-			p_name,
-		),
+		create_ref(PipelineLayoutResource, &G_PIPELINE_LAYOUT_REF_ARRAY, p_name),
 	)
 	get_pipeline_layout(ref).desc.name = p_name
 	return ref
@@ -69,13 +66,9 @@ allocate_pipeline_layout_ref :: proc(p_name: common.Name) -> PipelineLayoutRef {
 
 //---------------------------------------------------------------------------//
 
-create_graphics_pipeline_layout :: proc(
-	p_ref: PipelineLayoutRef,
-) -> bool {
+create_graphics_pipeline_layout :: proc(p_ref: PipelineLayoutRef) -> bool {
 	pipeline_layout := get_pipeline_layout(p_ref)
-	if
-	   backend_reflect_pipeline_layout(p_ref, pipeline_layout) ==
-	   false {
+	if backend_reflect_graphics_pipeline_layout(p_ref, pipeline_layout) == false {
 		free_ref(PipelineLayoutResource, &G_PIPELINE_LAYOUT_REF_ARRAY, p_ref)
 		return false
 	}

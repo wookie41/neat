@@ -1,5 +1,6 @@
 package renderer
 
+import "core:c"
 import "../common"
 
 //---------------------------------------------------------------------------//
@@ -24,8 +25,7 @@ MeshFlags :: distinct bit_set[MeshFlagBits;u8]
 //---------------------------------------------------------------------------//
 
 MeshResource :: struct {
-	using backend_mesh: BackendMeshResource,
-	desc:                     MeshDesc,
+	desc: MeshDesc,
 }
 
 //---------------------------------------------------------------------------//

@@ -9,38 +9,23 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	@(private)
-	BackendPipelineLayoutUsedDescriptorsFlagBits :: enum u16 {
-		VertexBindlessTextureArray,
-		VertexSamplers,
-		FragmentBindlessTextureArray,
-		FragmentSamplers,
-		VertexPerFrameUniform,
-		VertexPerViewUniform,
-		VertexPerRenderPassUniform,
-		VertexPerInstanceUniform,
-		FragmentPerFrameUniform,
-		FragmentPerViewUniform,
-		FragmentPerRenderPassUniform,
-		FragmentPerInstanceUniform,
+	VulkanDescriptorSetLayout :: struct {
+		set:    u8,
+		layout: vk.DescriptorSetLayout,
 	}
-
-	@(private)
-	BackendPipelineLayoutUsedDescriptorsFlags :: distinct bit_set[BackendPipelineLayoutUsedDescriptorsFlagBits;u16]
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
 	BackendPipelineLayoutResource :: struct {
-		used_descriptors_flags:            BackendPipelineLayoutUsedDescriptorsFlags,
-		vk_programs_descriptor_set_layout: vk.DescriptorSetLayout,
-		vk_pipeline_layout:                vk.PipelineLayout,
+		vk_descriptor_set_layouts: []VulkanDescriptorSetLayout,
+		vk_pipeline_layout:        vk.PipelineLayout,
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_reflect_pipeline_layout :: proc(
+	backend_reflect_graphics_pipeline_layout :: proc(
 		p_ref: PipelineLayoutRef,
 		p_layout: ^PipelineLayoutResource,
 	) -> bool {
@@ -48,124 +33,177 @@ when USE_VULKAN_BACKEND {
 		vert_shader := get_shader(p_layout.desc.vert_shader_ref)
 		frag_shader := get_shader(p_layout.desc.frag_shader_ref)
 
-		vk_bindings := make(
-			[]vk.DescriptorSetLayoutBinding,
-			len(vert_shader.vk_bindings) + len(frag_shader.vk_bindings),
+		// Determine the number of distinct descriptor sets used across vertex and fragment shader
+		num_descriptor_sets_used := len(vert_shader.vk_descriptor_sets)
+		for frag_descriptor_set in frag_shader.vk_descriptor_sets {
+			for vert_descriptor_set in vert_shader.vk_descriptor_sets {
+				if frag_descriptor_set.set == vert_descriptor_set.set {
+					break
+				}
+				num_descriptor_sets_used += 1
+			}
+		}
+
+		bindings_per_set := make(
+			map[uint][dynamic]vk.DescriptorSetLayoutBinding,
+			num_descriptor_sets_used,
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
-		defer delete(vk_bindings, G_RENDERER_ALLOCATORS.temp_allocator)
+		defer delete(bindings_per_set)
 
-		// Determine which of the global descriptors are being used in the pipeline
-		{
-			// Vertex shader
-			for binding in vert_shader.vk_bindings {
-				// Set 0
-				if binding.set == 0 {
-					if binding.binding == 0 {
-						p_layout.used_descriptors_flags += {.VertexBindlessTextureArray}
-					} else if binding.binding == 1 {
-						p_layout.used_descriptors_flags += {.VertexSamplers}
+		// Gather vertex shader descriptor info
+		for descriptor_set in vert_shader.vk_descriptor_sets {
 
-					}
-				}
-				// Set 1
-				if binding.set == 1 {
-					if binding.binding == 0 {
-						p_layout.used_descriptors_flags += {.VertexPerFrameUniform}
-					} else if binding.binding == 1 {
-						p_layout.used_descriptors_flags += {.VertexPerViewUniform}
-					} else if binding.binding == 2 {
-						p_layout.used_descriptors_flags += {.VertexPerRenderPassUniform}
-					}
-				}
+			set_number := uint(descriptor_set.set)
+			if (set_number in bindings_per_set) == false {
+				bindings_per_set[set_number] = make(
+					[dynamic]vk.DescriptorSetLayoutBinding,
+					G_RENDERER_ALLOCATORS.temp_allocator,
+				)
 			}
 
+			set_bindings := &bindings_per_set[set_number]
+
+			for descriptor in descriptor_set.descriptors {
+				layout_binding := vk.DescriptorSetLayoutBinding {
+					binding = descriptor.binding,
+					descriptorCount = descriptor.count,
+					descriptorType = descriptor.type,
+					stageFlags = {.VERTEX},
+				}
+				append(set_bindings, layout_binding)
+			}
 		}
 
-		backend_add_shader_bindings(&vert_shader.vk_bindings, {.VERTEX}, 0, vk_bindings)
+		// Gather fragment shader descriptor info
+		for descriptor_set in frag_shader.vk_descriptor_sets {
 
-		backend_add_shader_bindings(
-			&frag_shader.vk_bindings,
-			{.FRAGMENT},
-			u32(len(vert_shader.vk_bindings)),
-			vk_bindings,
+			set_number := uint(descriptor_set.set)
+			if (set_number in bindings_per_set) == false {
+				bindings_per_set[set_number] = make(
+					[dynamic]vk.DescriptorSetLayoutBinding,
+					G_RENDERER_ALLOCATORS.temp_allocator,
+				)
+			}
+
+			set_bindings := &bindings_per_set[set_number]
+
+			for descriptor in descriptor_set.descriptors {
+				// Check if the vertex shader already added it, and if so, simply add the fragment stage
+				already_used_by_vertex := false
+				for existing_binding in set_bindings {
+					if existing_binding.binding == descriptor.binding {
+						existing_binding.stageFlags += {.FRAGMENT}
+						assert(existing_binding.descriptorType == descriptor.type)
+						already_used_by_vertex = true
+						break
+					}
+				}
+
+				if already_used_by_vertex {
+					continue
+				}
+
+				layout_binding := vk.DescriptorSetLayoutBinding {
+					binding = descriptor.binding,
+					descriptorCount = descriptor.count,
+					descriptorType = descriptor.type,
+					stageFlags = {.FRAGMENT},
+				}
+				append(set_bindings, layout_binding)
+			}
+		}
+
+		// Create the descriptor set layouts
+		descriptor_set_layout_create_info := make(
+			[]vk.DescriptorSetLayoutCreateInfo,
+			len(bindings_per_set),
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+		defer delete(descriptor_set_layout_create_info, G_RENDERER_ALLOCATORS.temp_allocator)
+
+		p_layout.vk_descriptor_set_layouts = make(
+			[]VulkanDescriptorSetLayout,
+			len(bindings_per_set),
+			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
 
-		// Create programs descriptor set layout
+		// Create the descriptor sets
 		{
-			create_info := vk.DescriptorSetLayoutCreateInfo {
-				sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-				bindingCount = u32(len(vk_bindings)),
-				pBindings    = raw_data(vk_bindings),
-			}
+			set_count := 0
+			for set in bindings_per_set {
+				descriptor_set_bindings := bindings_per_set[set]
+				create_info := vk.DescriptorSetLayoutCreateInfo {
+					sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+					bindingCount = u32(len(descriptor_set_bindings)),
+					pBindings    = raw_data(descriptor_set_bindings),
+				}
 
-			if
-			   vk.CreateDescriptorSetLayout(
-				   G_RENDERER.device,
-				   &create_info,
-				   nil,
-				   &p_layout.vk_programs_descriptor_set_layout,
-			   ) !=
-			   .SUCCESS {
-				log.warn("Failed to create descriptor set layout")
-				return false
+				p_layout.vk_descriptor_set_layouts[set_count].set = u8(set)
+				if vk.CreateDescriptorSetLayout(
+					   G_RENDERER.device,
+					   &create_info,
+					   nil,
+					   &p_layout.vk_descriptor_set_layouts[set_count].layout,
+				   ) != .SUCCESS {
+					log.warn("Failed to create descriptor set layout")
+					return false
+				}
+				set_count += 1
 			}
 		}
-
+		
 
 		// Create pipeline layout
 		{
-			create_info := vk.PipelineLayoutCreateInfo {
-				sType          = .PIPELINE_LAYOUT_CREATE_INFO,
-				pSetLayouts    = &p_layout.vk_programs_descriptor_set_layout,
-				setLayoutCount = 1,
+			descriptor_set_layouts := make(
+				[]vk.DescriptorSetLayout, 
+				len(p_layout.vk_descriptor_set_layouts), 
+				G_RENDERER_ALLOCATORS.temp_allocator)
+
+			defer delete(descriptor_set_layouts, G_RENDERER_ALLOCATORS.temp_allocator)
+
+			for descriptor_set_layout, i in &p_layout.vk_descriptor_set_layouts {
+				descriptor_set_layouts[i] = descriptor_set_layout.layout
 			}
 
-			if
-			   vk.CreatePipelineLayout(
+			create_info := vk.PipelineLayoutCreateInfo {
+				sType          = .PIPELINE_LAYOUT_CREATE_INFO,
+				pSetLayouts    = raw_data(descriptor_set_layouts),
+				setLayoutCount = u32(len(descriptor_set_layouts)),
+			}
+
+			if vk.CreatePipelineLayout(
 				   G_RENDERER.device,
 				   &create_info,
 				   nil,
 				   &p_layout.vk_pipeline_layout,
-			   ) !=
-			   .SUCCESS {
+			   ) != .SUCCESS {
 				log.warn("Failed to create pipeline layout")
 				return false
 			}
+		}
+
+		// Cleanup
+		{
+			for _, bindings in bindings_per_set {
+				delete(bindings)
+			}
+			delete(bindings_per_set)
 		}
 
 		return true
 	}
 
 	//---------------------------------------------------------------------------//
-	@(private = "file")
-	backend_add_shader_bindings :: proc(
-		p_bindings: ^[]VulkanShaderBinding,
-		p_stage_flags: vk.ShaderStageFlags,
-		p_bindings_count: u32,
-		p_out_vk_bindings: []vk.DescriptorSetLayoutBinding,
-	) {
-
-		curr_binding := p_bindings_count
-		for binding in p_bindings {
-
-			desc_binding := &p_out_vk_bindings[curr_binding]
-
-			desc_binding.binding = binding.binding
-			desc_binding.descriptorType = binding.type
-			desc_binding.descriptorCount = binding.count
-			// @TODO When Immutable samplers are added
-			//desc_binding.pImmutableSamplers
-			desc_binding.stageFlags = p_stage_flags
-			curr_binding += 1
-		}
-	}
-
-	//---------------------------------------------------------------------------//
 
 	@(private)
 	backend_destroy_pipeline_layout :: proc(p_ref: PipelineLayoutRef) {
-		// nothing to do
+		pipeline_layout := get_pipeline_layout(p_ref)
+		delete(
+			pipeline_layout.vk_descriptor_set_layouts,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
 	}
 
 	//---------------------------------------------------------------------------//

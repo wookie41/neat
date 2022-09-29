@@ -18,9 +18,15 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	VulkanShaderBinding :: struct {
+	VulkanShaderDescriptorSet :: struct {
+		set:         u8,
+		descriptors: []VulkanShaderDescriptor,
+	}
+
+	//---------------------------------------------------------------------------//
+
+	VulkanShaderDescriptor :: struct {
 		name:    common.Name,
-		set:     u32,
 		binding: u32,
 		count:   u32,
 		type:    vk.DescriptorType,
@@ -36,9 +42,9 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	BackendShaderResource :: struct {
-		vk_bindings:      []VulkanShaderBinding,
-		vk_module:        vk.ShaderModule,
-		fragment_outputs: []FragmentOutput,
+		vk_module:          vk.ShaderModule,
+		vk_descriptor_sets: []VulkanShaderDescriptorSet,
+		fragment_outputs:   []FragmentOutput,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -62,7 +68,6 @@ when USE_VULKAN_BACKEND {
 
 		case .COMPUTE:
 			compile_target = "cs_6_7"
-
 		}
 
 		shader_src_path := fmt.aprintf(
@@ -152,71 +157,63 @@ when USE_VULKAN_BACKEND {
 				raw_data(descriptor_sets),
 			)
 
-			// Count how many bindings in total the shader has and allocate memory for them
+			// Determine how many descriptors there are for each sets
 			{
-				total_bindings: u32 = 0
-				for i in 0 ..< num_descriptor_sets {
-					total_bindings += descriptor_sets[i].binding_count
-				}
-				shader_resource.vk_bindings = make(
-					[]VulkanShaderBinding,
-					total_bindings,
+				shader_resource.vk_descriptor_sets = make(
+					[]VulkanShaderDescriptorSet,
+					num_descriptor_sets,
 					G_RENDERER_ALLOCATORS.resource_allocator,
 				)
 
-				defer if compile_result == false {
-					delete(shader_resource.vk_bindings, G_RENDERER_ALLOCATORS.resource_allocator)
-				}
-			}
-
-			// Fill binding information
-			{
-				curr_binding := 0
 				for i in 0 ..< num_descriptor_sets {
-					des_set := descriptor_sets[i]
-					for j in 0 ..< des_set.binding_count {
-						des_binding := des_set.bindings[j]
-						shader_binding := &shader_resource.vk_bindings[curr_binding]
+					// Fill set info and create the descriptors array
+					descriptor_set := descriptor_sets[i]
+					shader_resource.vk_descriptor_sets[i].set = u8(descriptor_set.set)
+					shader_resource.vk_descriptor_sets[i].descriptors = make(
+						[]VulkanShaderDescriptor,
+						descriptor_set.binding_count,
+						G_RENDERER_ALLOCATORS.resource_allocator,
+					)
 
-						shader_binding.binding = des_binding.binding
-						shader_binding.name = common.create_name(string(des_binding.name))
+					// Fill descriptors info
+					for j in 0 ..< descriptor_set.binding_count {
+						descriptor := &shader_resource.vk_descriptor_sets[i].descriptors[j]
+						descriptor.binding = descriptor_set.bindings[j].binding
+						descriptor.name = common.create_name(string(descriptor_set.bindings[j].name))
+						descriptor.count = descriptor_set.bindings[j].count
 
-						#partial switch des_binding.descriptor_type {
+						#partial switch descriptor_set.bindings[j].descriptor_type {
 						case .Sampler:
-							shader_binding.type = .SAMPLER
+							descriptor.type = .SAMPLER
 						case .CombinedImageSampler:
-							shader_binding.type = .COMBINED_IMAGE_SAMPLER
+							descriptor.type = .COMBINED_IMAGE_SAMPLER
 						case .SampledImage:
-							shader_binding.type = .SAMPLED_IMAGE
+							descriptor.type = .SAMPLED_IMAGE
 						case .StorageImage:
-							shader_binding.type = .STORAGE_IMAGE
+							descriptor.type = .STORAGE_IMAGE
 						case .UniformTexelBuffer:
-							shader_binding.type = .UNIFORM_TEXEL_BUFFER
+							descriptor.type = .UNIFORM_TEXEL_BUFFER
 						case .StorageTexelBuffer:
-							shader_binding.type = .STORAGE_TEXEL_BUFFER
+							descriptor.type = .STORAGE_TEXEL_BUFFER
 						case .UniformBuffer:
-							shader_binding.type = .UNIFORM_BUFFER
+							descriptor.type = .UNIFORM_BUFFER
 						case .StorageBuffer:
-							shader_binding.type = .STORAGE_BUFFER
+							descriptor.type = .STORAGE_BUFFER
 						case .UniformBufferDynamic:
-							shader_binding.type = .UNIFORM_BUFFER_DYNAMIC
+							descriptor.type = .UNIFORM_BUFFER_DYNAMIC
 						case .StorageBufferDynamic:
-							shader_binding.type = .STORAGE_BUFFER_DYNAMIC
+							descriptor.type = .STORAGE_BUFFER_DYNAMIC
 						case .InputAttachment:
-							shader_binding.type = .INPUT_ATTACHMENT
+							descriptor.type = .INPUT_ATTACHMENT
 						}
-
-						shader_binding.count = des_binding.count
-						curr_binding += 1
 					}
 				}
 
-				when ODIN_DEBUG {
-					defer if compile_result == false {
-						for binding in shader_resource.vk_bindings {
-							common.destroy_name(binding.name)
-						}
+				defer if compile_result == false {
+					for descriptor_set in shader_resource.vk_descriptor_sets {
+						delete(descriptor_set.descriptors, G_RENDERER_ALLOCATORS.resource_allocator)
 					}
+					delete(shader_resource.vk_descriptor_sets, G_RENDERER_ALLOCATORS.resource_allocator)
 				}
 			}
 		}
@@ -256,8 +253,11 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_destroy_shader :: proc(p_ref: ShaderRef) {
 		shader := get_shader(p_ref)
-		if len(shader.vk_bindings) > 0 {
-			delete(shader.vk_bindings, G_RENDERER_ALLOCATORS.resource_allocator)
+		if len(shader.vk_descriptor_sets) > 0 {
+			for descriptor_set in shader.vk_descriptor_sets {
+				delete(descriptor_set.descriptors, G_RENDERER_ALLOCATORS.resource_allocator)
+			}
+			delete(shader.vk_descriptor_sets, G_RENDERER_ALLOCATORS.resource_allocator)
 		}
 		if len(shader.fragment_outputs) > 0 {
 			delete(shader.fragment_outputs, G_RENDERER_ALLOCATORS.resource_allocator)
