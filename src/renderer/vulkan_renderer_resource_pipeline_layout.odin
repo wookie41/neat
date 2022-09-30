@@ -9,16 +9,14 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	VulkanDescriptorSetLayout :: struct {
-		set:    u8,
-		layout: vk.DescriptorSetLayout,
-	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
 	BackendPipelineLayoutResource :: struct {
-		vk_descriptor_set_layouts: []VulkanDescriptorSetLayout,
+		vk_descriptor_set_numbers: []u8,
+		vk_descriptor_set_layouts: []vk.DescriptorSetLayout,
+		vk_descriptor_sets:        []vk.DescriptorSet,
 		vk_pipeline_layout:        vk.PipelineLayout,
 	}
 
@@ -49,7 +47,13 @@ when USE_VULKAN_BACKEND {
 			num_descriptor_sets_used,
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
-		defer delete(bindings_per_set)
+
+		defer {
+			for _, bindings in bindings_per_set {
+				delete(bindings)
+			}
+			delete(bindings_per_set)
+		}
 
 		// Gather vertex shader descriptor info
 		for descriptor_set in vert_shader.vk_descriptor_sets {
@@ -123,12 +127,18 @@ when USE_VULKAN_BACKEND {
 		defer delete(descriptor_set_layout_create_info, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		p_layout.vk_descriptor_set_layouts = make(
-			[]VulkanDescriptorSetLayout,
+			[]vk.DescriptorSetLayout,
 			len(bindings_per_set),
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
 
-		// Create the descriptor sets
+		p_layout.vk_descriptor_set_numbers = make(
+			[]u8,
+			len(bindings_per_set),
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
+
+		// Create the descriptor set layout
 		{
 			set_count := 0
 			for set in bindings_per_set {
@@ -139,12 +149,12 @@ when USE_VULKAN_BACKEND {
 					pBindings    = raw_data(descriptor_set_bindings),
 				}
 
-				p_layout.vk_descriptor_set_layouts[set_count].set = u8(set)
+				p_layout.vk_descriptor_set_numbers[set_count] = u8(set)
 				if vk.CreateDescriptorSetLayout(
 					   G_RENDERER.device,
 					   &create_info,
 					   nil,
-					   &p_layout.vk_descriptor_set_layouts[set_count].layout,
+					   &p_layout.vk_descriptor_set_layouts[set_count],
 				   ) != .SUCCESS {
 					log.warn("Failed to create descriptor set layout")
 					return false
@@ -152,25 +162,36 @@ when USE_VULKAN_BACKEND {
 				set_count += 1
 			}
 		}
-		
+
+		// Create the descriptor sets
+		{
+			descriptor_sets_alloc_info := vk.DescriptorSetAllocateInfo {
+				sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
+				descriptorPool     = G_RENDERER.vk_descriptor_pool,
+				descriptorSetCount = u32(len(p_layout.vk_descriptor_set_layouts)),
+				pSetLayouts        = raw_data(p_layout.vk_descriptor_set_layouts),
+			}
+
+			p_layout.vk_descriptor_sets = make(
+				[]vk.DescriptorSet,
+				descriptor_sets_alloc_info.descriptorSetCount,
+				G_RENDERER_ALLOCATORS.resource_allocator,
+			)
+
+			res := vk.AllocateDescriptorSets(
+				G_RENDERER.device,
+				&descriptor_sets_alloc_info,
+				raw_data(p_layout.vk_descriptor_sets),
+			)
+			assert(res == .SUCCESS)
+		}
 
 		// Create pipeline layout
 		{
-			descriptor_set_layouts := make(
-				[]vk.DescriptorSetLayout, 
-				len(p_layout.vk_descriptor_set_layouts), 
-				G_RENDERER_ALLOCATORS.temp_allocator)
-
-			defer delete(descriptor_set_layouts, G_RENDERER_ALLOCATORS.temp_allocator)
-
-			for descriptor_set_layout, i in &p_layout.vk_descriptor_set_layouts {
-				descriptor_set_layouts[i] = descriptor_set_layout.layout
-			}
-
 			create_info := vk.PipelineLayoutCreateInfo {
 				sType          = .PIPELINE_LAYOUT_CREATE_INFO,
-				pSetLayouts    = raw_data(descriptor_set_layouts),
-				setLayoutCount = u32(len(descriptor_set_layouts)),
+				pSetLayouts    = raw_data(p_layout.vk_descriptor_set_layouts),
+				setLayoutCount = u32(len(p_layout.vk_descriptor_set_layouts)),
 			}
 
 			if vk.CreatePipelineLayout(
@@ -184,14 +205,6 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
-		// Cleanup
-		{
-			for _, bindings in bindings_per_set {
-				delete(bindings)
-			}
-			delete(bindings_per_set)
-		}
-
 		return true
 	}
 
@@ -200,10 +213,26 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_destroy_pipeline_layout :: proc(p_ref: PipelineLayoutRef) {
 		pipeline_layout := get_pipeline_layout(p_ref)
+		vk.FreeDescriptorSets(
+			G_RENDERER.device,
+			G_RENDERER.vk_descriptor_pool,
+			u32(len(pipeline_layout.vk_descriptor_sets)),
+			raw_data(pipeline_layout.vk_descriptor_sets),
+		)
+		for descriptor_set_layout in pipeline_layout.vk_descriptor_set_layouts {
+			vk.DestroyDescriptorSetLayout(G_RENDERER.device, descriptor_set_layout, nil)
+		}
+		vk.DestroyPipelineLayout(G_RENDERER.device, pipeline_layout.vk_pipeline_layout, nil)
+		delete(
+			pipeline_layout.vk_descriptor_set_numbers,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
 		delete(
 			pipeline_layout.vk_descriptor_set_layouts,
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
+		delete(pipeline_layout.vk_descriptor_sets, G_RENDERER_ALLOCATORS.resource_allocator)
+
 	}
 
 	//---------------------------------------------------------------------------//

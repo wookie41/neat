@@ -28,6 +28,7 @@ MAX_PIPELINE_LAYOUTS :: #config(MAX_PIPELINE_LAYOUTS, 128)
 MAX_IMAGES :: #config(MAX_IMAGES, 256)
 MAX_BUFFERS :: #config(MAX_BUFFERS, 256)
 MAX_RENDER_PASSES :: #config(MAX_RENDER_PASSES, 256)
+MAX_RENDER_PASS_INSTANCES :: #config(MAX_RENDER_PASSES, 256)
 MAX_PIPELINES :: #config(MAX_PIPELINES, 128)
 MAX_COMMAND_BUFFERS :: #config(MAX_PIPELINES, 32)
 
@@ -179,13 +180,13 @@ init :: proc(p_options: InitOptions) -> bool {
 				return false
 			}
 			get_command_buffer(cmd_buff_ref).desc = {
-				flags = {.Primary}, 
-				thread = 0, 
+				flags = {.Primary},
+				thread = 0,
 				frame = u8(i),
 			}
 			if create_command_buffer(cmd_buff_ref) == false {
 				log.error("Failed to create command buffer")
-				return false				
+				return false
 			}
 			G_RENDERER.primary_cmd_buffer_ref[i] = cmd_buff_ref
 		}
@@ -206,7 +207,7 @@ init :: proc(p_options: InitOptions) -> bool {
 		execute_queued_texture_copies()
 		end_command_buffer(cmd_buff)
 		submit_pre_render(cmd_buff)
-		
+
 		// Advance the frame index when using unified queues, as we don't want to wait for the 0th
 		// command buffer to finish before we start recording the frame
 		if .DedicatedTransferQueue in G_RENDERER.device_hints {
@@ -225,9 +226,12 @@ update :: proc(p_dt: f32) {
 	cmd_buff_ref := get_frame_cmd_buffer()
 
 	backend_wait_for_frame_resources()
+
 	begin_command_buffer(cmd_buff_ref)
 
+	render_pass_begin_frame()
 	buffer_upload_begin_frame()
+
 	backend_update(p_dt)
 
 	execute_queued_texture_copies()

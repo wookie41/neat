@@ -56,17 +56,15 @@ ColorBlendType :: enum {
 //---------------------------------------------------------------------------//
 
 PipelineDesc :: struct {
-	name:                      common.Name,
-	vert_shader:               ShaderRef,
-	frag_shader:               ShaderRef,
-	vertex_layout:             VertexLayout,
-	primitive_type:            PrimitiveType,
-	resterizer_type:           RasterizerType,
-	multisampling_type:        MultisamplingType,
-	depth_stencil_type:        DepthStencilType,
-	render_target_formats:     []ImageFormat,
-	render_target_blend_types: []ColorBlendType,
-	depth_format:              ImageFormat,
+	name:               common.Name,
+	vert_shader:        ShaderRef,
+	frag_shader:        ShaderRef,
+	vertex_layout:      VertexLayout,
+	primitive_type:     PrimitiveType,
+	resterizer_type:    RasterizerType,
+	multisampling_type: MultisamplingType,
+	depth_stencil_type: DepthStencilType,
+	render_pass_layout: RenderPassLayout,
 }
 
 //---------------------------------------------------------------------------//
@@ -128,9 +126,7 @@ deinit_pipelines :: proc() {
 //---------------------------------------------------------------------------//
 
 allocte_pipeline_ref :: proc(p_name: common.Name) -> PipelineRef {
-	ref := PipelineRef(
-		create_ref(PipelineResource, &G_PIPELINE_REF_ARRAY, p_name),
-	)
+	ref := PipelineRef(create_ref(PipelineResource, &G_PIPELINE_REF_ARRAY, p_name))
 	get_pipeline(ref).desc.name = p_name
 	return ref
 }
@@ -163,8 +159,6 @@ get_pipeline :: proc(p_ref: PipelineRef) -> ^PipelineResource {
 destroy_pipeline :: proc(p_ref: PipelineRef) {
 	pipeline := get_pipeline(p_ref)
 	destroy_pipeline_layout(pipeline.pipeline_layout)
-	delete(pipeline.desc.render_target_formats, G_RENDERER_ALLOCATORS.resource_allocator)
-	delete(pipeline.desc.render_target_blend_types, G_RENDERER_ALLOCATORS.resource_allocator)
 	backend_destroy_pipeline(pipeline)
 	free_ref(PipelineResource, &G_PIPELINE_REF_ARRAY, p_ref)
 }

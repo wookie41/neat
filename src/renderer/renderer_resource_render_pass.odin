@@ -4,7 +4,15 @@ package renderer
 
 import "../common"
 import c "core:c"
+import mem "core:mem"
 import "core:math/linalg/glsl"
+
+//---------------------------------------------------------------------------//
+
+INTERNAL: struct {
+	render_pass_instances:               []RenderPassInstance,
+	num_allocated_render_pass_instances: u32,
+}
 
 //---------------------------------------------------------------------------//
 
@@ -16,19 +24,16 @@ RenderPassResolution :: enum u8 {
 
 //---------------------------------------------------------------------------//
 
-RenderPassDesc :: struct {
-	name:                      common.Name,
-	vert_shader:               ShaderRef,
-	frag_shader:               ShaderRef,
-	vertex_layout:             VertexLayout,
-	primitive_type:            PrimitiveType,
-	rasterizer_type:           RasterizerType,
-	multisampling_type:        MultisamplingType,
-	depth_stencil_type:        DepthStencilType,
+RenderPassLayout :: struct {
 	render_target_formats:     []ImageFormat,
 	render_target_blend_types: []ColorBlendType,
 	depth_format:              ImageFormat,
-	resolution:                RenderPassResolution,
+}
+
+RenderPassDesc :: struct {
+	name:       common.Name,
+	layout:     RenderPassLayout,
+	resolution: RenderPassResolution,
 }
 
 //---------------------------------------------------------------------------//
@@ -44,7 +49,6 @@ RenderPassFlags :: distinct bit_set[RenderPassFlagBits;u32]
 RenderPassResource :: struct {
 	using backend_render_pass: BackendRenderPassResource,
 	desc:                      RenderPassDesc,
-	pipeline:                  PipelineRef,
 	flags:                     RenderPassFlags,
 }
 
@@ -62,6 +66,7 @@ InvalidRenderPassRef := RenderPassRef {
 
 @(private = "file")
 G_RENDER_PASS_REF_ARRAY: RefArray(RenderPassResource)
+
 
 //---------------------------------------------------------------------------//
 
@@ -119,10 +124,32 @@ RenderPassBeginInfo :: struct {
 
 //---------------------------------------------------------------------------//
 
+Draw :: struct {
+}
+
+//---------------------------------------------------------------------------//
+
+RenderPassInstance :: struct {
+	
+}
+
+//---------------------------------------------------------------------------//
+
 @(private)
 init_render_passes :: proc() {
 	G_RENDER_PASS_REF_ARRAY = create_ref_array(RenderPassResource, MAX_RENDER_PASSES)
+	INTERNAL.render_pass_instances = make(
+		[]RenderPassInstance,
+		MAX_RENDER_PASS_INSTANCES,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
 	backend_init_render_passes()
+}
+
+//---------------------------------------------------------------------------//
+
+render_pass_begin_frame :: proc() {
+	INTERNAL.num_allocated_render_pass_instances = 0
 }
 
 //---------------------------------------------------------------------------//
@@ -153,7 +180,19 @@ get_render_pass :: proc(p_ref: RenderPassRef) -> ^RenderPassResource {
 
 destroy_render_pass :: proc(p_ref: RenderPassRef) {
 	render_pass := get_render_pass(p_ref)
-	destroy_pipeline(render_pass.pipeline)
+	if len(render_pass.desc.layout.render_target_formats) > 0 {
+		delete(
+			render_pass.desc.layout.render_target_formats,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
+
+	}
+	if len(render_pass.desc.layout.render_target_blend_types) > 0 {
+		delete(
+			render_pass.desc.layout.render_target_blend_types,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
+	}
 	backend_destroy_render_pass(render_pass)
 	free_ref(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_ref)
 }
@@ -163,8 +202,12 @@ begin_render_pass :: #force_inline proc(
 	p_render_pass_ref: RenderPassRef,
 	p_cmd_buff_ref: CommandBufferRef,
 	p_begin_info: ^RenderPassBeginInfo,
-) {
-	backend_begin_render_pass(p_render_pass_ref, p_cmd_buff_ref, p_begin_info)
+) -> ^RenderPassInstance {
+	render_pass_instance := &INTERNAL.render_pass_instances[INTERNAL.num_allocated_render_pass_instances]
+	mem.zero_item(render_pass_instance)
+	backend_begin_render_pass(p_render_pass_ref, p_cmd_buff_ref, p_begin_info, render_pass_instance)
+	INTERNAL.num_allocated_render_pass_instances += 1
+	return render_pass_instance
 }
 
 //---------------------------------------------------------------------------//
@@ -175,3 +218,7 @@ end_render_pass :: #force_inline proc(
 ) {
 	backend_end_render_pass(p_render_pass_ref, p_cmd_buff_ref)
 }
+
+//---------------------------------------------------------------------------//
+
+

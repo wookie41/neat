@@ -29,27 +29,6 @@ when USE_VULKAN_BACKEND {
 		p_render_pass_desc: RenderPassDesc,
 		p_render_pass: ^RenderPassResource,
 	) -> bool {
-
-		p_render_pass.pipeline = allocte_pipeline_ref(p_render_pass.desc.name)
-		pipeline := get_pipeline(p_render_pass.pipeline)
-		pipeline.desc.vert_shader               = p_render_pass_desc.vert_shader
-		pipeline.desc.frag_shader               = p_render_pass_desc.frag_shader
-		pipeline.desc.vertex_layout             = p_render_pass_desc.vertex_layout
-		pipeline.desc.primitive_type            = p_render_pass_desc.primitive_type
-		pipeline.desc.multisampling_type        = p_render_pass_desc.multisampling_type
-		pipeline.desc.depth_stencil_type        = p_render_pass_desc.depth_stencil_type
-		pipeline.desc.render_target_formats     = p_render_pass_desc.render_target_formats
-		pipeline.desc.render_target_blend_types = p_render_pass_desc.render_target_blend_types
-		pipeline.desc.depth_format              = p_render_pass_desc.depth_format
-
-		if !create_graphics_pipeline(p_render_pass.pipeline) {
-			log.warnf(
-				"Failed to create the pipeline when initializing render pass: %s",
-				common.get_string(p_render_pass_desc.name),
-			)
-			return false
-		}
-
 		return true
 	}
 
@@ -67,6 +46,7 @@ when USE_VULKAN_BACKEND {
 		p_render_pass_ref: RenderPassRef,
 		p_cmd_buff_ref: CommandBufferRef,
 		p_begin_info: ^RenderPassBeginInfo,
+		p_render_pass_instance: ^RenderPassInstance,
 	) {
 		render_pass := get_render_pass(p_render_pass_ref)
 		assert((.IsActive in render_pass.flags) == false)
@@ -75,7 +55,7 @@ when USE_VULKAN_BACKEND {
 
 		color_attachments := make(
 			[]vk.RenderingAttachmentInfo,
-			len(render_pass.desc.render_target_formats),
+			len(render_pass.desc.layout.render_target_formats),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(color_attachments, G_RENDERER_ALLOCATORS.temp_allocator)
@@ -83,7 +63,7 @@ when USE_VULKAN_BACKEND {
 		num_render_target_barriers := 0
 		render_target_barriers := make(
 			[]vk.ImageMemoryBarrier,
-			len(render_pass.desc.render_target_formats),
+			len(render_pass.desc.layout.render_target_formats),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(render_target_barriers, G_RENDERER_ALLOCATORS.temp_allocator)
@@ -91,7 +71,7 @@ when USE_VULKAN_BACKEND {
 		// Check compability of render targets, build the Vulkan color attachments and prepare barrier
 		{
 			render_target_index := 0
-			for render_target_format, i in render_pass.desc.render_target_formats {
+			for render_target_format, i in render_pass.desc.layout.render_target_formats {
 
 				render_target_binding := &p_begin_info.render_targets_bindings[i]
 
@@ -267,8 +247,6 @@ when USE_VULKAN_BACKEND {
 			renderArea = {extent = render_area},
 		}
 
-		vk_pipeline := get_pipeline(render_pass.pipeline).vk_pipeline
-
 		viewport := vk.Viewport {
 			x        = 0.0,
 			y        = 0.0,
@@ -284,7 +262,6 @@ when USE_VULKAN_BACKEND {
 		}
 
 		vk.CmdBeginRendering(cmd_buff.vk_cmd_buff, &rendering_info)
-		vk.CmdBindPipeline(cmd_buff.vk_cmd_buff, .GRAPHICS, vk_pipeline)
 		vk.CmdSetViewport(cmd_buff.vk_cmd_buff, 0, 1, &viewport)
 		vk.CmdSetScissor(cmd_buff.vk_cmd_buff, 0, 1, &scissor)
 	}

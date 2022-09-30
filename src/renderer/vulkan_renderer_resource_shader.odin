@@ -44,7 +44,6 @@ when USE_VULKAN_BACKEND {
 	BackendShaderResource :: struct {
 		vk_module:          vk.ShaderModule,
 		vk_descriptor_sets: []VulkanShaderDescriptorSet,
-		fragment_outputs:   []FragmentOutput,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -258,9 +257,6 @@ when USE_VULKAN_BACKEND {
 				delete(descriptor_set.descriptors, G_RENDERER_ALLOCATORS.resource_allocator)
 			}
 			delete(shader.vk_descriptor_sets, G_RENDERER_ALLOCATORS.resource_allocator)
-		}
-		if len(shader.fragment_outputs) > 0 {
-			delete(shader.fragment_outputs, G_RENDERER_ALLOCATORS.resource_allocator)
 		}
 		vk.DestroyShaderModule(G_RENDERER.device, shader.vk_module, nil)
 	}

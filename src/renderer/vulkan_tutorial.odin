@@ -18,14 +18,13 @@ G_VT: struct {
 	vertex_buffer_ref:        BufferRef,
 	index_buffer_ref:         BufferRef,
 	start_time:               time.Time,
-	descriptor_pool:          vk.DescriptorPool,
-	descriptor_sets:          [dynamic]vk.DescriptorSet,
 	texture_image_ref:        ImageRef,
 	texture_image_allocation: vma.Allocation,
 	texture_image_view:       vk.ImageView,
 	texture_sampler:          vk.Sampler,
 	depth_buffer_ref:         ImageRef,
 	render_pass_ref:          RenderPassRef,
+	pipeline_ref:             PipelineRef,
 	depth_buffer_attachment:  DepthAttachment,
 	render_target_bindings:   []RenderTargetBinding,
 }
@@ -113,38 +112,47 @@ init_vt :: proc() -> bool {
 
 		// Create render pass
 		{
-			vertex_shader_ref := find_shader_by_name(common.create_name("base.vert"))
-			fragment_shader_ref := find_shader_by_name(common.create_name("base.frag"))
-
 			swap_image_format := get_image(G_RENDERER.swap_image_refs[0]).desc.format
 
 			render_pass_desc := RenderPassDesc {
 				name = common.create_name("Vulkan Tutorial Pass"),
-				vert_shader = vertex_shader_ref,
-				frag_shader = fragment_shader_ref,
-				vertex_layout = .Mesh,
-				primitive_type = .TriangleList,
-				rasterizer_type = .Fill,
-				multisampling_type = ._1,
-				depth_stencil_type = .DepthTestWrite,
-				render_target_blend_types = {.Default},
-				depth_format = get_image(depth_buffer_ref).desc.format,
 				resolution = .Full,
+				layout = {
+					render_target_blend_types = {.Default},
+					depth_format = get_image(depth_buffer_ref).desc.format,
+				},
 			}
 
-			render_pass_desc.render_target_formats = make(
+			render_pass_desc.layout.render_target_formats = make(
 				[]ImageFormat,
 				1,
 				G_RENDERER_ALLOCATORS.resource_allocator,
 			)
 
-			render_pass_desc.render_target_formats[0] = swap_image_format
+			render_pass_desc.layout.render_target_formats[0] = swap_image_format
 			render_pass_ref = create_render_pass(render_pass_desc)
 		}
 
+		// Create pipeline
+		{
+			render_pass := get_render_pass(render_pass_ref)
+
+			vertex_shader_ref := find_shader_by_name(common.create_name("base.vert"))
+			fragment_shader_ref := find_shader_by_name(common.create_name("base.frag"))
+			pipeline_desc := PipelineDesc {
+				name               = common.create_name("Vulkan Tutorial Pipe"),
+				vert_shader        = vertex_shader_ref,
+				frag_shader        = fragment_shader_ref,
+				vertex_layout      = .Mesh,
+				primitive_type     = .TriangleList,
+				resterizer_type    = .Fill,
+				multisampling_type = ._1,
+				depth_stencil_type = .DepthTestWrite,
+				render_pass_layout = render_pass.desc.layout,
+			}
+		}
+
 		vt_create_uniform_buffers()
-		vt_create_descriptor_pool()
-		vk_create_descriptor_sets()
 		vt_load_model()
 
 		return true
@@ -167,7 +175,6 @@ deinit_vt :: proc() {
 	vk.DestroySampler(device, texture_sampler, nil)
 	vk.DestroyImageView(device, texture_image_view, nil)
 	destroy_image(texture_image_ref)
-	vk.DestroyDescriptorPool(device, descriptor_pool, nil)
 	for ubo_ref in ubo_refs {
 		destroy_buffer(ubo_ref)
 	}
@@ -195,18 +202,22 @@ vt_update :: proc(
 	begin_render_pass(render_pass_ref, p_cmd_buff_ref, &begin_info)
 	{
 		render_pass := get_render_pass(render_pass_ref)
-		pipeline := get_pipeline(render_pass.pipeline)
 
-		vk.CmdBindDescriptorSets(
-			p_cmd_buff.vk_cmd_buff,
-			.GRAPHICS,
-			get_pipeline_layout(pipeline.pipeline_layout).vk_pipeline_layout,
-			0,
-			1,
-			&descriptor_sets[p_frame_idx],
-			0,
-			nil,
-		)
+		{
+			// @TODO bind pipeline 
+			pipeline := get_pipeline(render_pass.pipeline)
+
+			vk.CmdBindDescriptorSets(
+				p_cmd_buff.vk_cmd_buff,
+				.GRAPHICS,
+				get_pipeline_layout(pipeline.pipeline_layout).vk_pipeline_layout,
+				0,
+				1,
+				&descriptor_sets[p_frame_idx],
+				0,
+				nil,
+			)	
+		}
 
 		offset := vk.DeviceSize{}
 
@@ -366,73 +377,6 @@ vt_update_uniform_buffer :: proc() {
 
 	uniform_buffer := get_buffer(ubo_refs[get_frame_idx()])
 	mem.copy(uniform_buffer.mapped_ptr, &ubo, size_of(UniformBufferObject))
-}
-
-vt_create_descriptor_pool :: proc() {
-	using G_RENDERER
-	using G_VT
-
-	ubo_pool_size := vk.DescriptorPoolSize {
-		type            = .UNIFORM_BUFFER,
-		descriptorCount = num_frames_in_flight,
-	}
-
-	sampler_pool_size := vk.DescriptorPoolSize {
-		type            = .COMBINED_IMAGE_SAMPLER,
-		descriptorCount = num_frames_in_flight,
-	}
-
-
-	pool_sizes := []vk.DescriptorPoolSize{ubo_pool_size, sampler_pool_size}
-
-
-	pool_info := vk.DescriptorPoolCreateInfo {
-		sType         = .DESCRIPTOR_POOL_CREATE_INFO,
-		poolSizeCount = u32(len(pool_sizes)),
-		pPoolSizes    = raw_data(pool_sizes),
-		maxSets       = num_frames_in_flight,
-	}
-
-	if vk.CreateDescriptorPool(device, &pool_info, nil, &descriptor_pool) != .SUCCESS {
-		log.warn("Failed to create descriptor pool")
-	}
-}
-
-vk_create_descriptor_sets :: proc() {
-	using G_RENDERER
-	using G_VT
-
-	resize(&descriptor_sets, int(num_frames_in_flight))
-
-	render_pass := get_render_pass(render_pass_ref)
-	pipeline := get_pipeline(render_pass.pipeline)
-	pipeline_layout := get_pipeline_layout(pipeline.pipeline_layout)
-
-	defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
-
-	set_layouts := make(
-		[dynamic]vk.DescriptorSetLayout,
-		int(num_frames_in_flight),
-		G_RENDERER_ALLOCATORS.temp_allocator,
-	)
-	for _, i in set_layouts {
-		set_layouts[i] = pipeline_layout.vk_descriptor_set_layouts[0].layout
-	}
-
-	descriptor_sets_alloc_info := vk.DescriptorSetAllocateInfo {
-		sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
-		descriptorPool     = descriptor_pool,
-		descriptorSetCount = num_frames_in_flight,
-		pSetLayouts        = raw_data(set_layouts),
-	}
-
-	if vk.AllocateDescriptorSets(
-		   device,
-		   &descriptor_sets_alloc_info,
-		   raw_data(descriptor_sets),
-	   ) != .SUCCESS {
-		log.warn("Failed to allocate descriptor sets")
-	}
 }
 
 vt_write_descriptor_sets :: proc() {

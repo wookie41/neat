@@ -243,12 +243,12 @@ when USE_VULKAN_BACKEND {
 		// Color attachments blending
 		color_blend_attachments := make(
 			[]vk.PipelineColorBlendAttachmentState,
-			len(p_pipeline.desc.render_target_blend_types),
+			len(p_pipeline.desc.render_pass_layout.render_target_blend_types),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(color_blend_attachments, G_RENDERER_ALLOCATORS.temp_allocator)
 
-		for blend_type, i in p_pipeline.desc.render_target_blend_types {
+		for blend_type, i in p_pipeline.desc.render_pass_layout.render_target_blend_types {
 			color_blend_attachments[i] = COLOR_BLEND_PER_TYPE[blend_type]
 		}
 
@@ -281,17 +281,17 @@ when USE_VULKAN_BACKEND {
 		// Map color attachment formats
 		color_attachment_formats := make(
 			[]vk.Format,
-			len(p_pipeline.desc.render_target_formats),
+			len(p_pipeline.desc.render_pass_layout.render_target_formats),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(color_attachment_formats, G_RENDERER_ALLOCATORS.temp_allocator)
 
-		for format, i in p_pipeline.desc.render_target_formats {
+		for format, i in p_pipeline.desc.render_pass_layout.render_target_formats {
 			color_attachment_formats[i] = G_IMAGE_FORMAT_MAPPING[format]
 		}
 
 		// Map depth format
-		depth_format := G_IMAGE_FORMAT_MAPPING[p_pipeline.desc.depth_format]
+		depth_format := G_IMAGE_FORMAT_MAPPING[p_pipeline.desc.render_pass_layout.depth_format]
 
 		// Dynamic rendering 
 		pipeline_rendering_create_info := vk.PipelineRenderingCreateInfo {
