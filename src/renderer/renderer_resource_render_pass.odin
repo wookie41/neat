@@ -9,13 +9,6 @@ import "core:math/linalg/glsl"
 
 //---------------------------------------------------------------------------//
 
-INTERNAL: struct {
-	render_pass_instances:               []RenderPassInstance,
-	num_allocated_render_pass_instances: u32,
-}
-
-//---------------------------------------------------------------------------//
-
 RenderPassResolution :: enum u8 {
 	Full,
 	Half,
@@ -66,7 +59,6 @@ InvalidRenderPassRef := RenderPassRef {
 
 @(private = "file")
 G_RENDER_PASS_REF_ARRAY: RefArray(RenderPassResource)
-
 
 //---------------------------------------------------------------------------//
 
@@ -124,50 +116,24 @@ RenderPassBeginInfo :: struct {
 
 //---------------------------------------------------------------------------//
 
-Draw :: struct {
-}
-
-//---------------------------------------------------------------------------//
-
-RenderPassInstance :: struct {
-	
-}
-
-//---------------------------------------------------------------------------//
-
-@(private)
-init_render_passes :: proc() {
-	G_RENDER_PASS_REF_ARRAY = create_ref_array(RenderPassResource, MAX_RENDER_PASSES)
-	INTERNAL.render_pass_instances = make(
-		[]RenderPassInstance,
-		MAX_RENDER_PASS_INSTANCES,
-		G_RENDERER_ALLOCATORS.resource_allocator,
-	)
-	backend_init_render_passes()
-}
-
-//---------------------------------------------------------------------------//
-
-render_pass_begin_frame :: proc() {
-	INTERNAL.num_allocated_render_pass_instances = 0
-}
-
-//---------------------------------------------------------------------------//
-
-create_render_pass :: proc(p_render_pass_desc: RenderPassDesc) -> RenderPassRef {
+allocate_render_pass_ref :: proc(p_name: common.Name) -> RenderPassRef {
 	ref := RenderPassRef(
-		create_ref(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_render_pass_desc.name),
+		create_ref(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_name),
 	)
-	idx := get_ref_idx(ref)
-	render_pass := &G_RENDER_PASS_REF_ARRAY.resource_array[idx]
-	render_pass.desc = p_render_pass_desc
+	get_render_pass(ref).desc.name = p_name
+	return ref
+}
 
-	if backend_create_render_pass(p_render_pass_desc, render_pass) == false {
+//---------------------------------------------------------------------------//
+
+create_render_pass :: proc(p_render_pass_ref: RenderPassRef) -> bool {
+	render_pass := get_render_pass(p_render_pass_ref)
+	if backend_create_render_pass(p_render_pass_ref, render_pass) == false {
 		free_ref(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, ref)
-		return InvalidRenderPassRef
+		return false
 	}
 
-	return ref
+	return true
 }
 
 //---------------------------------------------------------------------------//
@@ -202,12 +168,8 @@ begin_render_pass :: #force_inline proc(
 	p_render_pass_ref: RenderPassRef,
 	p_cmd_buff_ref: CommandBufferRef,
 	p_begin_info: ^RenderPassBeginInfo,
-) -> ^RenderPassInstance {
-	render_pass_instance := &INTERNAL.render_pass_instances[INTERNAL.num_allocated_render_pass_instances]
-	mem.zero_item(render_pass_instance)
-	backend_begin_render_pass(p_render_pass_ref, p_cmd_buff_ref, p_begin_info, render_pass_instance)
-	INTERNAL.num_allocated_render_pass_instances += 1
-	return render_pass_instance
+) {
+	backend_begin_render_pass(p_render_pass_ref, p_cmd_buff_ref, p_begin_info)
 }
 
 //---------------------------------------------------------------------------//
@@ -220,5 +182,3 @@ end_render_pass :: #force_inline proc(
 }
 
 //---------------------------------------------------------------------------//
-
-

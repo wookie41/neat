@@ -14,9 +14,6 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	BackendPipelineLayoutResource :: struct {
-		vk_descriptor_set_numbers: []u8,
-		vk_descriptor_set_layouts: []vk.DescriptorSetLayout,
-		vk_descriptor_sets:        []vk.DescriptorSet,
 		vk_pipeline_layout:        vk.PipelineLayout,
 	}
 

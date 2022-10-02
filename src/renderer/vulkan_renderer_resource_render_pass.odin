@@ -26,7 +26,7 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_create_render_pass :: proc(
-		p_render_pass_desc: RenderPassDesc,
+		p_ref: RenderPassRef,
 		p_render_pass: ^RenderPassResource,
 	) -> bool {
 		return true
@@ -46,7 +46,6 @@ when USE_VULKAN_BACKEND {
 		p_render_pass_ref: RenderPassRef,
 		p_cmd_buff_ref: CommandBufferRef,
 		p_begin_info: ^RenderPassBeginInfo,
-		p_render_pass_instance: ^RenderPassInstance,
 	) {
 		render_pass := get_render_pass(p_render_pass_ref)
 		assert((.IsActive in render_pass.flags) == false)
