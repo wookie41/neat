@@ -7,22 +7,55 @@ import "../common"
 
 //---------------------------------------------------------------------------//
 
-TextureBinding :: struct {
-	name:      common.Name,
-	image_ref: ImageRef,
+SamplerType :: enum {
+	NearestClampToEdge,
+	NearestClampToBorder,
+	NearestRepeat,
+	LinearClampToEdge,
+	LinearClampToBorder,
+	LinearRepeat,
 }
 
 //---------------------------------------------------------------------------//
 
+TextureBindingFlagBits :: enum u32 {
+	SampledImage,
+	StorageImage,
+}
+
+TextureBindingFlags :: distinct bit_set[TextureBindingFlagBits;u32]
+
+//---------------------------------------------------------------------------//
+
+TextureBinding :: struct {
+	slot:      u32,
+	image_ref: ImageRef,
+	flags:     TextureBindingFlags,
+	count:     u32,
+}
+
+//---------------------------------------------------------------------------//
+
+BufferBindingFlagBits :: enum u32 {
+	UniformBuffer,
+	DynamicUniformBuffer,
+	StorageBuffer,
+	DynamicStorageBuffer,
+}
+
+BufferBindingFlags :: distinct bit_set[BufferBindingFlagBits;u32]
+
+//---------------------------------------------------------------------------//
+
 BufferBinding :: struct {
-	name:       common.Name,
+	slot:       u32,
 	buffer_ref: BufferRef,
+	flags:      BufferBindingFlags,
 }
 
 //---------------------------------------------------------------------------//
 
 BindGroupDesc :: struct {
-	group:    u32,
 	textures: []TextureBinding,
 	buffers:  []BufferBinding,
 }
@@ -32,6 +65,14 @@ BindGroupDesc :: struct {
 BindGroupResource :: struct {
 	using backend_bind_group: BackendBindGroupResource,
 	desc:                     BindGroupDesc,
+}
+
+//---------------------------------------------------------------------------//
+
+BindGroupBinding :: struct {
+	target:          u32,
+	bind_group:      BindGroupRef,
+	dynamic_offsets: []u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -67,10 +108,11 @@ allocate_bind_group_ref :: proc(p_name: common.Name) -> BindGroupRef {
 
 //---------------------------------------------------------------------------//
 
-create_bind_group :: proc(p_ref: BindGroupRef) -> bool {
-	bind_group := get_bind_group(p_ref)
-	if backend_create_bind_group(p_ref, bind_group) == false {
-		free_ref(BindGroupResource, &G_BIND_GROUP_REF_ARRAY, p_ref)
+create_bind_groups :: proc(p_ref_array: []BindGroupRef) -> bool {
+	if backend_create_bind_groups(p_ref_array) == false {
+		for ref in p_ref_array {
+			free_ref(BindGroupResource, &G_BIND_GROUP_REF_ARRAY, ref)
+		}
 		return false
 	}
 
@@ -88,6 +130,31 @@ get_bind_group :: proc(p_ref: BindGroupRef) -> ^BindGroupResource {
 destroy_bind_group :: proc(p_ref: BindGroupRef) {
 	free_ref(BindGroupResource, &G_BIND_GROUP_REF_ARRAY, p_ref)
 	backend_destroy_bind_group(p_ref)
+}
+
+//---------------------------------------------------------------------------//
+
+/**
+* Some backends like Vulkan require samplers to be bound separatly, other like DX12 allow to declare them in HLSL
+* and that's when the p_samplers_bind_group_target is for.
+* The backend interally creates all of the required samplers if required and create a group for them.
+* The user can then choose which target it should be bound to, passing < 0 means that it's not needed
+* If some backend doesn't need it it's simply a no-op/
+*/
+bind_bind_groups :: proc(
+	p_cmd_buff: CommandBufferRef,
+	p_pipeline_type: PipelineType,
+	p_pipeline_layout_ref: PipelineLayoutRef,
+	p_bindings: []BindGroupBinding,
+	p_samplers_bind_group_target: i32,
+) {
+	backend_bind_bind_groups(
+		p_cmd_buff_ref,
+		p_pipeline_type,
+		p_pipeline_layout_ref,
+		p_bindings,
+		p_samplers_bind_group_target,
+	)
 }
 
 //---------------------------------------------------------------------------//

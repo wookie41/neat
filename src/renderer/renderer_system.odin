@@ -129,7 +129,6 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	init_pipeline_layouts()
 	init_pipelines()
-	init_render_passes()
 	init_buffers()
 	init_images()
 	init_command_buffers(p_options) or_return
@@ -229,7 +228,6 @@ update :: proc(p_dt: f32) {
 
 	begin_command_buffer(cmd_buff_ref)
 
-	render_pass_begin_frame()
 	buffer_upload_begin_frame()
 
 	backend_update(p_dt)

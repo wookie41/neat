@@ -114,8 +114,9 @@ init_vt :: proc() -> bool {
 		{
 			swap_image_format := get_image(G_RENDERER.swap_image_refs[0]).desc.format
 
-			render_pass_desc := RenderPassDesc {
-				name = common.create_name("Vulkan Tutorial Pass"),
+			render_pass_ref = allocate_render_pass_ref(common.create_name("Vulkan tutorial Render Pass"))
+			render_pas := get_render_pass(render_pass_ref)
+			render_pas.desc = RenderPassDesc {
 				resolution = .Full,
 				layout = {
 					render_target_blend_types = {.Default},
@@ -123,14 +124,14 @@ init_vt :: proc() -> bool {
 				},
 			}
 
-			render_pass_desc.layout.render_target_formats = make(
+			render_pas.desc.layout.render_target_formats = make(
 				[]ImageFormat,
 				1,
 				G_RENDERER_ALLOCATORS.resource_allocator,
 			)
 
-			render_pass_desc.layout.render_target_formats[0] = swap_image_format
-			render_pass_ref = create_render_pass(render_pass_desc)
+			render_pas.desc.layout.render_target_formats[0] = swap_image_format
+			create_render_pass(render_pass_desc)
 		}
 
 		// Create pipeline

@@ -55,6 +55,9 @@ ColorBlendType :: enum {
 
 //---------------------------------------------------------------------------//
 
+
+//---------------------------------------------------------------------------//
+
 PipelineDesc :: struct {
 	name:               common.Name,
 	vert_shader:        ShaderRef,
@@ -69,10 +72,19 @@ PipelineDesc :: struct {
 
 //---------------------------------------------------------------------------//
 
+PipelineType :: enum u8 {
+	Graphics,
+	Compute,
+	Raytracing,
+}
+
+//---------------------------------------------------------------------------//
+
 PipelineResource :: struct {
 	using backend_pipeline: BackendPipelineResource,
 	desc:                   PipelineDesc,
 	pipeline_layout:        PipelineLayoutRef,
+	pipeline_type:          PipelineType,
 }
 
 //---------------------------------------------------------------------------//
@@ -144,6 +156,8 @@ create_graphics_pipeline :: proc(p_ref: PipelineRef) -> bool {
 		free_ref(PipelineResource, &G_PIPELINE_REF_ARRAY, p_ref)
 		return false
 	}
+
+	pipeline.pipeline_type = .Graphics
 
 	return true
 }
