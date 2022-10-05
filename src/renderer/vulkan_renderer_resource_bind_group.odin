@@ -23,7 +23,9 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	BackendBindGroupResource :: struct {}
+	BackendBindGroupResource :: struct {
+		vk_descriptor_set: vk.DescriptorSet,
+	}
 
 	//---------------------------------------------------------------------------//
 
@@ -320,8 +322,24 @@ when USE_VULKAN_BACKEND {
 			descriptorSetCount = u32(len(descriptor_set_layouts)),
 			descriptorPool     = INTERNAL.descriptor_pool,
 		}
+		descriptor_sets := make(
+			[]vk.DescriptorSet,
+			u32(len(p_ref_array)),
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+		defer delete(descriptor_sets, G_RENDERER_ALLOCATORS.temp_allocator)
 
-		vk.AllocateDescriptorSets(G_RENDERER.device, descriptor_set_alloc_info, descriptor_sets)
+		res := vk.AllocateDescriptorSets(
+			G_RENDERER.device,
+			descriptor_set_alloc_info,
+			descriptor_sets,
+		)
+		assert(res == .SUCCESS) // @TODO
+
+		for descriptor_set, i in descriptor_sets {
+			bind_group := get_bind_group(p_ref_array[i])
+			bind_group.vk_descriptor_set = descriptor_set
+		}
 	}
 
 	//---------------------------------------------------------------------------//
@@ -396,8 +414,66 @@ when USE_VULKAN_BACKEND {
 		cmd_buff := get_command_buffer(p_cmd_buff_ref)
 		pipeline_layout := get_pipeline_layout(p_pipeline_layout_ref)
 		pipeline_bind_point := map_pipeline_bind_point(p_pipeline_type)
-        
-		vk.CmdBindDescriptorSets(cmd_buff.vk_cmd_buff, pipeline_bind_point)
+
+		dynamic_offsets_count := 0
+		// Determine the number of dynamic offsets
+		for binding in p_bindings {
+			dynamic_offsets_count += len(binding.dynamic_offsets)
+		}
+
+		// Create a joint dynamic offsets array
+		dynamic_offsets := make(
+			[]u32,
+			dynamic_offsets_count,
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+		defer delete(dynamic_offsets)
+		{
+			dyn_offset_idx := 0
+			for binding in p_bindings {
+				for dynamic_offset in binding.dynamic_offsets {
+					dynamic_offset[dyn_offset_idx] = dynamic_offset
+					dyn_offset_idx += 1
+				}
+			}
+		}
+
+		descriptor_sets_count := u32(len(p_bindings))
+		if p_samplers_bind_group_target >= 0 {
+			descriptor_sets_count += 1
+		}
+
+		descriptor_sets := make(
+			[]vk.DescriptorSet,
+			descriptor_sets_count,
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+		defer delete(descriptor_sets, G_RENDERER_ALLOCATORS.temp_allocator)
+
+
+		// Fill descriptors sets array with the descriptor sets from the bind groups
+		{
+			bind_group_idx := 0
+			for i in 0 ..< descriptor_sets_count {
+				if i == p_samplers_bind_group_target {
+					continue
+				}
+				bind_group := get_bind_group(p_bindings[bind_group_idx].bind_group_ref)
+				descriptor_sets[i] = bind_group.vk_descriptor_set
+				bind_group_idx += 1
+			}
+		}
+
+		vk.CmdBindDescriptorSets(
+			cmd_buff.vk_cmd_buff,
+			pipeline_bind_point,
+			pipeline_layout.vk_pipeline_layout,
+			0,
+			descriptor_sets_count,
+			&descriptor_sets,
+			dynamic_offsets_count,
+			&dynamic_offsets,
+		)
 	}
 
 	@(private = "file")

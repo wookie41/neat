@@ -70,8 +70,7 @@ BindGroupResource :: struct {
 //---------------------------------------------------------------------------//
 
 BindGroupBinding :: struct {
-	target:          u32,
-	bind_group:      BindGroupRef,
+	bind_group_ref:      BindGroupRef,
 	dynamic_offsets: []u32,
 }
 
