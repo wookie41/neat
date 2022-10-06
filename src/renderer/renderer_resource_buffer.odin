@@ -24,9 +24,11 @@ BufferUsageFlagBits :: enum u8 {
 	TransferSrc,
 	TransferDst,
 	UniformBuffer,
+	DynamicUniformBuffer,
 	IndexBuffer,
 	VertexBuffer,
 	Storagebuffer,
+	DynamicStoragebuffer,
 }
 
 BufferUsageFlags :: distinct bit_set[BufferUsageFlagBits;u8]

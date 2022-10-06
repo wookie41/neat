@@ -18,45 +18,32 @@ SamplerType :: enum {
 
 //---------------------------------------------------------------------------//
 
-TextureBindingFlagBits :: enum u32 {
+ImageBindingUsage :: enum u8 {
 	SampledImage,
 	StorageImage,
 }
 
-TextureBindingFlags :: distinct bit_set[TextureBindingFlagBits;u32]
-
 //---------------------------------------------------------------------------//
 
-TextureBinding :: struct {
-	slot:      u32,
-	image_ref: ImageRef,
-	flags:     TextureBindingFlags,
-	count:     u32,
+ImageBinding :: struct {
+	slot:  u32,
+	usage: ImageBindingUsage,
+	count: u32,
 }
-
-//---------------------------------------------------------------------------//
-
-BufferBindingFlagBits :: enum u32 {
-	UniformBuffer,
-	DynamicUniformBuffer,
-	StorageBuffer,
-	DynamicStorageBuffer,
-}
-
-BufferBindingFlags :: distinct bit_set[BufferBindingFlagBits;u32]
 
 //---------------------------------------------------------------------------//
 
 BufferBinding :: struct {
-	slot:       u32,
-	buffer_ref: BufferRef,
-	flags:      BufferBindingFlags,
+	slot:         u32,
+	buffer_usage: BufferUsageFlagBits,
 }
 
 //---------------------------------------------------------------------------//
 
 BindGroupDesc :: struct {
-	textures: []TextureBinding,
+	name:     common.Name,
+	target:   u32,
+	image: []ImageBinding,
 	buffers:  []BufferBinding,
 }
 
@@ -70,8 +57,32 @@ BindGroupResource :: struct {
 //---------------------------------------------------------------------------//
 
 BindGroupBinding :: struct {
-	bind_group_ref:      BindGroupRef,
+	bind_group_ref:  BindGroupRef,
 	dynamic_offsets: []u32,
+}
+
+//---------------------------------------------------------------------------//
+
+BindGroupImageUpdate :: struct {
+	image_ref: ImageRef,
+	mip: u32,
+}
+
+//---------------------------------------------------------------------------//
+
+BindGroupBufferUpdate :: struct {
+	slot:   u32,
+	offset: u32,
+	size:   u32,
+	buffer: BufferRef,
+}
+
+//---------------------------------------------------------------------------//
+
+BindGroupUpdate :: struct {
+	bind_group_ref: BindGroupRef,
+	image_updates:  []BindGroupImageUpdate,
+	buffer_updates: []BindGroupBufferUpdate,
 }
 
 //---------------------------------------------------------------------------//
@@ -126,9 +137,24 @@ get_bind_group :: proc(p_ref: BindGroupRef) -> ^BindGroupResource {
 
 //---------------------------------------------------------------------------//
 
-destroy_bind_group :: proc(p_ref: BindGroupRef) {
-	free_ref(BindGroupResource, &G_BIND_GROUP_REF_ARRAY, p_ref)
-	backend_destroy_bind_group(p_ref)
+destroy_bind_groups :: proc(p_ref_array: []BindGroupRef) {
+	backend_destroy_bind_groups(p_ref_array)
+	for ref in p_ref_array {
+		bind_group := get_bind_group(ref)
+		if len(bind_group.desc.buffers) > 0 {
+			delete(bind_group.desc.buffers, G_RENDERER_ALLOCATORS.resource_allocator)
+		}
+		if len(bind_group.desc.textures) > 0 {
+			delete(bind_group.desc.textures, G_RENDERER_ALLOCATORS.resource_allocator)
+		}
+		free_ref(BindGroupResource, &G_BIND_GROUP_REF_ARRAY, ref)
+	}
+}
+
+//---------------------------------------------------------------------------//
+
+update_bind_groups :: proc(p_updates: []BindGroupUpdate) {
+	backend_update_bind_groups(p_updates)
 }
 
 //---------------------------------------------------------------------------//
@@ -141,19 +167,15 @@ destroy_bind_group :: proc(p_ref: BindGroupRef) {
 * If some backend doesn't need it it's simply a no-op/
 */
 bind_bind_groups :: proc(
-	p_cmd_buff: CommandBufferRef,
-	p_pipeline_type: PipelineType,
-	p_pipeline_layout_ref: PipelineLayoutRef,
+	p_cmd_buff_ref: CommandBufferRef,
+	p_pipeline_ref: PipelineRef,
 	p_bindings: []BindGroupBinding,
 	p_samplers_bind_group_target: i32,
 ) {
-	backend_bind_bind_groups(
-		p_cmd_buff_ref,
-		p_pipeline_type,
-		p_pipeline_layout_ref,
-		p_bindings,
-		p_samplers_bind_group_target,
-	)
+	cmd_buff := get_command_buffer(p_cmd_buff_ref)
+	pipeline := get_pipeline(p_pipeline_ref)
+
+	backend_bind_bind_groups(cmd_buff, pipeline, p_bindings, p_samplers_bind_group_target)
 }
 
 //---------------------------------------------------------------------------//

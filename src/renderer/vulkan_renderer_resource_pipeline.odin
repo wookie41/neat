@@ -384,4 +384,16 @@ when USE_VULKAN_BACKEND {
 	}
 
 	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_bind_pipeline :: proc(
+		p_pipeline: ^PipelineResource,
+		p_cmd_buff: ^CommandBufferResource,
+	) {
+		bind_point := map_pipeline_bind_point(p_pipeline.pipeline_type)
+		vk.CmdBindPipeline(p_cmd_buff.backend_cmd_buffer, bind_point, p_pipeline.backend_pipeline)
+	}
+
+	//---------------------------------------------------------------------------//
+
 }

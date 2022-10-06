@@ -27,6 +27,9 @@ G_VT: struct {
 	pipeline_ref:             PipelineRef,
 	depth_buffer_attachment:  DepthAttachment,
 	render_target_bindings:   []RenderTargetBinding,
+	ubo_bind_group_refs:      []BindGroupRef,
+	texture_bind_group_ref:   BindGroupRef,
+	bind_group_bindings:      []BindGroupBinding,
 }
 
 Vertex :: struct {
@@ -114,7 +117,9 @@ init_vt :: proc() -> bool {
 		{
 			swap_image_format := get_image(G_RENDERER.swap_image_refs[0]).desc.format
 
-			render_pass_ref = allocate_render_pass_ref(common.create_name("Vulkan tutorial Render Pass"))
+			render_pass_ref = allocate_render_pass_ref(
+				common.create_name("Vulkan tutorial Render Pass"),
+			)
 			render_pas := get_render_pass(render_pass_ref)
 			render_pas.desc = RenderPassDesc {
 				resolution = .Full,
@@ -131,7 +136,7 @@ init_vt :: proc() -> bool {
 			)
 
 			render_pas.desc.layout.render_target_formats[0] = swap_image_format
-			create_render_pass(render_pass_desc)
+			create_render_pass(render_pass_ref)
 		}
 
 		// Create pipeline
@@ -156,6 +161,57 @@ init_vt :: proc() -> bool {
 		vt_create_uniform_buffers()
 		vt_load_model()
 
+		// Create the bind group
+		{
+			// Two bind groups per frame just to test multiple groups
+			texture_bind_group_ref = allocate_bind_group_ref(
+				common.create_name("Vulkan Tutorial texture bind group"),
+			)
+
+			{
+				texture_bind_group_desc := &get_bind_group(texture_bind_group_ref).desc
+				texture_bind_group_desc.textures = make(
+					[]TextureBinding,
+					1,
+					G_RENDERER_ALLOCATORS.resource_allocator,
+				)
+				texture_bind_group_desc.textures[0].count = 1
+				texture_bind_group_desc.textures[0].image_ref = texture_image_ref
+				texture_bind_group_desc.textures[0].slot = 1
+				texture_bind_group_desc.textures[0].usage = .SampledImage
+			}
+
+
+			ubo_bind_group_refs = make(
+				[]BindGroupRef,
+				num_frames_in_flight,
+				G_RENDERER_ALLOCATORS.main_allocator,
+			)
+			for bind_group_ref, i in &ubo_bind_group_refs {
+				bind_group_ref = allocate_bind_group_ref(
+					common.create_name("Vulkan Tutorial ubo bind group"),
+				)
+				bind_group_desc := &get_bind_group(bind_group_ref).desc
+
+				bind_group_desc.buffers = make(
+					[]BufferBinding,
+					1,
+					G_RENDERER_ALLOCATORS.resource_allocator,
+				)
+
+				bind_group_desc.buffers[0].slot = 0
+				bind_group_desc.buffers[0].buffer_ref = ubo_refs[i]
+			}
+		}
+
+		create_bind_groups({texture_bind_group_ref})
+		create_bind_groups(ubo_bind_group_refs)
+
+		// Create the bind group bindings
+		{
+			bind_group_bindings = make([]BindGroupBinding, 2, G_RENDERER_ALLOCATORS.main_allocator)
+			bind_group_bindings[1].bind_group_ref = texture_bind_group_ref
+		}
 		return true
 	}
 }
@@ -179,6 +235,8 @@ deinit_vt :: proc() {
 	for ubo_ref in ubo_refs {
 		destroy_buffer(ubo_ref)
 	}
+	destroy_bind_groups({texture_bind_group_ref})
+	destroy_bind_groups(ubo_bind_group_refs)
 	destroy_buffer(vertex_buffer_ref)
 	destroy_buffer(index_buffer_ref)
 }
@@ -202,23 +260,16 @@ vt_update :: proc(
 
 	begin_render_pass(render_pass_ref, p_cmd_buff_ref, &begin_info)
 	{
-		render_pass := get_render_pass(render_pass_ref)
+		bind_group_bindings[0].bind_group_ref = ubo_bind_group_refs[p_frame_idx]
 
-		{
-			// @TODO bind pipeline 
-			pipeline := get_pipeline(render_pass.pipeline)
-
-			vk.CmdBindDescriptorSets(
-				p_cmd_buff.vk_cmd_buff,
-				.GRAPHICS,
-				get_pipeline_layout(pipeline.pipeline_layout).vk_pipeline_layout,
-				0,
-				1,
-				&descriptor_sets[p_frame_idx],
-				0,
-				nil,
-			)	
-		}
+		bind_pipeline(pipeline_ref, p_cmd_buff_ref)
+		bind_bind_groups(
+			p_cmd_buff_ref,
+			pipeline_ref,
+			bind_group_bindings,
+			0,
+			0,
+		)
 
 		offset := vk.DeviceSize{}
 
@@ -415,8 +466,6 @@ vt_write_descriptor_sets :: proc() {
 	for i in 0 ..< num_frames_in_flight {
 		uniform_buffer := get_buffer(ubo_refs[i])
 		ubo_info.buffer = uniform_buffer.vk_buffer
-		ubo_write.dstSet = descriptor_sets[i]
-		image_write.dstSet = descriptor_sets[i]
 		descriptor_writes := []vk.WriteDescriptorSet{ubo_write, image_write}
 
 		vk.UpdateDescriptorSets(

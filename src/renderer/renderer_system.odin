@@ -31,6 +31,7 @@ MAX_RENDER_PASSES :: #config(MAX_RENDER_PASSES, 256)
 MAX_RENDER_PASS_INSTANCES :: #config(MAX_RENDER_PASSES, 256)
 MAX_PIPELINES :: #config(MAX_PIPELINES, 128)
 MAX_COMMAND_BUFFERS :: #config(MAX_PIPELINES, 32)
+MAX_BIND_GROUPS :: #config(MAX_PIPELINES, 1024)
 
 //---------------------------------------------------------------------------//
 

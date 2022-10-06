@@ -29,6 +29,7 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
+	@(private)
 	backend_init_bind_groups :: proc() -> bool {
 
 		// Create descriptor pools
@@ -259,43 +260,43 @@ when USE_VULKAN_BACKEND {
 			{
 				bindings := make(
 					[]vk.DescriptorSetLayoutBinding,
-					len(bind_group.desc.textures) + len(bind_group.desc.buffers),
+					len(bind_group.desc.images) + len(bind_group.desc.buffers),
 					G_RENDERER_ALLOCATORS.temp_allocator,
 				)
 				defer delete(bindings, G_RENDERER_ALLOCATORS.temp_allocator)
 
 				binding_idx := 0
 
-				// Texture bindings
-				for texture_binding in bind_group.desc.textures {
-					bindings[binding_idx].binding = texture_binding.slot
+				// Image bindings
+				for image_binding in bind_group.desc.images {
+					bindings[binding_idx].binding = image_binding.slot
 
-					if .SampledImage in texture_binding.flags {
+					if .SampledImage in image_binding.flags {
 						bindings[binding_idx].descriptorType = .SAMPLED_IMAGE
-					} else if .StorageImage in texture_binding.flags {
+					} else if .StorageImage in image_binding.flags {
 						bindings[binding_idx].descriptorType = .STORAGE_IMAGE
 					} else {
 						assert(false) // Probably added a new flag bit and forgot to handle it here
 					}
 
-					bindings[binding_idx].binding = texture_binding.slot
-					bindings[binding_idx].descriptorCount = texture_binding.count
+					bindings[binding_idx].binding = image_binding.slot
+					bindings[binding_idx].descriptorCount = image_binding.count
 					binding_idx += 1
 				}
 
 				// Buffer bindings
-				for texture_binding in bind_group.desc.textures {
-					bindings[binding_idx].binding = texture_binding.slot
+				for image_binding in bind_group.desc.images {
+					bindings[binding_idx].binding = image_binding.slot
 
-					if .SampledImage in texture_binding.flags {
+					if .SampledImage in image_binding.flags {
 						bindings[binding_idx].descriptorType = .SAMPLED_IMAGE
-					} else if .StorageImage in texture_binding.flags {
+					} else if .StorageImage in image_binding.flags {
 						bindings[binding_idx].descriptorType = .STORAGE_IMAGE
 					} else {
 						assert(false) // Probably added ad new flag bit and forgot to handle it here
 					}
 
-					bindings[binding_idx].binding = texture_binding.slot
+					bindings[binding_idx].binding = image_binding.slot
 					binding_idx += 1
 				}
 
@@ -358,34 +359,35 @@ when USE_VULKAN_BACKEND {
 
 		hash_entries := make(
 			[]BindGroupHashEntry,
-			len(p_bind_group.textures) + len(p_bind_group.buffers),
+			len(p_bind_group.images) + len(p_bind_group.buffers),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer free(hash_entries)
 
 		entry_idx := 0
 
-		for texture_binding in p_bind_group.desc.textures {
-			if .SampledImage in texture_binding.flags {
+		for image_binding in p_bind_group.desc.images {
+			if .SampledImage in image_binding.flags {
 				hash_entries[entry_idx].type = 0
-			} else if .StorageImage in texture_binding.flags {
+			} else if .StorageImage in image_binding.flags {
 				hash_entries[entry_idx].type = 1
 			} else {
 				assert(false) // Probably added ad new flag bit and forgot to handle it here
 			}
-			hash_entries[entry_idx].slot = texture_binding.slot
-			hash_entries[entry_idx].count = texture_binding.count
+			hash_entries[entry_idx].slot = image_binding.slot
+			hash_entries[entry_idx].count = image_binding.count
 			entry_idx += 1
 		}
 
 		for buffer_binding in p_bind_group.desc.buffers {
-			if .UniformBuffer in buffer_binding.flags {
+			buffer_usage := get_buffer(buffer_binding.buffer_ref).desc.usage
+			if .UniformBuffer in buffer_usage {
 				hash_entries[entry_idx].type = 2
-			} else if .DynamicUniformBuffer in buffer_binding.flags {
+			} else if .DynamicUniformBuffer in buffer_usage {
 				hash_entries[entry_idx].type = 3
-			} else if .StorageBuffer in buffer_binding.flags {
+			} else if .StorageBuffer in buffer_usage {
 				hash_entries[entry_idx].type = 4
-			} else if .DynamicStorageBuffer in buffer_binding.flags {
+			} else if .DynamicStorageBuffer in buffer_usage {
 				hash_entries[entry_idx].type = 5
 			} else {
 				assert(false) // Probably added ad new flag bit and forgot to handle it here
@@ -401,20 +403,13 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	//---------------------------------------------------------------------------//
-
 	@(private)
 	backend_bind_bind_groups :: proc(
-		p_cmd_buff: CommandBufferRef,
-		p_pipeline_type: PipelineType,
-		p_pipeline_layout_ref: PipelineLayoutRef,
+		p_cmd_buff: ^CommandBufferResource,
+		p_pipeline: ^PipelineResource,
 		p_bindings: []BindGroupBinding,
 		p_samplers_bind_group_target: i32,
 	) {
-		cmd_buff := get_command_buffer(p_cmd_buff_ref)
-		pipeline_layout := get_pipeline_layout(p_pipeline_layout_ref)
-		pipeline_bind_point := map_pipeline_bind_point(p_pipeline_type)
-
 		dynamic_offsets_count := 0
 		// Determine the number of dynamic offsets
 		for binding in p_bindings {
@@ -464,6 +459,9 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
+		pipeline_bind_point := map_pipeline_bind_point(p_pipeline.pipeline_type)
+		pipeline_layout := get_pipeline_layout(p_pipeline.pipeline_layout)
+
 		vk.CmdBindDescriptorSets(
 			cmd_buff.vk_cmd_buff,
 			pipeline_bind_point,
@@ -476,7 +474,9 @@ when USE_VULKAN_BACKEND {
 		)
 	}
 
-	@(private = "file")
+	//---------------------------------------------------------------------------//
+
+	@(private)
 	map_pipeline_bind_point :: proc(p_pipeline_type: PipelineType) -> vk.PipelineBindPoint {
 		if p_pipeline_type == .Graphics {
 			return .GRAPHICS
@@ -492,4 +492,95 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
+	@(private)
+	backend_destroy_bind_groups :: proc(p_ref_array: []BindGroupRef) {
+		descriptor_sets_to_free := make(
+			[]vk.DescriptorSet,
+			len(p_ref_array),
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+		defer delete(descriptor_sets_to_free, G_RENDERER_ALLOCATORS.temp_allocator)
+
+		for ref, i in p_ref_array {
+			descriptor_sets_to_free[i] = get_bind_group(ref).vk_descriptor_set
+		}
+
+		vk.FreeDescriptorSets(
+			G_RENDERER.device,
+			INTERNAL.descriptor_pool,
+			u32(len(descriptor_sets_to_free)),
+			raw_data(descriptor_sets_to_free),
+		)
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_update_bind_groups :: proc(p_updates: []BindGroupUpdate) {
+		// Allocate descriptor write array (for now we just write the entire bind group, no dirty bindings checking)
+		images_infos_count := 0
+		buffer_infos_count := 0
+
+		for update in &p_updates {
+			buffer_infos_count += len(update.buffer_updates)
+			images_infos_count += len(update.image_updates)
+		}
+		total_writes_count := buffer_infos_count + images_infos_count
+
+		descriptor_writes := make([]vk.WriteDescriptorSet, total_writes_count, G_RENDERER_ALLOCATORS.temp_allocator)
+		defer delete(descriptor_writes, G_RENDERER_ALLOCATORS.temp_allocator)
+
+		image_writes := make([]vk.DescriptorImageInfo, images_infos_count, G_RENDERER_ALLOCATORS.temp_allocator)
+		defer delete(image_writes, G_RENDERER_ALLOCATORS.temp_allocator)
+
+		buffer_writes := make([]vk.DescriptorBufferInfo, buffer_infos_count, G_RENDERER_ALLOCATORS.temp_allocator)
+		defer delete(buffer_writes, G_RENDERER_ALLOCATORS.temp_allocator)
+		
+		write_idx := 0
+		image_info_idx := 0
+		buffer_info_idx := 0
+
+		for update in &p_updates {
+			bind_group_desc := &get_bind_group(ref).desc
+			
+			for buffer_update in &update.buffer_updates {
+				buffer := get_buffer(buffer_update.buffer)
+				buffer_writes[buffer_info_idx].buffer = buffer.vk_buffer
+				buffer_writes[buffer_info_idx].offset = vk.DeviceSize(buffer_update.offset)
+				buffer_writes[buffer_info_idx].range = vk.DeviceSize(buffer_update.size)
+
+				descriptor_writes[write_idx].sType = .WRITE_DESCRIPTOR_SET
+				descriptor_writes[write_idx].descriptorCount = 1				
+				descriptor_writes[write_idx].dstBinding = buffer_update.slot
+				descriptor_writes[write_idx].dstSet = bind_group_desc.target
+				descriptor_writes[write_idx].pBufferInfo = &buffer_writes[buffer_infos_count]
+
+				if .UniformBuffer in buffer.desc.usage {
+					descriptor_writes[write_idx].descriptorType = .UNIFORM_BUFFER
+				} else if .DynamicUniformBuffer in buffer.desc.usage {
+					descriptor_writes[write_idx].descriptorType = .UNIFORM_BUFFER
+				} else if .StorageBuffer in buffer.desc.usage {
+					descriptor_writes[write_idx].descriptorType = .UNIFORM_BUFFER
+				} else if .DynamicStorageBuffer in buffer.desc.usage {
+					descriptor_writes[write_idx].descriptorType = .UNIFORM_BUFFER
+				} else {
+					assert(false) // Probably added ad new flag bit and forgot to handle it here
+				}
+	
+				buffer_info_idx += 1
+				write_idx += 1
+			}
+
+			for image_update in &update.image_updates {
+				image := get_image(image_update.image_ref)
+				image_writes[image_info_idx].imageView = image.all_mips_vk_view[image_update.mip]
+				image_writes[image_info_idx].imageLayout = image.vk_layout_per_mip[image_update.mip]
+
+				image_info_idx += 1
+				write_idx += 1
+			}
+
+			
+		}
+	}
+	//---------------------------------------------------------------------------//
 }

@@ -10,12 +10,20 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
+	@(private)
 	backend_create_draw_command :: proc(
-		p_ref: DrawCommandRef,
 		p_draw_command: ^DrawCommandResource,
 	) -> bool {
 
 	}
 
 	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_destroy_draw_command :: proc(p_draw_cmd: ^DrawCommandResource) {
+
+	}
+
+	//---------------------------------------------------------------------------//
+
 }

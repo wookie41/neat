@@ -13,27 +13,28 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	BackendBufferResource :: struct {
-		vk_buffer:  vk.Buffer,
-		allocation: vma.Allocation,
+		vk_buffer:               vk.Buffer,
+		allocation:              vma.Allocation,
 		owning_queue_family_idx: u32,
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	INTERNAL: struct {
-	}
+	INTERNAL: struct {}
 
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
 	G_BUFFER_USAGE_MAPPING := map[BufferUsageFlagBits]vk.BufferUsageFlag {
-		.TransferSrc   = .TRANSFER_SRC,
-		.TransferDst   = .TRANSFER_DST,
-		.UniformBuffer = .UNIFORM_BUFFER,
-		.IndexBuffer   = .INDEX_BUFFER,
-		.VertexBuffer  = .VERTEX_BUFFER,
-		.Storagebuffer = .STORAGE_BUFFER,
+		.TransferSrc          = .TRANSFER_SRC,
+		.TransferDst          = .TRANSFER_DST,
+		.UniformBuffer        = .UNIFORM_BUFFER,
+		.DynamicUniformBuffer = .UNIFORM_BUFFER,
+		.IndexBuffer          = .INDEX_BUFFER,
+		.VertexBuffer         = .VERTEX_BUFFER,
+		.Storagebuffer        = .STORAGE_BUFFER,
+		.DynamicStoragebuffer = .UNIFORM_BUFFER,
 	}
 
 	//---------------------------------------------------------------------------//

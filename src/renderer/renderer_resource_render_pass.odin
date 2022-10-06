@@ -129,7 +129,7 @@ allocate_render_pass_ref :: proc(p_name: common.Name) -> RenderPassRef {
 create_render_pass :: proc(p_render_pass_ref: RenderPassRef) -> bool {
 	render_pass := get_render_pass(p_render_pass_ref)
 	if backend_create_render_pass(p_render_pass_ref, render_pass) == false {
-		free_ref(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, ref)
+		free_ref(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_render_pass_ref)
 		return false
 	}
 

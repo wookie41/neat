@@ -72,19 +72,10 @@ PipelineDesc :: struct {
 
 //---------------------------------------------------------------------------//
 
-PipelineType :: enum u8 {
-	Graphics,
-	Compute,
-	Raytracing,
-}
-
-//---------------------------------------------------------------------------//
-
 PipelineResource :: struct {
 	using backend_pipeline: BackendPipelineResource,
 	desc:                   PipelineDesc,
-	pipeline_layout:        PipelineLayoutRef,
-	pipeline_type:          PipelineType,
+	pipeline_layout_ref:    PipelineLayoutRef,
 }
 
 //---------------------------------------------------------------------------//
@@ -157,8 +148,6 @@ create_graphics_pipeline :: proc(p_ref: PipelineRef) -> bool {
 		return false
 	}
 
-	pipeline.pipeline_type = .Graphics
-
 	return true
 }
 
@@ -172,9 +161,15 @@ get_pipeline :: proc(p_ref: PipelineRef) -> ^PipelineResource {
 
 destroy_pipeline :: proc(p_ref: PipelineRef) {
 	pipeline := get_pipeline(p_ref)
-	destroy_pipeline_layout(pipeline.pipeline_layout)
+	destroy_pipeline_layout(pipeline.pipeline_layout_ref)
 	backend_destroy_pipeline(pipeline)
 	free_ref(PipelineResource, &G_PIPELINE_REF_ARRAY, p_ref)
+}
+
+//---------------------------------------------------------------------------//
+
+bind_pipeline :: proc(p_pipeline_ref: PipelineRef, p_cmd_buff_ref: CommandBufferRef) {
+	backend_bind_pipeline(get_pipeline(p_pipeline_ref), get_command_buffer(p_cmd_buff_ref))
 }
 
 //---------------------------------------------------------------------------//
