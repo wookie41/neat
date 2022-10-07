@@ -145,7 +145,8 @@ init_vt :: proc() -> bool {
 
 			vertex_shader_ref := find_shader_by_name(common.create_name("base.vert"))
 			fragment_shader_ref := find_shader_by_name(common.create_name("base.frag"))
-			pipeline_desc := PipelineDesc {
+			pipeline_ref = allocate_pipeline_ref(common.create_name("Vulkan Tutorial Pipeline"))
+			get_pipeline(pipeline_ref).desc = {
 				name               = common.create_name("Vulkan Tutorial Pipe"),
 				vert_shader        = vertex_shader_ref,
 				frag_shader        = fragment_shader_ref,
@@ -156,73 +157,129 @@ init_vt :: proc() -> bool {
 				depth_stencil_type = .DepthTestWrite,
 				render_pass_layout = render_pass.desc.layout,
 			}
+			create_graphics_pipeline(pipeline_ref)
 		}
 
 		vt_create_uniform_buffers()
 		vt_load_model()
 
-		// Create the bind group
-		{
-			// Two bind groups per frame just to test multiple groups
-			texture_bind_group_ref = allocate_bind_group_ref(
-				common.create_name("Vulkan Tutorial texture bind group"),
-			)
-
-			{
-				texture_bind_group_desc := &get_bind_group(texture_bind_group_ref).desc
-				texture_bind_group_desc.textures = make(
-					[]TextureBinding,
-					1,
-					G_RENDERER_ALLOCATORS.resource_allocator,
-				)
-				texture_bind_group_desc.textures[0].count = 1
-				texture_bind_group_desc.textures[0].image_ref = texture_image_ref
-				texture_bind_group_desc.textures[0].slot = 1
-				texture_bind_group_desc.textures[0].usage = .SampledImage
-			}
-
-
-			ubo_bind_group_refs = make(
-				[]BindGroupRef,
-				num_frames_in_flight,
-				G_RENDERER_ALLOCATORS.main_allocator,
-			)
-			for bind_group_ref, i in &ubo_bind_group_refs {
-				bind_group_ref = allocate_bind_group_ref(
-					common.create_name("Vulkan Tutorial ubo bind group"),
-				)
-				bind_group_desc := &get_bind_group(bind_group_ref).desc
-
-				bind_group_desc.buffers = make(
-					[]BufferBinding,
-					1,
-					G_RENDERER_ALLOCATORS.resource_allocator,
-				)
-
-				bind_group_desc.buffers[0].slot = 0
-				bind_group_desc.buffers[0].buffer_ref = ubo_refs[i]
-			}
-		}
-
-		create_bind_groups({texture_bind_group_ref})
-		create_bind_groups(ubo_bind_group_refs)
-
-		// Create the bind group bindings
-		{
-			bind_group_bindings = make([]BindGroupBinding, 2, G_RENDERER_ALLOCATORS.main_allocator)
-			bind_group_bindings[1].bind_group_ref = texture_bind_group_ref
-		}
 		return true
 	}
 }
 
 vt_pre_render :: proc() {
+
+	using G_RENDERER
+	using G_VT
+
 	vt_create_vertex_buffer()
 	vt_create_index_buffer()
 	vt_create_texture_image()
 	vt_create_texture_image_view()
 	vt_create_texture_sampler()
-	vt_write_descriptor_sets()
+
+	// Create the bind group
+	{
+		// Two bind groups per frame just to test multiple groups
+		texture_bind_group_ref = allocate_bind_group_ref(
+			common.create_name("Vulkan Tutorial texture bind group"),
+		)
+
+		{
+			texture_bind_group_desc := &get_bind_group(texture_bind_group_ref).desc
+			texture_bind_group_desc.images = make(
+				[]ImageBinding,
+				1,
+				G_RENDERER_ALLOCATORS.resource_allocator,
+			)
+			texture_bind_group_desc.images[0].count = 1
+			texture_bind_group_desc.images[0].slot = 1
+			texture_bind_group_desc.images[0].usage = .SampledImage
+		}
+
+
+		ubo_bind_group_refs = make(
+			[]BindGroupRef,
+			num_frames_in_flight,
+			G_RENDERER_ALLOCATORS.main_allocator,
+		)
+		for bind_group_ref, i in &ubo_bind_group_refs {
+			bind_group_ref = allocate_bind_group_ref(
+				common.create_name("Vulkan Tutorial ubo bind group"),
+			)
+			bind_group_desc := &get_bind_group(bind_group_ref).desc
+
+			bind_group_desc.buffers = make(
+				[]BufferBinding,
+				1,
+				G_RENDERER_ALLOCATORS.resource_allocator,
+			)
+
+			bind_group_desc.buffers[0].slot = 0
+			bind_group_desc.buffers[0].buffer_usage = .UniformBuffer
+		}
+	}
+
+	create_bind_groups({texture_bind_group_ref})
+	create_bind_groups(ubo_bind_group_refs)
+
+	// Create the bind group bindings
+	{
+		bind_group_bindings = make([]BindGroupBinding, 2, G_RENDERER_ALLOCATORS.main_allocator)
+		bind_group_bindings[1].bind_group_ref = texture_bind_group_ref
+	}
+
+
+	// Update the bind groups
+	{
+		bind_group_updates := make(
+			[]BindGroupUpdate,
+			num_frames_in_flight + 1,
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+		defer delete(bind_group_updates, G_RENDERER_ALLOCATORS.temp_allocator)
+
+		ubo_updates := make(
+			[]BindGroupBufferUpdate,
+			num_frames_in_flight,
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+		defer delete(ubo_updates, G_RENDERER_ALLOCATORS.temp_allocator)
+
+		texture_image_update := BindGroupImageUpdate {
+			image_ref = texture_image_ref,
+			mip       = 0,
+			slot      = 1,
+		}
+
+		bind_group_updates[0] = BindGroupUpdate {
+			bind_group_ref = texture_bind_group_ref,
+			image_updates = {texture_image_update},
+		}
+
+		for ubo_update, i in &ubo_updates {
+			ubo_update = BindGroupBufferUpdate {
+				slot   = 0,
+				buffer = ubo_refs[i],
+				offset = 0,
+				size   = size_of(UniformBufferObject),
+			}
+
+			bind_group_updates[i + 1].bind_group_ref = ubo_bind_group_refs[i]
+			bind_group_updates[i + 1].buffer_updates = make(
+				[]BindGroupBufferUpdate,
+				1,
+				G_RENDERER_ALLOCATORS.temp_allocator,
+			)
+			bind_group_updates[i + 1].buffer_updates[0] = ubo_update
+		}
+
+		update_bind_groups(bind_group_updates)
+
+		for i in 1..<len(bind_group_updates) {
+			delete(bind_group_updates[i].buffer_updates, G_RENDERER_ALLOCATORS.temp_allocator)
+		}
+	}
 }
 
 
@@ -263,13 +320,7 @@ vt_update :: proc(
 		bind_group_bindings[0].bind_group_ref = ubo_bind_group_refs[p_frame_idx]
 
 		bind_pipeline(pipeline_ref, p_cmd_buff_ref)
-		bind_bind_groups(
-			p_cmd_buff_ref,
-			pipeline_ref,
-			bind_group_bindings,
-			0,
-			0,
-		)
+		bind_bind_groups(p_cmd_buff_ref, pipeline_ref, bind_group_bindings, 0)
 
 		offset := vk.DeviceSize{}
 

@@ -41,10 +41,10 @@ BufferBinding :: struct {
 //---------------------------------------------------------------------------//
 
 BindGroupDesc :: struct {
-	name:     common.Name,
-	target:   u32,
-	image: []ImageBinding,
-	buffers:  []BufferBinding,
+	name:    common.Name,
+	target:  u32,
+	images:   []ImageBinding,
+	buffers: []BufferBinding,
 }
 
 //---------------------------------------------------------------------------//
@@ -64,8 +64,9 @@ BindGroupBinding :: struct {
 //---------------------------------------------------------------------------//
 
 BindGroupImageUpdate :: struct {
+	slot:      u32,
 	image_ref: ImageRef,
-	mip: u32,
+	mip:       u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -144,8 +145,8 @@ destroy_bind_groups :: proc(p_ref_array: []BindGroupRef) {
 		if len(bind_group.desc.buffers) > 0 {
 			delete(bind_group.desc.buffers, G_RENDERER_ALLOCATORS.resource_allocator)
 		}
-		if len(bind_group.desc.textures) > 0 {
-			delete(bind_group.desc.textures, G_RENDERER_ALLOCATORS.resource_allocator)
+		if len(bind_group.desc.images) > 0 {
+			delete(bind_group.desc.images, G_RENDERER_ALLOCATORS.resource_allocator)
 		}
 		free_ref(BindGroupResource, &G_BIND_GROUP_REF_ARRAY, ref)
 	}

@@ -265,15 +265,14 @@ when USE_VULKAN_BACKEND {
 		depth_stencil := DEPTH_STENCIL_STATE_PER_TYPE[p_pipeline.desc.depth_stencil_type]
 
 		// Pipeline layout
-		p_pipeline.pipeline_layout = allocate_pipeline_layout_ref(p_pipeline.desc.name)
-		pipeline_layout := get_pipeline_layout(p_pipeline.pipeline_layout)
+		p_pipeline.pipeline_layout_ref = allocate_pipeline_layout_ref(p_pipeline.desc.name)
+		pipeline_layout := get_pipeline_layout(p_pipeline.pipeline_layout_ref)
 
 		pipeline_layout.desc.name = p_pipeline.desc.name
-		pipeline_layout.desc.layout_type = .GRAPHICS
 		pipeline_layout.desc.vert_shader_ref = p_pipeline.desc.vert_shader
 		pipeline_layout.desc.frag_shader_ref = p_pipeline.desc.frag_shader
 
-		if !create_graphics_pipeline_layout(p_pipeline.pipeline_layout) {
+		if !create_graphics_pipeline_layout(p_pipeline.pipeline_layout_ref) {
 			log.warnf("Failed to create pipeline layout when creating the pipeline")
 			return false
 		}
@@ -327,7 +326,7 @@ when USE_VULKAN_BACKEND {
 			pColorBlendState    = &color_blending_state,
 			pDepthStencilState  = &depth_stencil,
 			layout              = get_pipeline_layout(
-				p_pipeline.pipeline_layout,
+				p_pipeline.pipeline_layout_ref,
 			).vk_pipeline_layout,
 			pViewportState      = &viewport_state,
 		}
@@ -390,8 +389,9 @@ when USE_VULKAN_BACKEND {
 		p_pipeline: ^PipelineResource,
 		p_cmd_buff: ^CommandBufferResource,
 	) {
-		bind_point := map_pipeline_bind_point(p_pipeline.pipeline_type)
-		vk.CmdBindPipeline(p_cmd_buff.backend_cmd_buffer, bind_point, p_pipeline.backend_pipeline)
+		pipeline_layout := get_pipeline_layout(p_pipeline.pipeline_layout_ref)
+		bind_point := map_pipeline_bind_point(pipeline_layout.desc.layout_type)
+		vk.CmdBindPipeline(p_cmd_buff.vk_cmd_buff, bind_point, p_pipeline.vk_pipeline)
 	}
 
 	//---------------------------------------------------------------------------//

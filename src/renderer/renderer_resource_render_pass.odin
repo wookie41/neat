@@ -4,7 +4,6 @@ package renderer
 
 import "../common"
 import c "core:c"
-import mem "core:mem"
 import "core:math/linalg/glsl"
 
 //---------------------------------------------------------------------------//

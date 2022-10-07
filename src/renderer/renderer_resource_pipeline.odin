@@ -128,7 +128,7 @@ deinit_pipelines :: proc() {
 
 //---------------------------------------------------------------------------//
 
-allocte_pipeline_ref :: proc(p_name: common.Name) -> PipelineRef {
+allocate_pipeline_ref :: proc(p_name: common.Name) -> PipelineRef {
 	ref := PipelineRef(create_ref(PipelineResource, &G_PIPELINE_REF_ARRAY, p_name))
 	get_pipeline(ref).desc.name = p_name
 	return ref

@@ -14,7 +14,7 @@ when USE_VULKAN_BACKEND {
 	backend_create_draw_command :: proc(
 		p_draw_command: ^DrawCommandResource,
 	) -> bool {
-
+		return true
 	}
 
 	//---------------------------------------------------------------------------//

@@ -18,7 +18,7 @@ when USE_VULKAN_BACKEND {
 		descriptor_layouts_cache:       map[u32]vk.DescriptorSetLayout,
 		samplers_descriptor_set_layout: vk.DescriptorSetLayout,
 		samplers_descriptor_set:        vk.DescriptorSet,
-		immutable_sampler:              []vk.Sampler,
+		immutable_samplers:             []vk.Sampler,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -71,7 +71,7 @@ when USE_VULKAN_BACKEND {
 
 		// Create samplers
 		{
-			INTERNAL.immutable_sampler = make(
+			INTERNAL.immutable_samplers = make(
 				[]vk.Sampler,
 				len(SamplerType),
 				G_RENDERER_ALLOCATORS.resource_allocator,
@@ -96,7 +96,7 @@ when USE_VULKAN_BACKEND {
 				G_RENDERER.device,
 				&sampler_create_info,
 				nil,
-				&INTERNAL.immutable_sampler[0],
+				&INTERNAL.immutable_samplers[0],
 			)
 
 			sampler_create_info.addressModeU = .CLAMP_TO_BORDER
@@ -107,7 +107,7 @@ when USE_VULKAN_BACKEND {
 				G_RENDERER.device,
 				&sampler_create_info,
 				nil,
-				&INTERNAL.immutable_sampler[1],
+				&INTERNAL.immutable_samplers[1],
 			)
 
 			sampler_create_info.addressModeU = .REPEAT
@@ -118,7 +118,7 @@ when USE_VULKAN_BACKEND {
 				G_RENDERER.device,
 				&sampler_create_info,
 				nil,
-				&INTERNAL.immutable_sampler[2],
+				&INTERNAL.immutable_samplers[2],
 			)
 
 			sampler_create_info.magFilter = .LINEAR
@@ -132,7 +132,7 @@ when USE_VULKAN_BACKEND {
 				G_RENDERER.device,
 				&sampler_create_info,
 				nil,
-				&INTERNAL.immutable_sampler[3],
+				&INTERNAL.immutable_samplers[3],
 			)
 
 			sampler_create_info.addressModeU = .CLAMP_TO_BORDER
@@ -143,7 +143,7 @@ when USE_VULKAN_BACKEND {
 				G_RENDERER.device,
 				&sampler_create_info,
 				nil,
-				&INTERNAL.immutable_sampler[4],
+				&INTERNAL.immutable_samplers[4],
 			)
 
 			sampler_create_info.addressModeU = .REPEAT
@@ -154,7 +154,7 @@ when USE_VULKAN_BACKEND {
 				G_RENDERER.device,
 				&sampler_create_info,
 				nil,
-				&INTERNAL.immutable_sampler[5],
+				&INTERNAL.immutable_samplers[5],
 			)
 		}
 
@@ -165,35 +165,35 @@ when USE_VULKAN_BACKEND {
 					binding = 0,
 					descriptorCount = 1,
 					descriptorType = .SAMPLER,
-					pImmutableSamplers = INTERNAL.immutable_sampler,
+					pImmutableSamplers = raw_data(INTERNAL.immutable_samplers),
 					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
 				},
 				{
 					binding = 1,
 					descriptorCount = 1,
 					descriptorType = .SAMPLER,
-					pImmutableSamplers = INTERNAL.immutable_sampler,
+					pImmutableSamplers = raw_data(INTERNAL.immutable_samplers),
 					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
 				},
 				{
 					binding = 2,
 					descriptorCount = 1,
 					descriptorType = .SAMPLER,
-					pImmutableSamplers = INTERNAL.immutable_sampler,
+					pImmutableSamplers = raw_data(INTERNAL.immutable_samplers),
 					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
 				},
 				{
 					binding = 3,
 					descriptorCount = 1,
 					descriptorType = .SAMPLER,
-					pImmutableSamplers = INTERNAL.immutable_sampler,
+					pImmutableSamplers = raw_data(INTERNAL.immutable_samplers),
 					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
 				},
 				{
 					binding = 4,
 					descriptorCount = 1,
 					descriptorType = .SAMPLER,
-					pImmutableSamplers = INTERNAL.immutable_sampler,
+					pImmutableSamplers = raw_data(INTERNAL.immutable_samplers),
 					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
 				},
 			}
@@ -218,7 +218,7 @@ when USE_VULKAN_BACKEND {
 
 			allocate_info := vk.DescriptorSetAllocateInfo {
 				sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
-				pSetLayouts        = &INTERNAL.descriptor_layouts_cache,
+				pSetLayouts        = &INTERNAL.samplers_descriptor_set_layout,
 				descriptorPool     = INTERNAL.descriptor_pool,
 				descriptorSetCount = 1,
 			}
@@ -226,13 +226,14 @@ when USE_VULKAN_BACKEND {
 			if vk.AllocateDescriptorSets(
 				   G_RENDERER.device,
 				   &allocate_info,
-				   INTERNAL.samplers_descriptor_set,
+				   &INTERNAL.samplers_descriptor_set,
 			   ) != .SUCCESS {
 				// @TODO We should delete stuff from INTERNAL here, 
 				// but we're still gonna shut down the renderer, so screw it for now
 				return false
 			}
 		}
+		return true
 	}
 
 	//---------------------------------------------------------------------------//
@@ -271,9 +272,9 @@ when USE_VULKAN_BACKEND {
 				for image_binding in bind_group.desc.images {
 					bindings[binding_idx].binding = image_binding.slot
 
-					if .SampledImage in image_binding.flags {
+					if .SampledImage == image_binding.usage {
 						bindings[binding_idx].descriptorType = .SAMPLED_IMAGE
-					} else if .StorageImage in image_binding.flags {
+					} else if .StorageImage == image_binding.usage {
 						bindings[binding_idx].descriptorType = .STORAGE_IMAGE
 					} else {
 						assert(false) // Probably added a new flag bit and forgot to handle it here
@@ -288,9 +289,9 @@ when USE_VULKAN_BACKEND {
 				for image_binding in bind_group.desc.images {
 					bindings[binding_idx].binding = image_binding.slot
 
-					if .SampledImage in image_binding.flags {
+					if .SampledImage == image_binding.usage {
 						bindings[binding_idx].descriptorType = .SAMPLED_IMAGE
-					} else if .StorageImage in image_binding.flags {
+					} else if .StorageImage == image_binding.usage {
 						bindings[binding_idx].descriptorType = .STORAGE_IMAGE
 					} else {
 						assert(false) // Probably added ad new flag bit and forgot to handle it here
@@ -332,8 +333,8 @@ when USE_VULKAN_BACKEND {
 
 		res := vk.AllocateDescriptorSets(
 			G_RENDERER.device,
-			descriptor_set_alloc_info,
-			descriptor_sets,
+			&descriptor_set_alloc_info,
+			raw_data(descriptor_sets),
 		)
 		assert(res == .SUCCESS) // @TODO
 
@@ -341,6 +342,8 @@ when USE_VULKAN_BACKEND {
 			bind_group := get_bind_group(p_ref_array[i])
 			bind_group.vk_descriptor_set = descriptor_set
 		}
+
+		return true
 	}
 
 	//---------------------------------------------------------------------------//
@@ -359,17 +362,17 @@ when USE_VULKAN_BACKEND {
 
 		hash_entries := make(
 			[]BindGroupHashEntry,
-			len(p_bind_group.images) + len(p_bind_group.buffers),
+			len(p_bind_group.desc.images) + len(p_bind_group.desc.buffers),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
-		defer free(hash_entries)
+		defer delete(hash_entries)
 
 		entry_idx := 0
 
 		for image_binding in p_bind_group.desc.images {
-			if .SampledImage in image_binding.flags {
+			if image_binding.usage == .SampledImage {
 				hash_entries[entry_idx].type = 0
-			} else if .StorageImage in image_binding.flags {
+			} else if image_binding.usage == .StorageImage {
 				hash_entries[entry_idx].type = 1
 			} else {
 				assert(false) // Probably added ad new flag bit and forgot to handle it here
@@ -380,17 +383,17 @@ when USE_VULKAN_BACKEND {
 		}
 
 		for buffer_binding in p_bind_group.desc.buffers {
-			buffer_usage := get_buffer(buffer_binding.buffer_ref).desc.usage
-			if .UniformBuffer in buffer_usage {
+			if buffer_binding.buffer_usage == .UniformBuffer {
 				hash_entries[entry_idx].type = 2
-			} else if .DynamicUniformBuffer in buffer_usage {
+			} else if buffer_binding.buffer_usage == .DynamicUniformBuffer {
 				hash_entries[entry_idx].type = 3
-			} else if .StorageBuffer in buffer_usage {
+			} else if buffer_binding.buffer_usage == .StorageBuffer {
 				hash_entries[entry_idx].type = 4
-			} else if .DynamicStorageBuffer in buffer_usage {
+			} else if buffer_binding.buffer_usage == .DynamicStorageBuffer {
 				hash_entries[entry_idx].type = 5
 			} else {
-				assert(false) // Probably added ad new flag bit and forgot to handle it here
+				// Probably added ad new flag bit and forgot to handle it here or it's not a suported buffer type
+				assert(false)
 			}
 
 			hash_entries[entry_idx].slot = buffer_binding.slot
@@ -427,7 +430,7 @@ when USE_VULKAN_BACKEND {
 			dyn_offset_idx := 0
 			for binding in p_bindings {
 				for dynamic_offset in binding.dynamic_offsets {
-					dynamic_offset[dyn_offset_idx] = dynamic_offset
+					dynamic_offsets[dyn_offset_idx] = dynamic_offset
 					dyn_offset_idx += 1
 				}
 			}
@@ -450,7 +453,7 @@ when USE_VULKAN_BACKEND {
 		{
 			bind_group_idx := 0
 			for i in 0 ..< descriptor_sets_count {
-				if i == p_samplers_bind_group_target {
+				if i32(i) == p_samplers_bind_group_target {
 					continue
 				}
 				bind_group := get_bind_group(p_bindings[bind_group_idx].bind_group_ref)
@@ -459,18 +462,18 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
-		pipeline_bind_point := map_pipeline_bind_point(p_pipeline.pipeline_type)
-		pipeline_layout := get_pipeline_layout(p_pipeline.pipeline_layout)
+		pipeline_layout := get_pipeline_layout(p_pipeline.pipeline_layout_ref)
+		pipeline_bind_point := map_pipeline_bind_point(pipeline_layout.desc.layout_type)
 
 		vk.CmdBindDescriptorSets(
-			cmd_buff.vk_cmd_buff,
+			p_cmd_buff.vk_cmd_buff,
 			pipeline_bind_point,
 			pipeline_layout.vk_pipeline_layout,
 			0,
 			descriptor_sets_count,
-			&descriptor_sets,
-			dynamic_offsets_count,
-			&dynamic_offsets,
+			raw_data(descriptor_sets),
+			u32(dynamic_offsets_count),
+			raw_data(dynamic_offsets),
 		)
 	}
 
@@ -480,14 +483,14 @@ when USE_VULKAN_BACKEND {
 	map_pipeline_bind_point :: proc(p_pipeline_type: PipelineType) -> vk.PipelineBindPoint {
 		if p_pipeline_type == .Graphics {
 			return .GRAPHICS
-		} else if p_pipeline_type.Compute {
+		} else if p_pipeline_type == .Compute {
 			return .COMPUTE
-		} else if p_pipeline_type.Raytracing {
+		} else if p_pipeline_type == .Raytracing {
 			assert(false)
 		} else {
 			assert(false)
 		}
-
+		return .GRAPHICS
 	}
 
 	//---------------------------------------------------------------------------//
@@ -511,6 +514,7 @@ when USE_VULKAN_BACKEND {
 			u32(len(descriptor_sets_to_free)),
 			raw_data(descriptor_sets_to_free),
 		)
+	}
 
 	//---------------------------------------------------------------------------//
 
@@ -520,28 +524,41 @@ when USE_VULKAN_BACKEND {
 		images_infos_count := 0
 		buffer_infos_count := 0
 
-		for update in &p_updates {
-			buffer_infos_count += len(update.buffer_updates)
+		for update in p_updates {
 			images_infos_count += len(update.image_updates)
+			buffer_infos_count += len(update.buffer_updates)
 		}
 		total_writes_count := buffer_infos_count + images_infos_count
 
-		descriptor_writes := make([]vk.WriteDescriptorSet, total_writes_count, G_RENDERER_ALLOCATORS.temp_allocator)
+		descriptor_writes := make(
+			[]vk.WriteDescriptorSet,
+			total_writes_count,
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
 		defer delete(descriptor_writes, G_RENDERER_ALLOCATORS.temp_allocator)
 
-		image_writes := make([]vk.DescriptorImageInfo, images_infos_count, G_RENDERER_ALLOCATORS.temp_allocator)
+		image_writes := make(
+			[]vk.DescriptorImageInfo,
+			images_infos_count,
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
 		defer delete(image_writes, G_RENDERER_ALLOCATORS.temp_allocator)
 
-		buffer_writes := make([]vk.DescriptorBufferInfo, buffer_infos_count, G_RENDERER_ALLOCATORS.temp_allocator)
+		buffer_writes := make(
+			[]vk.DescriptorBufferInfo,
+			buffer_infos_count,
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
 		defer delete(buffer_writes, G_RENDERER_ALLOCATORS.temp_allocator)
-		
+
 		write_idx := 0
 		image_info_idx := 0
 		buffer_info_idx := 0
 
-		for update in &p_updates {
-			bind_group_desc := &get_bind_group(ref).desc
-			
+		for _, i in p_updates {
+			update := &p_updates[i]
+			bind_group := get_bind_group(update.bind_group_ref)
+
 			for buffer_update in &update.buffer_updates {
 				buffer := get_buffer(buffer_update.buffer)
 				buffer_writes[buffer_info_idx].buffer = buffer.vk_buffer
@@ -549,9 +566,9 @@ when USE_VULKAN_BACKEND {
 				buffer_writes[buffer_info_idx].range = vk.DeviceSize(buffer_update.size)
 
 				descriptor_writes[write_idx].sType = .WRITE_DESCRIPTOR_SET
-				descriptor_writes[write_idx].descriptorCount = 1				
+				descriptor_writes[write_idx].descriptorCount = 1
 				descriptor_writes[write_idx].dstBinding = buffer_update.slot
-				descriptor_writes[write_idx].dstSet = bind_group_desc.target
+				descriptor_writes[write_idx].dstSet = bind_group.vk_descriptor_set
 				descriptor_writes[write_idx].pBufferInfo = &buffer_writes[buffer_infos_count]
 
 				if .UniformBuffer in buffer.desc.usage {
@@ -565,21 +582,21 @@ when USE_VULKAN_BACKEND {
 				} else {
 					assert(false) // Probably added ad new flag bit and forgot to handle it here
 				}
-	
+
 				buffer_info_idx += 1
 				write_idx += 1
 			}
 
-			for image_update in &update.image_updates {
+			for image_update in update.image_updates {
 				image := get_image(image_update.image_ref)
-				image_writes[image_info_idx].imageView = image.all_mips_vk_view[image_update.mip]
+				image_writes[image_info_idx].imageView = image.per_mip_vk_view[image_update.mip]
 				image_writes[image_info_idx].imageLayout = image.vk_layout_per_mip[image_update.mip]
 
 				image_info_idx += 1
 				write_idx += 1
 			}
 
-			
+
 		}
 	}
 	//---------------------------------------------------------------------------//

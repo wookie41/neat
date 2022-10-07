@@ -123,17 +123,25 @@ when USE_VULKAN_BACKEND {
 		)
 		defer delete(descriptor_set_layout_create_info, G_RENDERER_ALLOCATORS.temp_allocator)
 
-		p_layout.vk_descriptor_set_layouts = make(
+		descriptor_set_layouts := make(
 			[]vk.DescriptorSetLayout,
 			len(bindings_per_set),
-			G_RENDERER_ALLOCATORS.resource_allocator,
+			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
+		defer {
+			for descriptor_set_layout in descriptor_set_layouts {
+				vk.DestroyDescriptorSetLayout(G_RENDERER.device, descriptor_set_layout, nil)
+			}
+			delete(descriptor_set_layouts, G_RENDERER_ALLOCATORS.temp_allocator)
+		}
 
-		p_layout.vk_descriptor_set_numbers = make(
+		descriptor_set_numbers := make(
 			[]u8,
 			len(bindings_per_set),
-			G_RENDERER_ALLOCATORS.resource_allocator,
+			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
+		defer delete(descriptor_set_numbers, G_RENDERER_ALLOCATORS.temp_allocator)
+
 
 		// Create the descriptor set layout
 		{
@@ -146,12 +154,12 @@ when USE_VULKAN_BACKEND {
 					pBindings    = raw_data(descriptor_set_bindings),
 				}
 
-				p_layout.vk_descriptor_set_numbers[set_count] = u8(set)
+				descriptor_set_numbers[set_count] = u8(set)
 				if vk.CreateDescriptorSetLayout(
 					   G_RENDERER.device,
 					   &create_info,
 					   nil,
-					   &p_layout.vk_descriptor_set_layouts[set_count],
+					   &descriptor_set_layouts[set_count],
 				   ) != .SUCCESS {
 					log.warn("Failed to create descriptor set layout")
 					return false
@@ -160,35 +168,12 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
-		// Create the descriptor sets
-		{
-			descriptor_sets_alloc_info := vk.DescriptorSetAllocateInfo {
-				sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
-				descriptorPool     = G_RENDERER.vk_descriptor_pool,
-				descriptorSetCount = u32(len(p_layout.vk_descriptor_set_layouts)),
-				pSetLayouts        = raw_data(p_layout.vk_descriptor_set_layouts),
-			}
-
-			p_layout.vk_descriptor_sets = make(
-				[]vk.DescriptorSet,
-				descriptor_sets_alloc_info.descriptorSetCount,
-				G_RENDERER_ALLOCATORS.resource_allocator,
-			)
-
-			res := vk.AllocateDescriptorSets(
-				G_RENDERER.device,
-				&descriptor_sets_alloc_info,
-				raw_data(p_layout.vk_descriptor_sets),
-			)
-			assert(res == .SUCCESS)
-		}
-
 		// Create pipeline layout
 		{
 			create_info := vk.PipelineLayoutCreateInfo {
 				sType          = .PIPELINE_LAYOUT_CREATE_INFO,
-				pSetLayouts    = raw_data(p_layout.vk_descriptor_set_layouts),
-				setLayoutCount = u32(len(p_layout.vk_descriptor_set_layouts)),
+				pSetLayouts    = raw_data(descriptor_set_layouts),
+				setLayoutCount = u32(len(descriptor_set_layouts)),
 			}
 
 			if vk.CreatePipelineLayout(
@@ -208,27 +193,8 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_destroy_pipeline_layout :: proc(p_ref: PipelineLayoutRef) {
-		pipeline_layout := get_pipeline_layout(p_ref)
-		vk.FreeDescriptorSets(
-			G_RENDERER.device,
-			G_RENDERER.vk_descriptor_pool,
-			u32(len(pipeline_layout.vk_descriptor_sets)),
-			raw_data(pipeline_layout.vk_descriptor_sets),
-		)
-		for descriptor_set_layout in pipeline_layout.vk_descriptor_set_layouts {
-			vk.DestroyDescriptorSetLayout(G_RENDERER.device, descriptor_set_layout, nil)
-		}
-		vk.DestroyPipelineLayout(G_RENDERER.device, pipeline_layout.vk_pipeline_layout, nil)
-		delete(
-			pipeline_layout.vk_descriptor_set_numbers,
-			G_RENDERER_ALLOCATORS.resource_allocator,
-		)
-		delete(
-			pipeline_layout.vk_descriptor_set_layouts,
-			G_RENDERER_ALLOCATORS.resource_allocator,
-		)
-		delete(pipeline_layout.vk_descriptor_sets, G_RENDERER_ALLOCATORS.resource_allocator)
+	backend_destroy_pipeline_layout :: proc(p_pipeline_layout: ^PipelineLayoutResource) {
+		vk.DestroyPipelineLayout(G_RENDERER.device, p_pipeline_layout.vk_pipeline_layout, nil)
 
 	}
 

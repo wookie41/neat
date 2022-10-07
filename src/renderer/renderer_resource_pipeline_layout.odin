@@ -87,8 +87,9 @@ get_pipeline_layout :: proc(p_ref: PipelineLayoutRef) -> ^PipelineLayoutResource
 //---------------------------------------------------------------------------//
 
 destroy_pipeline_layout :: proc(p_ref: PipelineLayoutRef) {
+	backend_destroy_pipeline_layout(get_pipeline_layout(p_ref))
 	free_ref(PipelineLayoutResource, &G_PIPELINE_LAYOUT_REF_ARRAY, p_ref)
-	backend_destroy_pipeline_layout(p_ref)
+
 }
 
 //---------------------------------------------------------------------------//

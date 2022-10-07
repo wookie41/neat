@@ -108,7 +108,7 @@ when USE_VULKAN_BACKEND {
 				access_mask = {.INDEX_READ}
 			} else if .UniformBuffer in dst_buffer.desc.usage {
 				access_mask = {.UNIFORM_READ}
-			} else if .Storagebuffer in dst_buffer.desc.usage {
+			} else if .StorageBuffer in dst_buffer.desc.usage {
 				access_mask = {.SHADER_READ}
 			} else {
 				// You shouldn't be here, uploading to this buffer is not supported at the moment
