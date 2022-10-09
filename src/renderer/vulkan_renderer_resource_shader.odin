@@ -55,7 +55,6 @@ when USE_VULKAN_BACKEND {
 	) -> (
 		compile_result: bool,
 	) {
-
 		// Determine compile target
 		compile_target: string
 		switch shader_resource.type {
@@ -148,7 +147,7 @@ when USE_VULKAN_BACKEND {
 				num_descriptor_sets,
 				G_RENDERER_ALLOCATORS.temp_allocator,
 			)
-			defer delete(descriptor_sets)
+			defer delete(descriptor_sets, G_RENDERER_ALLOCATORS.temp_allocator)
 
 			spirv_reflect.enumerate_descriptor_sets(
 				&shader_module,
@@ -167,33 +166,57 @@ when USE_VULKAN_BACKEND {
 				for i in 0 ..< num_descriptor_sets {
 					// Fill set info and create the descriptors array
 					descriptor_set := descriptor_sets[i]
+					binding_count := descriptor_set.binding_count
+
+					// Special handling for set 0 which is the global descriptor set for samplers
+					non_sampler_binding_count: u32 = 0
+					if descriptor_set.set == 0 {
+						for j in 0 ..< descriptor_set.binding_count {
+							descriptor := descriptor_set.bindings[j]
+							if descriptor.descriptor_type != .Sampler {
+								non_sampler_binding_count += 1
+							}
+						}
+						binding_count = len(SamplerType) + non_sampler_binding_count
+					}
+
 					shader_resource.vk_descriptor_sets[i].set = u8(descriptor_set.set)
 					shader_resource.vk_descriptor_sets[i].descriptors = make(
 						[]VulkanShaderDescriptor,
-						descriptor_set.binding_count,
+						binding_count,
 						G_RENDERER_ALLOCATORS.resource_allocator,
 					)
+
+					// Fill samplers info
+					if descriptor_set.set == 0 {
+						for j in 0 ..< len(SamplerType) {
+							descriptor := &shader_resource.vk_descriptor_sets[i].descriptors[j]
+							descriptor.binding = u32(j)
+							descriptor.name = common.create_name(string(SamplerNames[j]))
+							descriptor.count = 1
+							descriptor.type = .SAMPLER
+						}
+						binding_count = len(SamplerType) + non_sampler_binding_count
+					}
 
 					// Fill descriptors info
 					for j in 0 ..< descriptor_set.binding_count {
 						descriptor := &shader_resource.vk_descriptor_sets[i].descriptors[j]
+
+						// Skip already added samplers
+						if descriptor_set.bindings[j].descriptor_type == .Sampler {
+							continue
+						}
+
 						descriptor.binding = descriptor_set.bindings[j].binding
 						descriptor.name = common.create_name(string(descriptor_set.bindings[j].name))
 						descriptor.count = descriptor_set.bindings[j].count
 
 						#partial switch descriptor_set.bindings[j].descriptor_type {
-						case .Sampler:
-							descriptor.type = .SAMPLER
-						case .CombinedImageSampler:
-							descriptor.type = .COMBINED_IMAGE_SAMPLER
 						case .SampledImage:
 							descriptor.type = .SAMPLED_IMAGE
 						case .StorageImage:
 							descriptor.type = .STORAGE_IMAGE
-						case .UniformTexelBuffer:
-							descriptor.type = .UNIFORM_TEXEL_BUFFER
-						case .StorageTexelBuffer:
-							descriptor.type = .STORAGE_TEXEL_BUFFER
 						case .UniformBuffer:
 							descriptor.type = .UNIFORM_BUFFER
 						case .StorageBuffer:
@@ -202,19 +225,19 @@ when USE_VULKAN_BACKEND {
 							descriptor.type = .UNIFORM_BUFFER_DYNAMIC
 						case .StorageBufferDynamic:
 							descriptor.type = .STORAGE_BUFFER_DYNAMIC
-						case .InputAttachment:
-							descriptor.type = .INPUT_ATTACHMENT
+						case:
+							assert(false) // Unsupported binding
 						}
 					}
 				}
-
-				defer if compile_result == false {
-					for descriptor_set in shader_resource.vk_descriptor_sets {
-						delete(descriptor_set.descriptors, G_RENDERER_ALLOCATORS.resource_allocator)
-					}
-					delete(shader_resource.vk_descriptor_sets, G_RENDERER_ALLOCATORS.resource_allocator)
-				}
 			}
+		}
+
+		defer if compile_result == false {
+			for descriptor_set in shader_resource.vk_descriptor_sets {
+				delete(descriptor_set.descriptors, G_RENDERER_ALLOCATORS.resource_allocator)
+			}
+			delete(shader_resource.vk_descriptor_sets, G_RENDERER_ALLOCATORS.resource_allocator)
 		}
 
 		// Create the shader module

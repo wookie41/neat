@@ -58,10 +58,10 @@ load_shaders :: proc() -> bool {
 	G_SHADER_REF_ARRAY = create_ref_array(ShaderResource, MAX_SHADERS)
 
 	context.allocator = G_RENDERER_ALLOCATORS.temp_allocator
-	defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
 
 	shaders_config := "app_data/renderer/config/shaders.json"
 	shaders_json_data, file_read_ok := os.read_entire_file(shaders_config)
+	defer free(raw_data(shaders_json_data))
 
 	if file_read_ok == false {
 		log.error("Failed to open the shaders config file")

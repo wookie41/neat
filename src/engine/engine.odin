@@ -41,7 +41,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	context.logger = G_ENGINE_LOG
 
 	// String arena
-	mem.init_arena(
+	mem.arena_init(
 		&G_ENGINE.string_area,
 		make([]byte, common.MEGABYTE * 8, context.allocator),
 	)

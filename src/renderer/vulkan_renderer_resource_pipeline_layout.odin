@@ -14,7 +14,7 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	BackendPipelineLayoutResource :: struct {
-		vk_pipeline_layout:        vk.PipelineLayout,
+		vk_pipeline_layout: vk.PipelineLayout,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -44,16 +44,16 @@ when USE_VULKAN_BACKEND {
 			num_descriptor_sets_used,
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
-
 		defer {
-			for _, bindings in bindings_per_set {
+			for set, bindings in bindings_per_set {
 				delete(bindings)
 			}
 			delete(bindings_per_set)
 		}
 
+
 		// Gather vertex shader descriptor info
-		for descriptor_set in vert_shader.vk_descriptor_sets {
+		for descriptor_set in &vert_shader.vk_descriptor_sets {
 
 			set_number := uint(descriptor_set.set)
 			if (set_number in bindings_per_set) == false {
@@ -71,6 +71,11 @@ when USE_VULKAN_BACKEND {
 					descriptorCount = descriptor.count,
 					descriptorType = descriptor.type,
 					stageFlags = {.VERTEX},
+					pImmutableSamplers = raw_data(IMMUTABLE_SAMPLERS),
+				}
+				// We have a single global descriptor set for sampler
+				if descriptor.type == .SAMPLER {
+					layout_binding.stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE}
 				}
 				append(set_bindings, layout_binding)
 			}
@@ -110,19 +115,16 @@ when USE_VULKAN_BACKEND {
 					descriptorCount = descriptor.count,
 					descriptorType = descriptor.type,
 					stageFlags = {.FRAGMENT},
+					pImmutableSamplers = raw_data(IMMUTABLE_SAMPLERS),
+				}
+				if descriptor.type == .SAMPLER {
+					layout_binding.stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE}
 				}
 				append(set_bindings, layout_binding)
 			}
 		}
 
 		// Create the descriptor set layouts
-		descriptor_set_layout_create_info := make(
-			[]vk.DescriptorSetLayoutCreateInfo,
-			len(bindings_per_set),
-			G_RENDERER_ALLOCATORS.temp_allocator,
-		)
-		defer delete(descriptor_set_layout_create_info, G_RENDERER_ALLOCATORS.temp_allocator)
-
 		descriptor_set_layouts := make(
 			[]vk.DescriptorSetLayout,
 			len(bindings_per_set),
@@ -135,17 +137,8 @@ when USE_VULKAN_BACKEND {
 			delete(descriptor_set_layouts, G_RENDERER_ALLOCATORS.temp_allocator)
 		}
 
-		descriptor_set_numbers := make(
-			[]u8,
-			len(bindings_per_set),
-			G_RENDERER_ALLOCATORS.temp_allocator,
-		)
-		defer delete(descriptor_set_numbers, G_RENDERER_ALLOCATORS.temp_allocator)
-
-
 		// Create the descriptor set layout
 		{
-			set_count := 0
 			for set in bindings_per_set {
 				descriptor_set_bindings := bindings_per_set[set]
 				create_info := vk.DescriptorSetLayoutCreateInfo {
@@ -154,17 +147,15 @@ when USE_VULKAN_BACKEND {
 					pBindings    = raw_data(descriptor_set_bindings),
 				}
 
-				descriptor_set_numbers[set_count] = u8(set)
 				if vk.CreateDescriptorSetLayout(
 					   G_RENDERER.device,
 					   &create_info,
 					   nil,
-					   &descriptor_set_layouts[set_count],
+					   &descriptor_set_layouts[set],
 				   ) != .SUCCESS {
 					log.warn("Failed to create descriptor set layout")
 					return false
 				}
-				set_count += 1
 			}
 		}
 

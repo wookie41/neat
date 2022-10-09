@@ -177,7 +177,11 @@ vt_pre_render :: proc() {
 	vt_create_texture_image()
 	vt_create_texture_image_view()
 	vt_create_texture_sampler()
+}
 
+vt_create_bind_groups :: proc() {
+	using G_RENDERER
+	using G_VT
 	// Create the bind group
 	{
 		// Two bind groups per frame just to test multiple groups
@@ -195,6 +199,7 @@ vt_pre_render :: proc() {
 			texture_bind_group_desc.images[0].count = 1
 			texture_bind_group_desc.images[0].slot = 1
 			texture_bind_group_desc.images[0].usage = .SampledImage
+			texture_bind_group_desc.images[0].stage_flags = {.Fragment}
 		}
 
 
@@ -217,6 +222,8 @@ vt_pre_render :: proc() {
 
 			bind_group_desc.buffers[0].slot = 0
 			bind_group_desc.buffers[0].buffer_usage = .UniformBuffer
+			bind_group_desc.buffers[0].stage_flags = {.Vertex}
+
 		}
 	}
 
@@ -273,10 +280,9 @@ vt_pre_render :: proc() {
 			)
 			bind_group_updates[i + 1].buffer_updates[0] = ubo_update
 		}
-
 		update_bind_groups(bind_group_updates)
 
-		for i in 1..<len(bind_group_updates) {
+		for i in 1 ..<len(bind_group_updates) {
 			delete(bind_group_updates[i].buffer_updates, G_RENDERER_ALLOCATORS.temp_allocator)
 		}
 	}

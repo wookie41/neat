@@ -169,9 +169,8 @@ when USE_VULKAN_BACKEND {
 
 		vk_name := strings.clone_to_cstring(
 			common.get_string(p_image.desc.name),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			G_RENDERER_ALLOCATORS.names_allocator,
 		)
-		defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		name_info := vk.DebugUtilsObjectNameInfoEXT {
 			sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
@@ -210,9 +209,8 @@ when USE_VULKAN_BACKEND {
 
 			vk_name := strings.clone_to_cstring(
 				common.get_string(p_image.desc.name),
-				G_RENDERER_ALLOCATORS.temp_allocator,
+				G_RENDERER_ALLOCATORS.names_allocator,
 			)
-			defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
 
 			name_info := vk.DebugUtilsObjectNameInfoEXT {
 				sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
@@ -261,9 +259,8 @@ when USE_VULKAN_BACKEND {
 
 				vk_name := strings.clone_to_cstring(
 					common.get_string(p_image.desc.name),
-					G_RENDERER_ALLOCATORS.temp_allocator,
+					G_RENDERER_ALLOCATORS.names_allocator,
 				)
-				defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
 
 				name_info := vk.DebugUtilsObjectNameInfoEXT {
 					sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
@@ -411,9 +408,8 @@ when USE_VULKAN_BACKEND {
 
 		vk_name := strings.clone_to_cstring(
 			common.get_string(p_name),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			G_RENDERER_ALLOCATORS.names_allocator,
 		)
-		defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		name_info := vk.DebugUtilsObjectNameInfoEXT {
 			sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
@@ -473,7 +469,6 @@ when USE_VULKAN_BACKEND {
 	backend_execute_queued_texture_copies :: proc(p_cmd_buff_ref: CommandBufferRef) {
 
 		cmd_buff := get_command_buffer(p_cmd_buff_ref)
-		defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
 
 		VkCopyEntry :: struct {
 			buffer:     vk.Buffer,
@@ -486,18 +481,21 @@ when USE_VULKAN_BACKEND {
 			len(G_RENDERER.queued_textures_copies),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
+		defer delete(to_transfer_barriers, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		vk_copies := make(
 			[]VkCopyEntry,
 			len(G_RENDERER.queued_textures_copies),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
+		defer delete(vk_copies, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		to_sample_barriers := make(
 			[]vk.ImageMemoryBarrier,
 			len(G_RENDERER.queued_textures_copies),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
+		defer delete(to_sample_barriers, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		for _, i in G_RENDERER.queued_textures_copies {
 
@@ -560,12 +558,17 @@ when USE_VULKAN_BACKEND {
 						depth = 1,
 					},
 				}
+
+
+				image.vk_layout_per_mip[mip] = .SHADER_READ_ONLY_OPTIMAL
 			}
 
 			vk_copies[i] = vk_copy_entry
+		}
+		defer {
+			for vk_copy in vk_copies {
+				defer delete(vk_copy.mip_copies, G_RENDERER_ALLOCATORS.temp_allocator)
 
-			for i in 0 ..< image.desc.mip_count {
-				image.vk_layout_per_mip[i] = .SHADER_READ_ONLY_OPTIMAL
 			}
 		}
 

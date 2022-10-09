@@ -115,6 +115,15 @@ RenderPassBeginInfo :: struct {
 
 //---------------------------------------------------------------------------//
 
+@(private)
+init_render_passes :: proc() {
+	G_RENDER_PASS_REF_ARRAY = create_ref_array(RenderPassResource, MAX_RENDER_PASSES)
+	backend_init_render_passes()
+}
+
+//---------------------------------------------------------------------------//
+
+
 allocate_render_pass_ref :: proc(p_name: common.Name) -> RenderPassRef {
 	ref := RenderPassRef(
 		create_ref(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_name),

@@ -5,7 +5,6 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	import "core:c"
-	import "core:mem"
 	import "core:log"
 
 	import sdl "vendor:sdl2"
@@ -98,11 +97,11 @@ when USE_VULKAN_BACKEND {
 			using G_RENDERER
 			using G_RENDERER_ALLOCATORS
 
-			defer mem.free_all(temp_allocator)
-
 			// Specify a list of required extensions and layers
-			required_extensions := make([dynamic]cstring, temp_allocator)
-			required_layers := make([dynamic]cstring, temp_allocator)
+			required_extensions := make([dynamic]cstring, G_RENDERER_ALLOCATORS.temp_allocator)
+			defer delete(required_extensions)
+			required_layers := make([dynamic]cstring, G_RENDERER_ALLOCATORS.temp_allocator)
+			defer delete(required_layers)
 
 			// Add SDL extensions
 			{
@@ -126,7 +125,11 @@ when USE_VULKAN_BACKEND {
 			}
 
 			// Check the required extensions and layers are supported
-			supported_extensions := make([dynamic]vk.ExtensionProperties)
+			supported_extensions := make(
+				[dynamic]vk.ExtensionProperties,
+				G_RENDERER_ALLOCATORS.temp_allocator,
+			)
+			defer delete(supported_extensions)
 			{
 				extension_count: u32
 				vk.EnumerateInstanceExtensionProperties(nil, &extension_count, nil)
@@ -138,7 +141,11 @@ when USE_VULKAN_BACKEND {
 				)
 			}
 
-			supported_layers := make([dynamic]vk.LayerProperties)
+			supported_layers := make(
+				[dynamic]vk.LayerProperties,
+				G_RENDERER_ALLOCATORS.temp_allocator,
+			)
+			defer delete(supported_layers)
 			{
 				layer_count: u32
 				vk.EnumerateInstanceLayerProperties(&layer_count, nil)
@@ -219,8 +226,6 @@ when USE_VULKAN_BACKEND {
 			using G_RENDERER
 			using G_RENDERER_ALLOCATORS
 
-			defer mem.free_all(temp_allocator)
-
 			physical_device_count: u32
 			vk.EnumeratePhysicalDevices(instance, &physical_device_count, nil)
 			if physical_device_count == 0 {
@@ -228,7 +233,12 @@ when USE_VULKAN_BACKEND {
 				return false
 			}
 
-			physical_devices := make([]vk.PhysicalDevice, physical_device_count, temp_allocator)
+			physical_devices := make(
+				[]vk.PhysicalDevice,
+				physical_device_count,
+				G_RENDERER_ALLOCATORS.temp_allocator,
+			)
+			defer delete(physical_devices, G_RENDERER_ALLOCATORS.temp_allocator)
 
 			vk.EnumeratePhysicalDevices(
 				instance,
@@ -243,7 +253,12 @@ when USE_VULKAN_BACKEND {
 				extension_count: u32
 				vk.EnumerateDeviceExtensionProperties(pd, nil, &extension_count, nil)
 
-				extensions := make([]vk.ExtensionProperties, extension_count)
+				extensions := make(
+					[]vk.ExtensionProperties,
+					extension_count,
+					G_RENDERER_ALLOCATORS.temp_allocator,
+				)
+				defer delete(extensions, G_RENDERER_ALLOCATORS.temp_allocator)
 				vk.EnumerateDeviceExtensionProperties(pd, nil, &extension_count, raw_data(extensions))
 
 				requied_extensions := true
@@ -276,7 +291,11 @@ when USE_VULKAN_BACKEND {
 					continue
 				}
 
-				formats := make([]vk.SurfaceFormatKHR, int(format_count))
+				formats := make(
+					[]vk.SurfaceFormatKHR,
+					int(format_count),
+					G_RENDERER_ALLOCATORS.main_allocator,
+				)
 				vk.GetPhysicalDeviceSurfaceFormatsKHR(pd, surface, &format_count, raw_data(formats))
 
 				// supported present modes
@@ -286,7 +305,11 @@ when USE_VULKAN_BACKEND {
 					continue
 				}
 
-				present_modes := make([]vk.PresentModeKHR, int(present_mode_count))
+				present_modes := make(
+					[]vk.PresentModeKHR,
+					int(present_mode_count),
+					G_RENDERER_ALLOCATORS.main_allocator,
+				)
 				vk.GetPhysicalDeviceSurfacePresentModesKHR(
 					pd,
 					surface,
@@ -301,8 +324,9 @@ when USE_VULKAN_BACKEND {
 				queue_families := make(
 					[]vk.QueueFamilyProperties,
 					int(queue_family_count),
-					temp_allocator,
+					G_RENDERER_ALLOCATORS.temp_allocator,
 				)
+
 				vk.GetPhysicalDeviceQueueFamilyProperties(
 					pd,
 					&queue_family_count,
@@ -399,31 +423,44 @@ when USE_VULKAN_BACKEND {
 			using G_RENDERER
 			using G_RENDERER_ALLOCATORS
 
-			defer mem.free_all(temp_allocator)
-
 			// Avoid creating duplicates
-			queue_families := make(map[u32]int, 4, temp_allocator)
+			queue_families := make(map[u32]int, 4, G_RENDERER_ALLOCATORS.temp_allocator)
+			defer delete(queue_families)
 			queue_families[queue_family_graphics_index] += 1
 			queue_families[queue_family_present_index] += 1
 			queue_families[queue_family_compute_index] += 1
 			queue_families[queue_family_transfer_index] += 1
 
-			queue_priorities := make([]f32, len(queue_families))
+			queue_priorities := make(
+				[]f32,
+				len(queue_families),
+				G_RENDERER_ALLOCATORS.temp_allocator,
+			)
+			defer delete(queue_priorities, G_RENDERER_ALLOCATORS.temp_allocator)
+
 			for qfc in 0 ..< len(queue_families) {
 				queue_families[u32(qfc)] = 1.0
 			}
 
-			queue_create_infos: [dynamic]vk.DeviceQueueCreateInfo
-			for family, count in &queue_families {
-				append(
-					&queue_create_infos,
-					vk.DeviceQueueCreateInfo{
-						sType = .DEVICE_QUEUE_CREATE_INFO,
+			queue_create_infos := make(
+				[]vk.DeviceQueueCreateInfo,
+				len(queue_families),
+				G_RENDERER_ALLOCATORS.temp_allocator,
+			)
+			defer delete(queue_create_infos, G_RENDERER_ALLOCATORS.temp_allocator)
+
+			{
+				idx := 0
+				for family, count in &queue_families {
+					queue_create_infos[idx] = vk.DeviceQueueCreateInfo {
+						sType            = .DEVICE_QUEUE_CREATE_INFO,
 						queueFamilyIndex = u32(family),
-						queueCount = u32(count),
+						queueCount       = u32(count),
 						pQueuePriorities = raw_data(queue_priorities),
-					},
-				)
+					}
+					idx += 1
+				}
+
 			}
 
 			device_features := vk.PhysicalDeviceFeatures{}
@@ -969,4 +1006,3 @@ backend_handler_on_window_resized :: proc(p_event: WindowResizedEvent) {
 }
 
 //---------------------------------------------------------------------------//
-

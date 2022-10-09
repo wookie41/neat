@@ -51,7 +51,6 @@ when USE_VULKAN_BACKEND {
 		p_buffer_ref: BufferRef,
 		p_buffer: ^BufferResource,
 	) -> bool {
-
 		p_buffer.owning_queue_family_idx = vk.QUEUE_FAMILY_IGNORED
 
 		vk_usage: vk.BufferUsageFlags
@@ -115,9 +114,8 @@ when USE_VULKAN_BACKEND {
 
 		vk_name := strings.clone_to_cstring(
 			common.get_string(p_buffer.desc.name),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			G_RENDERER_ALLOCATORS.names_allocator,
 		)
-		defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		name_info := vk.DebugUtilsObjectNameInfoEXT {
 			sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,

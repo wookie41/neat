@@ -56,13 +56,17 @@ G_RENDERER: struct {
 
 @(private)
 G_RENDERER_ALLOCATORS: struct {
-	main_allocator:     mem.Allocator,
-	resource_arena:     mem.Arena,
-	resource_allocator: mem.Allocator,
-	temp_arena:         mem.Arena,
-	temp_allocator:     mem.Allocator,
-	frame_arena:        mem.Arena,
-	frame_allocator:    mem.Allocator,
+	main_allocator:             mem.Allocator,
+	// @TODO look for a better allocator here, but remember 
+	// that we need free internal arrays of the resource
+	temp_scratch_allocator:     mem.Scratch_Allocator,
+	temp_allocator:             mem.Allocator,
+	names_scratch_allocator:    mem.Scratch_Allocator,
+	names_allocator:            mem.Allocator,
+	resource_scratch_allocator: mem.Scratch_Allocator,
+	resource_allocator:         mem.Allocator,
+	frame_arena:                mem.Arena,
+	frame_allocator:            mem.Allocator,
 }
 
 @(private)
@@ -90,31 +94,43 @@ init :: proc(p_options: InitOptions) -> bool {
 	// Just take the current context allocator for now
 	G_RENDERER_ALLOCATORS.main_allocator = context.allocator
 
-	// Temp arena
-	mem.init_arena(
-		&G_RENDERER_ALLOCATORS.temp_arena,
-		make([]byte, common.MEGABYTE * 8, G_RENDERER_ALLOCATORS.main_allocator),
+	// Temp allocator
+	mem.scratch_allocator_init(
+		&G_RENDERER_ALLOCATORS.temp_scratch_allocator,
+		common.MEGABYTE * 8,
+		G_RENDERER_ALLOCATORS.main_allocator,
 	)
-	G_RENDERER_ALLOCATORS.temp_allocator = mem.arena_allocator(
-		&G_RENDERER_ALLOCATORS.temp_arena,
-	)
-
-	// Resource arena
-	mem.init_arena(
-		&G_RENDERER_ALLOCATORS.resource_arena,
-		make([]byte, common.MEGABYTE * 8, G_RENDERER_ALLOCATORS.main_allocator),
-	)
-	G_RENDERER_ALLOCATORS.resource_allocator = mem.arena_allocator(
-		&G_RENDERER_ALLOCATORS.resource_arena,
+	G_RENDERER_ALLOCATORS.temp_allocator = mem.scratch_allocator(
+		&G_RENDERER_ALLOCATORS.temp_scratch_allocator,
 	)
 
-	// Frame arena
-	mem.init_arena(
+	// Resource allocator
+	mem.scratch_allocator_init(
+		&G_RENDERER_ALLOCATORS.resource_scratch_allocator,
+		common.MEGABYTE * 8,
+		G_RENDERER_ALLOCATORS.main_allocator,
+	)
+	G_RENDERER_ALLOCATORS.resource_allocator = mem.scratch_allocator(
+		&G_RENDERER_ALLOCATORS.resource_scratch_allocator,
+	)
+
+	// Frame allocator
+	mem.arena_init(
 		&G_RENDERER_ALLOCATORS.frame_arena,
 		make([]byte, common.MEGABYTE * 8, G_RENDERER_ALLOCATORS.main_allocator),
 	)
 	G_RENDERER_ALLOCATORS.frame_allocator = mem.arena_allocator(
 		&G_RENDERER_ALLOCATORS.frame_arena,
+	)
+
+	// Names allocator
+	mem.scratch_allocator_init(
+		&G_RENDERER_ALLOCATORS.names_scratch_allocator,
+		common.MEGABYTE * 8,
+		G_RENDERER_ALLOCATORS.main_allocator,
+	)
+	G_RENDERER_ALLOCATORS.names_allocator = mem.scratch_allocator(
+		&G_RENDERER_ALLOCATORS.names_scratch_allocator,
 	)
 
 	G_RENDERER.queued_textures_copies = make(
@@ -128,6 +144,8 @@ init :: proc(p_options: InitOptions) -> bool {
 	setup_renderer_context()
 	backend_init(p_options) or_return
 
+	init_render_passes()
+	init_bind_groups()
 	init_pipeline_layouts()
 	init_pipelines()
 	init_buffers()
@@ -207,6 +225,7 @@ init :: proc(p_options: InitOptions) -> bool {
 		execute_queued_texture_copies()
 		end_command_buffer(cmd_buff)
 		submit_pre_render(cmd_buff)
+		vt_create_bind_groups()
 
 		// Advance the frame index when using unified queues, as we don't want to wait for the 0th
 		// command buffer to finish before we start recording the frame
@@ -222,7 +241,6 @@ init :: proc(p_options: InitOptions) -> bool {
 update :: proc(p_dt: f32) {
 	setup_renderer_context()
 
-	clear(&G_RENDERER.queued_textures_copies)
 	cmd_buff_ref := get_frame_cmd_buffer()
 
 	backend_wait_for_frame_resources()
@@ -241,6 +259,8 @@ update :: proc(p_dt: f32) {
 	submit_current_frame(cmd_buff_ref)
 
 	advance_frame_idx()
+
+	assert(len(G_RENDERER_ALLOCATORS.temp_scratch_allocator.leaked_allocations) == 0)
 }
 
 //---------------------------------------------------------------------------//
@@ -320,6 +340,7 @@ execute_queued_texture_copies :: proc() {
 	cmd_buff_ref := get_frame_cmd_buffer()
 	if len(G_RENDERER.queued_textures_copies) > 0 {
 		backend_execute_queued_texture_copies(cmd_buff_ref)
+		clear(&G_RENDERER.queued_textures_copies)
 	}
 }
 

@@ -16,7 +16,7 @@ struct PerView
     float4x4 proj;
 };
 
-[[vk::binding(0, 0)]]
+[[vk::binding(0, 1)]]
 ConstantBuffer<PerView> gPerView;
 
 float4 main(in VSInput pVertexInput, out VSOutput pVertexOutput) : SV_Position {

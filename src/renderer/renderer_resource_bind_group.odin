@@ -16,6 +16,25 @@ SamplerType :: enum {
 	LinearRepeat,
 }
 
+SamplerNames := []string{
+	"NearestClampToEdge",
+	"NearestClampToBorder",
+	"NearestRepeat",
+	"LinearClampToEdge",
+	"LinearClampToBorder",
+	"LinearRepeat",
+}
+
+//---------------------------------------------------------------------------//
+
+BindingUsageStageFlagBits :: enum u8 {
+	Vertex,
+	Fragment,
+	Compute,
+}
+
+BindingUsageStageFlags :: distinct bit_set[BindingUsageStageFlagBits;u8]
+
 //---------------------------------------------------------------------------//
 
 ImageBindingUsage :: enum u8 {
@@ -26,9 +45,10 @@ ImageBindingUsage :: enum u8 {
 //---------------------------------------------------------------------------//
 
 ImageBinding :: struct {
-	slot:  u32,
-	usage: ImageBindingUsage,
-	count: u32,
+	slot:        u32,
+	usage:       ImageBindingUsage,
+	count:       u32,
+	stage_flags: BindingUsageStageFlags,
 }
 
 //---------------------------------------------------------------------------//
@@ -36,6 +56,7 @@ ImageBinding :: struct {
 BufferBinding :: struct {
 	slot:         u32,
 	buffer_usage: BufferUsageFlagBits,
+	stage_flags:  BindingUsageStageFlags,
 }
 
 //---------------------------------------------------------------------------//
@@ -43,7 +64,7 @@ BufferBinding :: struct {
 BindGroupDesc :: struct {
 	name:    common.Name,
 	target:  u32,
-	images:   []ImageBinding,
+	images:  []ImageBinding,
 	buffers: []BufferBinding,
 }
 
