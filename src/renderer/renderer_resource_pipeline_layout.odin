@@ -29,6 +29,7 @@ PipelineLayoutDesc :: struct {
 PipelineLayoutResource :: struct {
 	using backend_layout: BackendPipelineLayoutResource,
 	desc:                 PipelineLayoutDesc,
+	bind_group_refs:       []BindGroupRef,
 }
 
 //---------------------------------------------------------------------------//
@@ -50,10 +51,7 @@ G_PIPELINE_LAYOUT_REF_ARRAY: RefArray(PipelineLayoutResource)
 
 @(private)
 init_pipeline_layouts :: proc() {
-	G_PIPELINE_LAYOUT_REF_ARRAY = create_ref_array(
-		PipelineLayoutResource,
-		MAX_PIPELINE_LAYOUTS,
-	)
+	G_PIPELINE_LAYOUT_REF_ARRAY = create_ref_array(PipelineLayoutResource, MAX_PIPELINE_LAYOUTS)
 }
 
 //---------------------------------------------------------------------------//
@@ -68,9 +66,10 @@ allocate_pipeline_layout_ref :: proc(p_name: common.Name) -> PipelineLayoutRef {
 
 //---------------------------------------------------------------------------//
 
-create_graphics_pipeline_layout :: proc(p_ref: PipelineLayoutRef) -> bool {
+create_pipeline_layout :: proc(p_ref: PipelineLayoutRef) -> bool {
 	pipeline_layout := get_pipeline_layout(p_ref)
-	if backend_reflect_graphics_pipeline_layout(p_ref, pipeline_layout) == false {
+
+	if backend_create_pipeline_layout(pipeline_layout) == false {
 		free_ref(PipelineLayoutResource, &G_PIPELINE_LAYOUT_REF_ARRAY, p_ref)
 		return false
 	}
@@ -87,9 +86,22 @@ get_pipeline_layout :: proc(p_ref: PipelineLayoutRef) -> ^PipelineLayoutResource
 //---------------------------------------------------------------------------//
 
 destroy_pipeline_layout :: proc(p_ref: PipelineLayoutRef) {
-	backend_destroy_pipeline_layout(get_pipeline_layout(p_ref))
+	pipeline_layout := get_pipeline_layout(p_ref)
+	destroy_bind_groups(pipeline_layout.bind_group_refs)
+	delete(pipeline_layout.bind_group_refs, G_RENDERER_ALLOCATORS.resource_allocator)
+	backend_destroy_pipeline_layout(pipeline_layout)
 	free_ref(PipelineLayoutResource, &G_PIPELINE_LAYOUT_REF_ARRAY, p_ref)
+	destroy_bind_groups(pipeline_layout.bind_group_refs)
+}
 
+//---------------------------------------------------------------------------//
+
+create_bind_groups_for_pipeline_layout :: #force_inline proc(
+	p_pipeline_layout_ref: PipelineLayoutRef,
+	p_out_bind_groups: []BindGroupRef,
+) -> bool {
+	pipeline_layout := get_pipeline_layout(p_pipeline_layout_ref)
+	return clone_bind_groups(pipeline_layout.bind_group_refs, p_out_bind_groups)
 }
 
 //---------------------------------------------------------------------------//

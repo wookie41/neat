@@ -5,6 +5,8 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	import "core:log"
+	import "core:slice"
+
 	import vk "vendor:vulkan"
 
 	//---------------------------------------------------------------------------//
@@ -20,15 +22,12 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_reflect_graphics_pipeline_layout :: proc(
-		p_ref: PipelineLayoutRef,
-		p_layout: ^PipelineLayoutResource,
-	) -> bool {
+	backend_create_pipeline_layout :: proc(p_layout: ^PipelineLayoutResource) -> bool {
 
 		vert_shader := get_shader(p_layout.desc.vert_shader_ref)
 		frag_shader := get_shader(p_layout.desc.frag_shader_ref)
 
-		// Determine the number of distinct descriptor sets used across vertex and fragment shader
+		// Determine the number of distinct descriptor sets used across 
 		num_descriptor_sets_used := len(vert_shader.vk_descriptor_sets)
 		for frag_descriptor_set in frag_shader.vk_descriptor_sets {
 			for vert_descriptor_set in vert_shader.vk_descriptor_sets {
@@ -40,7 +39,7 @@ when USE_VULKAN_BACKEND {
 		}
 
 		bindings_per_set := make(
-			map[uint][dynamic]vk.DescriptorSetLayoutBinding,
+			map[u8][dynamic]vk.DescriptorSetLayoutBinding,
 			num_descriptor_sets_used,
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
@@ -55,7 +54,7 @@ when USE_VULKAN_BACKEND {
 		// Gather vertex shader descriptor info
 		for descriptor_set in &vert_shader.vk_descriptor_sets {
 
-			set_number := uint(descriptor_set.set)
+			set_number := descriptor_set.set
 			if (set_number in bindings_per_set) == false {
 				bindings_per_set[set_number] = make(
 					[dynamic]vk.DescriptorSetLayoutBinding,
@@ -84,7 +83,7 @@ when USE_VULKAN_BACKEND {
 		// Gather fragment shader descriptor info
 		for descriptor_set in frag_shader.vk_descriptor_sets {
 
-			set_number := uint(descriptor_set.set)
+			set_number := descriptor_set.set
 			if (set_number in bindings_per_set) == false {
 				bindings_per_set[set_number] = make(
 					[dynamic]vk.DescriptorSetLayoutBinding,
@@ -137,9 +136,20 @@ when USE_VULKAN_BACKEND {
 			delete(descriptor_set_layouts, G_RENDERER_ALLOCATORS.temp_allocator)
 		}
 
-		// Create the descriptor set layout
+		// Create the descriptor set layout and the bind groups
 		{
+			p_layout.bind_group_refs = make(
+				[]BindGroupRef,
+				len(bindings_per_set) - 1, // Set 0 is reserved for samplers and texture array
+				G_RENDERER_ALLOCATORS.resource_allocator,
+			)
+			for i in 0 ..< len(p_layout.bind_group_refs) {
+				p_layout.bind_group_refs[i] = allocate_bind_group_ref(p_layout.desc.name)
+			}
+			bind_group_idx := 0
 			for set in bindings_per_set {
+
+				// Descriptor set
 				descriptor_set_bindings := bindings_per_set[set]
 				create_info := vk.DescriptorSetLayoutCreateInfo {
 					sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -152,11 +162,101 @@ when USE_VULKAN_BACKEND {
 					   &create_info,
 					   nil,
 					   &descriptor_set_layouts[set],
-				   ) != .SUCCESS {
+				   ) !=
+				   .SUCCESS {
 					log.warn("Failed to create descriptor set layout")
 					return false
 				}
+
+				image_bindings := make([dynamic]ImageBinding, G_RENDERER_ALLOCATORS.temp_allocator)
+				defer delete(image_bindings)
+
+				buffer_bindings := make(
+					[dynamic]BufferBinding,
+					G_RENDERER_ALLOCATORS.temp_allocator,
+				)
+				defer delete(buffer_bindings)
+
+				for descriptor in descriptor_set_bindings {
+
+					stage_flags: BindingUsageStageFlags
+					if .VERTEX in descriptor.stageFlags {
+						stage_flags += {.Vertex}
+					}
+					if .FRAGMENT in descriptor.stageFlags {
+						stage_flags += {.Fragment}
+					}
+					if .COMPUTE in descriptor.stageFlags {
+						stage_flags += {.Compute}
+					}
+
+					if descriptor.descriptorType == .SAMPLED_IMAGE {
+						image_binding := ImageBinding {
+							count       = descriptor.descriptorCount,
+							slot        = descriptor.binding,
+							stage_flags = stage_flags,
+							usage       = .SampledImage,
+						}
+						append(&image_bindings, image_binding)
+					} else if descriptor.descriptorType == .STORAGE_IMAGE {
+						image_binding := ImageBinding {
+							count       = descriptor.descriptorCount,
+							slot        = descriptor.binding,
+							stage_flags = stage_flags,
+							usage       = .StorageImage,
+						}
+						append(&image_bindings, image_binding)
+					} else if descriptor.descriptorType == .UNIFORM_BUFFER {
+						buffer_binding := BufferBinding {
+							slot         = descriptor.binding,
+							stage_flags  = stage_flags,
+							buffer_usage = .UniformBuffer,
+						}
+						append(&buffer_bindings, buffer_binding)
+					} else if descriptor.descriptorType == .UNIFORM_BUFFER_DYNAMIC {
+						buffer_binding := BufferBinding {
+							slot         = descriptor.binding,
+							stage_flags  = stage_flags,
+							buffer_usage = .DynamicUniformBuffer,
+						}
+						append(&buffer_bindings, buffer_binding)
+					} else if descriptor.descriptorType == .STORAGE_BUFFER {
+						buffer_binding := BufferBinding {
+							slot         = descriptor.binding,
+							stage_flags  = stage_flags,
+							buffer_usage = .StorageBuffer,
+						}
+						append(&buffer_bindings, buffer_binding)
+					} else if descriptor.descriptorType == .STORAGE_BUFFER_DYNAMIC {
+						buffer_binding := BufferBinding {
+							slot         = descriptor.binding,
+							stage_flags  = stage_flags,
+							buffer_usage = .DynamicStorageBuffer,
+						}
+						append(&buffer_bindings, buffer_binding)
+					} else if descriptor.descriptorType != .SAMPLER {
+						assert(false, "Unsupported binding type")
+					}
+				}
+
+				// Set 0 is reserved for samplers and texture array
+				if set != 0 {
+					bind_group := get_bind_group(p_layout.bind_group_refs[bind_group_idx])
+					bind_group_idx += 1
+
+
+					bind_group.desc.images = slice.clone(
+						image_bindings[:],
+						G_RENDERER_ALLOCATORS.resource_allocator,
+					)
+					bind_group.desc.buffers = slice.clone(
+						buffer_bindings[:],
+						G_RENDERER_ALLOCATORS.resource_allocator,
+					)
+				}
+
 			}
+			create_bind_groups(p_layout.bind_group_refs)
 		}
 
 		// Create pipeline layout
@@ -172,7 +272,8 @@ when USE_VULKAN_BACKEND {
 				   &create_info,
 				   nil,
 				   &p_layout.vk_pipeline_layout,
-			   ) != .SUCCESS {
+			   ) !=
+			   .SUCCESS {
 				log.warn("Failed to create pipeline layout")
 				return false
 			}

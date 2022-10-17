@@ -201,3 +201,18 @@ bind_bind_groups :: proc(
 }
 
 //---------------------------------------------------------------------------//
+
+/** 
+* Returns a new bind group based on layout of the provided bind group. 
+* The bind group will be uninitialized, so the user must call update_bind_groups() for it
+*/
+clone_bind_groups :: proc(p_bind_group_refs: []BindGroupRef, p_out_bind_groups: []BindGroupRef) -> bool {
+	assert(len(p_bind_group_refs) == len(p_out_bind_groups))
+	for i in 0..<len(p_bind_group_refs) {
+		p_out_bind_groups[i] = allocate_bind_group_ref(p_bind_group_refs[i].name)
+		get_bind_group(p_out_bind_groups[i]).desc = get_bind_group(p_out_bind_groups[i]).desc
+	}
+	return backend_clone_bind_groups(p_bind_group_refs, p_out_bind_groups)
+}
+
+//---------------------------------------------------------------------------//

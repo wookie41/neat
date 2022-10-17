@@ -182,60 +182,27 @@ vt_pre_render :: proc() {
 vt_create_bind_groups :: proc() {
 	using G_RENDERER
 	using G_VT
-	// Create the bind group
+	// Create the bind groups
 	{
-		// Two bind groups per frame just to test multiple groups
-		texture_bind_group_ref = allocate_bind_group_ref(
-			common.create_name("Vulkan Tutorial texture bind group"),
-		)
+		ubo_bind_group_refs = make([]BindGroupRef, num_frames_in_flight, G_RENDERER_ALLOCATORS.main_allocator)
+		refs := []BindGroupRef { InvalidBindGroupRef, InvalidBindGroupRef }
+		create_bind_groups_for_pipeline(pipeline_ref, refs)
+		ubo_bind_group_refs[0] = refs[0]
+		texture_bind_group_ref = refs[1]
 
-		{
-			texture_bind_group_desc := &get_bind_group(texture_bind_group_ref).desc
-			texture_bind_group_desc.images = make(
-				[]ImageBinding,
-				1,
-				G_RENDERER_ALLOCATORS.resource_allocator,
-			)
-			texture_bind_group_desc.images[0].count = 1
-			texture_bind_group_desc.images[0].slot = 1
-			texture_bind_group_desc.images[0].usage = .SampledImage
-			texture_bind_group_desc.images[0].stage_flags = {.Fragment}
-		}
-
-
-		ubo_bind_group_refs = make(
-			[]BindGroupRef,
-			num_frames_in_flight,
-			G_RENDERER_ALLOCATORS.main_allocator,
-		)
-		for bind_group_ref, i in &ubo_bind_group_refs {
-			bind_group_ref = allocate_bind_group_ref(
-				common.create_name("Vulkan Tutorial ubo bind group"),
-			)
-			bind_group_desc := &get_bind_group(bind_group_ref).desc
-
-			bind_group_desc.buffers = make(
-				[]BufferBinding,
-				1,
-				G_RENDERER_ALLOCATORS.resource_allocator,
-			)
-
-			bind_group_desc.buffers[0].slot = 0
-			bind_group_desc.buffers[0].buffer_usage = .UniformBuffer
-			bind_group_desc.buffers[0].stage_flags = {.Vertex}
-
+		// @TODO replace this ugly thing with dynamic offsets
+		for i in 1..<num_frames_in_flight {
+			clone := []BindGroupRef { InvalidBindGroupRef}
+			clone_bind_groups({ubo_bind_group_refs[0]}, clone)
+			ubo_bind_group_refs[i] = clone[0]
 		}
 	}
-
-	create_bind_groups({texture_bind_group_ref})
-	create_bind_groups(ubo_bind_group_refs)
 
 	// Create the bind group bindings
 	{
 		bind_group_bindings = make([]BindGroupBinding, 2, G_RENDERER_ALLOCATORS.main_allocator)
 		bind_group_bindings[1].bind_group_ref = texture_bind_group_ref
 	}
-
 
 	// Update the bind groups
 	{

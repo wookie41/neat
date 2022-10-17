@@ -273,7 +273,7 @@ when USE_VULKAN_BACKEND {
 		pipeline_layout.desc.vert_shader_ref = p_pipeline.desc.vert_shader
 		pipeline_layout.desc.frag_shader_ref = p_pipeline.desc.frag_shader
 
-		if !create_graphics_pipeline_layout(p_pipeline.pipeline_layout_ref) {
+		if !create_pipeline_layout(p_pipeline.pipeline_layout_ref) {
 			log.warnf("Failed to create pipeline layout when creating the pipeline")
 			return false
 		}

@@ -173,3 +173,13 @@ bind_pipeline :: proc(p_pipeline_ref: PipelineRef, p_cmd_buff_ref: CommandBuffer
 }
 
 //---------------------------------------------------------------------------//
+
+create_bind_groups_for_pipeline :: #force_inline proc(
+	p_pipeline_ref: PipelineRef,
+	p_out_bind_groups: []BindGroupRef,
+) -> bool {
+	pipeline := get_pipeline(p_pipeline_ref)
+	return create_bind_groups_for_pipeline_layout(pipeline.pipeline_layout_ref, p_out_bind_groups)
+}
+
+//---------------------------------------------------------------------------//

@@ -26,7 +26,8 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	BackendBindGroupResource :: struct {
-		vk_descriptor_set: vk.DescriptorSet,
+		vk_descriptor_set_layout: vk.DescriptorSetLayout,
+		vk_descriptor_set:        vk.DescriptorSet,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -94,34 +95,19 @@ when USE_VULKAN_BACKEND {
 				mipmapMode   = .LINEAR,
 			}
 
-			vk.CreateSampler(
-				G_RENDERER.device,
-				&sampler_create_info,
-				nil,
-				&IMMUTABLE_SAMPLERS[0],
-			)
+			vk.CreateSampler(G_RENDERER.device, &sampler_create_info, nil, &IMMUTABLE_SAMPLERS[0])
 
 			sampler_create_info.addressModeU = .CLAMP_TO_BORDER
 			sampler_create_info.addressModeV = .CLAMP_TO_BORDER
 			sampler_create_info.addressModeW = .CLAMP_TO_BORDER
 
-			vk.CreateSampler(
-				G_RENDERER.device,
-				&sampler_create_info,
-				nil,
-				&IMMUTABLE_SAMPLERS[1],
-			)
+			vk.CreateSampler(G_RENDERER.device, &sampler_create_info, nil, &IMMUTABLE_SAMPLERS[1])
 
 			sampler_create_info.addressModeU = .REPEAT
 			sampler_create_info.addressModeV = .REPEAT
 			sampler_create_info.addressModeW = .REPEAT
 
-			vk.CreateSampler(
-				G_RENDERER.device,
-				&sampler_create_info,
-				nil,
-				&IMMUTABLE_SAMPLERS[2],
-			)
+			vk.CreateSampler(G_RENDERER.device, &sampler_create_info, nil, &IMMUTABLE_SAMPLERS[2])
 
 			sampler_create_info.magFilter = .LINEAR
 			sampler_create_info.minFilter = .LINEAR
@@ -130,34 +116,19 @@ when USE_VULKAN_BACKEND {
 			sampler_create_info.addressModeV = .CLAMP_TO_EDGE
 			sampler_create_info.addressModeW = .CLAMP_TO_EDGE
 
-			vk.CreateSampler(
-				G_RENDERER.device,
-				&sampler_create_info,
-				nil,
-				&IMMUTABLE_SAMPLERS[3],
-			)
+			vk.CreateSampler(G_RENDERER.device, &sampler_create_info, nil, &IMMUTABLE_SAMPLERS[3])
 
 			sampler_create_info.addressModeU = .CLAMP_TO_BORDER
 			sampler_create_info.addressModeV = .CLAMP_TO_BORDER
 			sampler_create_info.addressModeW = .CLAMP_TO_BORDER
 
-			vk.CreateSampler(
-				G_RENDERER.device,
-				&sampler_create_info,
-				nil,
-				&IMMUTABLE_SAMPLERS[4],
-			)
+			vk.CreateSampler(G_RENDERER.device, &sampler_create_info, nil, &IMMUTABLE_SAMPLERS[4])
 
 			sampler_create_info.addressModeU = .REPEAT
 			sampler_create_info.addressModeV = .REPEAT
 			sampler_create_info.addressModeW = .REPEAT
 
-			vk.CreateSampler(
-				G_RENDERER.device,
-				&sampler_create_info,
-				nil,
-				&IMMUTABLE_SAMPLERS[5],
-			)
+			vk.CreateSampler(G_RENDERER.device, &sampler_create_info, nil, &IMMUTABLE_SAMPLERS[5])
 		}
 
 		// Create samplers descriptor set
@@ -218,7 +189,8 @@ when USE_VULKAN_BACKEND {
 				   &descriptor_set_layout_create_info,
 				   nil,
 				   &INTERNAL.samplers_descriptor_set_layout,
-			   ) != .SUCCESS {
+			   ) !=
+			   .SUCCESS {
 
 				// @TODO We should delete stuff from INTERNAL here, 
 				// but we're still gonna shut down the renderer, so screw it for now
@@ -236,7 +208,8 @@ when USE_VULKAN_BACKEND {
 				   G_RENDERER.device,
 				   &allocate_info,
 				   &INTERNAL.samplers_descriptor_set,
-			   ) != .SUCCESS {
+			   ) !=
+			   .SUCCESS {
 				// @TODO We should delete stuff from INTERNAL here, 
 				// but we're still gonna shut down the renderer, so screw it for now
 				return false
@@ -253,7 +226,7 @@ when USE_VULKAN_BACKEND {
 			len(p_ref_array),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
-		defer delete(descriptor_set_layouts,G_RENDERER_ALLOCATORS.temp_allocator)
+		defer delete(descriptor_set_layouts, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		for ref, layout_idx in p_ref_array {
 			bind_group := get_bind_group(ref)
@@ -261,7 +234,9 @@ when USE_VULKAN_BACKEND {
 
 			// Use an existing layout if we have one
 			if bind_group_hash in INTERNAL.descriptor_layouts_cache {
-				descriptor_set_layouts[layout_idx] = INTERNAL.descriptor_layouts_cache[bind_group_hash]
+				bind_group.vk_descriptor_set_layout =
+					INTERNAL.descriptor_layouts_cache[bind_group_hash]
+				descriptor_set_layouts[layout_idx] = bind_group.vk_descriptor_set_layout
 				continue
 			}
 
@@ -294,14 +269,14 @@ when USE_VULKAN_BACKEND {
 
 					if .Vertex in image_binding.stage_flags {
 						bindings[binding_idx].stageFlags += {.VERTEX}
-					} 
+					}
 					if .Fragment in image_binding.stage_flags {
 						bindings[binding_idx].stageFlags += {.FRAGMENT}
 					}
 					if .Compute in image_binding.stage_flags {
 						bindings[binding_idx].stageFlags += {.COMPUTE}
 					}
-					
+
 					binding_idx += 1
 				}
 
@@ -322,7 +297,7 @@ when USE_VULKAN_BACKEND {
 
 					if .Vertex in buffer_binding.stage_flags {
 						bindings[binding_idx].stageFlags += {.VERTEX}
-					} 
+					}
 					if .Fragment in buffer_binding.stage_flags {
 						bindings[binding_idx].stageFlags += {.FRAGMENT}
 					}
@@ -345,9 +320,11 @@ when USE_VULKAN_BACKEND {
 					G_RENDERER.device,
 					&create_info,
 					nil,
-					&descriptor_set_layouts[layout_idx],
+					&bind_group.vk_descriptor_set_layout,
 				)
 				assert(res == .SUCCESS) // @TODO
+
+				descriptor_set_layouts[layout_idx] = bind_group.vk_descriptor_set_layout
 			}
 		}
 
@@ -453,11 +430,7 @@ when USE_VULKAN_BACKEND {
 		}
 
 		// Create a joint dynamic offsets array
-		dynamic_offsets := make(
-			[]u32,
-			dynamic_offsets_count,
-			G_RENDERER_ALLOCATORS.temp_allocator,
-		)
+		dynamic_offsets := make([]u32, dynamic_offsets_count, G_RENDERER_ALLOCATORS.temp_allocator)
 		defer delete(dynamic_offsets, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		{
@@ -541,7 +514,13 @@ when USE_VULKAN_BACKEND {
 		defer delete(descriptor_sets_to_free, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		for ref, i in p_ref_array {
-			descriptor_sets_to_free[i] = get_bind_group(ref).vk_descriptor_set
+			bind_group := get_bind_group(ref)
+			descriptor_sets_to_free[i] = bind_group.vk_descriptor_set
+			vk.DestroyDescriptorSetLayout(
+				G_RENDERER.device,
+				bind_group.vk_descriptor_set_layout,
+				nil,
+			)
 		}
 
 		vk.FreeDescriptorSets(
@@ -617,7 +596,7 @@ when USE_VULKAN_BACKEND {
 				} else if .DynamicStorageBuffer in buffer.desc.usage {
 					descriptor_writes[write_idx].descriptorType = .STORAGE_BUFFER_DYNAMIC
 				} else {
-					assert(false) // Probably added ad new flag bit and forgot to handle it here
+					assert(false) // Probably added a new flag bit and forgot to handle it here
 				}
 
 				buffer_info_idx += 1
@@ -628,7 +607,8 @@ when USE_VULKAN_BACKEND {
 				image := get_image(image_update.image_ref)
 
 				image_writes[image_info_idx].imageView = image.per_mip_vk_view[image_update.mip]
-				image_writes[image_info_idx].imageLayout = image.vk_layout_per_mip[image_update.mip]
+				image_writes[image_info_idx].imageLayout =
+					image.vk_layout_per_mip[image_update.mip]
 
 				descriptor_writes[write_idx].sType = .WRITE_DESCRIPTOR_SET
 				descriptor_writes[write_idx].descriptorCount = 1
@@ -642,7 +622,67 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
-		vk.UpdateDescriptorSets(G_RENDERER.device, u32(len(descriptor_writes)), raw_data(descriptor_writes), 0, nil)
+		vk.UpdateDescriptorSets(
+			G_RENDERER.device,
+			u32(len(descriptor_writes)),
+			raw_data(descriptor_writes),
+			0,
+			nil,
+		)
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_clone_bind_groups :: proc(
+		p_original_bind_group_refs: []BindGroupRef,
+		p_cloned_bind_group_refs: []BindGroupRef,
+	) -> bool {
+		// @TODO handle descriptor layout cache
+		set_layouts := make(
+			[]vk.DescriptorSetLayout,
+			len(p_cloned_bind_group_refs),
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+		defer delete(set_layouts, G_RENDERER_ALLOCATORS.temp_allocator)
+		
+		descriptor_sets := make(
+			[]vk.DescriptorSet,
+			len(p_cloned_bind_group_refs),
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+		defer delete(set_layouts, G_RENDERER_ALLOCATORS.temp_allocator)
+
+		for i in 0 ..< len(p_original_bind_group_refs) {
+			original_bind_group := get_bind_group(p_original_bind_group_refs[i])
+			cloned_bind_group := get_bind_group(p_cloned_bind_group_refs[i])
+
+			cloned_bind_group.vk_descriptor_set_layout =
+				original_bind_group.vk_descriptor_set_layout
+
+			set_layouts[i] = cloned_bind_group.vk_descriptor_set_layout
+		}
+
+		allocate_descriptor_set_info := vk.DescriptorSetAllocateInfo {
+			sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
+			descriptorPool     = INTERNAL.descriptor_pool,
+			descriptorSetCount = u32(len(set_layouts)),
+			pSetLayouts        = raw_data(set_layouts),
+		}
+
+		res := vk.AllocateDescriptorSets(
+			G_RENDERER.device,
+			&allocate_descriptor_set_info,
+			raw_data(descriptor_sets),
+		)
+		assert(res == .SUCCESS) // @TODO
+
+		for bind_group_ref, i in p_cloned_bind_group_refs {
+			get_bind_group(bind_group_ref).vk_descriptor_set = descriptor_sets[i]
+		}
+
+		return true
 	}
 	//---------------------------------------------------------------------------//
+
 }
