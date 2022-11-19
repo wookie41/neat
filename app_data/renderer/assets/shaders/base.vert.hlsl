@@ -17,13 +17,13 @@ struct PerView
 };
 
 [[vk::binding(0, 1)]]
-ConstantBuffer<PerView> gPerView;
+ConstantBuffer<PerView> gPerView_Dynamic;
 
 float4 main(in VSInput pVertexInput, out VSOutput pVertexOutput) : SV_Position {
     pVertexOutput.fragColor = pVertexInput.color;
     pVertexOutput.uv = pVertexInput.uv;
-    return mul(gPerView.proj, 
-        mul(gPerView.view, 
-        mul(gPerView.model, 
+    return mul(gPerView_Dynamic.proj, 
+        mul(gPerView_Dynamic.view, 
+        mul(gPerView_Dynamic.model, 
         float4(pVertexInput.position, 1.0))));
 }

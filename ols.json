@@ -2,11 +2,11 @@
     "collections": [
         {
             "name": "core",
-            "path": "A:\\Tools\\Odin\\core"
+            "path": "C:\\Projects\\Odin\\core"
         },
         {
             "name": "vendor",
-            "path": "A:\\Tools\\Odin\\vendor"
+            "path": "C:\\Projects\\Odin\\vendor"
         }
     ],
     "enable_document_symbols": true,

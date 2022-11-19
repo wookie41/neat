@@ -14,7 +14,7 @@ import assimp "../third_party/assimp"
 import "../common"
 
 G_VT: struct {
-	ubo_refs:                 []BufferRef,
+	ubo_ref:                  BufferRef,
 	vertex_buffer_ref:        BufferRef,
 	index_buffer_ref:         BufferRef,
 	start_time:               time.Time,
@@ -27,7 +27,7 @@ G_VT: struct {
 	pipeline_ref:             PipelineRef,
 	depth_buffer_attachment:  DepthAttachment,
 	render_target_bindings:   []RenderTargetBinding,
-	ubo_bind_group_refs:      []BindGroupRef,
+	ubo_bind_group_ref:       BindGroupRef,
 	texture_bind_group_ref:   BindGroupRef,
 	bind_group_bindings:      []BindGroupBinding,
 }
@@ -145,7 +145,9 @@ init_vt :: proc() -> bool {
 
 			vertex_shader_ref := find_shader_by_name(common.create_name("base.vert"))
 			fragment_shader_ref := find_shader_by_name(common.create_name("base.frag"))
-			pipeline_ref = allocate_pipeline_ref(common.create_name("Vulkan Tutorial Pipeline"))
+			pipeline_ref = allocate_pipeline_ref(
+				common.create_name("Vulkan Tutorial Pipeline"),
+			)
 			get_pipeline(pipeline_ref).desc = {
 				name               = common.create_name("Vulkan Tutorial Pipe"),
 				vert_shader        = vertex_shader_ref,
@@ -160,7 +162,7 @@ init_vt :: proc() -> bool {
 			create_graphics_pipeline(pipeline_ref)
 		}
 
-		vt_create_uniform_buffers()
+		vt_create_uniform_buffer()
 		vt_load_model()
 
 		return true
@@ -182,76 +184,47 @@ vt_pre_render :: proc() {
 vt_create_bind_groups :: proc() {
 	using G_RENDERER
 	using G_VT
+
 	// Create the bind groups
 	{
-		ubo_bind_group_refs = make([]BindGroupRef, num_frames_in_flight, G_RENDERER_ALLOCATORS.main_allocator)
-		refs := []BindGroupRef { InvalidBindGroupRef, InvalidBindGroupRef }
+		refs := []BindGroupRef{InvalidBindGroupRef, InvalidBindGroupRef}
 		create_bind_groups_for_pipeline(pipeline_ref, refs)
-		ubo_bind_group_refs[0] = refs[0]
-		texture_bind_group_ref = refs[1]
 
-		// @TODO replace this ugly thing with dynamic offsets
-		for i in 1..<num_frames_in_flight {
-			clone := []BindGroupRef { InvalidBindGroupRef}
-			clone_bind_groups({ubo_bind_group_refs[0]}, clone)
-			ubo_bind_group_refs[i] = clone[0]
-		}
+		ubo_bind_group_ref = refs[0]
+		texture_bind_group_ref = refs[1]
 	}
 
 	// Create the bind group bindings
 	{
-		bind_group_bindings = make([]BindGroupBinding, 2, G_RENDERER_ALLOCATORS.main_allocator)
+		bind_group_bindings = make(
+			[]BindGroupBinding,
+			2,
+			G_RENDERER_ALLOCATORS.main_allocator,
+		)
+		bind_group_bindings[0].bind_group_ref = ubo_bind_group_ref
 		bind_group_bindings[1].bind_group_ref = texture_bind_group_ref
 	}
 
 	// Update the bind groups
 	{
-		bind_group_updates := make(
-			[]BindGroupUpdate,
-			num_frames_in_flight + 1,
-			G_RENDERER_ALLOCATORS.temp_allocator,
-		)
-		defer delete(bind_group_updates, G_RENDERER_ALLOCATORS.temp_allocator)
-
-		ubo_updates := make(
-			[]BindGroupBufferUpdate,
-			num_frames_in_flight,
-			G_RENDERER_ALLOCATORS.temp_allocator,
-		)
-		defer delete(ubo_updates, G_RENDERER_ALLOCATORS.temp_allocator)
-
-		texture_image_update := BindGroupImageUpdate {
-			image_ref = texture_image_ref,
-			mip       = 0,
-			slot      = 1,
+		ubo_bind_group_update := BindGroupUpdate {
+			bind_group_ref = ubo_bind_group_ref,
+			buffer_updates = {
+				{
+					slot = 0,
+					buffer = ubo_ref,
+					offset = 0,
+					size = size_of(UniformBufferObject) * num_frames_in_flight,
+				},
+			},
 		}
 
-		bind_group_updates[0] = BindGroupUpdate {
+		texture_bind_group_update := BindGroupUpdate {
 			bind_group_ref = texture_bind_group_ref,
-			image_updates = {texture_image_update},
+			image_updates = {{image_ref = texture_image_ref, mip = 0, slot = 1}},
 		}
 
-		for ubo_update, i in &ubo_updates {
-			ubo_update = BindGroupBufferUpdate {
-				slot   = 0,
-				buffer = ubo_refs[i],
-				offset = 0,
-				size   = size_of(UniformBufferObject),
-			}
-
-			bind_group_updates[i + 1].bind_group_ref = ubo_bind_group_refs[i]
-			bind_group_updates[i + 1].buffer_updates = make(
-				[]BindGroupBufferUpdate,
-				1,
-				G_RENDERER_ALLOCATORS.temp_allocator,
-			)
-			bind_group_updates[i + 1].buffer_updates[0] = ubo_update
-		}
-		update_bind_groups(bind_group_updates)
-
-		for i in 1 ..<len(bind_group_updates) {
-			delete(bind_group_updates[i].buffer_updates, G_RENDERER_ALLOCATORS.temp_allocator)
-		}
+		update_bind_groups({ubo_bind_group_update, texture_bind_group_update})
 	}
 }
 
@@ -262,11 +235,8 @@ deinit_vt :: proc() {
 	vk.DestroySampler(device, texture_sampler, nil)
 	vk.DestroyImageView(device, texture_image_view, nil)
 	destroy_image(texture_image_ref)
-	for ubo_ref in ubo_refs {
-		destroy_buffer(ubo_ref)
-	}
-	destroy_bind_groups({texture_bind_group_ref})
-	destroy_bind_groups(ubo_bind_group_refs)
+	destroy_buffer(ubo_ref)
+	destroy_bind_groups({texture_bind_group_ref, ubo_bind_group_ref})
 	destroy_buffer(vertex_buffer_ref)
 	destroy_buffer(index_buffer_ref)
 }
@@ -290,7 +260,9 @@ vt_update :: proc(
 
 	begin_render_pass(render_pass_ref, p_cmd_buff_ref, &begin_info)
 	{
-		bind_group_bindings[0].bind_group_ref = ubo_bind_group_refs[p_frame_idx]
+		bind_group_bindings[0].dynamic_offsets = {
+			size_of(UniformBufferObject) * get_frame_idx(),
+		}
 
 		bind_pipeline(pipeline_ref, p_cmd_buff_ref)
 		bind_bind_groups(p_cmd_buff_ref, pipeline_ref, bind_group_bindings, 0)
@@ -299,8 +271,19 @@ vt_update :: proc(
 
 		vertex_buffer := get_buffer(vertex_buffer_ref)
 		index_buffer := get_buffer(index_buffer_ref)
-		vk.CmdBindVertexBuffers(p_cmd_buff.vk_cmd_buff, 0, 1, &vertex_buffer.vk_buffer, &offset)
-		vk.CmdBindIndexBuffer(p_cmd_buff.vk_cmd_buff, index_buffer.vk_buffer, offset, .UINT32)
+		vk.CmdBindVertexBuffers(
+			p_cmd_buff.vk_cmd_buff,
+			0,
+			1,
+			&vertex_buffer.vk_buffer,
+			&offset,
+		)
+		vk.CmdBindIndexBuffer(
+			p_cmd_buff.vk_cmd_buff,
+			index_buffer.vk_buffer,
+			offset,
+			.UINT32,
+		)
 		vk.CmdDrawIndexed(p_cmd_buff.vk_cmd_buff, u32(len(g_indices)), 1, 0, 0, 0)
 		// vk.CmdDraw(cmd, u32(len(g_vertices)), 1, 0, 0)
 	}
@@ -410,23 +393,18 @@ vt_copy_buffer :: proc(
 	vt_end_single_time_command_buffer(copy_cmd_buff)
 }
 
-vt_create_uniform_buffers :: proc() {
+vt_create_uniform_buffer :: proc() {
 	using G_RENDERER
 	using G_VT
 
-	ubo_refs = make([]BufferRef, num_frames_in_flight, G_RENDERER_ALLOCATORS.main_allocator)
+	ubo_ref = allocate_buffer_ref(common.create_name("UBO"))
+	ubo := get_buffer(ubo_ref)
 
-	for i in 0 ..< num_frames_in_flight {
-		ubo_refs[i] = allocate_buffer_ref(common.create_name("UBO"))
-		ubo := get_buffer(ubo_refs[i])
+	ubo.desc.flags = {.HostWrite, .Mapped}
+	ubo.desc.size = size_of(UniformBufferObject) * num_frames_in_flight
+	ubo.desc.usage = {.DynamicUniformBuffer}
 
-		ubo.desc.flags = {.HostWrite, .Mapped}
-		ubo.desc.size = size_of(UniformBufferObject)
-		ubo.desc.usage = {.UniformBuffer}
-
-		create_buffer(ubo_refs[i])
-	}
-
+	create_buffer(ubo_ref)
 }
 
 // @TODO use p_dt
@@ -451,55 +429,15 @@ vt_update_uniform_buffer :: proc() {
 		),
 	}
 
-	uniform_buffer := get_buffer(ubo_refs[get_frame_idx()])
-	mem.copy(uniform_buffer.mapped_ptr, &ubo, size_of(UniformBufferObject))
-}
-
-vt_write_descriptor_sets :: proc() {
-	using G_RENDERER
-	using G_VT
-
-	ubo_info := vk.DescriptorBufferInfo {
-		range = size_of(UniformBufferObject),
-	}
-	ubo_write := vk.WriteDescriptorSet {
-		sType           = .WRITE_DESCRIPTOR_SET,
-		dstBinding      = 0,
-		dstSet          = 0,
-		descriptorCount = 1,
-		descriptorType  = .UNIFORM_BUFFER,
-		pBufferInfo     = &ubo_info,
-	}
-
-	image_info := vk.DescriptorImageInfo {
-		sampler     = texture_sampler,
-		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
-		imageView   = texture_image_view,
-	}
-
-	image_write := vk.WriteDescriptorSet {
-		sType           = .WRITE_DESCRIPTOR_SET,
-		dstSet          = 0,
-		dstBinding      = 1,
-		descriptorCount = 1,
-		descriptorType  = .COMBINED_IMAGE_SAMPLER,
-		pImageInfo      = &image_info,
-	}
-
-
-	for i in 0 ..< num_frames_in_flight {
-		uniform_buffer := get_buffer(ubo_refs[i])
-		ubo_info.buffer = uniform_buffer.vk_buffer
-		descriptor_writes := []vk.WriteDescriptorSet{ubo_write, image_write}
-
-		vk.UpdateDescriptorSets(
-			device,
-			u32(len(descriptor_writes)),
-			raw_data(descriptor_writes),
-			0,
-			nil,
-		)
-	}
+	uniform_buffer := get_buffer(ubo_ref)
+	mem.copy(
+		mem.ptr_offset(
+			uniform_buffer.mapped_ptr,
+			size_of(UniformBufferObject) * get_frame_idx(),
+		),
+		&ubo,
+		size_of(UniformBufferObject),
+	)
 }
 
 vt_create_texture_image :: proc() {
@@ -595,7 +533,9 @@ vt_transition_image_layout :: proc(
 
 		src_stage = {.TOP_OF_PIPE}
 		dst_stage = {.TRANSFER}
-	} else if p_old_layout == .TRANSFER_DST_OPTIMAL && p_new_layout == .SHADER_READ_ONLY_OPTIMAL {
+	} else if
+	   p_old_layout == .TRANSFER_DST_OPTIMAL &&
+	   p_new_layout == .SHADER_READ_ONLY_OPTIMAL {
 		barrier.srcAccessMask = {.TRANSFER_WRITE}
 		barrier.dstAccessMask = {.SHADER_READ}
 
@@ -611,7 +551,18 @@ vt_transition_image_layout :: proc(
 		dst_stage = {.EARLY_FRAGMENT_TESTS}
 
 	}
-	vk.CmdPipelineBarrier(cmd_buff, src_stage, dst_stage, nil, 0, nil, 0, nil, 1, &barrier)
+	vk.CmdPipelineBarrier(
+		cmd_buff,
+		src_stage,
+		dst_stage,
+		nil,
+		0,
+		nil,
+		0,
+		nil,
+		1,
+		&barrier,
+	)
 	vt_end_single_time_command_buffer(cmd_buff)
 
 }
@@ -630,7 +581,14 @@ vt_copy_buffer_to_image :: proc(
 		imageSubresource = {aspectMask = {.COLOR}, layerCount = 1},
 		imageExtent = {width = p_width, height = p_height, depth = 1},
 	}
-	vk.CmdCopyBufferToImage(cmd_buff, p_buffer, p_image, .TRANSFER_DST_OPTIMAL, 1, &region)
+	vk.CmdCopyBufferToImage(
+		cmd_buff,
+		p_buffer,
+		p_image,
+		.TRANSFER_DST_OPTIMAL,
+		1,
+		&region,
+	)
 	vt_end_single_time_command_buffer(cmd_buff)
 }
 
@@ -684,7 +642,9 @@ vt_create_texture_sampler :: proc() {
 		mipmapMode       = .LINEAR,
 	}
 
-	if vk.CreateSampler(device, &sampler_create_info, nil, &texture_sampler) != .SUCCESS {
+	if
+	   vk.CreateSampler(device, &sampler_create_info, nil, &texture_sampler) !=
+	   .SUCCESS {
 		log.warn("Failed to create sampler")
 	}
 }
@@ -729,7 +689,11 @@ vt_assimp_load_node :: proc(
 		mesh := p_scene.mMeshes[i]
 		for j in 0 ..< mesh.mNumVertices {
 			vertex := Vertex {
-				position = {mesh.mVertices[j].x, mesh.mVertices[j].y, mesh.mVertices[j].z},
+				position = {
+					mesh.mVertices[j].x,
+					mesh.mVertices[j].y,
+					mesh.mVertices[j].z,
+				},
 				color = {0, 0, 0},
 				uv = {mesh.mTextureCoords[0][j].x, mesh.mTextureCoords[0][j].y},
 			}

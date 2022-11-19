@@ -218,9 +218,17 @@ when USE_VULKAN_BACKEND {
 						case .StorageImage:
 							descriptor.type = .STORAGE_IMAGE
 						case .UniformBuffer:
-							descriptor.type = .UNIFORM_BUFFER
+							if strings.has_suffix(common.get_string(descriptor.name), "_Dynamic") {
+								descriptor.type = .UNIFORM_BUFFER_DYNAMIC								
+							} else {
+								descriptor.type = .UNIFORM_BUFFER
+							}
 						case .StorageBuffer:
-							descriptor.type = .STORAGE_BUFFER
+							if strings.has_suffix(common.get_string(descriptor.name), "_Dynamic") {
+								descriptor.type = .STORAGE_BUFFER_DYNAMIC								
+							} else {
+								descriptor.type = .STORAGE_BUFFER
+							}
 						case .UniformBufferDynamic:
 							descriptor.type = .UNIFORM_BUFFER_DYNAMIC
 						case .StorageBufferDynamic:
