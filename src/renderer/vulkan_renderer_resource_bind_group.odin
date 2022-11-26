@@ -448,7 +448,6 @@ when USE_VULKAN_BACKEND {
 			descriptor_sets_count += 1
 		}
 
-		// @TODO keep them allocated in the BackendBindGroup?
 		descriptor_sets := make(
 			[]vk.DescriptorSet,
 			descriptor_sets_count,

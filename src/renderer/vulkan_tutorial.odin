@@ -29,6 +29,7 @@ G_VT: struct {
 	render_target_bindings:   []RenderTargetBinding,
 	ubo_bind_group_ref:       BindGroupRef,
 	texture_bind_group_ref:   BindGroupRef,
+	draw_stream:              DrawStream,
 	bind_group_bindings:      []BindGroupBinding,
 }
 
@@ -164,7 +165,6 @@ init_vt :: proc() -> bool {
 
 		vt_create_uniform_buffer()
 		vt_load_model()
-
 		return true
 	}
 }
@@ -179,6 +179,26 @@ vt_pre_render :: proc() {
 	vt_create_texture_image()
 	vt_create_texture_image_view()
 	vt_create_texture_sampler()
+	vt_create_bind_groups()
+
+	// Setup the draw stream
+	{
+		draw_stream_init(G_RENDERER_ALLOCATORS.main_allocator, &G_VT.draw_stream)
+		draw_stream_change_pipeline(&G_VT.draw_stream, G_VT.pipeline_ref)
+		bind_group_bindings = draw_stream_change_bindings(&G_VT.draw_stream, 2)
+		bind_group_bindings[0].bind_group_ref = ubo_bind_group_ref
+		bind_group_bindings[0].dynamic_offsets = make([]u32, 1, draw_stream.allocator)
+		bind_group_bindings[1].bind_group_ref = texture_bind_group_ref
+
+		cube_draw := draw_stream_add_indexed_draw(&G_VT.draw_stream)
+		cube_draw.index_buffer_ref = index_buffer_ref
+		cube_draw.instance_count = 1
+		cube_draw.index_count = u32(len(g_indices))
+		cube_draw.vertex_buffer_ref = vertex_buffer_ref
+		cube_draw.index_type = .UInt32
+		draw_stream_reset(&G_VT.draw_stream)
+
+	}
 }
 
 vt_create_bind_groups :: proc() {
@@ -192,17 +212,6 @@ vt_create_bind_groups :: proc() {
 
 		ubo_bind_group_ref = refs[0]
 		texture_bind_group_ref = refs[1]
-	}
-
-	// Create the bind group bindings
-	{
-		bind_group_bindings = make(
-			[]BindGroupBinding,
-			2,
-			G_RENDERER_ALLOCATORS.main_allocator,
-		)
-		bind_group_bindings[0].bind_group_ref = ubo_bind_group_ref
-		bind_group_bindings[1].bind_group_ref = texture_bind_group_ref
 	}
 
 	// Update the bind groups
@@ -264,28 +273,8 @@ vt_update :: proc(
 			size_of(UniformBufferObject) * get_frame_idx(),
 		}
 
-		bind_pipeline(pipeline_ref, p_cmd_buff_ref)
-		bind_bind_groups(p_cmd_buff_ref, pipeline_ref, bind_group_bindings, 0)
-
-		offset := vk.DeviceSize{}
-
-		vertex_buffer := get_buffer(vertex_buffer_ref)
-		index_buffer := get_buffer(index_buffer_ref)
-		vk.CmdBindVertexBuffers(
-			p_cmd_buff.vk_cmd_buff,
-			0,
-			1,
-			&vertex_buffer.vk_buffer,
-			&offset,
-		)
-		vk.CmdBindIndexBuffer(
-			p_cmd_buff.vk_cmd_buff,
-			index_buffer.vk_buffer,
-			offset,
-			.UINT32,
-		)
-		vk.CmdDrawIndexed(p_cmd_buff.vk_cmd_buff, u32(len(g_indices)), 1, 0, 0, 0)
-		// vk.CmdDraw(cmd, u32(len(g_vertices)), 1, 0, 0)
+		draw_stream_reset(&draw_stream)
+		draw_stream_submit(p_cmd_buff_ref, &draw_stream)
 	}
 	end_render_pass(render_pass_ref, p_cmd_buff_ref)
 }
