@@ -23,6 +23,7 @@ MAX_NUM_FRAMES_IN_FLIGHT :: #config(NUM_FRAMES_IN_FLIGHT, 2)
 // @TODO Move to a config file
 
 @(private)
+MAX_TEST :: #config(MAX_TEST, 128)
 MAX_SHADERS :: #config(MAX_SHADERS, 128)
 MAX_PIPELINE_LAYOUTS :: #config(MAX_PIPELINE_LAYOUTS, 128)
 MAX_IMAGES :: #config(MAX_IMAGES, 256)
@@ -32,6 +33,10 @@ MAX_RENDER_PASS_INSTANCES :: #config(MAX_RENDER_PASSES, 256)
 MAX_PIPELINES :: #config(MAX_PIPELINES, 128)
 MAX_COMMAND_BUFFERS :: #config(MAX_PIPELINES, 32)
 MAX_BIND_GROUPS :: #config(MAX_PIPELINES, 1024)
+MAX_RENDER_TASKS :: #config(MAX_RENDER_TASKS, 64)
+MAX_MATERIALS :: #config(MAX_MATERIALS, 64)
+MAX_MATERIAL_PASSES :: #config(MAX_MATERIALS, 64)
+MAX_MATERIAL_INSTANCES :: #config(MAX_MATERIALS, 2048)
 
 //---------------------------------------------------------------------------//
 
@@ -151,6 +156,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	init_buffers()
 	init_images()
 	init_command_buffers(p_options) or_return
+	init_render_tasks() or_return
 
 	load_shaders() or_return
 	create_swap_images()
