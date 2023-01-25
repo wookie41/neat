@@ -37,6 +37,7 @@ MAX_RENDER_TASKS :: #config(MAX_RENDER_TASKS, 64)
 MAX_MATERIALS :: #config(MAX_MATERIALS, 64)
 MAX_MATERIAL_PASSES :: #config(MAX_MATERIALS, 64)
 MAX_MATERIAL_INSTANCES :: #config(MAX_MATERIALS, 2048)
+MAX_MESHES :: #config(MAX_MESHES, 1024)
 
 //---------------------------------------------------------------------------//
 

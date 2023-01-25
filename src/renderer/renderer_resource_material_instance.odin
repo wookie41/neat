@@ -43,7 +43,7 @@ init_material_instances :: proc() -> bool {
 //---------------------------------------------------------------------------//
 
 deinit_material_instances :: proc() {
-s}
+}
 
 //---------------------------------------------------------------------------//
 
@@ -67,7 +67,7 @@ get_material_instance :: proc(p_ref: MaterialInstanceRef) -> ^MaterialInstanceRe
 //--------------------------------------------------------------------------//
 
 destroy_material_instance :: proc(p_ref: MaterialInstanceRef) {
-	material_instance := get_material_instance(p_ref)
+	// material_instance := get_material_instance(p_ref)
 	free_ref(MaterialInstanceResource, &G_MATERIAL_INSTANCE_REF_ARRAY, p_ref)
 }
 

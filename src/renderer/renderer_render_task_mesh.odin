@@ -6,6 +6,7 @@ import "../common"
 
 //---------------------------------------------------------------------------//
 
+@(private="file")
 INTERNAL : struct {
     render_task_mesh_ref: RenderTaskRef,
 }
@@ -28,7 +29,7 @@ create_render_task_mesh :: proc() -> bool {
 @(private="file")
 init :: proc() -> bool {
     return true
-}s  
+}
 
 //---------------------------------------------------------------------------//
 

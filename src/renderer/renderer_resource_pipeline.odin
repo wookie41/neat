@@ -8,11 +8,11 @@ import c "core:c"
 import "core:math/linalg/glsl"
 
 //---------------------------------------------------------------------------//
-
 MeshVertexLayout :: struct {
 	position: glsl.vec3,
-	color:    glsl.vec3,
 	uv:       glsl.vec2,
+	normal:   glsl.vec3,
+	tangent:  glsl.vec3,
 }
 
 //---------------------------------------------------------------------------//
@@ -169,7 +169,10 @@ destroy_pipeline :: proc(p_ref: PipelineRef) {
 //---------------------------------------------------------------------------//
 
 bind_pipeline :: proc(p_pipeline_ref: PipelineRef, p_cmd_buff_ref: CommandBufferRef) {
-	backend_bind_pipeline(get_pipeline(p_pipeline_ref), get_command_buffer(p_cmd_buff_ref))
+	backend_bind_pipeline(
+		get_pipeline(p_pipeline_ref),
+		get_command_buffer(p_cmd_buff_ref),
+	)
 }
 
 //---------------------------------------------------------------------------//
@@ -179,7 +182,12 @@ create_bind_groups_for_pipeline :: #force_inline proc(
 	p_out_bind_groups: []BindGroupRef,
 ) -> bool {
 	pipeline := get_pipeline(p_pipeline_ref)
-	return create_bind_groups_for_pipeline_layout(pipeline.pipeline_layout_ref, p_out_bind_groups)
+	return(
+		create_bind_groups_for_pipeline_layout(
+			pipeline.pipeline_layout_ref,
+			p_out_bind_groups,
+		)
+	)
 }
 
 //---------------------------------------------------------------------------//

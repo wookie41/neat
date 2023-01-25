@@ -4,6 +4,8 @@ package renderer
 
 import "core:c"
 import "../common"
+import vma "../third_party/vma"
+import vk "vendor:vulkan"
 
 //---------------------------------------------------------------------------//
 
@@ -16,7 +18,6 @@ BufferDescFlagBits :: enum u8 {
 	SharingModeConcurrent, // Defaults to exclusive
 }
 BufferDescFlags :: distinct bit_set[BufferDescFlagBits;u8]
-
 
 //---------------------------------------------------------------------------//
 
@@ -48,6 +49,8 @@ BufferResource :: struct {
 	using backend_buffer: BackendBufferResource,
 	desc:                 BufferDesc,
 	mapped_ptr:           ^u8,
+	// Virtual block used to suballocate the buffer using the VMA virtual allocator
+	vma_block:            vma.VirtualBlock,
 }
 
 //---------------------------------------------------------------------------//
@@ -64,6 +67,13 @@ InvalidBufferRef := BufferRef {
 
 @(private = "file")
 G_BUFFER_REF_ARRAY: RefArray(BufferResource)
+
+//---------------------------------------------------------------------------//
+
+BufferSuballocation :: struct {
+	offset:         u32,
+	vma_allocation: vma.VirtualAllocation,
+}
 
 //---------------------------------------------------------------------------//
 
@@ -85,6 +95,19 @@ allocate_buffer_ref :: proc(p_name: common.Name) -> BufferRef {
 
 create_buffer :: proc(p_ref: BufferRef) -> bool {
 	buffer := get_buffer(p_ref)
+
+	// Create the virtual VMA block used for sub-allocations
+	{
+		virtual_block_create_info := vma.VirtualBlockCreateInfo {
+			size = vk.DeviceSize(buffer.desc.size),
+			flags = {.LINEAR},
+		}
+
+		res := vma.create_virtual_block(&virtual_block_create_info, &buffer.vma_block)
+		if res != .SUCCESS {
+			return false
+		}
+	}
 
 	if backend_create_buffer(p_ref, buffer) == false {
 		free_ref(BufferResource, &G_BUFFER_REF_ARRAY, p_ref)
@@ -125,12 +148,66 @@ unmap_buffer :: proc(p_ref: BufferRef) {
 
 //---------------------------------------------------------------------------//
 
-StagedBufferDesc :: struct {
-	size:   u32,
-	usage:  BufferUsageFlagBits,
-	// stages in which the buffer is going to be read,
-	// used to determine barrier placement
-	stages: PipelineStageFlags,
+buffer_allocate :: proc(
+	p_buffer_ref: BufferRef,
+	p_size: u32,
+) -> (
+	bool,
+	BufferSuballocation,
+) {
+	buffer := get_buffer(p_buffer_ref)
+
+	alloc_info := vma.VirtualAllocationCreateInfo {
+		size = vk.DeviceSize(p_size),
+		flags = {.MIN_MEMORY},
+	}
+
+	suballocation := BufferSuballocation{}
+	suballocation_offset : vk.DeviceSize
+
+	res := vma.virtual_allocate(
+		buffer.vma_block,
+		&alloc_info,
+		suballocation.vma_allocation,
+		&suballocation_offset
+	)
+
+	suballocation.offset = u32(suballocation_offset)
+
+	return res == .SUCCESS, suballocation
+}
+
+//---------------------------------------------------------------------------//
+
+buffer_free :: proc(
+	p_buffer_ref: BufferRef,
+	p_allocation: vma.VirtualAllocation,
+) {
+	buffer := get_buffer(p_buffer_ref)
+
+	suballocation_offset : vk.DeviceSize
+
+	vma.virtual_free(
+		buffer.vma_block,
+		p_allocation,
+	)
+}
+//---------------------------------------------------------------------------//
+
+
+buffer_free_all :: proc(
+	p_buffer_ref: BufferRef,
+) {
+	buffer := get_buffer(p_buffer_ref)
+
+	vma.destroy_virtual_block(buffer.vma_block)
+	virtual_block_create_info := vma.VirtualBlockCreateInfo {
+		size = vk.DeviceSize(buffer.desc.size),
+		flags = {.LINEAR},
+	}
+	
+	res := vma.create_virtual_block(&virtual_block_create_info, &buffer.vma_block)
+	assert(res == .SUCCESS)
 }
 
 //---------------------------------------------------------------------------//

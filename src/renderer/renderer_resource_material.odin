@@ -67,7 +67,7 @@ get_material :: proc(p_ref: MaterialRef) -> ^MaterialResource {
 //--------------------------------------------------------------------------//
 
 destroy_material :: proc(p_ref: MaterialRef) {
-	material := get_material(p_ref)
+	// material := get_material(p_ref)
 	free_ref(MaterialResource, &G_MATERIAL_REF_ARRAY, p_ref)
 }
 

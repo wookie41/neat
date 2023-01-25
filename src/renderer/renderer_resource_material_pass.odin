@@ -43,7 +43,7 @@ init_material_passs :: proc() -> bool {
 //---------------------------------------------------------------------------//
 
 deinit_material_passs :: proc() {
-s}
+}
 
 //---------------------------------------------------------------------------//
 
@@ -67,7 +67,7 @@ get_material_pass :: proc(p_ref: MaterialPassRef) -> ^MaterialPassResource {
 //--------------------------------------------------------------------------//
 
 destroy_material_pass :: proc(p_ref: MaterialPassRef) {
-	material_pass := get_material_pass(p_ref)
+	// material_pass := get_material_pass(p_ref)
 	free_ref(MaterialPassResource, &G_MATERIAL_PASS_REF_ARRAY, p_ref)
 }
 
