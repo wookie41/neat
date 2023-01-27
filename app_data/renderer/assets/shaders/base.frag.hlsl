@@ -1,8 +1,7 @@
 #include "samplers.hlsl"
 
 struct FSInput {
-    [[vk::location(0)]] float3 fragColor : FRAGCOLOR;
-    [[vk::location(1)]] float2 uv        : TEXCOORD0;
+    [[vk::location(0)]] float2 uv        : TEXCOORD0;
 };
 
 struct FSOutput {

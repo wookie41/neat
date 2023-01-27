@@ -114,6 +114,17 @@ buffer_upload_begin_frame :: proc() {
 
 //---------------------------------------------------------------------------//
 
+// Used to check if a request of a given size will fit into the buffer
+@(private)
+dry_request_buffer_upload :: proc(p_size: u32) -> bool {
+	return(
+		INTERNAL.staging_buffer_offset + p_size <=
+		INTERNAL.single_staging_region_size
+	)
+}
+
+//---------------------------------------------------------------------------//
+
 @(private)
 request_buffer_upload :: proc(p_request: BufferUploadRequest) -> BufferUploadResponse {
 
@@ -121,14 +132,8 @@ request_buffer_upload :: proc(p_request: BufferUploadRequest) -> BufferUploadRes
 
 	// Check if this request will stil fit in the staging buffer 
 	// or do we have to delay it to the next frame
-	{
-		will_request_fit :=
-			INTERNAL.staging_buffer_offset + p_request.size <=
-			INTERNAL.single_staging_region_size
-
-		if !will_request_fit {
-			return BufferUploadResponse{ptr = nil}
-		}
+	if dry_request_buffer_upload(p_request.size) == false {
+		return BufferUploadResponse{ptr = nil}
 	}
 
 	upload_ptr := mem.ptr_offset(

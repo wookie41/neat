@@ -759,7 +759,7 @@ foreign vma {
 	virtual_allocate :: proc(
 		virtualBlock: VirtualBlock,
 		pCreateInfo: ^VirtualAllocationCreateInfo,
-		pAllocation: VirtualAllocation,
+		pAllocation: ^VirtualAllocation,
 		pOffset: ^vk.DeviceSize,
 	) -> vk.Result ---
 

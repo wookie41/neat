@@ -155,6 +155,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	init_pipeline_layouts()
 	init_pipelines()
 	init_buffers()
+	init_meshes()
 	init_images()
 	init_command_buffers(p_options) or_return
 	init_render_tasks() or_return

@@ -15,8 +15,6 @@ import "../common"
 
 G_VT: struct {
 	ubo_ref:                  BufferRef,
-	vertex_buffer_ref:        BufferRef,
-	index_buffer_ref:         BufferRef,
 	start_time:               time.Time,
 	texture_image_ref:        ImageRef,
 	texture_image_allocation: vma.Allocation,
@@ -31,43 +29,8 @@ G_VT: struct {
 	texture_bind_group_ref:   BindGroupRef,
 	draw_stream:              DrawStream,
 	bind_group_bindings:      []BindGroupBinding,
+	viking_room_mesh_ref:     MeshRef,
 }
-
-Vertex :: struct {
-	position: glsl.vec3,
-	color:    glsl.vec3,
-	uv:       glsl.vec2,
-}
-
-vertex_binding_description := vk.VertexInputBindingDescription {
-	binding   = 0,
-	stride    = size_of(Vertex),
-	inputRate = .VERTEX,
-}
-
-vertex_attributes_descriptions := []vk.VertexInputAttributeDescription{
-	{
-		binding = 0,
-		location = 0,
-		format = .R32G32B32_SFLOAT,
-		offset = u32(offset_of(Vertex, position)),
-	},
-	{
-		binding = 1,
-		location = 1,
-		format = .R32G32B32_SFLOAT,
-		offset = u32(offset_of(Vertex, color)),
-	},
-	{
-		binding = 2,
-		location = 2,
-		format = .R32G32_SFLOAT,
-		offset = u32(offset_of(Vertex, uv)),
-	},
-}
-
-g_vertices: []Vertex
-g_indices: []u32
 
 MODEL_PATH :: "app_data/renderer/assets/models/viking_room.obj"
 MODEL_TEXTURE_PATH :: "app_data/renderer/assets/models/viking_room.png"
@@ -174,8 +137,6 @@ vt_pre_render :: proc() {
 	using G_RENDERER
 	using G_VT
 
-	vt_create_vertex_buffer()
-	vt_create_index_buffer()
 	vt_create_texture_image()
 	vt_create_texture_image_view()
 	vt_create_texture_sampler()
@@ -183,6 +144,8 @@ vt_pre_render :: proc() {
 
 	// Setup the draw stream
 	{
+		viking_room_mesh := get_mesh(G_VT.viking_room_mesh_ref)
+
 		draw_stream_init(G_RENDERER_ALLOCATORS.main_allocator, &G_VT.draw_stream)
 		draw_stream_change_pipeline(&G_VT.draw_stream, G_VT.pipeline_ref)
 		bind_group_bindings = draw_stream_change_bindings(&G_VT.draw_stream, 2)
@@ -191,11 +154,11 @@ vt_pre_render :: proc() {
 		bind_group_bindings[1].bind_group_ref = texture_bind_group_ref
 
 		cube_draw := draw_stream_add_indexed_draw(&G_VT.draw_stream)
-		cube_draw.index_buffer_ref = index_buffer_ref
+		cube_draw.index_buffer_ref = MESH_INTERNAL.index_buffer_ref
 		cube_draw.instance_count = 1
-		cube_draw.index_count = u32(len(g_indices))
-		cube_draw.vertex_buffer_ref = vertex_buffer_ref
-		cube_draw.index_type = .UInt32
+		cube_draw.index_count = u32(len(viking_room_mesh.desc.indices))
+		cube_draw.vertex_buffer_ref = MESH_INTERNAL.vertex_buffer_ref
+		cube_draw.index_type = .UInt16
 		draw_stream_reset(&G_VT.draw_stream)
 
 	}
@@ -246,8 +209,6 @@ deinit_vt :: proc() {
 	destroy_image(texture_image_ref)
 	destroy_buffer(ubo_ref)
 	destroy_bind_groups({texture_bind_group_ref, ubo_bind_group_ref})
-	destroy_buffer(vertex_buffer_ref)
-	destroy_buffer(index_buffer_ref)
 }
 
 vt_update :: proc(
@@ -277,55 +238,6 @@ vt_update :: proc(
 		draw_stream_submit(p_cmd_buff_ref, &draw_stream)
 	}
 	end_render_pass(render_pass_ref, p_cmd_buff_ref)
-}
-
-vt_create_vertex_buffer :: proc() {
-	using G_RENDERER
-	using G_VT
-
-	vertex_buffer_ref = allocate_buffer_ref(common.create_name("VertexBuffer"))
-	vertex_buffer := get_buffer(vertex_buffer_ref)
-
-	vertex_buffer.desc.size = u32(len(g_vertices) * size_of(MeshVertexLayout))
-	vertex_buffer.desc.usage = {.VertexBuffer, .TransferDst}
-	vertex_buffer.desc.flags = {.Dedicated}
-	create_buffer(vertex_buffer_ref)
-
-	upload_request := BufferUploadRequest {
-		dst_buff          = vertex_buffer_ref,
-		dst_buff_offset   = 0,
-		dst_queue_usage   = .Graphics,
-		first_usage_stage = .VertexInput,
-		size              = u32(len(g_vertices) * size_of(Vertex)),
-	}
-
-	response := request_buffer_upload(upload_request)
-	assert(response.ptr != nil)
-
-	mem.copy(response.ptr, raw_data(g_vertices), len(g_vertices) * size_of(Vertex))
-}
-
-vt_create_index_buffer :: proc() {
-	using G_RENDERER
-	using G_VT
-
-	index_buffer_ref = allocate_buffer_ref(common.create_name("IndexBuffer"))
-	index_buffer := get_buffer(index_buffer_ref)
-	index_buffer.desc.size = u32(len(g_indices) * size_of(g_indices[0]))
-	index_buffer.desc.usage = {.IndexBuffer, .TransferDst}
-	index_buffer.desc.flags = {.Dedicated}
-	create_buffer(index_buffer_ref)
-
-	upload_request := BufferUploadRequest {
-		dst_buff          = index_buffer_ref,
-		dst_buff_offset   = 0,
-		dst_queue_usage   = .Graphics,
-		first_usage_stage = .VertexInput,
-		size              = index_buffer.desc.size,
-	}
-	response := request_buffer_upload(upload_request)
-	assert(response.ptr != nil)
-	mem.copy(response.ptr, raw_data(g_indices), int(index_buffer.desc.size))
 }
 
 vt_create_buffer :: proc(
@@ -656,17 +568,31 @@ vt_load_model :: proc() {
 		num_indices += u32(scene.mMeshes[i].mNumFaces * 3)
 	}
 
-	g_vertices = make([]Vertex, num_vertices)
-	g_indices = make([]u32, num_indices)
+	mesh_ref := allocate_mesh_ref(common.create_name("VikingRoom"))
+	mesh := get_mesh(mesh_ref)
+
+	mesh.desc.indices = make([]u16, int(num_indices))
+	mesh.desc.position = make([]glsl.vec3, int(num_vertices))
+	mesh.desc.uv = make([]glsl.vec2, int(num_vertices))
+	mesh.desc.sub_meshes = make([]SubMesh, scene.mNumMeshes)
+	mesh.desc.features = {.UV}
+	mesh.desc.flags = {.Indexed}
 
 	import_ctx: ImportContext
+	import_ctx.mesh = mesh
 
 	vt_assimp_load_node(scene, scene.mRootNode, &import_ctx)
+
+	create_mesh(mesh_ref)
+
+	G_VT.viking_room_mesh_ref = mesh_ref
 }
 
 ImportContext :: struct {
-	curr_vtx: u32,
-	curr_idx: u32,
+	curr_vtx:         u32,
+	curr_idx:         u32,
+	current_sub_mesh: u32,
+	mesh:             ^MeshResource,
 }
 
 vt_assimp_load_node :: proc(
@@ -674,28 +600,40 @@ vt_assimp_load_node :: proc(
 	p_node: ^assimp.Node,
 	p_import_ctx: ^ImportContext,
 ) {
+
 	for i in 0 ..< p_node.mNumMeshes {
-		mesh := p_scene.mMeshes[i]
-		for j in 0 ..< mesh.mNumVertices {
-			vertex := Vertex {
-				position = {
-					mesh.mVertices[j].x,
-					mesh.mVertices[j].y,
-					mesh.mVertices[j].z,
-				},
-				color = {0, 0, 0},
-				uv = {mesh.mTextureCoords[0][j].x, mesh.mTextureCoords[0][j].y},
+		assimp_mesh := p_scene.mMeshes[i]
+
+		sub_mesh := &p_import_ctx.mesh.desc.sub_meshes[p_import_ctx.current_sub_mesh]
+		sub_mesh.data_count = assimp_mesh.mNumVertices
+		sub_mesh.data_offset = p_import_ctx.curr_vtx
+
+		for j in 0 ..< assimp_mesh.mNumVertices {
+
+			p_import_ctx.mesh.desc.position[p_import_ctx.curr_vtx] = {
+				assimp_mesh.mVertices[j].x,
+				assimp_mesh.mVertices[j].y,
+				assimp_mesh.mVertices[j].z,
 			}
-			g_vertices[p_import_ctx.curr_vtx] = vertex
+
+			p_import_ctx.mesh.desc.uv[p_import_ctx.curr_vtx] = {
+				assimp_mesh.mTextureCoords[0][j].x,
+				assimp_mesh.mTextureCoords[0][j].y,
+			}
+
 			p_import_ctx.curr_vtx += 1
 		}
 
-		for j in 0 ..< mesh.mNumFaces {
-			for k in 0 ..< mesh.mFaces[j].mNumIndices {
-				g_indices[p_import_ctx.curr_idx] = mesh.mFaces[j].mIndices[k]
+		for j in 0 ..< assimp_mesh.mNumFaces {
+			for k in 0 ..< assimp_mesh.mFaces[j].mNumIndices {
+				p_import_ctx.mesh.desc.indices[p_import_ctx.curr_idx] = u16(
+					assimp_mesh.mFaces[j].mIndices[k],
+				)
 				p_import_ctx.curr_idx += 1
 			}
 		}
+
+		p_import_ctx.current_sub_mesh += 1
 	}
 
 	for i in 0 ..< p_node.mNumChildren {

@@ -15,30 +15,28 @@ VERTEX_BUFFER_SIZE :: 512 * common.MEGABYTE
 INDEX_BUFFER_SIZE :: 128 * common.MEGABYTE
 
 @(private = "file")
-VERTEX_UPLOAD_BUFFER_SIZE :: 64 * common.MEGABYTE
-@(private = "file")
-INDEX_UPLOAD_BUFFER_SIZE :: 64 * common.MEGABYTE
-@(private = "file")
 INDEX_DATA_TYPE :: u16
 @(private = "file")
 ZERO_VECTOR := glsl.vec4{0, 0, 0, 0}
+@(private = "file")
+VERTEX_STRIDE ::
+	// Position
+	size_of(glsl.vec3) + 
+	// UV
+	size_of(glsl.vec2) + 
+	// Normal
+	size_of(glsl.vec3) + 
+	// Tangetn
+	size_of(glsl.vec3)
 
 //---------------------------------------------------------------------------//
 
-@(private = "file")
-INTERNAL: struct {
+// @(private = "file")
+MESH_INTERNAL: struct {
 	// Global vertex buffer for mesh data
-	vertex_buffer_ref:           BufferRef,
-	// Staging vertex buffer used to upload data to the GPU
-	vertex_upload_buffer_ref:    BufferRef,
+	vertex_buffer_ref: BufferRef,
 	// Global index buffer for mesh data
-	index_buffer_ref:            BufferRef,
-	// Staging index buffer used to upload data to the GPU
-	index_upload_buffer_ref:     BufferRef,
-	// Current offset into the vertex staging buffer
-	vertex_upload_buffer_offset: u32,
-	// Current offset into the index staging buffer
-	index_upload_buffer_offset:  u32,
+	index_buffer_ref:  BufferRef,
 }
 
 //---------------------------------------------------------------------------//
@@ -63,8 +61,10 @@ MeshFeatureFlags :: distinct bit_set[MeshFeatureFlagBits;u16]
 //---------------------------------------------------------------------------//
 
 SubMesh :: struct {
-	vertex_offset: u32,
-	vertex_count:  u32,
+	// Offset and number of vertices/indices for this submesh
+	// Usage depends on wether the mesh is using indexed draw or not
+	data_offset: u32,
+	data_count:  u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -116,7 +116,7 @@ init_meshes :: proc() -> bool {
 
 	// Create vertex buffer for mesh data
 	{
-		using INTERNAL
+		using MESH_INTERNAL
 		vertex_buffer_ref = allocate_buffer_ref(common.create_name("MeshVertexBuffer"))
 		vertex_buffer := get_buffer(vertex_buffer_ref)
 
@@ -126,44 +126,16 @@ init_meshes :: proc() -> bool {
 		create_buffer(vertex_buffer_ref) or_return
 	}
 
-	// Create vertex upload buffer 
-	{
-		using INTERNAL
-		vertex_upload_buffer_ref = allocate_buffer_ref(
-			common.create_name("MeshVertexUploadBuffer"),
-		)
-		vertex_upload_buffer := get_buffer(vertex_upload_buffer_ref)
-
-		vertex_upload_buffer.desc.size = VERTEX_UPLOAD_BUFFER_SIZE
-		vertex_upload_buffer.desc.usage = {.VertexBuffer, .TransferSrc}
-		vertex_upload_buffer.desc.flags = {.HostWrite, .Mapped}
-		create_buffer(vertex_upload_buffer_ref) or_return
-	}
-
 	// Create index buffer for mesh data
 	{
-		using INTERNAL
+		using MESH_INTERNAL
 		index_buffer_ref = allocate_buffer_ref(common.create_name("MeshIndexBuffer"))
 		index_buffer := get_buffer(index_buffer_ref)
 
 		index_buffer.desc.size = INDEX_BUFFER_SIZE
-		index_buffer.desc.usage = {.TransferSrc}
+		index_buffer.desc.usage = {.IndexBuffer, .TransferDst}
 		index_buffer.desc.flags = {.Dedicated}
 		create_buffer(index_buffer_ref) or_return
-	}
-
-	// Create index upload buffer 
-	{
-		using INTERNAL
-		index_upload_buffer_ref = allocate_buffer_ref(
-			common.create_name("MeshIndexUploadBuffer"),
-		)
-		index_upload_buffer := get_buffer(index_upload_buffer_ref)
-
-		index_upload_buffer.desc.size = INDEX_UPLOAD_BUFFER_SIZE
-		index_upload_buffer.desc.usage = {.TransferSrc}
-		index_upload_buffer.desc.flags = {.HostWrite, .Mapped}
-		create_buffer(index_upload_buffer_ref) or_return
 	}
 
 	return true
@@ -179,114 +151,84 @@ deinit_meshes :: proc() {
 create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 	mesh := get_mesh(p_mesh_ref)
 
-	total_vertex_count: int = 0
-
-	// Calculate the total number of vertices
-	for sub_mesh in mesh.desc.sub_meshes {
-		total_vertex_count += int(sub_mesh.vertex_count)
-	}
+	index_count := len(mesh.desc.indices)
+	vertex_count := len(mesh.desc.position)
 
 	// Check if the data that is actually provided has the expected number of elements
-	assert(len(mesh.desc.position) == total_vertex_count)
-	assert(len(mesh.desc.uv) == 0 || len(mesh.desc.uv) == total_vertex_count)
-	assert(len(mesh.desc.normal) == 0 || len(mesh.desc.normal) == total_vertex_count)
-	assert(len(mesh.desc.tangent) == 0 || len(mesh.desc.tangent) == total_vertex_count)
+	assert(len(mesh.desc.uv) == 0 || len(mesh.desc.uv) == vertex_count)
+	assert(len(mesh.desc.normal) == 0 || len(mesh.desc.normal) == vertex_count)
+	assert(len(mesh.desc.tangent) == 0 || len(mesh.desc.tangent) == vertex_count)
 
-	// Prepare the data that we're going to transfer to the GPU
-	// pad the missing features with 0s
-	total_mesh_data_size :=
-		(size_of(mesh.desc.position[0]) +
-			size_of(mesh.desc.uv[0]) +
-			size_of(mesh.desc.normal[0]) +
-			size_of(mesh.desc.tangent[0])) *
-		total_vertex_count
+	assert(
+		.Indexed in mesh.desc.flags && len(mesh.desc.indices) > 0 ||
+		(.Indexed in mesh.desc.flags) == false && len(mesh.desc.indices) == 0,
+	)
 
+	// Check if the the uplaod requests will fit into the staging buffer
+	vertex_data_size := VERTEX_STRIDE * vertex_count
+	index_data_size := index_count * size_of(INDEX_DATA_TYPE)
 
-	// Abort if we don't have enough space in vertex buffers
-	{
-		no_space_in_upload_buffer :=
-			INTERNAL.vertex_upload_buffer_offset + u32(total_mesh_data_size) >
-			VERTEX_UPLOAD_BUFFER_SIZE
-
-		allocation_successful, allocation := buffer_allocate(
-			INTERNAL.vertex_buffer_ref,
-			u32(total_mesh_data_size),
-		)
-
-		if no_space_in_upload_buffer || allocation_successful == false {
-			return false
-		}
-
-		mesh.vertex_buffer_allocation = allocation
+	if dry_request_buffer_upload(u32(vertex_data_size + index_data_size)) == false {
+		return false
 	}
 
-	// Abort if we don't have enough space in index buffers
-	{
-		no_space_in_upload_buffer :=
-			INTERNAL.index_upload_buffer_offset +
-				u32(total_vertex_count) * u32(size_of(INDEX_DATA_TYPE)) >
-			VERTEX_UPLOAD_BUFFER_SIZE
+	// Suballocate the vertex and index buffers
+	vertex_allocation_successful, vertex_allocation := buffer_allocate(
+		MESH_INTERNAL.vertex_buffer_ref,
+		u32(vertex_data_size),
+	)
 
-		allocation_successful, allocation := buffer_allocate(
-			INTERNAL.vertex_buffer_ref,
-			u32(total_mesh_data_size),
-		)
-
-		if no_space_in_upload_buffer || allocation_successful == false {
-			buffer_free(
-				INTERNAL.vertex_buffer_ref,
-				mesh.vertex_buffer_allocation.vma_allocation,
-			)
-			return false
-		}
-
-		mesh.index_buffer_allocation = allocation
+	if vertex_allocation_successful == false {
+		return false
 	}
 
-	// Move index data to the upload buffer
-	{
-		index_upload_buffer := get_buffer(INTERNAL.index_upload_buffer_ref)
+	index_allocation_successful, index_allocation := buffer_allocate(
+		MESH_INTERNAL.index_buffer_ref,
+		u32(index_data_size),
+	)
+
+	if index_allocation_successful == false {
+		buffer_free(MESH_INTERNAL.vertex_buffer_ref, vertex_allocation.vma_allocation)
+		return false
+	}
+
+	// Upload index data to the staging buffer
+	if .Indexed in mesh.desc.flags {
+		index_buffer_upload_request := BufferUploadRequest {
+			dst_buff          = MESH_INTERNAL.index_buffer_ref,
+			dst_buff_offset   = index_allocation.offset,
+			dst_queue_usage   = .Graphics,
+			first_usage_stage = .VertexInput,
+			size              = u32(index_data_size),
+		}
+
+		upload_response := request_buffer_upload(index_buffer_upload_request)
 
 		mem.copy(
-			mem.ptr_offset(
-				index_upload_buffer.mapped_ptr,
-				INTERNAL.index_upload_buffer_offset,
-			),
+			upload_response.ptr,
 			raw_data(mesh.desc.indices),
-			size_of(INDEX_DATA_TYPE) * total_vertex_count,
+			size_of(INDEX_DATA_TYPE) * index_count,
 		)
-
-		INTERNAL.index_upload_buffer_offset +=
-			u32(size_of(INDEX_DATA_TYPE)) * u32(total_vertex_count)
 	}
 
-	// Move vertex data to the upload buffer
+	// Upload vertex data to the staging buffer
 	{
-		// Calculate the stride
-		stride := size_of(mesh.desc.position[0])
-
-		if .UV in mesh.desc.features {
-			stride += size_of(mesh.desc.uv[0])
+		vertex_buffer_upload_request := BufferUploadRequest {
+			dst_buff          = MESH_INTERNAL.vertex_buffer_ref,
+			dst_buff_offset   = vertex_allocation.offset,
+			dst_queue_usage   = .Graphics,
+			first_usage_stage = .VertexInput,
+			size              = u32(vertex_data_size),
 		}
 
-		if .Normal in mesh.desc.features {
-			stride += size_of(mesh.desc.normal[0])
-		}
+		upload_response := request_buffer_upload(vertex_buffer_upload_request)
 
-		if .Tangent in mesh.desc.features {
-			stride += size_of(mesh.desc.tangent[0])
-		}
-
-		vertex_upload_buffer := get_buffer(INTERNAL.vertex_upload_buffer_ref)
+		vertex_data_ptr := (^byte)(upload_response.ptr)
 
 		// Upload data and pad with 0s if neccessary 
-		for i in 0 ..< total_vertex_count {
-
+		for i in 0 ..< vertex_count {
 			mem.copy(
-				mem.ptr_offset(
-					vertex_upload_buffer.mapped_ptr,
-					int(INTERNAL.vertex_upload_buffer_offset) + stride * i,
-				),
+				mem.ptr_offset(vertex_data_ptr, VERTEX_STRIDE * i),
 				&mesh.desc.position[i],
 				size_of(mesh.desc.position[0]),
 			)
@@ -294,26 +236,22 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 
 		// UV
 		if .UV in mesh.desc.features {
-			for i in 0 ..< total_vertex_count {
+			for i in 0 ..< vertex_count {
 				mem.copy(
 					mem.ptr_offset(
-						vertex_upload_buffer.mapped_ptr,
-						int(INTERNAL.vertex_upload_buffer_offset) +
-						stride * i +
-						size_of(mesh.desc.position[0]),
+						vertex_data_ptr,
+						VERTEX_STRIDE * i + size_of(mesh.desc.position[0]),
 					),
 					&mesh.desc.uv[i],
 					size_of(mesh.desc.uv[0]),
 				)
 			}
 		} else {
-			for i in 0 ..< total_vertex_count {
+			for i in 0 ..< vertex_count {
 				mem.copy(
 					mem.ptr_offset(
-						vertex_upload_buffer.mapped_ptr,
-						int(INTERNAL.vertex_upload_buffer_offset) +
-						stride * i +
-						size_of(mesh.desc.position[0]),
+						vertex_data_ptr,
+						VERTEX_STRIDE * i + size_of(mesh.desc.position[0]),
 					),
 					&ZERO_VECTOR,
 					size_of(mesh.desc.uv[0]),
@@ -323,12 +261,11 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 
 		// Normal
 		if .Normal in mesh.desc.features {
-			for i in 0 ..< total_vertex_count {
+			for i in 0 ..< vertex_count {
 				mem.copy(
 					mem.ptr_offset(
-						vertex_upload_buffer.mapped_ptr,
-						int(INTERNAL.vertex_upload_buffer_offset) +
-						stride * i +
+						vertex_data_ptr,
+						VERTEX_STRIDE * i +
 						size_of(mesh.desc.position[0]) +
 						size_of(mesh.desc.uv[0]),
 					),
@@ -337,12 +274,11 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 				)
 			}
 		} else {
-			for i in 0 ..< total_vertex_count {
+			for i in 0 ..< vertex_count {
 				mem.copy(
 					mem.ptr_offset(
-						vertex_upload_buffer.mapped_ptr,
-						int(INTERNAL.vertex_upload_buffer_offset) +
-						stride * i +
+						vertex_data_ptr,
+						VERTEX_STRIDE * i +
 						size_of(mesh.desc.position[0]) +
 						size_of(mesh.desc.uv[0]),
 					),
@@ -354,12 +290,11 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 
 		// Tangent
 		if .Tangent in mesh.desc.features {
-			for i in 0 ..< total_vertex_count {
+			for i in 0 ..< vertex_count {
 				mem.copy(
 					mem.ptr_offset(
-						vertex_upload_buffer.mapped_ptr,
-						int(INTERNAL.vertex_upload_buffer_offset) +
-						stride * i +
+						vertex_data_ptr,
+						VERTEX_STRIDE * i +
 						size_of(mesh.desc.position[0]) +
 						size_of(mesh.desc.uv[0]) +
 						size_of(mesh.desc.normal[0]),
@@ -369,12 +304,11 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 				)
 			}
 		} else {
-			for i in 0 ..< total_vertex_count {
+			for i in 0 ..< vertex_count {
 				mem.copy(
 					mem.ptr_offset(
-						vertex_upload_buffer.mapped_ptr,
-						int(INTERNAL.vertex_upload_buffer_offset) +
-						stride * i +
+						vertex_data_ptr,
+						VERTEX_STRIDE * i +
 						size_of(mesh.desc.position[0]) +
 						size_of(mesh.desc.uv[0]) +
 						size_of(mesh.desc.normal[0]),
@@ -384,13 +318,10 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 				)
 			}
 		}
-
-		// Update the upload buffer offset
-		INTERNAL.vertex_upload_buffer_offset += u32(total_mesh_data_size)
 	}
 
-	// @TODO Queue the transfer, use renderer_buffer_upload.odin 
-	// (those internal pending buffers here are useless, delete them)
+	mesh.index_buffer_allocation = index_allocation
+	mesh.vertex_buffer_allocation = vertex_allocation
 
 	return true
 }

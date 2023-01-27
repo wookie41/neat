@@ -168,7 +168,7 @@ buffer_allocate :: proc(
 	res := vma.virtual_allocate(
 		buffer.vma_block,
 		&alloc_info,
-		suballocation.vma_allocation,
+		&suballocation.vma_allocation,
 		&suballocation_offset
 	)
 
@@ -184,8 +184,6 @@ buffer_free :: proc(
 	p_allocation: vma.VirtualAllocation,
 ) {
 	buffer := get_buffer(p_buffer_ref)
-
-	suballocation_offset : vk.DeviceSize
 
 	vma.virtual_free(
 		buffer.vma_block,
