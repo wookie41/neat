@@ -248,6 +248,9 @@ init :: proc(p_options: InitOptions) -> bool {
 update :: proc(p_dt: f32) {
 	setup_renderer_context()
 
+
+	// @TODO Render tasks - begin_frame()
+
 	cmd_buff_ref := get_frame_cmd_buffer()
 
 	backend_wait_for_frame_resources()
@@ -255,6 +258,8 @@ update :: proc(p_dt: f32) {
 	begin_command_buffer(cmd_buff_ref)
 
 	buffer_upload_begin_frame()
+
+	// @TODO Render tasks - render()
 
 	backend_update(p_dt)
 
@@ -264,6 +269,28 @@ update :: proc(p_dt: f32) {
 	end_command_buffer(cmd_buff_ref)
 
 	submit_current_frame(cmd_buff_ref)
+
+	// @TODO Render tasks - end_frame()
+
+	// Recreate mesh queus
+	{
+		delete(g_created_mesh_refs)
+		delete(g_destroyed_mesh_refs)
+
+		g_created_mesh_refs = make(
+			[dynamic]MeshRef,
+			G_RENDERER_ALLOCATORS.frame_allocator,
+		)
+
+		for mesh_ref in g_destroyed_mesh_refs {
+			free_mesh_ref( mesh_ref)
+		}
+
+		g_destroyed_mesh_refs = make(
+			[dynamic]MeshRef,
+			G_RENDERER_ALLOCATORS.frame_allocator,
+		)
+	}
 
 	advance_frame_idx()
 

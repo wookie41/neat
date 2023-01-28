@@ -20,18 +20,24 @@ INDEX_DATA_TYPE :: u16
 ZERO_VECTOR := glsl.vec4{0, 0, 0, 0}
 @(private = "file")
 VERTEX_STRIDE ::
-	// Position
-	size_of(glsl.vec3) + 
-	// UV
-	size_of(glsl.vec2) + 
-	// Normal
-	size_of(glsl.vec3) + 
-	// Tangetn
-	size_of(glsl.vec3)
+	size_of(glsl.vec3) + size_of(glsl.vec2) + size_of(glsl.vec3) + size_of(glsl.vec3)// Position// UV// Normal// Tangetn
 
 //---------------------------------------------------------------------------//
 
-// @(private = "file")
+
+// Array where we store refs of the meshes that were created during this frame 
+// so that different systems get a chance to react to it. 
+// For example, the mesh render can create and store draw commands.
+@(private)
+g_created_mesh_refs: [dynamic]MeshRef
+
+@(private)
+g_destroyed_mesh_refs: [dynamic]MeshRef
+
+//---------------------------------------------------------------------------//
+
+
+ @(private)
 MESH_INTERNAL: struct {
 	// Global vertex buffer for mesh data
 	vertex_buffer_ref: BufferRef,
@@ -112,6 +118,10 @@ G_MESH_REF_ARRAY: RefArray(MeshResource)
 
 
 init_meshes :: proc() -> bool {
+
+	g_created_mesh_refs = make([dynamic]MeshRef, G_RENDERER_ALLOCATORS.frame_allocator)
+	g_destroyed_mesh_refs = make([dynamic]MeshRef, G_RENDERER_ALLOCATORS.frame_allocator)
+
 	G_MESH_REF_ARRAY = create_ref_array(MeshResource, MAX_MESHES)
 
 	// Create vertex buffer for mesh data
@@ -323,6 +333,8 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 	mesh.index_buffer_allocation = index_allocation
 	mesh.vertex_buffer_allocation = vertex_allocation
 
+	append(&g_created_mesh_refs, p_mesh_ref)
+
 	return true
 }
 
@@ -342,8 +354,29 @@ get_mesh :: proc(p_ref: MeshRef) -> ^MeshResource {
 //--------------------------------------------------------------------------//
 
 destroy_mesh :: proc(p_ref: MeshRef) {
-	// mesh := get_mesh(p_ref)
-	free_ref(MeshResource, &G_MESH_REF_ARRAY, p_ref)
+	mesh := get_mesh(p_ref)
+
+	// Free index and vertex data
+	buffer_free(
+		MESH_INTERNAL.index_buffer_ref,
+		mesh.index_buffer_allocation.vma_allocation,
+	)
+
+	buffer_free(
+		MESH_INTERNAL.vertex_buffer_ref,
+		mesh.vertex_buffer_allocation.vma_allocation,
+	)
+
+	// Add the mesh ref to the destroyed meshes queue
+	append(&g_created_mesh_refs, p_ref)
+}
+
+//--------------------------------------------------------------------------//
+
+@(private)
+free_mesh_ref ::proc(p_mesh_ref: MeshRef) {
+	free_ref(MeshResource, &G_MESH_REF_ARRAY, p_mesh_ref)
+
 }
 
 //--------------------------------------------------------------------------//

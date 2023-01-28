@@ -16,9 +16,17 @@ RenderTaskDesc :: struct {
 RenderTaskResource :: struct {
 	using backend_render_task: BackendRenderTaskResource,
 	desc:                      RenderTaskDesc,
+	// Called once, after creating the render task
+	// This is the place when the render task should create it's internal resources
 	init:                      proc() -> bool,
+	// Called once, just before destroying the render task
+	// This is the place when the render task should destroy it's internal resources
 	deinit:                    proc(),
-	pre_render:                proc(),
+	// Called before the frame begin, i.e. before any draw/compute commands are issued
+	begin_frame:               proc(),
+	// Called after the frame ends, i.e. after all draw and compute commands were submited
+	end_frame:                 proc(),
+	// Called each frame to run the render task
 	render:                    proc(dt: f32),
 }
 
