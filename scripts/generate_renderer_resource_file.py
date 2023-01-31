@@ -14,9 +14,9 @@ import "core:c"
 //---------------------------------------------------------------------------//
 
 @(private="file")
-INTERNAL : struct {
+INTERNAL : struct {{
 	
-}
+}}
 
 //---------------------------------------------------------------------------//
 
@@ -56,7 +56,7 @@ init_{resource_name_lowercase}s :: proc() -> bool {{
 //---------------------------------------------------------------------------//
 
 deinit_{resource_name_lowercase}s :: proc() {{
-	backend_deinit_{resource_name_lowercase}()
+	backend_deinit_{resource_name_lowercase}s()
 }}
 
 //---------------------------------------------------------------------------//
@@ -91,6 +91,15 @@ destroy_{resource_name_lowercase} :: proc(p_ref: {resource_name_capitalized}Ref)
 	free_ref({resource_name_capitalized}Resource, &G_{resource_name_uppercase}_REF_ARRAY, p_ref)
 }}
 
+find_{resource_name_lowercase}_by_name :: proc(p_name: common.Name) -> {resource_name_capitalized}Ref {{
+	ref := find_ref_by_name({resource_name_capitalized}Resource, &G_{resource_name_uppercase}}_REF_ARRAY, p_name)
+	if ref == Invalid{resource_name_capitalized}Ref {{
+		return Invalid{resource_name_capitalized}Ref
+	}}
+	return {resource_name_capitalized}Ref(ref)
+}}
+
+
 """
 
 
@@ -112,7 +121,7 @@ when USE_VULKAN_BACKEND {{
 	//---------------------------------------------------------------------------//
 
 
-	@(private)
+	@(private="file")
 	INTERNAL: struct {{
 	}}
 

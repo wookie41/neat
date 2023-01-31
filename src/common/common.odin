@@ -20,7 +20,7 @@ GIGABYTE :: MEGABYTE * 1024
 //---------------------------------------------------------------------------//
 
 StringTableEntry :: struct {
-	str: string,
+	str:       string,
 	ref_count: u32,
 }
 
@@ -52,10 +52,10 @@ create_name :: proc(p_name: string) -> Name {
 		return name
 	}
 	INTERNAL.string_table[name] = {
-		str = p_name,
+		str       = p_name,
 		ref_count = 0,
 	}
-	return name	 
+	return name
 }
 
 //---------------------------------------------------------------------------//
@@ -99,3 +99,14 @@ get_string :: proc(p_name: Name) -> string {
 }
 
 //---------------------------------------------------------------------------//
+
+hash_string_array :: proc(p_strings: []string) -> u32 {
+	if len(p_strings) == 0 {
+		return 0
+	}
+	h := hash.crc32(transmute([]u8)p_strings[0])
+	for s in p_strings[1:] {
+		h ~= hash.crc32(transmute([]u8)s)
+	}
+	return h
+}

@@ -150,6 +150,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	setup_renderer_context()
 	backend_init(p_options) or_return
 
+	init_shaders() or_return
 	init_render_passes()
 	init_bind_groups()
 	init_pipeline_layouts()
@@ -160,7 +161,6 @@ init :: proc(p_options: InitOptions) -> bool {
 	init_command_buffers(p_options) or_return
 	init_render_tasks() or_return
 
-	load_shaders() or_return
 	create_swap_images()
 
 	{
@@ -337,6 +337,16 @@ submit_current_frame :: proc(p_cmd_buff_ref: CommandBufferRef) {
 deinit :: proc() {
 	setup_renderer_context()
 	deinit_pipelines()
+	deinit_shaders()
+	deinit_render_tasks()
+	// @TODO deinit_bind_groups()
+	// @TODO deinit_pipeline_layouts()
+	// @TODOdeinit_pipelines()
+	// @TODO deinit_images()
+	// @TODO deinit_meshes()
+	// @TODO deinit_buffers()
+	// @TODO deinit_command_buffers(p_options)
+	deinit_render_tasks()
 	deinit_backend()
 }
 

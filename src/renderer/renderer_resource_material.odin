@@ -9,13 +9,13 @@ import "core:c"
 //---------------------------------------------------------------------------//
 
 MaterialDesc :: struct {
-	name:               common.Name,
+	name:                common.Name,
 }
 
 //---------------------------------------------------------------------------//
 
 MaterialResource :: struct {
-	desc:                   MaterialDesc,
+	desc: MaterialDesc,
 }
 
 //---------------------------------------------------------------------------//
@@ -70,4 +70,3 @@ destroy_material :: proc(p_ref: MaterialRef) {
 	// material := get_material(p_ref)
 	free_ref(MaterialResource, &G_MATERIAL_REF_ARRAY, p_ref)
 }
-
