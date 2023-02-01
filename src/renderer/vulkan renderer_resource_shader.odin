@@ -105,8 +105,8 @@ when USE_VULKAN_BACKEND {
 			shader_defines := ""
 			shader_defines_log := ""
 			for feature in p_shader.desc.features {
-				fmt.aprintf("%s -D %s", shader_defines, feature)
-				fmt.aprintf("%s\n%s\n", shader_defines, feature)
+				shader_defines = fmt.aprintf("%s -D %s", shader_defines, feature)
+				shader_defines_log = fmt.aprintf("%s\n%s\n", shader_defines_log, feature)
 			}
 
 			log.infof(

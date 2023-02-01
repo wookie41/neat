@@ -9,6 +9,7 @@ import "core:log"
 import "core:encoding/json"
 import "core:strings"
 import "core:hash"
+import "core:slice"
 
 import "../common"
 
@@ -23,8 +24,9 @@ INTERNAL: struct {
 
 @(private)
 ShaderJSONEntry :: struct {
-	name: string,
-	path: string,
+	name:     string,
+	path:     string,
+	features: []string,
 }
 
 //---------------------------------------------------------------------------//
@@ -115,6 +117,10 @@ init_shaders :: proc() -> bool {
 		shader_ref := allocate_shader_ref(name)
 		shader := get_shader(shader_ref)
 		shader.desc.file_path = entry.path
+		shader.desc.features = slice.clone(
+			entry.features,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
 
 		if strings.has_suffix(entry.name, ".vert") {
 			shader.desc.type = .VERTEX
