@@ -216,6 +216,8 @@ when USE_VULKAN_BACKEND {
 		vert_shader := get_shader(p_pipeline.desc.vert_shader)
 		frag_shader := get_shader(p_pipeline.desc.frag_shader)
 
+		render_pass := get_render_pass(p_pipeline.desc.render_pass_ref)
+
 		// create stage info for each shader
 		vertex_stage_info := vk.PipelineShaderStageCreateInfo {
 			sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -237,7 +239,7 @@ when USE_VULKAN_BACKEND {
 
 		// Input assembly
 		input_assembly_state :=
-			INPUT_ASSEMBLY_PER_PRIMITIVE_TYPE[p_pipeline.desc.primitive_type]
+			INPUT_ASSEMBLY_PER_PRIMITIVE_TYPE[render_pass.desc.primitive_type]
 
 		// Vertex layout
 		vertex_binding_descriptions :=
@@ -254,22 +256,22 @@ when USE_VULKAN_BACKEND {
 		}
 
 		// Rasterizer
-		raster_state := RASTERIZER_STATE_PER_TYPE[p_pipeline.desc.resterizer_type]
+		raster_state := RASTERIZER_STATE_PER_TYPE[render_pass.desc.resterizer_type]
 
 		// Multisampler
 		multisample_state :=
-			MULTISAMPLER_STATE_PER_SAMPLE_TYPE[p_pipeline.desc.multisampling_type]
+			MULTISAMPLER_STATE_PER_SAMPLE_TYPE[render_pass.desc.multisampling_type]
 
 		// Color attachments blending
 		color_blend_attachments := make(
 			[]vk.PipelineColorBlendAttachmentState,
-			len(p_pipeline.desc.render_pass_layout.render_target_blend_types),
+			len(render_pass.desc.layout.render_target_blend_types),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(color_blend_attachments, G_RENDERER_ALLOCATORS.temp_allocator)
 
 
-		for blend_type, i in p_pipeline.desc.render_pass_layout.render_target_blend_types {
+		for blend_type, i in render_pass.desc.layout.render_target_blend_types {
 			color_blend_attachments[i] = COLOR_BLEND_PER_TYPE[blend_type]
 		}
 
@@ -283,7 +285,7 @@ when USE_VULKAN_BACKEND {
 		}
 
 		// Depth stencil
-		depth_stencil := DEPTH_STENCIL_STATE_PER_TYPE[p_pipeline.desc.depth_stencil_type]
+		depth_stencil := DEPTH_STENCIL_STATE_PER_TYPE[render_pass.desc.depth_stencil_type]
 
 		// Pipeline layout
 		p_pipeline.pipeline_layout_ref = allocate_pipeline_layout_ref(p_pipeline.desc.name)
@@ -301,18 +303,18 @@ when USE_VULKAN_BACKEND {
 		// Map color attachment formats
 		color_attachment_formats := make(
 			[]vk.Format,
-			len(p_pipeline.desc.render_pass_layout.render_target_formats),
+			len(render_pass.desc.layout.render_target_formats),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(color_attachment_formats, G_RENDERER_ALLOCATORS.temp_allocator)
 
 
-		for format, i in p_pipeline.desc.render_pass_layout.render_target_formats {
+		for format, i in render_pass.desc.layout.render_target_formats {
 			color_attachment_formats[i] = G_IMAGE_FORMAT_MAPPING[format]
 		}
 
 		// Map depth format
-		depth_format := G_IMAGE_FORMAT_MAPPING[p_pipeline.desc.render_pass_layout.depth_format]
+		depth_format := G_IMAGE_FORMAT_MAPPING[render_pass.desc.layout.depth_format]
 
 		// Dynamic rendering 
 		pipeline_rendering_create_info := vk.PipelineRenderingCreateInfo {

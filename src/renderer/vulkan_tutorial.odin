@@ -91,6 +91,10 @@ init_vt :: proc() -> bool {
 					render_target_blend_types = {.Default},
 					depth_format = get_image(depth_buffer_ref).desc.format,
 				},
+				primitive_type = .TriangleList,
+				resterizer_type = .Fill,
+				multisampling_type = ._1,
+				depth_stencil_type = .DepthTestWrite,
 			}
 
 			render_pas.desc.layout.render_target_formats = make(
@@ -105,23 +109,17 @@ init_vt :: proc() -> bool {
 
 		// Create pipeline
 		{
-			render_pass := get_render_pass(render_pass_ref)
-
 			vertex_shader_ref := find_shader_by_name(common.create_name("base.vert"))
 			fragment_shader_ref := find_shader_by_name(common.create_name("base.frag"))
 			pipeline_ref = allocate_pipeline_ref(
 				common.create_name("Vulkan Tutorial Pipeline"),
 			)
 			get_pipeline(pipeline_ref).desc = {
-				name               = common.create_name("Vulkan Tutorial Pipe"),
-				vert_shader        = vertex_shader_ref,
-				frag_shader        = fragment_shader_ref,
-				vertex_layout      = .Mesh,
-				primitive_type     = .TriangleList,
-				resterizer_type    = .Fill,
-				multisampling_type = ._1,
-				depth_stencil_type = .DepthTestWrite,
-				render_pass_layout = render_pass.desc.layout,
+				name            = common.create_name("Vulkan Tutorial Pipe"),
+				vert_shader     = vertex_shader_ref,
+				frag_shader     = fragment_shader_ref,
+				vertex_layout   = .Mesh,
+				render_pass_ref = render_pass_ref,
 			}
 			create_graphics_pipeline(pipeline_ref)
 		}
@@ -138,8 +136,6 @@ vt_pre_render :: proc() {
 	using G_VT
 
 	vt_create_texture_image()
-	vt_create_texture_image_view()
-	vt_create_texture_sampler()
 	vt_create_bind_groups()
 
 	// Setup the draw stream
@@ -170,8 +166,10 @@ vt_create_bind_groups :: proc() {
 
 	// Create the bind groups
 	{
-		refs := []BindGroupRef{InvalidBindGroupRef, InvalidBindGroupRef}
-		create_bind_groups_for_pipeline(pipeline_ref, refs)
+		refs, _ := create_bind_groups_for_pipeline(
+			pipeline_ref,
+			G_RENDERER_ALLOCATORS.main_allocator,
+		)
 
 		ubo_bind_group_ref = refs[0]
 		texture_bind_group_ref = refs[1]
@@ -238,60 +236,6 @@ vt_update :: proc(
 		draw_stream_submit(p_cmd_buff_ref, &draw_stream)
 	}
 	end_render_pass(render_pass_ref, p_cmd_buff_ref)
-}
-
-vt_create_buffer :: proc(
-	p_size: vk.DeviceSize,
-	p_usage: vk.BufferUsageFlags,
-	p_alloc_usage: vma.MemoryUsage,
-	p_alloc_flags: vma.AllocationCreateFlags,
-) -> (
-	vk.Buffer,
-	vma.Allocation,
-) {
-	using G_RENDERER
-	buffer_info := vk.BufferCreateInfo {
-		sType       = .BUFFER_CREATE_INFO,
-		size        = p_size,
-		usage       = p_usage,
-		sharingMode = .EXCLUSIVE,
-	}
-	alloc_info := vma.AllocationCreateInfo {
-		usage = p_alloc_usage,
-		flags = p_alloc_flags,
-	}
-
-	buffer: vk.Buffer
-	alloc: vma.Allocation
-	alloc_infos: vma.AllocationInfo
-	res := vma.create_buffer(
-		vma_allocator,
-		&buffer_info,
-		&alloc_info,
-		&buffer,
-		&alloc,
-		&alloc_infos,
-	)
-	if res != .SUCCESS {
-		log.warn("Failed to create buffer")
-		return 0, nil
-	}
-	return buffer, alloc
-}
-
-vt_copy_buffer :: proc(
-	p_src_buffer: vk.Buffer,
-	p_dst_buffer: vk.Buffer,
-	p_size: vk.DeviceSize,
-) {
-	using G_VT
-	using G_RENDERER
-	copy_cmd_buff := vt_begin_single_time_command_buffer()
-	copy_region := vk.BufferCopy {
-		size = p_size,
-	}
-	vk.CmdCopyBuffer(copy_cmd_buff, p_src_buffer, p_dst_buffer, 1, &copy_region)
-	vt_end_single_time_command_buffer(copy_cmd_buff)
 }
 
 vt_create_uniform_buffer :: proc() {
@@ -370,184 +314,6 @@ vt_create_texture_image :: proc() {
 	create_texture_image(texture_image_ref)
 
 	stb_image.image_free(pixels)
-}
-
-
-vt_begin_single_time_command_buffer :: proc() -> vk.CommandBuffer {
-	using G_VT
-	using G_RENDERER
-
-	alloc_info := vk.CommandBufferAllocateInfo {
-		sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
-		level              = .PRIMARY,
-		commandPool        = INTERNAL.graphics_command_pools[0],
-		commandBufferCount = 1,
-	}
-	cmd_buff: vk.CommandBuffer
-	vk.AllocateCommandBuffers(device, &alloc_info, &cmd_buff)
-
-	begin_info := vk.CommandBufferBeginInfo {
-		sType = .COMMAND_BUFFER_BEGIN_INFO,
-		flags = {.ONE_TIME_SUBMIT},
-	}
-
-	vk.BeginCommandBuffer(cmd_buff, &begin_info)
-	return cmd_buff
-}
-
-vt_end_single_time_command_buffer :: proc(cmd_buff: vk.CommandBuffer) {
-	using G_VT
-	using G_RENDERER
-
-	vk.EndCommandBuffer(cmd_buff)
-
-	command_buffer := cmd_buff
-	submit_info := vk.SubmitInfo {
-		sType              = .SUBMIT_INFO,
-		commandBufferCount = 1,
-		pCommandBuffers    = &command_buffer,
-	}
-	vk.QueueSubmit(graphics_queue, 1, &submit_info, 0)
-	vk.QueueWaitIdle(graphics_queue)
-}
-
-vt_transition_image_layout :: proc(
-	p_image: vk.Image,
-	p_old_layout: vk.ImageLayout,
-	p_new_layout: vk.ImageLayout,
-) {
-
-	cmd_buff := vt_begin_single_time_command_buffer()
-	barrier := vk.ImageMemoryBarrier {
-		sType = .IMAGE_MEMORY_BARRIER,
-		oldLayout = p_old_layout,
-		newLayout = p_new_layout,
-		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		image = p_image,
-		subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
-	}
-	src_stage: vk.PipelineStageFlags
-	dst_stage: vk.PipelineStageFlags
-	if p_old_layout == .UNDEFINED && p_new_layout == .TRANSFER_DST_OPTIMAL {
-		barrier.dstAccessMask = {.TRANSFER_WRITE}
-
-		src_stage = {.TOP_OF_PIPE}
-		dst_stage = {.TRANSFER}
-	} else if
-	   p_old_layout == .TRANSFER_DST_OPTIMAL &&
-	   p_new_layout == .SHADER_READ_ONLY_OPTIMAL {
-		barrier.srcAccessMask = {.TRANSFER_WRITE}
-		barrier.dstAccessMask = {.SHADER_READ}
-
-		src_stage = {.TRANSFER}
-		dst_stage = {.FRAGMENT_SHADER}
-	} else if p_old_layout == .UNDEFINED && p_new_layout == .DEPTH_ATTACHMENT_OPTIMAL {
-		barrier.dstAccessMask = {
-			.DEPTH_STENCIL_ATTACHMENT_READ,
-			.DEPTH_STENCIL_ATTACHMENT_WRITE,
-		}
-
-		src_stage = {.TOP_OF_PIPE}
-		dst_stage = {.EARLY_FRAGMENT_TESTS}
-
-	}
-	vk.CmdPipelineBarrier(
-		cmd_buff,
-		src_stage,
-		dst_stage,
-		nil,
-		0,
-		nil,
-		0,
-		nil,
-		1,
-		&barrier,
-	)
-	vt_end_single_time_command_buffer(cmd_buff)
-
-}
-
-vt_copy_buffer_to_image :: proc(
-	p_buffer: vk.Buffer,
-	p_image: vk.Image,
-	p_width: u32,
-	p_height: u32,
-) {
-	cmd_buff := vt_begin_single_time_command_buffer()
-	region := vk.BufferImageCopy {
-		bufferOffset = 0,
-		bufferRowLength = 0,
-		bufferImageHeight = 0,
-		imageSubresource = {aspectMask = {.COLOR}, layerCount = 1},
-		imageExtent = {width = p_width, height = p_height, depth = 1},
-	}
-	vk.CmdCopyBufferToImage(
-		cmd_buff,
-		p_buffer,
-		p_image,
-		.TRANSFER_DST_OPTIMAL,
-		1,
-		&region,
-	)
-	vt_end_single_time_command_buffer(cmd_buff)
-}
-
-vt_create_texture_image_view :: proc() {
-	texture_image := get_image(G_VT.texture_image_ref)
-	G_VT.texture_image_view = vt_create_image_view(
-		texture_image.vk_image,
-		.R8G8B8A8_SRGB,
-		{.COLOR},
-	)
-}
-
-vt_create_image_view :: proc(
-	p_image: vk.Image,
-	p_format: vk.Format,
-	p_aspect_mask: vk.ImageAspectFlags,
-) -> vk.ImageView {
-	using G_RENDERER
-	using G_VT
-
-	view_create_info := vk.ImageViewCreateInfo {
-		sType = .IMAGE_VIEW_CREATE_INFO,
-		image = p_image,
-		viewType = .D2,
-		format = p_format,
-		subresourceRange = {aspectMask = p_aspect_mask, levelCount = 1, layerCount = 1},
-	}
-
-	image_view: vk.ImageView
-	if vk.CreateImageView(device, &view_create_info, nil, &image_view) != .SUCCESS {
-		log.warn("Failed to create image view")
-	}
-	return image_view
-}
-
-vt_create_texture_sampler :: proc() {
-	using G_RENDERER
-	using G_VT
-
-	sampler_create_info := vk.SamplerCreateInfo {
-		sType            = .SAMPLER_CREATE_INFO,
-		magFilter        = .LINEAR,
-		minFilter        = .LINEAR,
-		addressModeU     = .REPEAT,
-		addressModeV     = .REPEAT,
-		addressModeW     = .REPEAT,
-		anisotropyEnable = true,
-		maxAnisotropy    = device_properties.limits.maxSamplerAnisotropy,
-		borderColor      = .INT_OPAQUE_BLACK,
-		compareOp        = .ALWAYS,
-		mipmapMode       = .LINEAR,
-	}
-
-	if
-	   vk.CreateSampler(device, &sampler_create_info, nil, &texture_sampler) !=
-	   .SUCCESS {
-		log.warn("Failed to create sampler")
-	}
 }
 
 vt_load_model :: proc() {

@@ -2,6 +2,8 @@ package common
 
 import "core:hash"
 import "core:mem"
+import "core:slice"
+import "core:strings"
 
 //---------------------------------------------------------------------------//
 
@@ -34,6 +36,12 @@ INTERNAL: struct {
 init_names :: proc(p_string_allocator: mem.Allocator) {
 	context.allocator = p_string_allocator
 	INTERNAL.string_table = make(map[Name]StringTableEntry)
+}
+
+//---------------------------------------------------------------------------//
+
+make_name :: #force_inline proc(p_name: string) -> Name {
+	return Name(hash.crc32(transmute([]u8)p_name))
 }
 
 //---------------------------------------------------------------------------//
@@ -110,3 +118,16 @@ hash_string_array :: proc(p_strings: []string) -> u32 {
 	}
 	return h
 }
+
+//---------------------------------------------------------------------------//
+
+clone_string_array :: proc(p_strings: []string, p_allocator: mem.Allocator) -> []string {
+	assert(len(p_strings) > 0)
+	cloned := slice.clone(p_strings, p_allocator)
+	for str, i in cloned {
+		cloned[i] = strings.clone(str, p_allocator)
+	}
+	return cloned
+}
+
+//---------------------------------------------------------------------------//

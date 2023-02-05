@@ -3,6 +3,7 @@ package renderer
 //---------------------------------------------------------------------------//
 
 import "core:c"
+import "core:mem"
 
 import "../common"
 
@@ -29,7 +30,7 @@ PipelineLayoutDesc :: struct {
 PipelineLayoutResource :: struct {
 	using backend_layout: BackendPipelineLayoutResource,
 	desc:                 PipelineLayoutDesc,
-	bind_group_refs:       []BindGroupRef,
+	bind_group_refs:      []BindGroupRef,
 }
 
 //---------------------------------------------------------------------------//
@@ -51,7 +52,10 @@ G_PIPELINE_LAYOUT_REF_ARRAY: RefArray(PipelineLayoutResource)
 
 @(private)
 init_pipeline_layouts :: proc() {
-	G_PIPELINE_LAYOUT_REF_ARRAY = create_ref_array(PipelineLayoutResource, MAX_PIPELINE_LAYOUTS)
+	G_PIPELINE_LAYOUT_REF_ARRAY = create_ref_array(
+		PipelineLayoutResource,
+		MAX_PIPELINE_LAYOUTS,
+	)
 }
 
 //---------------------------------------------------------------------------//
@@ -98,10 +102,13 @@ destroy_pipeline_layout :: proc(p_ref: PipelineLayoutRef) {
 
 create_bind_groups_for_pipeline_layout :: #force_inline proc(
 	p_pipeline_layout_ref: PipelineLayoutRef,
-	p_out_bind_groups: []BindGroupRef,
-) -> bool {
+	p_allocator: mem.Allocator,
+) -> (
+	[]BindGroupRef,
+	bool,
+) {
 	pipeline_layout := get_pipeline_layout(p_pipeline_layout_ref)
-	return clone_bind_groups(pipeline_layout.bind_group_refs, p_out_bind_groups)
+	return clone_bind_groups(pipeline_layout.bind_group_refs, p_allocator)
 }
 
 //---------------------------------------------------------------------------//

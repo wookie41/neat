@@ -38,6 +38,7 @@ MAX_MATERIALS :: #config(MAX_MATERIALS, 64)
 MAX_MATERIAL_PASSES :: #config(MAX_MATERIALS, 64)
 MAX_MATERIAL_INSTANCES :: #config(MAX_MATERIALS, 2048)
 MAX_MESHES :: #config(MAX_MESHES, 1024)
+MAX_MESH_INSTANCES :: #config(MAX_MESHES, 4096)
 
 //---------------------------------------------------------------------------//
 
@@ -151,7 +152,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	backend_init(p_options) or_return
 
 	init_shaders() or_return
-	init_render_passes()
+	assert(init_render_passes())
 	init_bind_groups()
 	init_pipeline_layouts()
 	init_pipelines()
@@ -160,6 +161,8 @@ init :: proc(p_options: InitOptions) -> bool {
 	init_images()
 	init_command_buffers(p_options) or_return
 	init_render_tasks() or_return
+	init_material_passs() or_return
+	init_materials() or_return
 
 	create_swap_images()
 

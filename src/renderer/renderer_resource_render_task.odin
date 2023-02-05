@@ -18,16 +18,18 @@ RenderTaskResource :: struct {
 	desc:                      RenderTaskDesc,
 	// Called once, after creating the render task
 	// This is the place when the render task should create it's internal resources
-	init:                      proc() -> bool,
+	init:                      proc(p_render_task: ^RenderTaskResource) -> bool,
 	// Called once, just before destroying the render task
 	// This is the place when the render task should destroy it's internal resources
-	deinit:                    proc(),
+	deinit:                    proc(p_render_task: ^RenderTaskResource),
 	// Called before the frame begin, i.e. before any draw/compute commands are issued
-	begin_frame:               proc(),
+	begin_frame:               proc(p_render_task: ^RenderTaskResource),
 	// Called after the frame ends, i.e. after all draw and compute commands were submited
-	end_frame:                 proc(),
+	end_frame:                 proc(p_render_task: ^RenderTaskResource),
 	// Called each frame to run the render task
-	render:                    proc(dt: f32),
+	render:                    proc(p_render_task: ^RenderTaskResource, dt: f32),
+	// Pointer to data that is internally used but the render task
+	data_ptr:                  rawptr,
 }
 
 //---------------------------------------------------------------------------//

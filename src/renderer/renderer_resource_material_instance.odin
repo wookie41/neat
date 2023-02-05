@@ -9,13 +9,16 @@ import "core:c"
 //---------------------------------------------------------------------------//
 
 MaterialInstanceDesc :: struct {
-	name:               common.Name,
+	name:         common.Name,
+	material_ref: MaterialRef,
 }
 
 //---------------------------------------------------------------------------//
 
 MaterialInstanceResource :: struct {
-	desc:                   MaterialInstanceDesc,
+	desc: MaterialInstanceDesc,
+	// This bind group hold the per-material bindings
+	material_bind_group_ref: BindGroupRef,
 }
 
 //---------------------------------------------------------------------------//
@@ -36,7 +39,10 @@ G_MATERIAL_INSTANCE_REF_ARRAY: RefArray(MaterialInstanceResource)
 //---------------------------------------------------------------------------//
 
 init_material_instances :: proc() -> bool {
-	G_MATERIAL_INSTANCE_REF_ARRAY = create_ref_array(MaterialInstanceResource, MAX_MATERIAL_INSTANCES)
+	G_MATERIAL_INSTANCE_REF_ARRAY = create_ref_array(
+		MaterialInstanceResource,
+		MAX_MATERIAL_INSTANCES,
+	)
 	return true
 }
 
@@ -48,13 +54,29 @@ deinit_material_instances :: proc() {
 //---------------------------------------------------------------------------//
 
 create_material_instance :: proc(p_material_instance_ref: MaterialInstanceRef) -> bool {
+	material_instance := get_material_instance(p_material_instance_ref)
+	material := get_material(material_instance.desc.material_ref)
+
+	// Create a copy of the material bind group
+	pipeline := get_pipeline(material.pipeline_ref)
+	pipeline_layout := get_pipeline_layout(pipeline.pipeline_layout_ref)
+
+	for bind_group_ref in pipeline_layout.bind_group_refs {
+		bind_group := get_bind_group(bind_group_ref)
+		if bind_group.desc.target == 2 {
+
+		}
+	}
+	
 	return true
 }
 
 //---------------------------------------------------------------------------//
 
 allocate_material_instance_ref :: proc(p_name: common.Name) -> MaterialInstanceRef {
-	ref := MaterialInstanceRef(create_ref(MaterialInstanceResource, &G_MATERIAL_INSTANCE_REF_ARRAY, p_name))
+	ref := MaterialInstanceRef(
+		create_ref(MaterialInstanceResource, &G_MATERIAL_INSTANCE_REF_ARRAY, p_name),
+	)
 	get_material_instance(ref).desc.name = p_name
 	return ref
 }
@@ -70,4 +92,3 @@ destroy_material_instance :: proc(p_ref: MaterialInstanceRef) {
 	// material_instance := get_material_instance(p_ref)
 	free_ref(MaterialInstanceResource, &G_MATERIAL_INSTANCE_REF_ARRAY, p_ref)
 }
-

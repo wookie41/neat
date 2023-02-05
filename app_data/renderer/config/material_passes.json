@@ -1,0 +1,8 @@
+[
+    {
+        "name": "TestMaterialPass",
+        "baseVertexShader": "base.vert",
+        "baseFragmentShader": "base.frag",
+        "renderPass": "TestRenderPass"
+    }
+]

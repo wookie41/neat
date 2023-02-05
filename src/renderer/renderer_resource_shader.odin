@@ -1,6 +1,9 @@
 
 package renderer
 
+// @TODO Figure out when we should free the shader, as they can be used by
+// multiple material instances. For now we always keep them loaded
+
 //---------------------------------------------------------------------------//
 
 import "core:c"
@@ -80,7 +83,7 @@ init_shaders :: proc() -> bool {
 	// Load base shader permutations
 	shaders_config := "app_data/renderer/config/shaders.json"
 	shaders_json_data, file_read_ok := os.read_entire_file(shaders_config)
-	defer free(raw_data(shaders_json_data))
+	defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
 
 	if file_read_ok == false {
 		log.error("Failed to open the shaders config file")
@@ -106,7 +109,6 @@ init_shaders :: proc() -> bool {
 	// Parse the shader config file
 	if err := json.unmarshal(shaders_json_data, &shader_json_entries); err != nil {
 		log.errorf("Failed to unmarshal shaders json: %s\n", err)
-		delete(shaders_json_data)
 		return false
 	}
 
@@ -121,6 +123,13 @@ init_shaders :: proc() -> bool {
 			entry.features,
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
+		for feature, i in shader.desc.features {
+			shader.desc.features[i] = strings.clone(
+				feature,
+				G_RENDERER_ALLOCATORS.resource_allocator,
+			)
+
+		}
 
 		if strings.has_suffix(entry.name, ".vert") {
 			shader.desc.type = .VERTEX
@@ -181,13 +190,20 @@ get_shader :: proc(p_ref: ShaderRef) -> ^ShaderResource {
 destroy_shader :: proc(p_ref: ShaderRef) {
 	shader := get_shader(p_ref)
 	backend_destroy_shader(shader)
+	for feature in shader.desc.features {
+		delete(feature, G_RENDERER_ALLOCATORS.resource_allocator)
+	}
 	delete(shader.desc.features, G_RENDERER_ALLOCATORS.resource_allocator)
 	free_ref(ShaderResource, &G_SHADER_REF_ARRAY, p_ref)
 }
 
 //--------------------------------------------------------------------------//
 
-find_shader_by_name :: proc(p_name: common.Name) -> ShaderRef {
+find_shader_by_name :: proc {find_shader_by_name_name, find_shader_by_name_str}
+
+//--------------------------------------------------------------------------//
+
+find_shader_by_name_name :: proc(p_name: common.Name) -> ShaderRef {
 	ref := find_ref_by_name(ShaderResource, &G_SHADER_REF_ARRAY, p_name)
 	if ref == InvalidShaderRef {
 		return InvalidShaderRef
@@ -197,8 +213,18 @@ find_shader_by_name :: proc(p_name: common.Name) -> ShaderRef {
 
 //--------------------------------------------------------------------------//
 
+find_shader_by_name_str :: proc(p_name: string) -> ShaderRef {
+	ref := find_ref_by_name(ShaderResource, &G_SHADER_REF_ARRAY, common.make_name(p_name))
+	if ref == InvalidShaderRef {
+		return InvalidShaderRef
+	}
+	return ShaderRef(ref)
+}
+
+//--------------------------------------------------------------------------//
+
 // Creates a new shader permutation using the base shader
-create_shader_permutation_with :: proc(
+create_shader_permutation :: proc(
 	p_name: common.Name,
 	p_base_shader_ref: ShaderRef,
 	p_features: []string,
@@ -242,6 +268,13 @@ create_shader_permutation_with :: proc(
 	permutation_hash := calculate_hash_for_shader(&permutation_desc)
 	if permutation_hash in INTERNAL.shader_by_hash {
 		return INTERNAL.shader_by_hash[permutation_hash]
+	}
+
+	for feature, i in permutation_desc.features {
+		permutation_desc.features[i] = strings.clone(
+			feature,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
 	}
 
 	permutation_ref := allocate_shader_ref(p_name)

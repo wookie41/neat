@@ -6,6 +6,7 @@ import "../common"
 import "core:log"
 import c "core:c"
 import "core:math/linalg/glsl"
+import "core:mem"
 
 //---------------------------------------------------------------------------//
 MeshVertexLayout :: struct {
@@ -53,21 +54,22 @@ ColorBlendType :: enum {
 	Default,
 }
 
+
 //---------------------------------------------------------------------------//
 
+@(private)
+G_BLEND_TYPE_NAME_MAPPING := map[string]ColorBlendType {
+	"Default" = .Default,
+}
 
 //---------------------------------------------------------------------------//
 
 PipelineDesc :: struct {
-	name:               common.Name,
-	vert_shader:        ShaderRef,
-	frag_shader:        ShaderRef,
-	vertex_layout:      VertexLayout,
-	primitive_type:     PrimitiveType,
-	resterizer_type:    RasterizerType,
-	multisampling_type: MultisamplingType,
-	depth_stencil_type: DepthStencilType,
-	render_pass_layout: RenderPassLayout,
+	name:            common.Name,
+	render_pass_ref: RenderPassRef,
+	vert_shader:     ShaderRef,
+	frag_shader:     ShaderRef,
+	vertex_layout:   VertexLayout,
 }
 
 //---------------------------------------------------------------------------//
@@ -179,15 +181,13 @@ bind_pipeline :: proc(p_pipeline_ref: PipelineRef, p_cmd_buff_ref: CommandBuffer
 
 create_bind_groups_for_pipeline :: #force_inline proc(
 	p_pipeline_ref: PipelineRef,
-	p_out_bind_groups: []BindGroupRef,
-) -> bool {
+	p_allocator: mem.Allocator,
+) -> (
+	[]BindGroupRef,
+	bool,
+) {
 	pipeline := get_pipeline(p_pipeline_ref)
-	return(
-		create_bind_groups_for_pipeline_layout(
-			pipeline.pipeline_layout_ref,
-			p_out_bind_groups,
-		)
-	)
+	return create_bind_groups_for_pipeline_layout(pipeline.pipeline_layout_ref, p_allocator)
 }
 
 //---------------------------------------------------------------------------//

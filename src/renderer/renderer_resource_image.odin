@@ -36,10 +36,38 @@ ImageAspectFlags :: distinct bit_set[ImageAspectFlagBits;u8]
 
 //---------------------------------------------------------------------------//
 
+G_IMAGE_TYPE_NAME_MAPPING := map[string]ImageType {
+	"2D" = .OneDimensional,
+	"3D" = .ThreeDimensional,
+}
+
+//---------------------------------------------------------------------------//
+
 ImageType :: enum u8 {
 	OneDimensional,
 	TwoDimensional,
 	ThreeDimensional,
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
+G_IMAGE_FORMAT_NAME_MAPPING := map[string]ImageFormat {
+	"Depth32SFloat" = .Depth32SFloat,
+	"R32UInt" = .R32UInt,
+	"R32Int" = .R32Int,
+	"R32SFloat" = .R32SFloat,
+	"RG32UInt" = .RG32UInt,
+	"RG32Int" = .RG32Int,
+	"RG32SFloat" = .RG32SFloat,
+	"RGB32UInt" = .RGB32UInt,
+	"RGB32Int" = .RGB32Int,
+	"RGB32SFloat" = .RGB32SFloat,
+	"RGBA32UInt" = .RGBA32UInt,
+	"RGBA32Int" = .RGBA32Int,
+	"RGBA32SFloat" = .RGBA32SFloat,
+	"RGBA8_SRGB" = .RGBA8_SRGB,
+	"BGRA8_SRGB" = .BGRA8_SRGB,
 }
 
 //---------------------------------------------------------------------------//
@@ -76,6 +104,7 @@ ImageFormat :: enum u16 {
 	RGBA32UInt,
 	RGBA32Int,
 	RGBA32SFloat,
+	R11G11B10,
 	RGBAFormatsEnd,
 
 	SRGB_FormatsStart,

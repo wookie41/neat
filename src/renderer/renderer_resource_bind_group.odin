@@ -3,6 +3,7 @@ package renderer
 //---------------------------------------------------------------------------//
 
 import "core:c"
+import "core:mem"
 import "../common"
 
 //---------------------------------------------------------------------------//
@@ -45,6 +46,7 @@ ImageBindingUsage :: enum u8 {
 //---------------------------------------------------------------------------//
 
 ImageBinding :: struct {
+	name:        common.Name,
 	slot:        u32,
 	usage:       ImageBindingUsage,
 	count:       u32,
@@ -197,7 +199,12 @@ bind_bind_groups :: proc(
 	cmd_buff := get_command_buffer(p_cmd_buff_ref)
 	pipeline := get_pipeline(p_pipeline_ref)
 
-	backend_bind_bind_groups(cmd_buff, pipeline, p_bindings, p_samplers_bind_group_target)
+	backend_bind_bind_groups(
+		cmd_buff,
+		pipeline,
+		p_bindings,
+		p_samplers_bind_group_target,
+	)
 }
 
 //---------------------------------------------------------------------------//
@@ -206,13 +213,21 @@ bind_bind_groups :: proc(
 * Returns a new bind group based on layout of the provided bind group. 
 * The bind group will be uninitialized, so the user must call update_bind_groups() for it
 */
-clone_bind_groups :: proc(p_bind_group_refs: []BindGroupRef, p_out_bind_groups: []BindGroupRef) -> bool {
-	assert(len(p_bind_group_refs) == len(p_out_bind_groups))
-	for i in 0..<len(p_bind_group_refs) {
-		p_out_bind_groups[i] = allocate_bind_group_ref(p_bind_group_refs[i].name)
-		get_bind_group(p_out_bind_groups[i]).desc = get_bind_group(p_out_bind_groups[i]).desc
+clone_bind_groups :: proc(
+	p_bind_group_refs: []BindGroupRef,
+	p_allocator: mem.Allocator,
+) -> (
+	[]BindGroupRef,
+	bool,
+) {
+	cloned_bind_group_refs := make([]BindGroupRef, len(p_bind_group_refs), p_allocator)
+	for i in 0 ..< len(p_bind_group_refs) {
+		cloned_bind_group_refs[i] = allocate_bind_group_ref(p_bind_group_refs[i].name)
+		get_bind_group(cloned_bind_group_refs[i]).desc =
+			get_bind_group(p_bind_group_refs[i]).desc
 	}
-	return backend_clone_bind_groups(p_bind_group_refs, p_out_bind_groups)
+	res := backend_clone_bind_groups(p_bind_group_refs, cloned_bind_group_refs)
+	return cloned_bind_group_refs, res
 }
 
 //---------------------------------------------------------------------------//

@@ -9,6 +9,7 @@ when USE_VULKAN_BACKEND {
 
 	import vk "vendor:vulkan"
 
+	import "../common"
 	//---------------------------------------------------------------------------//
 
 
@@ -50,6 +51,12 @@ when USE_VULKAN_BACKEND {
 			delete(bindings_per_set)
 		}
 
+		texture_name_by_slot := make(
+			map[u32]common.Name,
+			32,
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+		defer delete(texture_name_by_slot)
 
 		// Gather vertex shader descriptor info
 		for descriptor_set in &vert_shader.vk_descriptor_sets {
@@ -75,9 +82,15 @@ when USE_VULKAN_BACKEND {
 				// We have a single global descriptor set for sampler
 				if descriptor.type == .SAMPLER {
 					layout_binding.stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE}
+				} else if
+				   descriptor.type == .SAMPLED_IMAGE ||
+				   descriptor.type == .STORAGE_IMAGE {
+					// Add a texture slot so we can later resolve name -> slot
+					texture_name_by_slot[descriptor.binding] = descriptor.name
 				}
 				append(set_bindings, layout_binding)
 			}
+
 		}
 
 		// Gather fragment shader descriptor info
@@ -118,6 +131,11 @@ when USE_VULKAN_BACKEND {
 				}
 				if descriptor.type == .SAMPLER {
 					layout_binding.stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE}
+				} else if
+				   descriptor.type == .SAMPLED_IMAGE ||
+				   descriptor.type == .STORAGE_IMAGE {
+					// Add a texture slot so we can later resolve name -> slot
+					texture_name_by_slot[descriptor.binding] = descriptor.name
 				}
 				append(set_bindings, layout_binding)
 			}
@@ -131,7 +149,11 @@ when USE_VULKAN_BACKEND {
 		)
 		defer {
 			for descriptor_set_layout in descriptor_set_layouts {
-				vk.DestroyDescriptorSetLayout(G_RENDERER.device, descriptor_set_layout, nil)
+				vk.DestroyDescriptorSetLayout(
+					G_RENDERER.device,
+					descriptor_set_layout,
+					nil,
+				)
 			}
 			delete(descriptor_set_layouts, G_RENDERER_ALLOCATORS.temp_allocator)
 		}
@@ -157,7 +179,8 @@ when USE_VULKAN_BACKEND {
 					pBindings    = raw_data(descriptor_set_bindings),
 				}
 
-				if vk.CreateDescriptorSetLayout(
+				if
+				   vk.CreateDescriptorSetLayout(
 					   G_RENDERER.device,
 					   &create_info,
 					   nil,
@@ -168,7 +191,10 @@ when USE_VULKAN_BACKEND {
 					return false
 				}
 
-				image_bindings := make([dynamic]ImageBinding, G_RENDERER_ALLOCATORS.temp_allocator)
+				image_bindings := make(
+					[dynamic]ImageBinding,
+					G_RENDERER_ALLOCATORS.temp_allocator,
+				)
 				defer delete(image_bindings)
 
 				buffer_bindings := make(
@@ -192,6 +218,7 @@ when USE_VULKAN_BACKEND {
 
 					if descriptor.descriptorType == .SAMPLED_IMAGE {
 						image_binding := ImageBinding {
+							name        = texture_name_by_slot[descriptor.binding],
 							count       = descriptor.descriptorCount,
 							slot        = descriptor.binding,
 							stage_flags = stage_flags,
@@ -200,6 +227,7 @@ when USE_VULKAN_BACKEND {
 						append(&image_bindings, image_binding)
 					} else if descriptor.descriptorType == .STORAGE_IMAGE {
 						image_binding := ImageBinding {
+							name        = texture_name_by_slot[descriptor.binding],
 							count       = descriptor.descriptorCount,
 							slot        = descriptor.binding,
 							stage_flags = stage_flags,
@@ -241,7 +269,9 @@ when USE_VULKAN_BACKEND {
 
 				// Set 0 is reserved for samplers and texture array
 				if set != 0 {
-					bind_group := get_bind_group(p_layout.bind_group_refs[bind_group_idx])
+					bind_group := get_bind_group(
+						p_layout.bind_group_refs[bind_group_idx],
+					)
 					bind_group_idx += 1
 
 
@@ -267,7 +297,8 @@ when USE_VULKAN_BACKEND {
 				setLayoutCount = u32(len(descriptor_set_layouts)),
 			}
 
-			if vk.CreatePipelineLayout(
+			if
+			   vk.CreatePipelineLayout(
 				   G_RENDERER.device,
 				   &create_info,
 				   nil,
@@ -286,7 +317,11 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_destroy_pipeline_layout :: proc(p_pipeline_layout: ^PipelineLayoutResource) {
-		vk.DestroyPipelineLayout(G_RENDERER.device, p_pipeline_layout.vk_pipeline_layout, nil)
+		vk.DestroyPipelineLayout(
+			G_RENDERER.device,
+			p_pipeline_layout.vk_pipeline_layout,
+			nil,
+		)
 
 	}
 

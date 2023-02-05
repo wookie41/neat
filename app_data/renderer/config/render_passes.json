@@ -1,0 +1,10 @@
+[
+    {
+        "name": "TestRenderPass",
+        "renderTargets": [
+            { "format": "BGRA8_SRGB", "blendType": "Default" }
+        ],
+        "depthFormat": "Depth32SFloat",
+        "resolution": "Full"
+    }
+]
