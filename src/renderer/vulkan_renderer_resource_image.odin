@@ -14,6 +14,11 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
+	@(private = "file")
+	MAX_BINDLESS_COUNT :: 2048
+
+	//---------------------------------------------------------------------------//
+
 	@(private)
 	BackendImageResource :: struct {
 		vk_image:          vk.Image,
@@ -57,22 +62,44 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
+	RunningImageUpload :: struct {
+		image_ref:             ImageRef,
+		upload_finished_fence: vk.Fence,
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private = "file")
 	INTERNAL: struct {
 		// Buffer used to upload the initial contents of the images
-		staging_buffer:        BufferRef,
-		stating_buffer_offset: u32,
+		staging_buffer:                 BufferRef,
+		stating_buffer_offset:          u32,
+		bindless_descriptor_pool:       vk.DescriptorPool,
+		bindless_descriptor_set_layout: vk.DescriptorSetLayout,
+		bindless_descriptor_set:        vk.DescriptorSet,
+		immutable_samplers:             []vk.Sampler,
+		running_image_uploads:          [dynamic]RunningImageUpload,
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
 	backend_init_images :: proc() {
-		INTERNAL.staging_buffer = allocate_buffer_ref(common.create_name("ImageStagingBuffer"))
+		INTERNAL.staging_buffer = allocate_buffer_ref(
+			common.create_name("ImageStagingBuffer"),
+		)
 		staging_buffer := get_buffer(INTERNAL.staging_buffer)
 		staging_buffer.desc.size = common.MEGABYTE * 128
 		staging_buffer.desc.flags = {.HostWrite, .Mapped}
 		staging_buffer.desc.usage = {.TransferSrc}
 		create_buffer(INTERNAL.staging_buffer)
+
+		create_bindless_descriptor_array()
+
+		INTERNAL.running_image_uploads = make(
+			[dynamic]RunningImageUpload,
+			G_RENDERER_ALLOCATORS.main_allocator,
+		)
 	}
 
 	//---------------------------------------------------------------------------//
@@ -82,6 +109,14 @@ when USE_VULKAN_BACKEND {
 		p_image_ref: ImageRef,
 		p_image: ^ImageResource,
 	) -> bool {
+
+
+		// @TODO Bindless
+		// - get an index into the descriptor array
+		// - add a descriptor update entry
+		// - issue a descriptor update call at the end of the frame
+		// - think about storage images 
+
 		// Map vk image type
 		vk_image_type, type_found := G_IMAGE_TYPE_MAPPING[p_image.desc.type]
 		if type_found == false {
@@ -94,7 +129,8 @@ when USE_VULKAN_BACKEND {
 		}
 
 		// Map vk image view type
-		vk_image_view_type, view_type_found := G_IMAGE_VIEW_TYPE_MAPPING[p_image.desc.type]
+		vk_image_view_type, view_type_found :=
+			G_IMAGE_VIEW_TYPE_MAPPING[p_image.desc.type]
 		if view_type_found == false {
 			log.warnf(
 				"Failed to create image %s, unsupported type: %s\n",
@@ -161,7 +197,8 @@ when USE_VULKAN_BACKEND {
 			   &p_image.vk_image,
 			   &p_image.allocation,
 			   nil,
-		   ); res != .SUCCESS {
+		   );
+		   res != .SUCCESS {
 			log.warnf("Failed to create image %s", res)
 			return false
 		}
@@ -196,13 +233,19 @@ when USE_VULKAN_BACKEND {
 				},
 			}
 
-			if vk.CreateImageView(
+			if
+			   vk.CreateImageView(
 				   G_RENDERER.device,
 				   &view_create_info,
 				   nil,
 				   &p_image.all_mips_vk_view,
-			   ) != .SUCCESS {
-				vma.destroy_image(G_RENDERER.vma_allocator, p_image.vk_image, p_image.allocation)
+			   ) !=
+			   .SUCCESS {
+				vma.destroy_image(
+					G_RENDERER.vma_allocator,
+					p_image.vk_image,
+					p_image.allocation,
+				)
 				return false
 			}
 
@@ -242,18 +285,24 @@ when USE_VULKAN_BACKEND {
 				image = p_image.vk_image,
 				viewType = vk_image_view_type,
 				format = vk_image_format,
-				subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
+				subresourceRange = {
+					aspectMask = {.COLOR},
+					levelCount = 1,
+					layerCount = 1,
+				},
 			}
 
 			for i in 0 ..< p_image.desc.mip_count {
 				p_image.vk_layout_per_mip[i] = .UNDEFINED
 				view_create_info.subresourceRange.baseMipLevel = u32(i)
-				if vk.CreateImageView(
+				if
+				   vk.CreateImageView(
 					   G_RENDERER.device,
 					   &view_create_info,
 					   nil,
 					   &p_image.per_mip_vk_view[i],
-				   ) != .SUCCESS {
+				   ) !=
+				   .SUCCESS {
 					break
 				}
 
@@ -279,10 +328,18 @@ when USE_VULKAN_BACKEND {
 			if num_image_views_created < int(p_image.desc.mip_count) {
 				vk.DestroyImageView(G_RENDERER.device, p_image.all_mips_vk_view, nil)
 				for i in 0 ..= num_image_views_created {
-					vk.DestroyImageView(G_RENDERER.device, p_image.per_mip_vk_view[i], nil)
+					vk.DestroyImageView(
+						G_RENDERER.device,
+						p_image.per_mip_vk_view[i],
+						nil,
+					)
 				}
 				// Delete the image itself
-				vma.destroy_image(G_RENDERER.vma_allocator, p_image.vk_image, p_image.allocation)
+				vma.destroy_image(
+					G_RENDERER.vma_allocator,
+					p_image.vk_image,
+					p_image.allocation,
+				)
 				return false
 			}
 		}
@@ -306,10 +363,16 @@ when USE_VULKAN_BACKEND {
 		for mip_data, i in p_image.desc.data_per_mip {
 
 			// Make sure we have enough space in the staging buffer
-			assert(INTERNAL.stating_buffer_offset + u32(len(mip_data)) < staging_buffer.desc.size)
+			assert(
+				INTERNAL.stating_buffer_offset + u32(len(mip_data)) <
+				staging_buffer.desc.size,
+			)
 
 			mem.copy(
-				mem.ptr_offset(staging_buffer.mapped_ptr, INTERNAL.stating_buffer_offset),
+				mem.ptr_offset(
+					staging_buffer.mapped_ptr,
+					INTERNAL.stating_buffer_offset,
+				),
 				raw_data(mip_data),
 				len(mip_data),
 			)
@@ -340,7 +403,8 @@ when USE_VULKAN_BACKEND {
 			swap_image := get_image(ref)
 
 			swap_image.desc.type = .TwoDimensional
-			swap_image.desc.format = G_IMAGE_FORMAT_MAPPING_VK[G_RENDERER.swapchain_format.format]
+			swap_image.desc.format =
+				G_IMAGE_FORMAT_MAPPING_VK[G_RENDERER.swapchain_format.format]
 			swap_image.desc.mip_count = 1
 			swap_image.desc.dimensions = {
 				G_RENDERER.swap_extent.width,
@@ -366,10 +430,8 @@ when USE_VULKAN_BACKEND {
 	) -> bool {
 
 		assert(
-			p_depth_buffer_desc.format >
-			.DepthFormatsStart &&
-			p_depth_buffer_desc.format <
-			.DepthFormatsEnd,
+			p_depth_buffer_desc.format > .DepthFormatsStart &&
+			p_depth_buffer_desc.format < .DepthFormatsEnd,
 		)
 
 		depth_image_create_info := vk.ImageCreateInfo {
@@ -394,14 +456,16 @@ when USE_VULKAN_BACKEND {
 			usage = .AUTO,
 		}
 
-		if vma.create_image(
+		if
+		   vma.create_image(
 			   G_RENDERER.vma_allocator,
 			   &depth_image_create_info,
 			   &alloc_create_info,
 			   &p_depth_image.vk_image,
 			   &p_depth_image.allocation,
 			   nil,
-		   ) != .SUCCESS {
+		   ) !=
+		   .SUCCESS {
 			log.warn("Failed to create depth buffer")
 			return false
 		}
@@ -429,12 +493,14 @@ when USE_VULKAN_BACKEND {
 			subresourceRange = {aspectMask = {.DEPTH}, levelCount = 1, layerCount = 1},
 		}
 
-		if vk.CreateImageView(
+		if
+		   vk.CreateImageView(
 			   G_RENDERER.device,
 			   &view_create_info,
 			   nil,
 			   &p_depth_image.all_mips_vk_view,
-		   ) != .SUCCESS {
+		   ) !=
+		   .SUCCESS {
 			log.warn("Failed to create image view")
 			return false
 		}
@@ -587,7 +653,7 @@ when USE_VULKAN_BACKEND {
 		)
 
 		// Copy the data image
-		for copy in vk_copies {
+		for copy, i in vk_copies {
 
 			vk.CmdCopyBufferToImage(
 				cmd_buff.vk_cmd_buff,
@@ -597,22 +663,340 @@ when USE_VULKAN_BACKEND {
 				u32(len(copy.mip_copies)),
 				raw_data(copy.mip_copies),
 			)
+
+			// Transition the image to sample
+			vk.CmdPipelineBarrier(
+				cmd_buff.vk_cmd_buff,
+				{.TRANSFER},
+				{.VERTEX_SHADER, .FRAGMENT_SHADER, .COMPUTE_SHADER},
+				nil,
+				0,
+				nil,
+				0,
+				nil,
+				1,
+				&to_sample_barriers[i],
+			)
+
+			// Create a fence so that we can update the descriptor in the bindless array
+			upload_finished_fence_create_info := vk.FenceCreateInfo {
+				sType = .FENCE_CREATE_INFO,
+			}
+
+			running_image_upload := RunningImageUpload {
+				image_ref = G_RENDERER.queued_textures_copies[i].image,
+			}
+
+			vk.CreateFence(
+				G_RENDERER.device,
+				&upload_finished_fence_create_info,
+				nil,
+				&running_image_upload.upload_finished_fence,
+			)
 		}
 
-		// Transition the image to sample
-		vk.CmdPipelineBarrier(
-			cmd_buff.vk_cmd_buff,
-			{.TRANSFER},
-			{.VERTEX_SHADER, .FRAGMENT_SHADER, .COMPUTE_SHADER},
-			nil,
+	}
+	//---------------------------------------------------------------------------//
+
+	@(private = "file")
+	create_bindless_descriptor_array :: proc() {
+
+		// Create samplers
+		{
+			INTERNAL.immutable_samplers = make(
+				[]vk.Sampler,
+				len(SamplerType),
+				G_RENDERER_ALLOCATORS.resource_allocator,
+			)
+
+			sampler_create_info := vk.SamplerCreateInfo {
+				sType        = .SAMPLER_CREATE_INFO,
+				magFilter    = .NEAREST,
+				minFilter    = .NEAREST,
+				addressModeU = .CLAMP_TO_EDGE,
+				addressModeW = .CLAMP_TO_EDGE,
+				addressModeV = .CLAMP_TO_EDGE,
+				// @TODO
+				// anisotropyEnable = true,
+				//maxAnisotropy    = device_properties.limits.maxSamplerAnisotropy,
+				borderColor  = .INT_OPAQUE_BLACK,
+				compareOp    = .ALWAYS,
+				mipmapMode   = .LINEAR,
+			}
+
+			vk.CreateSampler(
+				G_RENDERER.device,
+				&sampler_create_info,
+				nil,
+				&INTERNAL.immutable_samplers[0],
+			)
+
+			sampler_create_info.addressModeU = .CLAMP_TO_BORDER
+			sampler_create_info.addressModeV = .CLAMP_TO_BORDER
+			sampler_create_info.addressModeW = .CLAMP_TO_BORDER
+
+			vk.CreateSampler(
+				G_RENDERER.device,
+				&sampler_create_info,
+				nil,
+				&INTERNAL.immutable_samplers[1],
+			)
+
+			sampler_create_info.addressModeU = .REPEAT
+			sampler_create_info.addressModeV = .REPEAT
+			sampler_create_info.addressModeW = .REPEAT
+
+			vk.CreateSampler(
+				G_RENDERER.device,
+				&sampler_create_info,
+				nil,
+				&INTERNAL.immutable_samplers[2],
+			)
+
+			sampler_create_info.magFilter = .LINEAR
+			sampler_create_info.minFilter = .LINEAR
+
+			sampler_create_info.addressModeU = .CLAMP_TO_EDGE
+			sampler_create_info.addressModeV = .CLAMP_TO_EDGE
+			sampler_create_info.addressModeW = .CLAMP_TO_EDGE
+
+			vk.CreateSampler(
+				G_RENDERER.device,
+				&sampler_create_info,
+				nil,
+				&INTERNAL.immutable_samplers[3],
+			)
+
+			sampler_create_info.addressModeU = .CLAMP_TO_BORDER
+			sampler_create_info.addressModeV = .CLAMP_TO_BORDER
+			sampler_create_info.addressModeW = .CLAMP_TO_BORDER
+
+			vk.CreateSampler(
+				G_RENDERER.device,
+				&sampler_create_info,
+				nil,
+				&INTERNAL.immutable_samplers[4],
+			)
+
+			sampler_create_info.addressModeU = .REPEAT
+			sampler_create_info.addressModeV = .REPEAT
+			sampler_create_info.addressModeW = .REPEAT
+
+			vk.CreateSampler(
+				G_RENDERER.device,
+				&sampler_create_info,
+				nil,
+				&INTERNAL.immutable_samplers[5],
+			)
+		}
+		// Create a descriptor poll for the bindless array and immutable samplers
+		{
+			pool_sizes := []vk.DescriptorPoolSize{
+				{type = .SAMPLER, descriptorCount = len(SamplerType)},
+				{type = .SAMPLED_IMAGE, descriptorCount = MAX_BINDLESS_COUNT},
+			}
+
+			descriptor_pool_create_info := vk.DescriptorPoolCreateInfo {
+				sType         = .DESCRIPTOR_POOL_CREATE_INFO,
+				maxSets       = 1,
+				poolSizeCount = 1,
+				pPoolSizes    = raw_data(pool_sizes),
+			}
+
+			vk.CreateDescriptorPool(
+				G_RENDERER.device,
+				&descriptor_pool_create_info,
+				nil,
+				&INTERNAL.bindless_descriptor_pool,
+			)
+
+		}
+
+		// Create the bindings layout and the layout itself
+		{
+			binding_flags := vk.DescriptorBindingFlags{.UPDATE_AFTER_BIND}
+
+			flags_create_info := vk.DescriptorSetLayoutBindingFlagsCreateInfo {
+				sType         = .DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+				bindingCount  = 1,
+				pBindingFlags = &binding_flags,
+			}
+
+			set_bindings := []vk.DescriptorSetLayoutBinding{
+				{
+					binding = 0,
+					descriptorCount = 1,
+					descriptorType = .SAMPLER,
+					pImmutableSamplers = raw_data(INTERNAL.immutable_samplers),
+					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
+				},
+				{
+					binding = 1,
+					descriptorCount = 1,
+					descriptorType = .SAMPLER,
+					pImmutableSamplers = raw_data(INTERNAL.immutable_samplers),
+					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
+				},
+				{
+					binding = 2,
+					descriptorCount = 1,
+					descriptorType = .SAMPLER,
+					pImmutableSamplers = raw_data(INTERNAL.immutable_samplers),
+					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
+				},
+				{
+					binding = 3,
+					descriptorCount = 1,
+					descriptorType = .SAMPLER,
+					pImmutableSamplers = raw_data(INTERNAL.immutable_samplers),
+					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
+				},
+				{
+					binding = 4,
+					descriptorCount = 1,
+					descriptorType = .SAMPLER,
+					pImmutableSamplers = raw_data(INTERNAL.immutable_samplers),
+					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
+				},
+				{
+					binding = 5,
+					descriptorCount = 1,
+					descriptorType = .SAMPLER,
+					pImmutableSamplers = raw_data(INTERNAL.immutable_samplers),
+					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
+				},
+				{
+					binding = 6,
+					descriptorCount = MAX_BINDLESS_COUNT,
+					descriptorType = .SAMPLED_IMAGE,
+					pImmutableSamplers = raw_data(INTERNAL.immutable_samplers),
+					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
+				},
+			}
+
+			descriptor_set_layout_create_info := vk.DescriptorSetLayoutCreateInfo {
+				sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+				bindingCount = u32(len(set_bindings)),
+				pBindings    = raw_data(set_bindings),
+			}
+
+			res := vk.CreateDescriptorSetLayout(
+				G_RENDERER.device,
+				&descriptor_set_layout_create_info,
+				nil,
+				&INTERNAL.bindless_descriptor_set_layout,
+			)
+			assert(res == .SUCCESS)
+
+			// Finally, allocate the descriptor set 
+			allocate_info := vk.DescriptorSetAllocateInfo {
+				sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
+				pSetLayouts        = &INTERNAL.bindless_descriptor_set_layout,
+				descriptorPool     = INTERNAL.bindless_descriptor_pool,
+				descriptorSetCount = 1,
+			}
+
+			res = vk.AllocateDescriptorSets(
+				G_RENDERER.device,
+				&allocate_info,
+				&INTERNAL.bindless_descriptor_set,
+			)
+			assert(res == .SUCCESS)
+		}
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_bind_bindless_array_and_immutable_samplers :: proc(
+		p_cmd_buffer: ^CommandBufferResource,
+		p_pipeline_layout: ^PipelineLayoutResource,
+		p_target: u32,
+		p_bind_point: PipelineType,
+	) {
+
+		vk.CmdBindDescriptorSets(
+			p_cmd_buffer.vk_cmd_buff,
+			map_pipeline_bind_point(p_bind_point),
+			p_pipeline_layout.vk_pipeline_layout,
+			p_target,
+			1,
+			&INTERNAL.bindless_descriptor_set,
 			0,
 			nil,
+		)
+
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_update_images :: proc(p_dt: f32) {
+
+		running_image_uploads := make(
+			[dynamic]RunningImageUpload,
+			G_RENDERER_ALLOCATORS.main_allocator,
+		)
+
+		bindless_writes := make(
+			[]vk.WriteDescriptorSet,
+			len(INTERNAL.running_image_uploads),
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+
+		defer delete(bindless_writes, G_RENDERER_ALLOCATORS.temp_allocator)
+
+		next_descriptor_write_idx := 0
+		for image_upload, i in INTERNAL.running_image_uploads {
+
+			// Check if the upload is finished
+			if
+			   vk.GetFenceStatus(
+				   G_RENDERER.device,
+				   image_upload.upload_finished_fence,
+			   ) ==
+			   .SUCCESS {
+
+				// If it is, then update the descriptor in the bindless array
+				image := get_image(image_upload.image_ref)
+
+				img_info := vk.DescriptorImageInfo {
+					imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+					imageView   = image.all_mips_vk_view,
+				}
+				bindless_writes[next_descriptor_write_idx] = vk.WriteDescriptorSet {
+					sType           = .WRITE_DESCRIPTOR_SET,
+					descriptorCount = 1,
+					descriptorType  = .SAMPLED_IMAGE,
+					dstSet          = INTERNAL.bindless_descriptor_set,
+					pImageInfo      = &img_info,
+					dstArrayElement = image.bindless_idx,
+					dstBinding      = 1,
+				}
+
+				next_descriptor_write_idx += 1
+			} else {
+				// Otherwise just keep add it to the new array containing only the 
+				// uploads that are still running
+
+				append(&running_image_uploads, image_upload)
+			}
+		}
+
+		// Swap the arrays to only keep the running uploads
+		delete(INTERNAL.running_image_uploads)
+		INTERNAL.running_image_uploads = running_image_uploads 
+
+		// Update the bindless array
+		vk.UpdateDescriptorSets(
+			G_RENDERER.device,
+			u32(next_descriptor_write_idx),
+			raw_data(bindless_writes),
 			0,
 			nil,
-			u32(len(vk_copies)),
-			&to_sample_barriers[0],
 		)
 	}
+
 	//---------------------------------------------------------------------------//
 
 }

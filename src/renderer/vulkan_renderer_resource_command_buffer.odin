@@ -47,7 +47,7 @@ when USE_VULKAN_BACKEND {
 		) or_return
 
 		// Create command pools for transfer queue if the GPU has a dedicated one
-		if  .DedicatedTransferQueue in G_RENDERER.device_hints {
+		if  .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 			INTERNAL.transfer_command_pools = make(
 				[]vk.CommandPool,
 				int(G_RENDERER.num_frames_in_flight),
@@ -67,7 +67,7 @@ when USE_VULKAN_BACKEND {
 		}
 
 		// Create command pools for compute queue if the GPU has a dedicated one
-		if  .DedicatedComputeQueue in G_RENDERER.device_hints {
+		if  .DedicatedComputeQueue in G_RENDERER.gpu_device_flags {
 			INTERNAL.compute_command_pools = make(
 				[]vk.CommandPool,
 				int(G_RENDERER.num_frames_in_flight),
@@ -200,7 +200,7 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	get_frame_transfer_cmd_buffer :: proc() -> vk.CommandBuffer {
-		if .DedicatedTransferQueue in G_RENDERER.device_hints {
+		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 			return INTERNAL.transfer_cmd_buffers[get_frame_idx()]
 		}
 		cmd_buff_ref := get_frame_cmd_buffer()

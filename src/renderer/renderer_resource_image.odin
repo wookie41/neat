@@ -54,20 +54,20 @@ ImageType :: enum u8 {
 @(private)
 G_IMAGE_FORMAT_NAME_MAPPING := map[string]ImageFormat {
 	"Depth32SFloat" = .Depth32SFloat,
-	"R32UInt" = .R32UInt,
-	"R32Int" = .R32Int,
-	"R32SFloat" = .R32SFloat,
-	"RG32UInt" = .RG32UInt,
-	"RG32Int" = .RG32Int,
-	"RG32SFloat" = .RG32SFloat,
-	"RGB32UInt" = .RGB32UInt,
-	"RGB32Int" = .RGB32Int,
-	"RGB32SFloat" = .RGB32SFloat,
-	"RGBA32UInt" = .RGBA32UInt,
-	"RGBA32Int" = .RGBA32Int,
-	"RGBA32SFloat" = .RGBA32SFloat,
-	"RGBA8_SRGB" = .RGBA8_SRGB,
-	"BGRA8_SRGB" = .BGRA8_SRGB,
+	"R32UInt"       = .R32UInt,
+	"R32Int"        = .R32Int,
+	"R32SFloat"     = .R32SFloat,
+	"RG32UInt"      = .RG32UInt,
+	"RG32Int"       = .RG32Int,
+	"RG32SFloat"    = .RG32SFloat,
+	"RGB32UInt"     = .RGB32UInt,
+	"RGB32Int"      = .RGB32Int,
+	"RGB32SFloat"   = .RGB32SFloat,
+	"RGBA32UInt"    = .RGBA32UInt,
+	"RGBA32Int"     = .RGBA32Int,
+	"RGBA32SFloat"  = .RGBA32SFloat,
+	"RGBA8_SRGB"    = .RGBA8_SRGB,
+	"BGRA8_SRGB"    = .BGRA8_SRGB,
 }
 
 //---------------------------------------------------------------------------//
@@ -106,12 +106,10 @@ ImageFormat :: enum u16 {
 	RGBA32SFloat,
 	R11G11B10,
 	RGBAFormatsEnd,
-
 	SRGB_FormatsStart,
 	RGBA8_SRGB,
 	BGRA8_SRGB,
 	SRGB_FormatsEnd,
-	
 	ColorFormatsEnd,
 	//---------------------//
 }
@@ -140,7 +138,7 @@ ImageSampleCountFlags :: distinct bit_set[ImageSampleFlagBits;u8]
 //---------------------------------------------------------------------------//
 
 ImageDesc :: struct {
-	name: 				common.Name,
+	name:               common.Name,
 	type:               ImageType,
 	format:             ImageFormat,
 	mip_count:          u8,
@@ -155,9 +153,19 @@ ImageDesc :: struct {
 ImageResource :: struct {
 	using backend_image: BackendImageResource,
 	desc:                ImageDesc,
+	bindless_idx:        u32,
 }
 
 //---------------------------------------------------------------------------//
+
+@(private = "file")
+INTERNAL: struct {
+	next_bindless_idx:     u32,
+	free_bindless_indices: [dynamic]u32,
+}
+
+//---------------------------------------------------------------------------//
+
 
 @(private)
 TextureCopy :: struct {
@@ -172,6 +180,11 @@ TextureCopy :: struct {
 @(private)
 init_images :: proc() {
 	G_IMAGE_REF_ARRAY = create_ref_array(ImageResource, MAX_IMAGES)
+	INTERNAL.next_bindless_idx = 0
+	INTERNAL.free_bindless_indices = make(
+		[dynamic]u32,
+		G_RENDERER_ALLOCATORS.main_allocator,
+	)
 	backend_init_images()
 }
 
@@ -186,6 +199,14 @@ allocate_image_ref :: proc(p_name: common.Name) -> ImageRef {
 /** Creates an image that can later be used as a sampled image inside a shader */
 create_texture_image :: proc(p_ref: ImageRef) -> bool {
 	image := get_image(p_ref)
+
+	if len(INTERNAL.free_bindless_indices) > 0 {
+		image.bindless_idx = pop(&INTERNAL.free_bindless_indices)
+	} else {
+		image.bindless_idx = INTERNAL.next_bindless_idx
+		INTERNAL.next_bindless_idx += 1
+	}
+
 	assert(
 		image.desc.format > .ColorFormatsStart && image.desc.format < .ColorFormatsEnd,
 	)
@@ -230,8 +251,34 @@ create_swap_images :: #force_inline proc() {
 
 destroy_image :: proc(p_ref: ImageRef) {
 	image := get_image(p_ref)
+	if image.bindless_idx != c.UINT32_MAX {
+		append(&INTERNAL.free_bindless_indices, image.bindless_idx)
+	}
 	backend_destroy_image(image)
 	free_ref(ImageResource, &G_IMAGE_REF_ARRAY, p_ref)
+}
+
+//---------------------------------------------------------------------------//
+
+bind_bindless_array_and_immutable_sampler :: #force_inline proc(
+	p_cmd_buff_ref: CommandBufferRef,
+	p_pipeline_layout_ref: PipelineLayoutRef,
+	p_bind_point: PipelineType,
+	p_target: u32,
+) {
+
+	backend_bind_bindless_array_and_immutable_sampler(
+		get_command_buffer(p_cmd_buff_ref),
+		get_pipeline_layout(p_pipeline_layout_ref),
+		p_bind_point,
+		p_target,
+	)
+}
+
+//---------------------------------------------------------------------------//
+
+update_images :: #force_inline proc(p_dt: f32) {
+	backend_update_images(p_dt)
 }
 
 //---------------------------------------------------------------------------//

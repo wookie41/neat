@@ -88,7 +88,7 @@ when USE_VULKAN_BACKEND {
 		INTERNAL.had_requests_prev_frame = true
 		transfer_cmd_buff := get_frame_transfer_cmd_buffer()
 
-		if .DedicatedTransferQueue in G_RENDERER.device_hints {
+		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 			begin_info := vk.CommandBufferBeginInfo {
 				sType = .COMMAND_BUFFER_BEGIN_INFO,
 				flags = {.ONE_TIME_SUBMIT},
@@ -125,7 +125,7 @@ when USE_VULKAN_BACKEND {
 				G_RENDERER.queue_family_transfer_index
 			if
 			   (is_not_first_usage && not_owning_buffer) &&
-			   .DedicatedTransferQueue in G_RENDERER.device_hints {
+			   .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 
 				acquire_barrier := vk.BufferMemoryBarrier {
 					sType = .BUFFER_MEMORY_BARRIER,
@@ -180,7 +180,7 @@ when USE_VULKAN_BACKEND {
 			}
 
 			// Issue a release barrier for the dst buffer if we're using a dedicated transfer queue
-			if .DedicatedTransferQueue in G_RENDERER.device_hints {
+			if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 				
 				// @TODO This should check to which queue this buffer belongs to hand back
 				// ownership to the appropriate queue
@@ -224,7 +224,7 @@ when USE_VULKAN_BACKEND {
 		}
 
 		// Now we have to submit the transfer if we're using a dedicated transfer queue
-		if .DedicatedTransferQueue in G_RENDERER.device_hints {
+		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 
 			G_RENDERER.should_wait_on_transfer_semaphore = true
 

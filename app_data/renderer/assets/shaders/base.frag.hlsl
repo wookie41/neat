@@ -1,4 +1,4 @@
-#include "samplers.hlsl"
+#include "bindless.hlsl"
 
 struct FSInput {
     [[vk::location(0)]] float2 uv        : TEXCOORD0;

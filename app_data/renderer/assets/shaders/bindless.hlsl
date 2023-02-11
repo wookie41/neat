@@ -10,3 +10,8 @@ SamplerState linearClampToEdgeSampler;
 SamplerState linearClampToBorderSampler;
 [[vk::binding(5, 0)]]
 SamplerState linearRepeatSampler;
+
+
+[[vk::binding(6, 0)]]
+Texture2D uTextures2D[2048];
+

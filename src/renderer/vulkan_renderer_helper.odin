@@ -71,4 +71,23 @@ when USE_VULKAN_BACKEND {
 	}
 
 	//---------------------------------------------------------------------------//
+
+	@(private)
+	map_pipeline_bind_point :: proc(p_pipeline_type: PipelineType) -> vk.PipelineBindPoint {
+		if p_pipeline_type == .Graphics {
+			return .GRAPHICS
+		} else if p_pipeline_type == .Compute {
+			return .COMPUTE
+		} else if p_pipeline_type == .Raytracing {
+			assert(false)
+		} else {
+			assert(false)
+		}
+		return .GRAPHICS
+	}
+
+	//---------------------------------------------------------------------------//
+
 }
+
+

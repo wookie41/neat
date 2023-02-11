@@ -16,9 +16,6 @@ import "../common"
 	will be placed for synchronization.
 	If the request can't be satisfied in the current frame, request_buffer_upload()
 	will return a nullptr.
-
-	As such, the buffer upload is only really applicable to discrite GPUs, as otherwise
-	we one should upload the data directly do the buffer.
  */
 
 //---------------------------------------------------------------------------//
@@ -71,8 +68,8 @@ BufferUploadInitOptions :: struct {
 @(private)
 init_buffer_upload :: proc(p_options: BufferUploadInitOptions) -> bool {
 
-	if .IntegratedGPU in G_RENDERER.device_hints {
-		return true
+	if .IntegratedGPU in G_RENDERER.gpu_device_flags {
+		return 
 	}
 
 	// Create the staging buffer used as upload src

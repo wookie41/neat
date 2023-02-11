@@ -12,9 +12,6 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	@(private)
-	IMMUTABLE_SAMPLERS: []vk.Sampler
-
 	@(private = "file")
 	INTERNAL: struct {
 		descriptor_pool:                vk.DescriptorPool,
@@ -38,9 +35,6 @@ when USE_VULKAN_BACKEND {
 		// Create descriptor pools
 		{
 			pool_sizes := []vk.DescriptorPoolSize{
-				{type = .SAMPLER, descriptorCount = 1 << 15},
-				{type = .COMBINED_IMAGE_SAMPLER, descriptorCount = 1 << 15},
-				{type = .SAMPLED_IMAGE, descriptorCount = 1 << 15},
 				{type = .STORAGE_IMAGE, descriptorCount = 1 << 15},
 				{type = .UNIFORM_BUFFER, descriptorCount = 1 << 15},
 				{type = .UNIFORM_BUFFER_DYNAMIC, descriptorCount = 1 << 15},
@@ -72,149 +66,6 @@ when USE_VULKAN_BACKEND {
 			)
 		}
 
-		// Create samplers
-		{
-			IMMUTABLE_SAMPLERS = make(
-				[]vk.Sampler,
-				len(SamplerType),
-				G_RENDERER_ALLOCATORS.resource_allocator,
-			)
-
-			sampler_create_info := vk.SamplerCreateInfo {
-				sType        = .SAMPLER_CREATE_INFO,
-				magFilter    = .NEAREST,
-				minFilter    = .NEAREST,
-				addressModeU = .CLAMP_TO_EDGE,
-				addressModeV = .CLAMP_TO_EDGE,
-				addressModeW = .CLAMP_TO_EDGE,
-				// @TODO
-				// anisotropyEnable = true,
-				//maxAnisotropy    = device_properties.limits.maxSamplerAnisotropy,
-				borderColor  = .INT_OPAQUE_BLACK,
-				compareOp    = .ALWAYS,
-				mipmapMode   = .LINEAR,
-			}
-
-			vk.CreateSampler(G_RENDERER.device, &sampler_create_info, nil, &IMMUTABLE_SAMPLERS[0])
-
-			sampler_create_info.addressModeU = .CLAMP_TO_BORDER
-			sampler_create_info.addressModeV = .CLAMP_TO_BORDER
-			sampler_create_info.addressModeW = .CLAMP_TO_BORDER
-
-			vk.CreateSampler(G_RENDERER.device, &sampler_create_info, nil, &IMMUTABLE_SAMPLERS[1])
-
-			sampler_create_info.addressModeU = .REPEAT
-			sampler_create_info.addressModeV = .REPEAT
-			sampler_create_info.addressModeW = .REPEAT
-
-			vk.CreateSampler(G_RENDERER.device, &sampler_create_info, nil, &IMMUTABLE_SAMPLERS[2])
-
-			sampler_create_info.magFilter = .LINEAR
-			sampler_create_info.minFilter = .LINEAR
-
-			sampler_create_info.addressModeU = .CLAMP_TO_EDGE
-			sampler_create_info.addressModeV = .CLAMP_TO_EDGE
-			sampler_create_info.addressModeW = .CLAMP_TO_EDGE
-
-			vk.CreateSampler(G_RENDERER.device, &sampler_create_info, nil, &IMMUTABLE_SAMPLERS[3])
-
-			sampler_create_info.addressModeU = .CLAMP_TO_BORDER
-			sampler_create_info.addressModeV = .CLAMP_TO_BORDER
-			sampler_create_info.addressModeW = .CLAMP_TO_BORDER
-
-			vk.CreateSampler(G_RENDERER.device, &sampler_create_info, nil, &IMMUTABLE_SAMPLERS[4])
-
-			sampler_create_info.addressModeU = .REPEAT
-			sampler_create_info.addressModeV = .REPEAT
-			sampler_create_info.addressModeW = .REPEAT
-
-			vk.CreateSampler(G_RENDERER.device, &sampler_create_info, nil, &IMMUTABLE_SAMPLERS[5])
-		}
-
-		// Create samplers descriptor set
-		{
-			samplers_descriptor_set_bindings := []vk.DescriptorSetLayoutBinding{
-				{
-					binding = 0,
-					descriptorCount = 1,
-					descriptorType = .SAMPLER,
-					pImmutableSamplers = raw_data(IMMUTABLE_SAMPLERS),
-					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
-				},
-				{
-					binding = 1,
-					descriptorCount = 1,
-					descriptorType = .SAMPLER,
-					pImmutableSamplers = raw_data(IMMUTABLE_SAMPLERS),
-					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
-				},
-				{
-					binding = 2,
-					descriptorCount = 1,
-					descriptorType = .SAMPLER,
-					pImmutableSamplers = raw_data(IMMUTABLE_SAMPLERS),
-					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
-				},
-				{
-					binding = 3,
-					descriptorCount = 1,
-					descriptorType = .SAMPLER,
-					pImmutableSamplers = raw_data(IMMUTABLE_SAMPLERS),
-					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
-				},
-				{
-					binding = 4,
-					descriptorCount = 1,
-					descriptorType = .SAMPLER,
-					pImmutableSamplers = raw_data(IMMUTABLE_SAMPLERS),
-					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
-				},
-				{
-					binding = 5,
-					descriptorCount = 1,
-					descriptorType = .SAMPLER,
-					pImmutableSamplers = raw_data(IMMUTABLE_SAMPLERS),
-					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
-				},
-			}
-
-			descriptor_set_layout_create_info := vk.DescriptorSetLayoutCreateInfo {
-				sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-				bindingCount = u32(len(samplers_descriptor_set_bindings)),
-				pBindings    = raw_data(samplers_descriptor_set_bindings),
-			}
-
-			if vk.CreateDescriptorSetLayout(
-				   G_RENDERER.device,
-				   &descriptor_set_layout_create_info,
-				   nil,
-				   &INTERNAL.samplers_descriptor_set_layout,
-			   ) !=
-			   .SUCCESS {
-
-				// @TODO We should delete stuff from INTERNAL here, 
-				// but we're still gonna shut down the renderer, so screw it for now
-				return false
-			}
-
-			allocate_info := vk.DescriptorSetAllocateInfo {
-				sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
-				pSetLayouts        = &INTERNAL.samplers_descriptor_set_layout,
-				descriptorPool     = INTERNAL.descriptor_pool,
-				descriptorSetCount = 1,
-			}
-
-			if vk.AllocateDescriptorSets(
-				   G_RENDERER.device,
-				   &allocate_info,
-				   &INTERNAL.samplers_descriptor_set,
-			   ) !=
-			   .SUCCESS {
-				// @TODO We should delete stuff from INTERNAL here, 
-				// but we're still gonna shut down the renderer, so screw it for now
-				return false
-			}
-		}
 		return true
 	}
 
@@ -420,7 +271,6 @@ when USE_VULKAN_BACKEND {
 		p_cmd_buff: ^CommandBufferResource,
 		p_pipeline: ^PipelineResource,
 		p_bindings: []BindGroupBinding,
-		p_samplers_bind_group_target: i32,
 	) {
 
 		dynamic_offsets_count := 0
@@ -444,10 +294,6 @@ when USE_VULKAN_BACKEND {
 		}
 
 		descriptor_sets_count := u32(len(p_bindings))
-		if p_samplers_bind_group_target >= 0 {
-			descriptor_sets_count += 1
-		}
-
 		descriptor_sets := make(
 			[]vk.DescriptorSet,
 			descriptor_sets_count,
@@ -457,15 +303,9 @@ when USE_VULKAN_BACKEND {
 
 		// Fill descriptors sets array with the descriptor sets from the bind groups
 		{
-			bind_group_idx := 0
-			for i in 0 ..< descriptor_sets_count {
-				if i32(i) == p_samplers_bind_group_target {
-					descriptor_sets[i] = INTERNAL.samplers_descriptor_set
-					continue
-				}
-				bind_group := get_bind_group(p_bindings[bind_group_idx].bind_group_ref)
+			for binding, i in p_bindings {
+				bind_group := get_bind_group(binding.bind_group_ref)
 				descriptor_sets[i] = bind_group.vk_descriptor_set
-				bind_group_idx += 1
 			}
 		}
 
@@ -484,21 +324,6 @@ when USE_VULKAN_BACKEND {
 		)
 	}
 
-	//---------------------------------------------------------------------------//
-
-	@(private)
-	map_pipeline_bind_point :: proc(p_pipeline_type: PipelineType) -> vk.PipelineBindPoint {
-		if p_pipeline_type == .Graphics {
-			return .GRAPHICS
-		} else if p_pipeline_type == .Compute {
-			return .COMPUTE
-		} else if p_pipeline_type == .Raytracing {
-			assert(false)
-		} else {
-			assert(false)
-		}
-		return .GRAPHICS
-	}
 
 	//---------------------------------------------------------------------------//
 

@@ -183,18 +183,10 @@ update_bind_groups :: proc(p_updates: []BindGroupUpdate) {
 
 //---------------------------------------------------------------------------//
 
-/**
-* Some backends like Vulkan require samplers to be bound separatly, other like DX12 allow to declare them in HLSL
-* and that's when the p_samplers_bind_group_target is for.
-* The backend interally creates all of the required samplers if required and create a group for them.
-* The user can then choose which target it should be bound to, passing < 0 means that it's not needed
-* If some backend doesn't need it it's simply a no-op/
-*/
 bind_bind_groups :: proc(
 	p_cmd_buff_ref: CommandBufferRef,
 	p_pipeline_ref: PipelineRef,
 	p_bindings: []BindGroupBinding,
-	p_samplers_bind_group_target: i32,
 ) {
 	cmd_buff := get_command_buffer(p_cmd_buff_ref)
 	pipeline := get_pipeline(p_pipeline_ref)
@@ -203,7 +195,6 @@ bind_bind_groups :: proc(
 		cmd_buff,
 		pipeline,
 		p_bindings,
-		p_samplers_bind_group_target,
 	)
 }
 
@@ -227,7 +218,27 @@ clone_bind_groups :: proc(
 			get_bind_group(p_bind_group_refs[i]).desc
 	}
 	res := backend_clone_bind_groups(p_bind_group_refs, cloned_bind_group_refs)
+	if res == false {
+		destroy_bind_groups(cloned_bind_group_refs)
+	}
 	return cloned_bind_group_refs, res
+}
+
+//---------------------------------------------------------------------------//
+
+clone_bind_group :: proc(p_bind_group_ref: BindGroupRef) -> BindGroupRef {
+	bind_group := get_bind_group(p_bind_group_ref)
+	cloned_bind_group_ref := allocate_bind_group_ref(bind_group.desc.name)
+	cloned_bind_group := get_bind_group(cloned_bind_group_ref)
+
+	cloned_bind_group.desc = bind_group.desc
+	res := backend_clone_bind_groups({p_bind_group_ref}, {cloned_bind_group_ref})
+	if res == false {
+		destroy_bind_groups({cloned_bind_group_ref})
+		return InvalidBindGroupRef
+	}
+
+	return cloned_bind_group_ref
 }
 
 //---------------------------------------------------------------------------//

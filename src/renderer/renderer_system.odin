@@ -50,6 +50,18 @@ INTERNAL: struct {
 
 //---------------------------------------------------------------------------//
 
+
+GPUDeviceFlagsBits :: enum u8 {
+	DedicatedTransferQueue,
+	DedicatedComputeQueue,
+	IntegratedGPU,
+	SupportsReBAR,
+}
+
+GPUDeviceFlags :: distinct bit_set[GPUDeviceFlagsBits;u8]
+
+//---------------------------------------------------------------------------//
+
 @(private)
 G_RENDERER: struct {
 	using backend_state:          BackendRendererState,
@@ -59,6 +71,7 @@ G_RENDERER: struct {
 	current_frame_swap_image_idx: u32,
 	swap_image_refs:              []ImageRef,
 	swap_image_render_targets:    []RenderTarget,
+	gpu_device_flags:             GPUDeviceFlags,
 }
 
 @(private)
@@ -239,7 +252,7 @@ init :: proc(p_options: InitOptions) -> bool {
 
 		// Advance the frame index when using unified queues, as we don't want to wait for the 0th
 		// command buffer to finish before we start recording the frame
-		if .DedicatedTransferQueue in G_RENDERER.device_hints {
+		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 			advance_frame_idx()
 		}
 	}
@@ -286,7 +299,7 @@ update :: proc(p_dt: f32) {
 		)
 
 		for mesh_ref in g_destroyed_mesh_refs {
-			free_mesh_ref( mesh_ref)
+			free_mesh_ref(mesh_ref)
 		}
 
 		g_destroyed_mesh_refs = make(

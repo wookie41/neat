@@ -8,12 +8,12 @@ import "core:c"
 import "core:encoding/json"
 import "core:os"
 import "core:log"
-import "core:slice"
 import "core:mem"
 
 //---------------------------------------------------------------------------//
 
 MATERIAL_PARAMS_BUFFER_SIZE :: 8 * common.MEGABYTE
+INITIAL_MATERIAL_BUFFER_ENTRIES_COUNT :: 64
 
 //---------------------------------------------------------------------------//
 
@@ -71,7 +71,7 @@ MaterialJSONEntry :: struct {
 	float_params: 				[]MaterialParamJSONEntry 			`json:"float_param"`,
 	texture_params: 			[]MaterialTextureBindingJSONEntry 	`json:"textureParams"`,
 	additional_shader_features: []string 							`json:"additionalShaderFeatures"`,
-	material_pass_name: string,
+	material_pass_name: string 										`json:"materialPass"`,
 }
 
 //---------------------------------------------------------------------------//
@@ -79,9 +79,14 @@ MaterialJSONEntry :: struct {
 MaterialResource :: struct {
 	desc:         	MaterialDesc,
 	params_buffer: 	BufferSuballocation,
-	int_params_ptr: ^int,
-	float_params_ptr: ^f32,
+	material_buffer_entry_size_in_bytes: u32,
+	// Offset at which float params start for this material in the material buffer
+	float_params_offset: u32,
 	pipeline_ref: PipelineRef,
+	// Next free index in the material buffer to use when creating a new material instnace
+	next_material_instance_idx: u32,
+	max_material_instance_entries: u32,
+	free_material_instance_indices: [dynamic]u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -133,6 +138,12 @@ deinit_materials :: proc() {
 create_material :: proc(p_material_ref: MaterialRef) -> (result: bool) {
 	material := get_material(p_material_ref)
 
+	material.next_material_instance_idx = 0
+	material.max_material_instance_entries = INITIAL_MATERIAL_BUFFER_ENTRIES_COUNT
+	material.free_material_instance_indices = make(
+		[dynamic]u32, 
+		G_RENDERER_ALLOCATORS.resource_allocator)
+
 	allocate_material_params_buffer(material)
 
 	material_pass := get_material_pass(material.desc.material_pass_ref)
@@ -178,9 +189,11 @@ create_material :: proc(p_material_ref: MaterialRef) -> (result: bool) {
 	pipeline.desc.render_pass_ref = material_pass.desc.render_pass_ref
 	pipeline.desc.vertex_layout = .Mesh
 
+	assert(create_graphics_pipeline(material.pipeline_ref))
+
 	resolve_texture_bindings(material, pipeline)
 
-	return create_graphics_pipeline(material.pipeline_ref)
+	return true
 }
 
 //---------------------------------------------------------------------------//
@@ -201,6 +214,8 @@ get_material :: proc(p_ref: MaterialRef) -> ^MaterialResource {
 
 destroy_material :: proc(p_ref: MaterialRef) {
 	material := get_material(p_ref)
+
+	delete(material.free_material_instance_indices)
 
 	if len(material.desc.int_params) > 0 {
 		delete(material.desc.int_params, G_RENDERER_ALLOCATORS.resource_allocator)
@@ -302,9 +317,9 @@ load_materials_from_config_file :: proc() -> bool {
 			)
 		
 			for texture_param, i in material_json_entry.texture_params {
-				assert(texture_param.name in G_IMAGE_TYPE_NAME_MAPPING)
+				assert(texture_param.type in G_IMAGE_TYPE_NAME_MAPPING)
 				material.desc.texture_params[i].name = common.create_name(texture_param.name)
-					material.desc.texture_params[i].image_type = G_IMAGE_TYPE_NAME_MAPPING[texture_param.name]
+				material.desc.texture_params[i].image_type = G_IMAGE_TYPE_NAME_MAPPING[texture_param.type]
 			}
 		}
 
@@ -321,7 +336,7 @@ allocate_material_params_buffer :: proc(
 	p_material: ^MaterialResource,
 ) -> (bool, BufferSuballocation) {
 
-	// Int params
+	// Calculate how many int params we have
 	num_int_records := 0
 	num_components := 0
 
@@ -333,7 +348,7 @@ allocate_material_params_buffer :: proc(
 			}
 	}
 
-	// Float params
+	// Calculate how many float params we have
 	num_float_records := 0
 	num_components = 0
 
@@ -345,30 +360,31 @@ allocate_material_params_buffer :: proc(
 			}
 	}
 
-
 	num_records := num_int_records + num_float_records
 	if num_records == 0 {
 		return true, {}
 	}
 
-	success, suballocation :=  buffer_allocate(
+	p_material.material_buffer_entry_size_in_bytes = u32(
+		num_float_records * size_of(f32) + 
+		num_int_records * size_of(u32)) * 4
+
+	initial_material_buffer_size := 
+		p_material.material_buffer_entry_size_in_bytes * 
+		INITIAL_MATERIAL_BUFFER_ENTRIES_COUNT
+
+	// Suballocate a chunk of the material buffer 
+	// where we will store material instance data
+	success, suballocation := buffer_allocate(
 		INTERNAL.material_params_buffer_ref, 
-		u32(num_records * size_of(f32) * 4),
+		u32(initial_material_buffer_size),
 	)
 
 	if success == false {
 		return false, {}
 	}
 
-	material_buffer := get_buffer(INTERNAL.material_params_buffer_ref)
-	p_material.int_params_ptr = (^int)(mem.ptr_offset(
-		material_buffer.mapped_ptr, 
-		suballocation.offset,
-	))
-	p_material.float_params_ptr = (^f32)(mem.ptr_offset(
-		p_material.int_params_ptr, 
-		num_int_records * size_of(int) * 4,
-	))
+	p_material.float_params_offset = u32(num_int_records * size_of(u32) * 4)
 
 	return true, suballocation
 }
@@ -390,7 +406,7 @@ resolve_texture_bindings :: proc(
 			continue
 		}
 
-		for texture_param, i in &p_material.desc.texture_params {
+		for texture_param in &p_material.desc.texture_params {
 			for image_binding in bind_group.desc.images {
 				if common.name_equal(texture_param.name, image_binding.name) {
 					texture_param.binding_slot = image_binding.slot
@@ -410,4 +426,51 @@ resolve_texture_bindings :: proc(
 		common.get_string(p_material.desc.name),
 	)
 }
+
+//--------------------------------------------------------------------------//
+
+// Allocates an entry in the material buffer. Grows the buffer it the entry cannot 
+// fit into the current buffer anymore.
+material_allocate_entry :: proc(p_material_ref: MaterialRef) -> (u32, ^byte) {
+
+	material := get_material(p_material_ref)
+	material_buffer := get_buffer(INTERNAL.material_params_buffer_ref)
+
+	// Check if we have some free entries in the free array 
+	if len(material.free_material_instance_indices) > 0 {
+		entry_idx := pop(&material.free_material_instance_indices)
+		entry_ptr := mem.ptr_offset(material_buffer.mapped_ptr, 
+			material.params_buffer.offset + entry_idx * material.material_buffer_entry_size_in_bytes)
+
+		return entry_idx, entry_ptr
+	}
+
+	if material.next_material_instance_idx >= material.max_material_instance_entries {
+		// @TODO grow the buffer and copy all of the data currently in there 
+		// to a new material, preserving the indexes for current material instances
+		assert(false)
+	}
+
+	entry_idx := material.next_material_instance_idx
+	material.next_material_instance_idx += 1
+	
+	entry_ptr := mem.ptr_offset(material_buffer.mapped_ptr, 
+		material.params_buffer.offset + entry_idx * material.material_buffer_entry_size_in_bytes)
+		
+	return entry_idx, entry_ptr
+} 
+
+//--------------------------------------------------------------------------//
+
+material_free_entry :: proc(p_material_ref: MaterialRef, p_entry_idx: u32) {
+
+	// @TODO shrink the buffer if less than half of the entries are used
+
+	material := get_material(p_material_ref)
+
+	append(&material.free_material_instance_indices, p_entry_idx)
+
+	return
+}
+
 //--------------------------------------------------------------------------//

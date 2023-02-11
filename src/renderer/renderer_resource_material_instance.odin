@@ -5,6 +5,8 @@ package renderer
 
 import "../common"
 import "core:c"
+import "core:mem"
+import "core:math/linalg/glsl"
 
 //---------------------------------------------------------------------------//
 
@@ -16,9 +18,10 @@ MaterialInstanceDesc :: struct {
 //---------------------------------------------------------------------------//
 
 MaterialInstanceResource :: struct {
-	desc: MaterialInstanceDesc,
-	// This bind group hold the per-material bindings
-	material_bind_group_ref: BindGroupRef,
+	desc:                      MaterialInstanceDesc,
+	material_bind_group_ref:   BindGroupRef,
+	material_buffer_entry_idx: u32,
+	material_buffer_entry_ptr: ^byte,
 }
 
 //---------------------------------------------------------------------------//
@@ -64,10 +67,16 @@ create_material_instance :: proc(p_material_instance_ref: MaterialInstanceRef) -
 	for bind_group_ref in pipeline_layout.bind_group_refs {
 		bind_group := get_bind_group(bind_group_ref)
 		if bind_group.desc.target == 2 {
-
+			material_instance.material_bind_group_ref = clone_bind_group(bind_group_ref)
 		}
 	}
-	
+
+	// @TODO bind group updates when updating texture bindings
+
+	// Request an entry in the material buffer
+	material_instance.material_buffer_entry_idx, material_instance.material_buffer_entry_ptr =
+		material_allocate_entry(material_instance.desc.material_ref)
+
 	return true
 }
 
@@ -89,6 +98,160 @@ get_material_instance :: proc(p_ref: MaterialInstanceRef) -> ^MaterialInstanceRe
 //--------------------------------------------------------------------------//
 
 destroy_material_instance :: proc(p_ref: MaterialInstanceRef) {
-	// material_instance := get_material_instance(p_ref)
+	material_instance := get_material_instance(p_ref)
+	material_free_entry(
+		material_instance.desc.material_ref,
+		material_instance.material_buffer_entry_idx,
+	)
 	free_ref(MaterialInstanceResource, &G_MATERIAL_INSTANCE_REF_ARRAY, p_ref)
+}
+
+//--------------------------------------------------------------------------//
+
+material_instance_set_int_param_1 :: proc(
+	p_material_instance_ref: MaterialInstanceRef,
+	p_name: common.Name,
+	p_value: int,
+) {
+	__material_instance_set_int_param(int, p_material_instance_ref, p_name, p_value)
+}
+
+//--------------------------------------------------------------------------//
+
+material_instance_set_int_param_2 :: proc(
+	p_material_instance_ref: MaterialInstanceRef,
+	p_name: common.Name,
+	p_value: glsl.ivec2,
+) {
+	__material_instance_set_int_param(glsl.ivec2, p_material_instance_ref, p_name, p_value)
+}
+
+//--------------------------------------------------------------------------//
+
+material_instance_set_int_param_3 :: proc(
+	p_material_instance_ref: MaterialInstanceRef,
+	p_name: common.Name,
+	p_value: glsl.ivec3,
+) {
+	__material_instance_set_int_param(glsl.ivec3, p_material_instance_ref, p_name, p_value)
+}
+
+//--------------------------------------------------------------------------//
+material_instance_set_int_param_4 :: proc(
+	p_material_instance_ref: MaterialInstanceRef,
+	p_name: common.Name,
+	p_value: glsl.ivec4,
+) {
+	__material_instance_set_int_param(glsl.ivec4, p_material_instance_ref, p_name, p_value)
+}
+
+//--------------------------------------------------------------------------//
+
+material_instance_set_int_param :: proc {
+	material_instance_set_int_param_1,
+	material_instance_set_int_param_2,
+	material_instance_set_int_param_3,
+	material_instance_set_int_param_4,
+}
+//--------------------------------------------------------------------------//
+
+
+@(private="file")
+__material_instance_set_int_param :: #force_inline proc(
+	$T: typeid,
+	p_material_instance_ref: MaterialInstanceRef,
+	p_name: common.Name,
+	p_value: T,
+) {
+	material_instance := get_material_instance(p_material_instance_ref)
+	material := get_material(material_instance.desc.material_ref)
+
+	param_index := 0
+	for int_param in material.desc.int_params {
+		if int_param.name == p_name {
+			break
+		}
+		param_index += int(int_param.num_components)
+	}
+
+	val := (^T)(mem.ptr_offset(
+		material_instance.material_buffer_entry_ptr,
+		param_index * size_of(u32)))
+
+	val^ = p_value
+}
+
+//--------------------------------------------------------------------------//
+
+material_instance_set_float_param_1 :: proc(
+	p_material_instance_ref: MaterialInstanceRef,
+	p_name: common.Name,
+	p_value: f32,
+) {
+	__material_instance_set_int_param(f32, p_material_instance_ref, p_name, p_value)
+}
+
+//--------------------------------------------------------------------------//
+
+material_instance_set_float_param_2 :: proc(
+	p_material_instance_ref: MaterialInstanceRef,
+	p_name: common.Name,
+	p_value: glsl.vec2,
+) {
+	__material_instance_set_int_param(glsl.vec2, p_material_instance_ref, p_name, p_value)
+}
+
+//--------------------------------------------------------------------------//
+
+material_instance_set_float_param_3 :: proc(
+	p_material_instance_ref: MaterialInstanceRef,
+	p_name: common.Name,
+	p_value: glsl.vec3,
+) {
+	__material_instance_set_float_param(glsl.vec3, p_material_instance_ref, p_name, p_value)
+}
+
+//--------------------------------------------------------------------------//
+material_instance_set_float_param_4 :: proc(
+	p_material_instance_ref: MaterialInstanceRef,
+	p_name: common.Name,
+	p_value: glsl.vec4,
+) {
+	__material_instance_set_float_param(glsl.vec4, p_material_instance_ref, p_name, p_value)
+}
+
+//--------------------------------------------------------------------------//
+
+material_instance_set_float_param :: proc {
+	material_instance_set_float_param_1,
+	material_instance_set_float_param_2,
+	material_instance_set_float_param_3,
+	material_instance_set_float_param_4,
+}
+//--------------------------------------------------------------------------//
+
+
+@(private="file")
+__material_instance_set_float_param :: #force_inline proc(
+	$T: typeid,
+	p_material_instance_ref: MaterialInstanceRef,
+	p_name: common.Name,
+	p_value: T,
+) {
+	material_instance := get_material_instance(p_material_instance_ref)
+	material := get_material(material_instance.desc.material_ref)
+
+	param_index := 0
+	for float_param in material.desc.int_params {
+		if float_param.name == p_name {
+			break
+		}
+		param_index += int(float_param.num_components)
+	}
+
+	val := (^T)(mem.ptr_offset(
+		material_instance.material_buffer_entry_ptr,
+		param_index * size_of(f32)))
+
+	val^ = p_value
 }
