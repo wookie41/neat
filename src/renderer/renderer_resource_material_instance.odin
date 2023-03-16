@@ -123,7 +123,12 @@ material_instance_set_int_param_2 :: proc(
 	p_name: common.Name,
 	p_value: glsl.ivec2,
 ) {
-	__material_instance_set_int_param(glsl.ivec2, p_material_instance_ref, p_name, p_value)
+	__material_instance_set_int_param(
+		glsl.ivec2,
+		p_material_instance_ref,
+		p_name,
+		p_value,
+	)
 }
 
 //--------------------------------------------------------------------------//
@@ -133,7 +138,12 @@ material_instance_set_int_param_3 :: proc(
 	p_name: common.Name,
 	p_value: glsl.ivec3,
 ) {
-	__material_instance_set_int_param(glsl.ivec3, p_material_instance_ref, p_name, p_value)
+	__material_instance_set_int_param(
+		glsl.ivec3,
+		p_material_instance_ref,
+		p_name,
+		p_value,
+	)
 }
 
 //--------------------------------------------------------------------------//
@@ -142,7 +152,12 @@ material_instance_set_int_param_4 :: proc(
 	p_name: common.Name,
 	p_value: glsl.ivec4,
 ) {
-	__material_instance_set_int_param(glsl.ivec4, p_material_instance_ref, p_name, p_value)
+	__material_instance_set_int_param(
+		glsl.ivec4,
+		p_material_instance_ref,
+		p_name,
+		p_value,
+	)
 }
 
 //--------------------------------------------------------------------------//
@@ -153,10 +168,40 @@ material_instance_set_int_param :: proc {
 	material_instance_set_int_param_3,
 	material_instance_set_int_param_4,
 }
+
 //--------------------------------------------------------------------------//
 
+material_instance_set_texture_slot :: proc(
+	p_material_instance_ref: MaterialInstanceRef,
+	p_slot_name: common.Name,
+	p_image_ref: ImageRef,
+) {
+	material_instance := get_material_instance(p_material_instance_ref)
+	material := get_material(material_instance.desc.material_ref)
 
-@(private="file")
+	param_index := 0
+	for texture_param in material.desc.texture_params {
+		if texture_param.name == p_slot_name {
+			break
+		}
+		param_index += 1
+	}
+
+	val := (^u32)(
+		mem.ptr_offset(
+			material_instance.material_buffer_entry_ptr,
+			param_index * size_of(u32),
+		),
+	)
+
+	image := get_image(p_image_ref)
+
+	val^ = image.bindless_idx
+}
+
+//--------------------------------------------------------------------------//
+
+@(private = "file")
 __material_instance_set_int_param :: #force_inline proc(
 	$T: typeid,
 	p_material_instance_ref: MaterialInstanceRef,
@@ -174,9 +219,12 @@ __material_instance_set_int_param :: #force_inline proc(
 		param_index += int(int_param.num_components)
 	}
 
-	val := (^T)(mem.ptr_offset(
-		material_instance.material_buffer_entry_ptr,
-		param_index * size_of(u32)))
+	val := (^T)(
+		mem.ptr_offset(
+			material_instance.material_buffer_entry_ptr,
+			param_index * size_of(u32),
+		),
+	)
 
 	val^ = p_value
 }
@@ -198,7 +246,12 @@ material_instance_set_float_param_2 :: proc(
 	p_name: common.Name,
 	p_value: glsl.vec2,
 ) {
-	__material_instance_set_int_param(glsl.vec2, p_material_instance_ref, p_name, p_value)
+	__material_instance_set_int_param(
+		glsl.vec2,
+		p_material_instance_ref,
+		p_name,
+		p_value,
+	)
 }
 
 //--------------------------------------------------------------------------//
@@ -208,7 +261,12 @@ material_instance_set_float_param_3 :: proc(
 	p_name: common.Name,
 	p_value: glsl.vec3,
 ) {
-	__material_instance_set_float_param(glsl.vec3, p_material_instance_ref, p_name, p_value)
+	__material_instance_set_float_param(
+		glsl.vec3,
+		p_material_instance_ref,
+		p_name,
+		p_value,
+	)
 }
 
 //--------------------------------------------------------------------------//
@@ -217,7 +275,12 @@ material_instance_set_float_param_4 :: proc(
 	p_name: common.Name,
 	p_value: glsl.vec4,
 ) {
-	__material_instance_set_float_param(glsl.vec4, p_material_instance_ref, p_name, p_value)
+	__material_instance_set_float_param(
+		glsl.vec4,
+		p_material_instance_ref,
+		p_name,
+		p_value,
+	)
 }
 
 //--------------------------------------------------------------------------//
@@ -231,7 +294,7 @@ material_instance_set_float_param :: proc {
 //--------------------------------------------------------------------------//
 
 
-@(private="file")
+@(private = "file")
 __material_instance_set_float_param :: #force_inline proc(
 	$T: typeid,
 	p_material_instance_ref: MaterialInstanceRef,
@@ -249,9 +312,14 @@ __material_instance_set_float_param :: #force_inline proc(
 		param_index += int(float_param.num_components)
 	}
 
-	val := (^T)(mem.ptr_offset(
-		material_instance.material_buffer_entry_ptr,
-		param_index * size_of(f32)))
+	val := (^T)(
+		mem.ptr_offset(
+			material_instance.material_buffer_entry_ptr,
+			param_index * size_of(f32),
+		),
+	)
 
 	val^ = p_value
 }
+
+//--------------------------------------------------------------------------//

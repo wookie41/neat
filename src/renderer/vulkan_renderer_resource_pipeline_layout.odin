@@ -77,12 +77,8 @@ when USE_VULKAN_BACKEND {
 					descriptorCount = descriptor.count,
 					descriptorType = descriptor.type,
 					stageFlags = {.VERTEX},
-					pImmutableSamplers = raw_data(IMMUTABLE_SAMPLERS),
 				}
-				// We have a single global descriptor set for sampler
-				if descriptor.type == .SAMPLER {
-					layout_binding.stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE}
-				} else if
+				if
 				   descriptor.type == .SAMPLED_IMAGE ||
 				   descriptor.type == .STORAGE_IMAGE {
 					// Add a texture slot so we can later resolve name -> slot
@@ -127,11 +123,8 @@ when USE_VULKAN_BACKEND {
 					descriptorCount = descriptor.count,
 					descriptorType = descriptor.type,
 					stageFlags = {.FRAGMENT},
-					pImmutableSamplers = raw_data(IMMUTABLE_SAMPLERS),
 				}
-				if descriptor.type == .SAMPLER {
-					layout_binding.stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE}
-				} else if
+				if
 				   descriptor.type == .SAMPLED_IMAGE ||
 				   descriptor.type == .STORAGE_IMAGE {
 					// Add a texture slot so we can later resolve name -> slot

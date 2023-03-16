@@ -75,7 +75,11 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_init :: proc(p_options: InitOptions) -> bool {
 
-		device_extensions := []cstring{vk.KHR_SWAPCHAIN_EXTENSION_NAME}
+		device_extensions := []cstring{
+			vk.KHR_SWAPCHAIN_EXTENSION_NAME,
+			vk.KHR_MAINTENANCE3_EXTENSION_NAME,
+			vk.EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+		}
 
 		G_RENDERER.window = p_options.window
 		G_RENDERER.windowID = sdl.GetWindowID(p_options.window)
@@ -89,11 +93,11 @@ when USE_VULKAN_BACKEND {
 			using G_RENDERER_ALLOCATORS
 
 			// Specify a list of required extensions and layers
-			required_extensions := make(
+			instance_extensions := make(
 				[dynamic]cstring,
 				G_RENDERER_ALLOCATORS.temp_allocator,
 			)
-			defer delete(required_extensions)
+			defer delete(instance_extensions)
 			required_layers := make(
 				[dynamic]cstring,
 				G_RENDERER_ALLOCATORS.temp_allocator,
@@ -104,27 +108,27 @@ when USE_VULKAN_BACKEND {
 			{
 				extension_count: c.uint
 				sdl.Vulkan_GetInstanceExtensions(window, &extension_count, nil)
-				resize(&required_extensions, int(extension_count))
+				resize(&instance_extensions, int(extension_count))
 				sdl.Vulkan_GetInstanceExtensions(
 					window,
 					&extension_count,
-					raw_data(required_extensions),
+					raw_data(instance_extensions),
 				)
 			}
 
 			// Add a couple of debug extensions and layers
 			when ODIN_DEBUG {
 				append(
-					&required_extensions,
+					&instance_extensions,
 					vk.EXT_DEBUG_REPORT_EXTENSION_NAME,
 					vk.EXT_DEBUG_UTILS_EXTENSION_NAME,
 				)
 			}
 
-			// Add extensions needed for bindless support
+			// Bindless support
 			append(
-				&required_extensions,
-				vk.EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+				&instance_extensions,
+				vk.KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
 			)
 
 			// Check the required extensions and layers are supported
@@ -159,7 +163,7 @@ when USE_VULKAN_BACKEND {
 				)
 			}
 
-			for required in required_extensions {
+			for required in instance_extensions {
 				contains := false
 				for supported in &supported_extensions {
 					name := transmute(cstring)&supported.extensionName
@@ -201,8 +205,8 @@ when USE_VULKAN_BACKEND {
 
 			instance_info := vk.InstanceCreateInfo {
 				sType                   = .INSTANCE_CREATE_INFO,
-				enabledExtensionCount   = u32(len(required_extensions)),
-				ppEnabledExtensionNames = raw_data(required_extensions),
+				enabledExtensionCount   = u32(len(instance_extensions)),
+				ppEnabledExtensionNames = raw_data(instance_extensions),
 				enabledLayerCount       = u32(len(required_layers)),
 				ppEnabledLayerNames     = raw_data(required_layers),
 				pApplicationInfo        = &app_info,
@@ -256,6 +260,10 @@ when USE_VULKAN_BACKEND {
 			// Find a suitable device
 			for pd in &physical_devices {
 
+				device_props: vk.PhysicalDeviceProperties
+				vk.GetPhysicalDeviceProperties(pd, &device_props)
+				log.infof("Checking  device: %s...\n ", device_props.deviceName)
+
 				// Check extension compatibility
 				extension_count: u32
 				vk.EnumerateDeviceExtensionProperties(pd, nil, &extension_count, nil)
@@ -273,8 +281,8 @@ when USE_VULKAN_BACKEND {
 					raw_data(extensions),
 				)
 
-				requied_extensions := true
-				for re in &device_extensions {
+				device_has_all_required_extension := true
+				for re, i in &device_extensions {
 					contains := false
 					for e in &extensions {
 						name := transmute(cstring)&e.extensionName
@@ -284,11 +292,11 @@ when USE_VULKAN_BACKEND {
 						}
 					}
 					if !contains {
-						requied_extensions = false
+						device_has_all_required_extension = false
 						break
 					}
 				}
-				if !requied_extensions {
+				if !device_has_all_required_extension {
 					continue
 				}
 
@@ -398,9 +406,6 @@ when USE_VULKAN_BACKEND {
 					continue
 				}
 
-				device_props: vk.PhysicalDeviceProperties
-				vk.GetPhysicalDeviceProperties(pd, &device_props)
-
 				log.infof(
 					"Found device %s, queues indices:\n - graphics: %d\n - present: %d\n - compute: %d\n - transfer: %d",
 					device_props.deviceName,
@@ -500,20 +505,31 @@ when USE_VULKAN_BACKEND {
 			device_features := vk.PhysicalDeviceFeatures{}
 			device_features.samplerAnisotropy = true
 
-			dynamic_rendering_frature := vk.PhysicalDeviceDynamicRenderingFeatures {
+			dynamic_rendering_fratures := vk.PhysicalDeviceDynamicRenderingFeatures {
 				sType            = .PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
 				dynamicRendering = true,
 			}
 
+			descriptor_indexing_features :=
+				vk.PhysicalDeviceDescriptorIndexingFeaturesEXT {
+					sType                                        = .PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
+					shaderSampledImageArrayNonUniformIndexing    = true,
+					runtimeDescriptorArray                       = true,
+					descriptorBindingVariableDescriptorCount     = true,
+					descriptorBindingSampledImageUpdateAfterBind = true,
+					pNext                                        = &dynamic_rendering_fratures,
+				}
+
+
 			device_create_info := vk.DeviceCreateInfo {
-				sType                   = .DEVICE_CREATE_INFO,
-				queueCreateInfoCount    = u32(len(queue_create_infos)),
-				pQueueCreateInfos       = raw_data(queue_create_infos),
-				enabledExtensionCount   = u32(len(device_extensions)),
-				ppEnabledExtensionNames = raw_data(device_extensions),
-				pEnabledFeatures        = &device_features,
-				pNext                   = &dynamic_rendering_frature,
-			}
+					sType                   = .DEVICE_CREATE_INFO,
+					queueCreateInfoCount    = u32(len(queue_create_infos)),
+					pQueueCreateInfos       = raw_data(queue_create_infos),
+					enabledExtensionCount   = u32(len(device_extensions)),
+					ppEnabledExtensionNames = raw_data(device_extensions),
+					pEnabledFeatures        = &device_features,
+					pNext                   = &descriptor_indexing_features,
+				}
 
 			if result := vk.CreateDevice(
 				   physical_device,

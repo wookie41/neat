@@ -69,7 +69,7 @@ BufferUploadInitOptions :: struct {
 init_buffer_upload :: proc(p_options: BufferUploadInitOptions) -> bool {
 
 	if .IntegratedGPU in G_RENDERER.gpu_device_flags {
-		return 
+		return false
 	}
 
 	// Create the staging buffer used as upload src

@@ -135,9 +135,6 @@ vt_pre_render :: proc() {
 	using G_RENDERER
 	using G_VT
 
-	vt_create_texture_image()
-	vt_create_bind_groups()
-
 	// Setup the draw stream
 	{
 		viking_room_mesh := get_mesh(G_VT.viking_room_mesh_ref)

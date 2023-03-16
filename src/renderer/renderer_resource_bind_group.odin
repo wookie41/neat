@@ -191,11 +191,7 @@ bind_bind_groups :: proc(
 	cmd_buff := get_command_buffer(p_cmd_buff_ref)
 	pipeline := get_pipeline(p_pipeline_ref)
 
-	backend_bind_bind_groups(
-		cmd_buff,
-		pipeline,
-		p_bindings,
-	)
+	backend_bind_bind_groups(cmd_buff, pipeline, p_bindings)
 }
 
 //---------------------------------------------------------------------------//

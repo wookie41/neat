@@ -216,16 +216,9 @@ when USE_VULKAN_BACKEND {
 					descriptor_set := descriptor_sets[i]
 					binding_count := descriptor_set.binding_count
 
-					// Special handling for set 0 which is the global descriptor set for samplers
-					non_sampler_binding_count: u32 = 0
+					// Skip set 0 which contains the bindless array and immutable samplers
 					if descriptor_set.set == 0 {
-						for j in 0 ..< descriptor_set.binding_count {
-							descriptor := descriptor_set.bindings[j]
-							if descriptor.descriptor_type != .Sampler {
-								non_sampler_binding_count += 1
-							}
-						}
-						binding_count = len(SamplerType) + non_sampler_binding_count
+						continue
 					}
 
 					p_shader.vk_descriptor_sets[i].set = u8(descriptor_set.set)
@@ -234,18 +227,6 @@ when USE_VULKAN_BACKEND {
 						binding_count,
 						G_RENDERER_ALLOCATORS.resource_allocator,
 					)
-
-					// Fill samplers info
-					if descriptor_set.set == 0 {
-						for j in 0 ..< len(SamplerType) {
-							descriptor := &p_shader.vk_descriptor_sets[i].descriptors[j]
-							descriptor.binding = u32(j)
-							descriptor.name = common.create_name(string(SamplerNames[j]))
-							descriptor.count = 1
-							descriptor.type = .SAMPLER
-						}
-						binding_count = len(SamplerType) + non_sampler_binding_count
-					}
 
 					// Fill descriptors info
 					for j in 0 ..< descriptor_set.binding_count {

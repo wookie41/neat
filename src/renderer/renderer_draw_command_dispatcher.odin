@@ -203,7 +203,6 @@ draw_stream_update_bindings :: #force_inline proc(
 		p_cmd_buff_ref,
 		p_draw_stream.pipeline_changes[p_draw_stream.next_pipeline - 1],
 		p_draw_stream.bindings_changes[p_draw_stream.next_bind_groups],
-		0, // Binding immutable samplers to set = 0
 	)
 
 	p_draw_stream.next_bind_groups += 1
@@ -217,12 +216,17 @@ draw_stream_update_pipeline :: #force_inline proc(
 	p_cmd_buff: ^CommandBufferResource,
 	p_draw_stream: ^DrawStream,
 ) {
-	backend_draw_stream_change_pipeline(
-		p_draw_stream,
-		p_cmd_buff,
-		get_pipeline(p_draw_stream.pipeline_changes[p_draw_stream.next_pipeline]),
+	new_pipeline := get_pipeline(
+		p_draw_stream.pipeline_changes[p_draw_stream.next_pipeline],
 	)
 	p_draw_stream.next_pipeline += 1
+	backend_draw_stream_change_pipeline(p_draw_stream, p_cmd_buff, new_pipeline)
+	bind_bindless_array_and_immutable_sampler(
+		p_cmd_buff_ref,
+		new_pipeline.pipeline_layout_ref,
+		.Graphics,
+		0,
+	)
 }
 
 //---------------------------------------------------------------------------//

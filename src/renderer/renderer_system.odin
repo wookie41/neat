@@ -244,11 +244,14 @@ init :: proc(p_options: InitOptions) -> bool {
 	{
 		cmd_buff := get_frame_cmd_buffer()
 		begin_command_buffer(cmd_buff)
-		vt_pre_render()
+		vt_create_texture_image()
 		run_buffer_upload_requests()
 		execute_queued_texture_copies()
 		end_command_buffer(cmd_buff)
 		submit_pre_render(cmd_buff)
+
+		vt_create_bind_groups()
+		vt_pre_render()
 
 		// Advance the frame index when using unified queues, as we don't want to wait for the 0th
 		// command buffer to finish before we start recording the frame
@@ -281,6 +284,7 @@ update :: proc(p_dt: f32) {
 
 	execute_queued_texture_copies()
 	run_buffer_upload_requests()
+	batch_update_bindless_array_entries()
 
 	end_command_buffer(cmd_buff_ref)
 
@@ -288,7 +292,7 @@ update :: proc(p_dt: f32) {
 
 	// @TODO Render tasks - end_frame()
 
-	// Recreate mesh queus
+	// Recreate mesh queues
 	{
 		delete(g_created_mesh_refs)
 		delete(g_destroyed_mesh_refs)

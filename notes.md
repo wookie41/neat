@@ -5,4 +5,4 @@
 - In the renderer_buffer_upload.odin, handle the case when we're on UMA by:
     - Don't create a staging buffer at all
     - Mapping the buffer upon creation 
-    - Returning a pointer to the mapped buffer in the response instead 
+    - Returning a pointer to the mapped buffer in the response instead

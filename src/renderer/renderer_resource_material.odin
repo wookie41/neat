@@ -191,8 +191,6 @@ create_material :: proc(p_material_ref: MaterialRef) -> (result: bool) {
 
 	assert(create_graphics_pipeline(material.pipeline_ref))
 
-	resolve_texture_bindings(material, pipeline)
-
 	return true
 }
 
@@ -360,14 +358,27 @@ allocate_material_params_buffer :: proc(
 			}
 	}
 
-	num_records := num_int_records + num_float_records
+	// Calculate how many textureparams we have
+	num_texture_records := 0
+	num_components = 0
+
+	for texture_param in p_material.desc.texture_params {
+		num_components += 1
+			if num_components >= 4 {
+				num_texture_records += 1
+				num_components = num_components % 4
+			}
+	}
+
+	num_records := num_int_records + num_float_records + num_texture_records
 	if num_records == 0 {
 		return true, {}
 	}
 
 	p_material.material_buffer_entry_size_in_bytes = u32(
 		num_float_records * size_of(f32) + 
-		num_int_records * size_of(u32)) * 4
+		num_int_records * size_of(u32) + 
+		num_texture_records * size_of(u32)) * 4
 
 	initial_material_buffer_size := 
 		p_material.material_buffer_entry_size_in_bytes * 
@@ -387,44 +398,6 @@ allocate_material_params_buffer :: proc(
 	p_material.float_params_offset = u32(num_int_records * size_of(u32) * 4)
 
 	return true, suballocation
-}
-
-//--------------------------------------------------------------------------//
-
-@(private="file")
-resolve_texture_bindings :: proc(
-	p_material: ^MaterialResource, 
-	p_pipeline: ^PipelineResource,
-) {
-	pipeline_layout := get_pipeline_layout(p_pipeline.pipeline_layout_ref)
-	
-	for bind_group_ref in pipeline_layout.bind_group_refs {
-		bind_group := get_bind_group(bind_group_ref)
-		
-		// Per-material bindings are stored in the third set
-		if bind_group.desc.target != 2 {
-			continue
-		}
-
-		for texture_param in &p_material.desc.texture_params {
-			for image_binding in bind_group.desc.images {
-				if common.name_equal(texture_param.name, image_binding.name) {
-					texture_param.binding_slot = image_binding.slot
-					continue
-				}
-				log.warn(
-					"Failed to find slot for texture %s on material %s", 
-					common.get_string(p_material.desc.name),
-				)			
-			}
-		}
-	}
-
-
-	log.warn(
-		"Failed to resolve texture bindings for material %s - no bind group found", 
-		common.get_string(p_material.desc.name),
-	)
 }
 
 //--------------------------------------------------------------------------//

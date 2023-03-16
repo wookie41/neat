@@ -72,13 +72,13 @@ when USE_VULKAN_BACKEND {
 	@(private = "file")
 	INTERNAL: struct {
 		// Buffer used to upload the initial contents of the images
-		staging_buffer:                 BufferRef,
-		stating_buffer_offset:          u32,
-		bindless_descriptor_pool:       vk.DescriptorPool,
-		bindless_descriptor_set_layout: vk.DescriptorSetLayout,
-		bindless_descriptor_set:        vk.DescriptorSet,
-		immutable_samplers:             []vk.Sampler,
-		running_image_uploads:          [dynamic]RunningImageUpload,
+		staging_buffer:                   BufferRef,
+		stating_buffer_offset:            u32,
+		bindless_descriptor_pool:         vk.DescriptorPool,
+		bindless_descriptor_set_layout:   vk.DescriptorSetLayout,
+		bindless_descriptor_set:          vk.DescriptorSet,
+		immutable_samplers:               []vk.Sampler,
+		bindless_descriptor_array_writes: [dynamic]vk.WriteDescriptorSet,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -94,12 +94,8 @@ when USE_VULKAN_BACKEND {
 		staging_buffer.desc.usage = {.TransferSrc}
 		create_buffer(INTERNAL.staging_buffer)
 
-		create_bindless_descriptor_array()
 
-		INTERNAL.running_image_uploads = make(
-			[dynamic]RunningImageUpload,
-			G_RENDERER_ALLOCATORS.main_allocator,
-		)
+		create_bindless_descriptor_array()
 	}
 
 	//---------------------------------------------------------------------------//
@@ -109,13 +105,6 @@ when USE_VULKAN_BACKEND {
 		p_image_ref: ImageRef,
 		p_image: ^ImageResource,
 	) -> bool {
-
-
-		// @TODO Bindless
-		// - get an index into the descriptor array
-		// - add a descriptor update entry
-		// - issue a descriptor update call at the end of the frame
-		// - think about storage images 
 
 		// Map vk image type
 		vk_image_type, type_found := G_IMAGE_TYPE_MAPPING[p_image.desc.type]
@@ -630,6 +619,25 @@ when USE_VULKAN_BACKEND {
 			}
 
 			vk_copies[i] = vk_copy_entry
+
+
+			// Update the descriptor in the bindless array
+			img_info := vk.DescriptorImageInfo {
+				imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+				imageView   = image.all_mips_vk_view,
+			}
+			bindless_write := vk.WriteDescriptorSet {
+				sType           = .WRITE_DESCRIPTOR_SET,
+				descriptorCount = 1,
+				descriptorType  = .SAMPLED_IMAGE,
+				dstSet          = INTERNAL.bindless_descriptor_set,
+				pImageInfo      = &img_info,
+				dstArrayElement = image.bindless_idx,
+				dstBinding      = 1,
+			}
+
+			append(&INTERNAL.bindless_descriptor_array_writes, bindless_write)
+
 		}
 		defer {
 			for vk_copy in vk_copies {
@@ -676,22 +684,6 @@ when USE_VULKAN_BACKEND {
 				nil,
 				1,
 				&to_sample_barriers[i],
-			)
-
-			// Create a fence so that we can update the descriptor in the bindless array
-			upload_finished_fence_create_info := vk.FenceCreateInfo {
-				sType = .FENCE_CREATE_INFO,
-			}
-
-			running_image_upload := RunningImageUpload {
-				image_ref = G_RENDERER.queued_textures_copies[i].image,
-			}
-
-			vk.CreateFence(
-				G_RENDERER.device,
-				&upload_finished_fence_create_info,
-				nil,
-				&running_image_upload.upload_finished_fence,
 			)
 		}
 
@@ -797,10 +789,11 @@ when USE_VULKAN_BACKEND {
 			}
 
 			descriptor_pool_create_info := vk.DescriptorPoolCreateInfo {
-				sType         = .DESCRIPTOR_POOL_CREATE_INFO,
-				maxSets       = 1,
+				sType = .DESCRIPTOR_POOL_CREATE_INFO,
+				maxSets = 1,
 				poolSizeCount = 1,
-				pPoolSizes    = raw_data(pool_sizes),
+				pPoolSizes = raw_data(pool_sizes),
+				flags = {.UPDATE_AFTER_BIND},
 			}
 
 			vk.CreateDescriptorPool(
@@ -814,12 +807,20 @@ when USE_VULKAN_BACKEND {
 
 		// Create the bindings layout and the layout itself
 		{
-			binding_flags := vk.DescriptorBindingFlags{.UPDATE_AFTER_BIND}
+			binding_flags := []vk.DescriptorBindingFlags{
+				{},
+				{},
+				{},
+				{},
+				{},
+				{},
+				{.UPDATE_AFTER_BIND},
+			}
 
 			flags_create_info := vk.DescriptorSetLayoutBindingFlagsCreateInfo {
 				sType         = .DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
-				bindingCount  = 1,
-				pBindingFlags = &binding_flags,
+				bindingCount  = u32(len(binding_flags)),
+				pBindingFlags = raw_data(binding_flags),
 			}
 
 			set_bindings := []vk.DescriptorSetLayoutBinding{
@@ -875,9 +876,11 @@ when USE_VULKAN_BACKEND {
 			}
 
 			descriptor_set_layout_create_info := vk.DescriptorSetLayoutCreateInfo {
-				sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+				sType = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
 				bindingCount = u32(len(set_bindings)),
-				pBindings    = raw_data(set_bindings),
+				pBindings = raw_data(set_bindings),
+				pNext = &flags_create_info,
+				flags = {.UPDATE_AFTER_BIND_POOL},
 			}
 
 			res := vk.CreateDescriptorSetLayout(
@@ -931,70 +934,22 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_update_images :: proc(p_dt: f32) {
+	backend_batch_update_bindless_array_entries :: proc() {
 
-		running_image_uploads := make(
-			[dynamic]RunningImageUpload,
-			G_RENDERER_ALLOCATORS.main_allocator,
-		)
-
-		bindless_writes := make(
-			[]vk.WriteDescriptorSet,
-			len(INTERNAL.running_image_uploads),
-			G_RENDERER_ALLOCATORS.temp_allocator,
-		)
-
-		defer delete(bindless_writes, G_RENDERER_ALLOCATORS.temp_allocator)
-
-		next_descriptor_write_idx := 0
-		for image_upload, i in INTERNAL.running_image_uploads {
-
-			// Check if the upload is finished
-			if
-			   vk.GetFenceStatus(
-				   G_RENDERER.device,
-				   image_upload.upload_finished_fence,
-			   ) ==
-			   .SUCCESS {
-
-				// If it is, then update the descriptor in the bindless array
-				image := get_image(image_upload.image_ref)
-
-				img_info := vk.DescriptorImageInfo {
-					imageLayout = .SHADER_READ_ONLY_OPTIMAL,
-					imageView   = image.all_mips_vk_view,
-				}
-				bindless_writes[next_descriptor_write_idx] = vk.WriteDescriptorSet {
-					sType           = .WRITE_DESCRIPTOR_SET,
-					descriptorCount = 1,
-					descriptorType  = .SAMPLED_IMAGE,
-					dstSet          = INTERNAL.bindless_descriptor_set,
-					pImageInfo      = &img_info,
-					dstArrayElement = image.bindless_idx,
-					dstBinding      = 1,
-				}
-
-				next_descriptor_write_idx += 1
-			} else {
-				// Otherwise just keep add it to the new array containing only the 
-				// uploads that are still running
-
-				append(&running_image_uploads, image_upload)
-			}
+		num_writes := len(INTERNAL.bindless_descriptor_array_writes)
+		if num_writes == 0 {
+			return
 		}
 
-		// Swap the arrays to only keep the running uploads
-		delete(INTERNAL.running_image_uploads)
-		INTERNAL.running_image_uploads = running_image_uploads 
-
-		// Update the bindless array
 		vk.UpdateDescriptorSets(
 			G_RENDERER.device,
-			u32(next_descriptor_write_idx),
-			raw_data(bindless_writes),
+			u32(num_writes),
+			raw_data(INTERNAL.bindless_descriptor_array_writes),
 			0,
 			nil,
 		)
+
+		clear(&INTERNAL.bindless_descriptor_array_writes)
 	}
 
 	//---------------------------------------------------------------------------//

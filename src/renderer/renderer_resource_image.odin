@@ -267,18 +267,18 @@ bind_bindless_array_and_immutable_sampler :: #force_inline proc(
 	p_target: u32,
 ) {
 
-	backend_bind_bindless_array_and_immutable_sampler(
+	backend_bind_bindless_array_and_immutable_samplers(
 		get_command_buffer(p_cmd_buff_ref),
 		get_pipeline_layout(p_pipeline_layout_ref),
-		p_bind_point,
 		p_target,
+		p_bind_point,
 	)
 }
 
 //---------------------------------------------------------------------------//
 
-update_images :: #force_inline proc(p_dt: f32) {
-	backend_update_images(p_dt)
+batch_update_bindless_array_entries :: #force_inline proc() {
+	backend_batch_update_bindless_array_entries()
 }
 
 //---------------------------------------------------------------------------//
