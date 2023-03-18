@@ -49,7 +49,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 
-	@(private="file")
+	@(private = "file")
 	INTERNAL: struct {}
 
 	//---------------------------------------------------------------------------//
@@ -90,14 +90,8 @@ when USE_VULKAN_BACKEND {
 		}
 
 		shader_path := p_shader.desc.file_path
-		shader_src_path := fmt.aprintf(
-			"app_data/renderer/assets/shaders/%s",
-			shader_path,
-		)
-		shader_bin_path := fmt.aprintf(
-			"app_data/renderer/assets/shaders/bin/%s.sprv",
-			shader_path,
-		)
+		shader_src_path := fmt.aprintf("app_data/renderer/assets/shaders/%s", shader_path)
+		shader_bin_path := fmt.aprintf("app_data/renderer/assets/shaders/bin/%s.sprv", shader_path)
 
 		// Compile the shader
 		{
@@ -109,11 +103,7 @@ when USE_VULKAN_BACKEND {
 				shader_defines_log = fmt.aprintf("%s\n%s\n", shader_defines_log, feature)
 			}
 
-			log.infof(
-				"Compiling shader %s with features %s\n",
-				shader_path,
-				shader_defines_log,
-			)
+			log.infof("Compiling shader %s with features %s\n", shader_path, shader_defines_log)
 
 			// @TODO replace with a single command when 
 			// https://github.com/microsoft/DirectXShaderCompiler/issues/4496 is fixed
@@ -126,11 +116,7 @@ when USE_VULKAN_BACKEND {
 			)
 
 			if res := libc.system(strings.clone_to_cstring(compile_cmd)); res != 0 {
-				log.warnf(
-					"Failed to compile shader %s: error code %d",
-					shader_path,
-					res,
-				)
+				log.warnf("Failed to compile shader %s: error code %d", shader_path, res)
 				return false
 			}
 		}
@@ -142,25 +128,17 @@ when USE_VULKAN_BACKEND {
 			// reflect_data, ok := os.read_entire_file(shader_reflect_path)
 			reflect_data, ok := os.read_entire_file(shader_bin_path)
 			if ok == false {
-				log.warnf(
-					"Failed to read reflection data for shader %s",
-					shader_path,
-				)
+				log.warnf("Failed to read reflection data for shader %s", shader_path)
 				return false
 			}
 
 			shader_module: spirv_reflect.ShaderModule
 			if res := spirv_reflect.create_shader_module(
-				   len(reflect_data),
-				   raw_data(reflect_data),
-				   &shader_module,
-			   );
-			   res != .Success {
-				log.warnf(
-					"Failed to create reflection data for shader %s: %s",
-					shader_path,
-					res,
-				)
+				len(reflect_data),
+				raw_data(reflect_data),
+				&shader_module,
+			); res != .Success {
+				log.warnf("Failed to create reflection data for shader %s: %s", shader_path, res)
 				return false
 			}
 
@@ -171,24 +149,15 @@ when USE_VULKAN_BACKEND {
 				shader_bin_path,
 			)
 
-			if res := libc.system(strings.clone_to_cstring(strip_reflect_info_cmd));
-			   res != 0 {
-				log.warnf(
-					"Failed to strip reflection info %s: error code %d",
-					shader_path,
-					res,
-				)
+			if res := libc.system(strings.clone_to_cstring(strip_reflect_info_cmd)); res != 0 {
+				log.warnf("Failed to strip reflection info %s: error code %d", shader_path, res)
 				return false
 			}
 
 			defer spirv_reflect.destroy_shader_module(&shader_module)
 
 			num_descriptor_sets: u32 = 0
-			spirv_reflect.enumerate_descriptor_sets(
-				&shader_module,
-				&num_descriptor_sets,
-				nil,
-			)
+			spirv_reflect.enumerate_descriptor_sets(&shader_module, &num_descriptor_sets, nil)
 
 			descriptor_sets := make(
 				[]^spirv_reflect.DescriptorSet,
@@ -203,6 +172,16 @@ when USE_VULKAN_BACKEND {
 				raw_data(descriptor_sets),
 			)
 
+			// Skip set 0 which contains the bindless array and immutable samplers
+			// This is created in the vulkan_renderer_resource_image.odin file
+			for descriptor_set in descriptor_sets {
+				if descriptor_set.set == 2 {
+					p_shader.flags += {.UsesBindlessArray}
+					num_descriptor_sets -= 1
+					break
+				}
+			}
+
 			// Determine how many descriptors there are for each sets
 			{
 				p_shader.vk_descriptor_sets = make(
@@ -215,11 +194,6 @@ when USE_VULKAN_BACKEND {
 					// Fill set info and create the descriptors array
 					descriptor_set := descriptor_sets[i]
 					binding_count := descriptor_set.binding_count
-
-					// Skip set 0 which contains the bindless array and immutable samplers
-					if descriptor_set.set == 0 {
-						continue
-					}
 
 					p_shader.vk_descriptor_sets[i].set = u8(descriptor_set.set)
 					p_shader.vk_descriptor_sets[i].descriptors = make(
@@ -249,21 +223,13 @@ when USE_VULKAN_BACKEND {
 						case .StorageImage:
 							descriptor.type = .STORAGE_IMAGE
 						case .UniformBuffer:
-							if
-							   strings.has_suffix(
-								   common.get_string(descriptor.name),
-								   "_Dynamic",
-							   ) {
+							if strings.has_suffix(common.get_string(descriptor.name), "_Dynamic") {
 								descriptor.type = .UNIFORM_BUFFER_DYNAMIC
 							} else {
 								descriptor.type = .UNIFORM_BUFFER
 							}
 						case .StorageBuffer:
-							if
-							   strings.has_suffix(
-								   common.get_string(descriptor.name),
-								   "_Dynamic",
-							   ) {
+							if strings.has_suffix(common.get_string(descriptor.name), "_Dynamic") {
 								descriptor.type = .STORAGE_BUFFER_DYNAMIC
 							} else {
 								descriptor.type = .STORAGE_BUFFER
@@ -282,10 +248,7 @@ when USE_VULKAN_BACKEND {
 
 		defer if create_result == false {
 			for descriptor_set in p_shader.vk_descriptor_sets {
-				delete(
-					descriptor_set.descriptors,
-					G_RENDERER_ALLOCATORS.resource_allocator,
-				)
+				delete(descriptor_set.descriptors, G_RENDERER_ALLOCATORS.resource_allocator)
 			}
 			delete(p_shader.vk_descriptor_sets, G_RENDERER_ALLOCATORS.resource_allocator)
 		}
@@ -303,17 +266,12 @@ when USE_VULKAN_BACKEND {
 				pCode    = cast(^u32)raw_data(shader_code),
 			}
 			if create_res := vk.CreateShaderModule(
-				   G_RENDERER.device,
-				   &module_create_info,
-				   nil,
-				   &p_shader.vk_module,
-			   );
-			   create_res != .SUCCESS {
-				log.warnf(
-					"Failed to create module for shader %s: %s",
-					shader_path,
-					create_res,
-				)
+				G_RENDERER.device,
+				&module_create_info,
+				nil,
+				&p_shader.vk_module,
+			); create_res != .SUCCESS {
+				log.warnf("Failed to create module for shader %s: %s", shader_path, create_res)
 				return false
 			}
 		}

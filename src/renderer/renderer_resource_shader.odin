@@ -18,6 +18,10 @@ import "../common"
 
 //---------------------------------------------------------------------------//
 
+BASE_SHADERS_PATH :: "app_data/renderer/assets/shaders/"
+
+//---------------------------------------------------------------------------//
+
 @(private = "file")
 INTERNAL: struct {
 	shader_by_hash: map[u32]ShaderRef,
@@ -53,9 +57,18 @@ ShaderType :: enum u8 {
 
 //---------------------------------------------------------------------------//
 
+ShaderFlagBits :: enum u16 {
+	UsesBindlessArray,
+}
+
+ShaderFlags :: distinct bit_set[ShaderFlagBits;u16]
+
+//---------------------------------------------------------------------------//
+
 ShaderResource :: struct {
 	using backend_shader: BackendShaderResource,
 	desc:                 ShaderDesc,
+	flags:                ShaderFlags,
 }
 
 //---------------------------------------------------------------------------//
@@ -107,7 +120,8 @@ init_shaders :: proc() -> bool {
 	}
 
 	// Parse the shader config file
-	if err := json.unmarshal(shaders_json_data, &shader_json_entries); err != nil {
+	if err := json.unmarshal(shaders_json_data, &shader_json_entries);
+	   err != nil {
 		log.errorf("Failed to unmarshal shaders json: %s\n", err)
 		return false
 	}
@@ -199,7 +213,10 @@ destroy_shader :: proc(p_ref: ShaderRef) {
 
 //--------------------------------------------------------------------------//
 
-find_shader_by_name :: proc {find_shader_by_name_name, find_shader_by_name_str}
+find_shader_by_name :: proc {
+	find_shader_by_name_name,
+	find_shader_by_name_str,
+}
 
 //--------------------------------------------------------------------------//
 
@@ -214,7 +231,11 @@ find_shader_by_name_name :: proc(p_name: common.Name) -> ShaderRef {
 //--------------------------------------------------------------------------//
 
 find_shader_by_name_str :: proc(p_name: string) -> ShaderRef {
-	ref := find_ref_by_name(ShaderResource, &G_SHADER_REF_ARRAY, common.make_name(p_name))
+	ref := find_ref_by_name(
+		ShaderResource,
+		&G_SHADER_REF_ARRAY,
+		common.make_name(p_name),
+	)
 	if ref == InvalidShaderRef {
 		return InvalidShaderRef
 	}
@@ -247,7 +268,8 @@ create_shader_permutation :: proc(
 		}
 
 		for feature, i in p_features {
-			permutation_desc.features[i + len(base_shader.desc.features)] = feature
+			permutation_desc.features[i + len(base_shader.desc.features)] =
+				feature
 		}
 
 	} else {

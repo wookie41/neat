@@ -4,10 +4,25 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "MakeBinDir",
+            "type": "shell",
+            "windows": {
+                "command": "cmd",
+                "args": ["/C", "if not exist .\\bin mkdir .\\bin"]
+            }
+        },
+        {
+            "label": "CopyDlls",
+            "type": "shell",
+            "command": "cp src/third_party/assimp/external/assimp-vc143-mt.dll bin/",
+            "dependsOn": "MakeBinDir",
+        },
+        {
             "label": "(Debug) Build",
             "type": "shell",
             "command": "odin build src/runner/neat.odin -file --debug -o:minimal --vet -out:bin/neat.exe",
             "problemMatcher": [],
+            "dependsOn": "CopyDlls",
             "group": {
                 "kind": "build",
                 "isDefault": true

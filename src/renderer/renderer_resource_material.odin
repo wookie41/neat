@@ -111,7 +111,7 @@ init_materials :: proc() -> bool {
 
 
 	INTERNAL.material_params_buffer_ref = allocate_buffer_ref(
-		common.create_name("MaterialParamsBuffer")
+		common.create_name("MaterialParamsBuffer"),
 	)
 
 	material_params_buffer := get_buffer(INTERNAL.material_params_buffer_ref)

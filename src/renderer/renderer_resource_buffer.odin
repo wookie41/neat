@@ -169,7 +169,7 @@ buffer_allocate :: proc(
 		buffer.vma_block,
 		&alloc_info,
 		&suballocation.vma_allocation,
-		&suballocation_offset
+		&suballocation_offset,
 	)
 
 	suballocation.offset = u32(suballocation_offset)

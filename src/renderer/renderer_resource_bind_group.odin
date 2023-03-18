@@ -86,9 +86,25 @@ BindGroupBinding :: struct {
 
 //---------------------------------------------------------------------------//
 
+EMPTY_BIND_GROUP_BINDING := BindGroupBinding {
+	bind_group_ref = InvalidBindGroupRef,
+}
+
+
+//---------------------------------------------------------------------------//
+
+BindGroupImageUpdateFlagBits :: enum u8 {
+	AddressSubresource,
+}
+
+BindGroupImageUpdateFlags :: distinct bit_set[BindGroupImageUpdateFlagBits;u8]
+
+//---------------------------------------------------------------------------//
+
 BindGroupImageUpdate :: struct {
 	slot:      u32,
 	image_ref: ImageRef,
+	flags:     BindGroupImageUpdateFlags,
 	mip:       u32,
 }
 
@@ -110,6 +126,7 @@ BindGroupUpdate :: struct {
 }
 
 //---------------------------------------------------------------------------//
+
 
 BindGroupRef :: Ref(BindGroupResource)
 
@@ -210,8 +227,7 @@ clone_bind_groups :: proc(
 	cloned_bind_group_refs := make([]BindGroupRef, len(p_bind_group_refs), p_allocator)
 	for i in 0 ..< len(p_bind_group_refs) {
 		cloned_bind_group_refs[i] = allocate_bind_group_ref(p_bind_group_refs[i].name)
-		get_bind_group(cloned_bind_group_refs[i]).desc =
-			get_bind_group(p_bind_group_refs[i]).desc
+		get_bind_group(cloned_bind_group_refs[i]).desc = get_bind_group(p_bind_group_refs[i]).desc
 	}
 	res := backend_clone_bind_groups(p_bind_group_refs, cloned_bind_group_refs)
 	if res == false {

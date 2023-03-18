@@ -19,10 +19,8 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_buffer_upload_begin_frame :: proc() {
-		if
-		   !INTERNAL.had_requests_prev_frame ||
-		   G_RENDERER.queue_family_transfer_index ==
-			   G_RENDERER.queue_family_graphics_index {
+		if !INTERNAL.had_requests_prev_frame ||
+		   G_RENDERER.queue_family_transfer_index == G_RENDERER.queue_family_graphics_index {
 			return
 		}
 
@@ -55,8 +53,7 @@ when USE_VULKAN_BACKEND {
 			}
 
 			for i in 0 ..< p_options.num_staging_regions {
-				if
-				   vk.CreateFence(
+				if vk.CreateFence(
 					   G_RENDERER.device,
 					   &fence_create_info,
 					   nil,
@@ -121,10 +118,8 @@ when USE_VULKAN_BACKEND {
 			// Issue an acquire barrier for the dst buffer if we're using a dedicated transfer queue
 			is_not_first_usage := dst_buffer.owning_queue_family_idx != max(u32)
 			not_owning_buffer :=
-				dst_buffer.owning_queue_family_idx !=
-				G_RENDERER.queue_family_transfer_index
-			if
-			   (is_not_first_usage && not_owning_buffer) &&
+				dst_buffer.owning_queue_family_idx != G_RENDERER.queue_family_transfer_index
+			if (is_not_first_usage && not_owning_buffer) &&
 			   .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 
 				acquire_barrier := vk.BufferMemoryBarrier {
@@ -181,22 +176,19 @@ when USE_VULKAN_BACKEND {
 
 			// Issue a release barrier for the dst buffer if we're using a dedicated transfer queue
 			if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
-				
+
 				// @TODO This should check to which queue this buffer belongs to hand back
 				// ownership to the appropriate queue
 				graphics_cmd_buff_ref := get_frame_cmd_buffer()
-				graphics_cmd_buff :=
-					get_command_buffer(graphics_cmd_buff_ref).vk_cmd_buff
+				graphics_cmd_buff := get_command_buffer(graphics_cmd_buff_ref).vk_cmd_buff
 
-				buffer_barrier.srcQueueFamilyIndex =
-					G_RENDERER.queue_family_transfer_index
-				buffer_barrier.dstQueueFamilyIndex =
-					G_RENDERER.queue_family_graphics_index
+				buffer_barrier.srcQueueFamilyIndex = G_RENDERER.queue_family_transfer_index
+				buffer_barrier.dstQueueFamilyIndex = G_RENDERER.queue_family_graphics_index
 
 				vk.CmdPipelineBarrier(
 					transfer_cmd_buff,
 					{.TRANSFER},
-					{.BOTTOM_OF_PIPE},
+					{.TOP_OF_PIPE},
 					nil,
 					0,
 					nil,
@@ -228,11 +220,7 @@ when USE_VULKAN_BACKEND {
 
 			G_RENDERER.should_wait_on_transfer_semaphore = true
 
-			vk.ResetFences(
-				G_RENDERER.device,
-				1,
-				&INTERNAL.transfer_fences[get_frame_idx()],
-			)
+			vk.ResetFences(G_RENDERER.device, 1, &INTERNAL.transfer_fences[get_frame_idx()])
 
 			vk.EndCommandBuffer(transfer_cmd_buff)
 
@@ -241,9 +229,7 @@ when USE_VULKAN_BACKEND {
 				commandBufferCount   = 1,
 				pCommandBuffers      = &transfer_cmd_buff,
 				signalSemaphoreCount = 1,
-				pSignalSemaphores    = &G_RENDERER.transfer_finished_semaphores[get_frame_idx(
-	                                                                                
-                                                                                )],
+				pSignalSemaphores    = &G_RENDERER.transfer_finished_semaphores[get_frame_idx()],
 			}
 
 			vk.QueueSubmit(

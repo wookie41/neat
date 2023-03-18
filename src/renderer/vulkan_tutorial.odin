@@ -26,7 +26,6 @@ G_VT: struct {
 	depth_buffer_attachment:  DepthAttachment,
 	render_target_bindings:   []RenderTargetBinding,
 	ubo_bind_group_ref:       BindGroupRef,
-	texture_bind_group_ref:   BindGroupRef,
 	draw_stream:              DrawStream,
 	bind_group_bindings:      []BindGroupBinding,
 	viking_room_mesh_ref:     MeshRef,
@@ -107,6 +106,8 @@ init_vt :: proc() -> bool {
 			create_render_pass(render_pass_ref)
 		}
 
+		vt_create_uniform_buffer()
+		
 		// Create pipeline
 		{
 			vertex_shader_ref := find_shader_by_name(common.create_name("base.vert"))
@@ -124,7 +125,6 @@ init_vt :: proc() -> bool {
 			create_graphics_pipeline(pipeline_ref)
 		}
 
-		vt_create_uniform_buffer()
 		vt_load_model()
 		return true
 	}
@@ -135,6 +135,8 @@ vt_pre_render :: proc() {
 	using G_RENDERER
 	using G_VT
 
+	vt_create_bind_groups()
+
 	// Setup the draw stream
 	{
 		viking_room_mesh := get_mesh(G_VT.viking_room_mesh_ref)
@@ -142,10 +144,12 @@ vt_pre_render :: proc() {
 		draw_stream_init(G_RENDERER_ALLOCATORS.main_allocator, &G_VT.draw_stream)
 		draw_stream_change_pipeline(&G_VT.draw_stream, G_VT.pipeline_ref)
 		bind_group_bindings = draw_stream_change_bindings(&G_VT.draw_stream, 2)
-		bind_group_bindings[0].bind_group_ref = ubo_bind_group_ref
-		bind_group_bindings[0].dynamic_offsets = make([]u32, 1, draw_stream.allocator)
-		bind_group_bindings[1].bind_group_ref = texture_bind_group_ref
 
+		bind_group_bindings[0] = EMPTY_BIND_GROUP_BINDING
+
+		bind_group_bindings[1].bind_group_ref = ubo_bind_group_ref
+		bind_group_bindings[1].dynamic_offsets = make([]u32, 1, draw_stream.allocator)
+		bind_group_bindings[1].dynamic_offsets[0] = size_of(UniformBufferObject) * get_frame_idx()
 		cube_draw := draw_stream_add_indexed_draw(&G_VT.draw_stream)
 		cube_draw.index_buffer_ref = MESH_INTERNAL.index_buffer_ref
 		cube_draw.instance_count = 1
@@ -169,7 +173,6 @@ vt_create_bind_groups :: proc() {
 		)
 
 		ubo_bind_group_ref = refs[0]
-		texture_bind_group_ref = refs[1]
 	}
 
 	// Update the bind groups
@@ -181,17 +184,12 @@ vt_create_bind_groups :: proc() {
 					slot = 0,
 					buffer = ubo_ref,
 					offset = 0,
-					size = size_of(UniformBufferObject) * num_frames_in_flight,
+					size = size_of(UniformBufferObject),
 				},
 			},
 		}
-
-		texture_bind_group_update := BindGroupUpdate {
-			bind_group_ref = texture_bind_group_ref,
-			image_updates = {{image_ref = texture_image_ref, mip = 0, slot = 1}},
-		}
-
-		update_bind_groups({ubo_bind_group_update, texture_bind_group_update})
+		
+		update_bind_groups({ubo_bind_group_update})
 	}
 }
 
@@ -203,7 +201,7 @@ deinit_vt :: proc() {
 	vk.DestroyImageView(device, texture_image_view, nil)
 	destroy_image(texture_image_ref)
 	destroy_buffer(ubo_ref)
-	destroy_bind_groups({texture_bind_group_ref, ubo_bind_group_ref})
+	destroy_bind_groups({ubo_bind_group_ref})
 }
 
 vt_update :: proc(
@@ -225,7 +223,7 @@ vt_update :: proc(
 
 	begin_render_pass(render_pass_ref, p_cmd_buff_ref, &begin_info)
 	{
-		bind_group_bindings[0].dynamic_offsets = {
+		bind_group_bindings[1].dynamic_offsets = {
 			size_of(UniformBufferObject) * get_frame_idx(),
 		}
 

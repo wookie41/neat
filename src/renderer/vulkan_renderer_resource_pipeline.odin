@@ -53,7 +53,7 @@ when USE_VULKAN_BACKEND {
 				binding = 0, 
 				location = 3, 
 				format = .R32G32B32_SFLOAT, 
-				offset = u32(offset_of(MeshVertexLayout, tangent))
+				offset = u32(offset_of(MeshVertexLayout, tangent)),
 			},
 		},
 	}

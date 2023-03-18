@@ -225,7 +225,7 @@ draw_stream_update_pipeline :: #force_inline proc(
 		p_cmd_buff_ref,
 		new_pipeline.pipeline_layout_ref,
 		.Graphics,
-		0,
+		2,
 	)
 }
 

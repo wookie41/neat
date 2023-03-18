@@ -272,7 +272,6 @@ when USE_VULKAN_BACKEND {
 		p_pipeline: ^PipelineResource,
 		p_bindings: []BindGroupBinding,
 	) {
-
 		dynamic_offsets_count := 0
 		// Determine the number of dynamic offsets
 		for binding in p_bindings {
@@ -304,6 +303,11 @@ when USE_VULKAN_BACKEND {
 		// Fill descriptors sets array with the descriptor sets from the bind groups
 		{
 			for binding, i in p_bindings {
+				if binding.bind_group_ref == InvalidBindGroupRef {
+					descriptor_sets[i] = vk.DescriptorSet(0)
+					continue
+
+				}
 				bind_group := get_bind_group(binding.bind_group_ref)
 				descriptor_sets[i] = bind_group.vk_descriptor_set
 			}
@@ -429,7 +433,14 @@ when USE_VULKAN_BACKEND {
 			for image_update in update.image_updates {
 				image := get_image(image_update.image_ref)
 
+				if .AddressSubresource in image_update.flags {
+					image_writes[image_info_idx].imageView = image.per_mip_vk_view[image_update.mip]
+				} else{
+					image_writes[image_info_idx].imageView = image.all_mips_vk_view
+				}
+				
 				image_writes[image_info_idx].imageView = image.per_mip_vk_view[image_update.mip]
+
 				image_writes[image_info_idx].imageLayout =
 					image.vk_layout_per_mip[image_update.mip]
 
@@ -468,7 +479,7 @@ when USE_VULKAN_BACKEND {
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(set_layouts, G_RENDERER_ALLOCATORS.temp_allocator)
-		
+
 		descriptor_sets := make(
 			[]vk.DescriptorSet,
 			len(p_cloned_bind_group_refs),

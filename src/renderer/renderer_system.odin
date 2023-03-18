@@ -250,7 +250,6 @@ init :: proc(p_options: InitOptions) -> bool {
 		end_command_buffer(cmd_buff)
 		submit_pre_render(cmd_buff)
 
-		vt_create_bind_groups()
 		vt_pre_render()
 
 		// Advance the frame index when using unified queues, as we don't want to wait for the 0th

@@ -10,8 +10,10 @@ when USE_VULKAN_BACKEND {
 	import vk "vendor:vulkan"
 
 	import "../common"
+
 	//---------------------------------------------------------------------------//
 
+	NUM_DESCRIPTOR_SET_LAYOUTS :: u32(3)
 
 	//---------------------------------------------------------------------------//
 
@@ -23,16 +25,21 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_create_pipeline_layout :: proc(p_layout: ^PipelineLayoutResource) -> bool {
+	backend_create_pipeline_layout :: proc(p_pipeline_layout: ^PipelineLayoutResource) -> bool {
 
-		vert_shader := get_shader(p_layout.desc.vert_shader_ref)
-		frag_shader := get_shader(p_layout.desc.frag_shader_ref)
+		// @TODO support for compute shaders
+		vert_shader := get_shader(p_pipeline_layout.desc.vert_shader_ref)
+		frag_shader := get_shader(p_pipeline_layout.desc.frag_shader_ref)
 
-		// Determine the number of distinct descriptor sets used across 
-		num_descriptor_sets_used := len(vert_shader.vk_descriptor_sets)
-		for frag_descriptor_set in frag_shader.vk_descriptor_sets {
+		// Determine the number of distinct descriptor sets used across stages
+		num_descriptor_sets_used := 0
+		for descriptor_set in frag_shader.vk_descriptor_sets {
+			num_descriptor_sets_used += 1
+		}
+
+		for descriptor_set in frag_shader.vk_descriptor_sets {
 			for vert_descriptor_set in vert_shader.vk_descriptor_sets {
-				if frag_descriptor_set.set == vert_descriptor_set.set {
+				if descriptor_set.set == vert_descriptor_set.set {
 					break
 				}
 				num_descriptor_sets_used += 1
@@ -51,15 +58,16 @@ when USE_VULKAN_BACKEND {
 			delete(bindings_per_set)
 		}
 
-		texture_name_by_slot := make(
-			map[u32]common.Name,
-			32,
-			G_RENDERER_ALLOCATORS.temp_allocator,
-		)
+		texture_name_by_slot := make(map[u32]common.Name, 32, G_RENDERER_ALLOCATORS.temp_allocator)
 		defer delete(texture_name_by_slot)
 
 		// Gather vertex shader descriptor info
 		for descriptor_set in &vert_shader.vk_descriptor_sets {
+
+			// Skip bindless array
+			if descriptor_set.set == 2 {
+				continue
+			}
 
 			set_number := descriptor_set.set
 			if (set_number in bindings_per_set) == false {
@@ -77,10 +85,9 @@ when USE_VULKAN_BACKEND {
 					descriptorCount = descriptor.count,
 					descriptorType = descriptor.type,
 					stageFlags = {.VERTEX},
+					pImmutableSamplers = raw_data(VK_BINDLESS.immutable_samplers),
 				}
-				if
-				   descriptor.type == .SAMPLED_IMAGE ||
-				   descriptor.type == .STORAGE_IMAGE {
+				if descriptor.type == .SAMPLED_IMAGE || descriptor.type == .STORAGE_IMAGE {
 					// Add a texture slot so we can later resolve name -> slot
 					texture_name_by_slot[descriptor.binding] = descriptor.name
 				}
@@ -91,6 +98,11 @@ when USE_VULKAN_BACKEND {
 
 		// Gather fragment shader descriptor info
 		for descriptor_set in frag_shader.vk_descriptor_sets {
+
+			// Skip bindless array
+			if descriptor_set.set == 2 {
+				continue
+			}
 
 			set_number := descriptor_set.set
 			if (set_number in bindings_per_set) == false {
@@ -124,9 +136,7 @@ when USE_VULKAN_BACKEND {
 					descriptorType = descriptor.type,
 					stageFlags = {.FRAGMENT},
 				}
-				if
-				   descriptor.type == .SAMPLED_IMAGE ||
-				   descriptor.type == .STORAGE_IMAGE {
+				if descriptor.type == .SAMPLED_IMAGE || descriptor.type == .STORAGE_IMAGE {
 					// Add a texture slot so we can later resolve name -> slot
 					texture_name_by_slot[descriptor.binding] = descriptor.name
 				}
@@ -134,35 +144,51 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
+
 		// Create the descriptor set layouts
 		descriptor_set_layouts := make(
 			[]vk.DescriptorSetLayout,
-			len(bindings_per_set),
+			NUM_DESCRIPTOR_SET_LAYOUTS,
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
+
+		descriptor_set_layouts[0] = vk.DescriptorSetLayout(0)
+		descriptor_set_layouts[1] = vk.DescriptorSetLayout(0)
+
+
+		if .UsesBindlessArray in vert_shader.flags || .UsesBindlessArray in frag_shader.flags {
+			descriptor_set_layouts[2] = VK_BINDLESS.bindless_descriptor_set_layout
+		} else {
+			descriptor_set_layouts[2] = vk.DescriptorSetLayout(0)
+
+		}
+
 		defer {
 			for descriptor_set_layout in descriptor_set_layouts {
-				vk.DestroyDescriptorSetLayout(
-					G_RENDERER.device,
-					descriptor_set_layout,
-					nil,
-				)
+				if descriptor_set_layout != vk.DescriptorSetLayout(0) &&
+				   descriptor_set_layout != VK_BINDLESS.bindless_descriptor_set_layout {
+					vk.DestroyDescriptorSetLayout(G_RENDERER.device, descriptor_set_layout, nil)
+				}
 			}
 			delete(descriptor_set_layouts, G_RENDERER_ALLOCATORS.temp_allocator)
 		}
 
 		// Create the descriptor set layout and the bind groups
 		{
-			p_layout.bind_group_refs = make(
+			p_pipeline_layout.bind_group_refs = make(
 				[]BindGroupRef,
-				len(bindings_per_set) - 1, // Set 0 is reserved for samplers and texture array
+				len(bindings_per_set),
 				G_RENDERER_ALLOCATORS.resource_allocator,
 			)
-			for i in 0 ..< len(p_layout.bind_group_refs) {
-				p_layout.bind_group_refs[i] = allocate_bind_group_ref(p_layout.desc.name)
+			for i in 0 ..< len(p_pipeline_layout.bind_group_refs) {
+				p_pipeline_layout.bind_group_refs[i] = allocate_bind_group_ref(
+					p_pipeline_layout.desc.name,
+				)
 			}
 			bind_group_idx := 0
 			for set in bindings_per_set {
+
+				// @TODO Cache and reuse descriptor set layouts
 
 				// Descriptor set
 				descriptor_set_bindings := bindings_per_set[set]
@@ -172,8 +198,7 @@ when USE_VULKAN_BACKEND {
 					pBindings    = raw_data(descriptor_set_bindings),
 				}
 
-				if
-				   vk.CreateDescriptorSetLayout(
+				if vk.CreateDescriptorSetLayout(
 					   G_RENDERER.device,
 					   &create_info,
 					   nil,
@@ -184,10 +209,7 @@ when USE_VULKAN_BACKEND {
 					return false
 				}
 
-				image_bindings := make(
-					[dynamic]ImageBinding,
-					G_RENDERER_ALLOCATORS.temp_allocator,
-				)
+				image_bindings := make([dynamic]ImageBinding, G_RENDERER_ALLOCATORS.temp_allocator)
 				defer delete(image_bindings)
 
 				buffer_bindings := make(
@@ -260,26 +282,19 @@ when USE_VULKAN_BACKEND {
 					}
 				}
 
-				// Set 0 is reserved for samplers and texture array
-				if set != 0 {
-					bind_group := get_bind_group(
-						p_layout.bind_group_refs[bind_group_idx],
-					)
-					bind_group_idx += 1
+				bind_group := get_bind_group(p_pipeline_layout.bind_group_refs[bind_group_idx])
+				bind_group_idx += 1
 
-
-					bind_group.desc.images = slice.clone(
-						image_bindings[:],
-						G_RENDERER_ALLOCATORS.resource_allocator,
-					)
-					bind_group.desc.buffers = slice.clone(
-						buffer_bindings[:],
-						G_RENDERER_ALLOCATORS.resource_allocator,
-					)
-				}
-
+				bind_group.desc.images = slice.clone(
+					image_bindings[:],
+					G_RENDERER_ALLOCATORS.resource_allocator,
+				)
+				bind_group.desc.buffers = slice.clone(
+					buffer_bindings[:],
+					G_RENDERER_ALLOCATORS.resource_allocator,
+				)
 			}
-			create_bind_groups(p_layout.bind_group_refs)
+			create_bind_groups(p_pipeline_layout.bind_group_refs)
 		}
 
 		// Create pipeline layout
@@ -290,12 +305,11 @@ when USE_VULKAN_BACKEND {
 				setLayoutCount = u32(len(descriptor_set_layouts)),
 			}
 
-			if
-			   vk.CreatePipelineLayout(
+			if vk.CreatePipelineLayout(
 				   G_RENDERER.device,
 				   &create_info,
 				   nil,
-				   &p_layout.vk_pipeline_layout,
+				   &p_pipeline_layout.vk_pipeline_layout,
 			   ) !=
 			   .SUCCESS {
 				log.warn("Failed to create pipeline layout")
@@ -310,11 +324,7 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_destroy_pipeline_layout :: proc(p_pipeline_layout: ^PipelineLayoutResource) {
-		vk.DestroyPipelineLayout(
-			G_RENDERER.device,
-			p_pipeline_layout.vk_pipeline_layout,
-			nil,
-		)
+		vk.DestroyPipelineLayout(G_RENDERER.device, p_pipeline_layout.vk_pipeline_layout, nil)
 
 	}
 

@@ -2,15 +2,15 @@
     "collections": [
         {
             "name": "core",
-            "path": "C:\\Projects\\Odin\\core"
+            "path": "C:\\Tools\\Odin\\core"
         },
         {
             "name": "vendor",
-            "path": "C:\\Projects\\Odin\\vendor"
+            "path": "C:\\Tools\\Odin\\vendor"
         }
     ],
-    "enable_document_symbols": true,
     "enable_semantic_tokens": false,
+    "enable_document_symbols": true,
     "enable_hover": true,
     "enable_snippets": true
 }
