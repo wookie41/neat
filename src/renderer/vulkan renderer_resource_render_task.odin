@@ -39,6 +39,7 @@ when USE_VULKAN_BACKEND {
 	backend_create_render_task :: proc(
 		p_ref: RenderTaskRef,
 		p_render_task: ^RenderTaskResource,
+		p_render_task_config: RenderTaskConfig,
 	) -> bool {
 		return true
 	}

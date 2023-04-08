@@ -49,6 +49,10 @@ G_RENDER_TASK_REF_ARRAY: RefArray(RenderTaskResource)
 
 //---------------------------------------------------------------------------//
 
+RenderTaskConfig :: map[string]string
+
+//---------------------------------------------------------------------------//
+
 init_render_tasks :: proc() -> bool {
 	G_RENDER_TASK_REF_ARRAY = create_ref_array(RenderTaskResource, MAX_RENDER_TASKS)
 	return backend_init_render_tasks()
@@ -58,23 +62,36 @@ init_render_tasks :: proc() -> bool {
 
 deinit_render_tasks :: proc() {
 	backend_deinit_render_tasks()
+	for render_task_ref in G_RENDER_TASK_REF_ARRAY.alive_refs {
+		deinit_render_tasks(allocate_render_task)
+		destroy_render_task(render_task_ref)
+	}
+	clear_ref_array(G_RENDER_TASK_REF_ARRAY.alive_refs)
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
+RENDER_TASK_CREATE_FUNCTION_BY_NAME := map[string]proc(p_render_task_config: RenderTaskConfig) -> RenderTaskRef {
+	"Mesh" = create_mesh_render_task,
 }
 
 //---------------------------------------------------------------------------//
 
 allocate_render_task_ref :: proc(p_name: common.Name) -> RenderTaskRef {
-	ref := RenderTaskRef(
-		create_ref(RenderTaskResource, &G_RENDER_TASK_REF_ARRAY, p_name),
-	)
+	ref := RenderTaskRef(create_ref(RenderTaskResource, &G_RENDER_TASK_REF_ARRAY, p_name))
 	get_render_task(ref).desc.name = p_name
 	return ref
 }
 
 //---------------------------------------------------------------------------//
 
-create_render_task :: proc(p_render_task_ref: RenderTaskRef) -> bool {
+create_render_task :: proc(
+	p_render_task_ref: RenderTaskRef,
+	p_render_task_config: RenderTaskConfig,
+) -> bool {
 	render_task := get_render_task(p_render_task_ref)
-	if backend_create_render_task(p_render_task_ref, render_task) == false {
+	if backend_create_render_task(p_render_task_ref, render_task, p_render_task_config) == false {
 		free_ref(RenderTaskResource, &G_RENDER_TASK_REF_ARRAY, p_render_task_ref)
 		return false
 	}
