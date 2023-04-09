@@ -10,6 +10,7 @@ when USE_VULKAN_BACKEND {
 	import "core:log"
 	import "core:fmt"
 	import "core:os"
+	import "core:hash"
 	import vk "vendor:vulkan"
 
 	import "../common"
@@ -131,6 +132,7 @@ when USE_VULKAN_BACKEND {
 				log.warnf("Failed to read reflection data for shader %s", shader_path)
 				return false
 			}
+			p_shader.hash = hash.adler32(reflect_data)
 
 			shader_module: spirv_reflect.ShaderModule
 			if res := spirv_reflect.create_shader_module(

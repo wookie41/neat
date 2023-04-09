@@ -7,7 +7,6 @@ when USE_VULKAN_BACKEND {
 	import vk "vendor:vulkan"
 	import os "core:os"
 	import log "core:log"
-	// import "core:math/linalg/glsl"
 
 	//---------------------------------------------------------------------------//
 
@@ -19,8 +18,7 @@ when USE_VULKAN_BACKEND {
 
 	@(private = "file")
 	VERTEX_BINDINGS_PER_TYPE := map[VertexLayout][]vk.VertexInputBindingDescription {
-		.Mesh = 
-			{{binding = 0, stride = size_of(MeshVertexLayout), inputRate = .VERTEX}},
+		.Mesh = {{binding = 0, stride = size_of(MeshVertexLayout), inputRate = .VERTEX}},
 	}
 
 	//---------------------------------------------------------------------------//
@@ -28,31 +26,28 @@ when USE_VULKAN_BACKEND {
 	@(private = "file")
 	VERTEX_ATTRIBUTES_PER_TYPE := map[VertexLayout][]vk.VertexInputAttributeDescription {
 		.Mesh = {
-			// Position
 			{
-				binding = 0,
-				location = 0,
+				// Position
+				binding = 0,location = 0,
 				format = .R32G32B32_SFLOAT,
 				offset = u32(offset_of(MeshVertexLayout, position)),
-			}, 
-			// UV
-			{	binding = 0, 
-				location = 1, 
-				format = .R32G32_SFLOAT, 
-				offset = u32(offset_of(MeshVertexLayout, uv)),
-			}, 
-			// Normal
+			},
 			{
-				binding = 0, 
-				location = 2, 
-				format = .R32G32B32_SFLOAT, 
+				// UV
+				binding = 0,location = 1,
+				format = .R32G32_SFLOAT,
+				offset = u32(offset_of(MeshVertexLayout, uv)),
+			},
+			{
+				// Normal
+				binding = 0,location = 2,
+				format = .R32G32B32_SFLOAT,
 				offset = u32(offset_of(MeshVertexLayout, normal)),
 			},
-			// Tangent
 			{
-				binding = 0, 
-				location = 3, 
-				format = .R32G32B32_SFLOAT, 
+				// Tangent
+				binding = 0,location = 3,
+				format = .R32G32B32_SFLOAT,
 				offset = u32(offset_of(MeshVertexLayout, tangent)),
 			},
 		},
@@ -61,84 +56,77 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	INPUT_ASSEMBLY_PER_PRIMITIVE_TYPE :=
-		map[PrimitiveType]vk.PipelineInputAssemblyStateCreateInfo {
-			.TriangleList = {
-				sType = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-				topology = .TRIANGLE_LIST,
-			},
-		}
+	INPUT_ASSEMBLY_PER_PRIMITIVE_TYPE := map[PrimitiveType]vk.PipelineInputAssemblyStateCreateInfo {
+		.TriangleList = {
+			sType = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+			topology = .TRIANGLE_LIST,
+		},
+	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	RASTERIZER_STATE_PER_TYPE :=
-		map[RasterizerType]vk.PipelineRasterizationStateCreateInfo {
-			.Fill = {
-				sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-				polygonMode = .FILL,
-				lineWidth = 1.0,
-			},
-		}
+	RASTERIZER_STATE_PER_TYPE := map[RasterizerType]vk.PipelineRasterizationStateCreateInfo {
+		.Fill = {
+			sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+			polygonMode = .FILL,
+			lineWidth = 1.0,
+		},
+	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	MULTISAMPLER_STATE_PER_SAMPLE_TYPE :=
-		map[MultisamplingType]vk.PipelineMultisampleStateCreateInfo {
-			._1 = {
-				sType = .PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-				rasterizationSamples = {._1},
-			},
-		}
+	MULTISAMPLER_STATE_PER_SAMPLE_TYPE := map[MultisamplingType]vk.PipelineMultisampleStateCreateInfo {
+		._1 = {sType = .PIPELINE_MULTISAMPLE_STATE_CREATE_INFO, rasterizationSamples = {._1}},
+	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	DEPTH_STENCIL_STATE_PER_TYPE :=
-		map[DepthStencilType]vk.PipelineDepthStencilStateCreateInfo {
-			.None = {
-				sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-				depthTestEnable = false,
-				depthWriteEnable = false,
-				depthCompareOp = .NEVER,
-				stencilTestEnable = false,
-			},
-			.DepthTestWrite = {
-				sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-				depthTestEnable = true,
-				depthWriteEnable = true,
-				depthCompareOp = .LESS,
-				minDepthBounds = 0,
-				maxDepthBounds = 1,
-				stencilTestEnable = false,
-			},
-			.DepthTestReadOnly = {
-				sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-				depthTestEnable = true,
-				depthWriteEnable = false,
-				depthCompareOp = .LESS,
-				minDepthBounds = 0,
-				maxDepthBounds = 1,
-				stencilTestEnable = false,
-			},
-		}
+	DEPTH_STENCIL_STATE_PER_TYPE := map[DepthStencilType]vk.PipelineDepthStencilStateCreateInfo {
+		.None = {
+			sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+			depthTestEnable = false,
+			depthWriteEnable = false,
+			depthCompareOp = .NEVER,
+			stencilTestEnable = false,
+		},
+		.DepthTestWrite = {
+			sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+			depthTestEnable = true,
+			depthWriteEnable = true,
+			depthCompareOp = .LESS,
+			minDepthBounds = 0,
+			maxDepthBounds = 1,
+			stencilTestEnable = false,
+		},
+		.DepthTestReadOnly = {
+			sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+			depthTestEnable = true,
+			depthWriteEnable = false,
+			depthCompareOp = .LESS,
+			minDepthBounds = 0,
+			maxDepthBounds = 1,
+			stencilTestEnable = false,
+		},
+	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
 	COLOR_BLEND_PER_TYPE := map[ColorBlendType]vk.PipelineColorBlendAttachmentState {
-			.Default = {
-				colorWriteMask = {.R, .G, .B, .A},
-				blendEnable = false,
-				srcColorBlendFactor = .ONE,
-				dstColorBlendFactor = .ZERO,
-				colorBlendOp = .ADD,
-				srcAlphaBlendFactor = .ONE,
-				dstAlphaBlendFactor = .ZERO,
-				alphaBlendOp = .ADD,
-			},
-		}
+		.Default = {
+			colorWriteMask = {.R, .G, .B, .A},
+			blendEnable = false,
+			srcColorBlendFactor = .ONE,
+			dstColorBlendFactor = .ZERO,
+			colorBlendOp = .ADD,
+			srcAlphaBlendFactor = .ONE,
+			dstAlphaBlendFactor = .ZERO,
+			alphaBlendOp = .ADD,
+		},
+	}
 
 	//---------------------------------------------------------------------------//
 
@@ -147,13 +135,29 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
+	PipelineLayoutCacheEntry :: struct {
+		pipeline_layout_ref: PipelineLayoutRef,
+		ref_count:           u32,
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private = "file")
 	INTERNAL: struct {
-		vk_pipeline_cache: vk.PipelineCache,
+		pipeline_layout_cache: map[u32]PipelineLayoutCacheEntry,
+		vk_pipeline_cache:     vk.PipelineCache,
 	}
 
 	//---------------------------------------------------------------------------//
 
 	backend_init_pipelines :: proc() {
+		// Init pipeline layout cache
+		INTERNAL.pipeline_layout_cache = make(
+			map[u32]PipelineLayoutCacheEntry,
+			MAX_PIPELINE_LAYOUTS,
+			G_RENDERER_ALLOCATORS.main_allocator,
+		)
+
 		pipeline_cache, ok := os.read_entire_file(
 			PIPELINE_CACHE_FILE,
 			G_RENDERER_ALLOCATORS.temp_allocator,
@@ -187,16 +191,12 @@ when USE_VULKAN_BACKEND {
 	backend_deinit_pipelines :: proc() {
 		cache_size: int
 
-		vk.GetPipelineCacheData(
-			G_RENDERER.device,
-			INTERNAL.vk_pipeline_cache,
-			&cache_size,
-			nil,
-		)
+		vk.GetPipelineCacheData(G_RENDERER.device, INTERNAL.vk_pipeline_cache, &cache_size, nil)
 
 		cache_data := make([]u8, cache_size, G_RENDERER_ALLOCATORS.temp_allocator)
 		delete(cache_data, G_RENDERER_ALLOCATORS.temp_allocator)
-		
+		delete(INTERNAL.pipeline_layout_cache)
+
 		vk.GetPipelineCacheData(
 			G_RENDERER.device,
 			INTERNAL.vk_pipeline_cache,
@@ -238,14 +238,11 @@ when USE_VULKAN_BACKEND {
 		}
 
 		// Input assembly
-		input_assembly_state :=
-			INPUT_ASSEMBLY_PER_PRIMITIVE_TYPE[render_pass.desc.primitive_type]
+		input_assembly_state := INPUT_ASSEMBLY_PER_PRIMITIVE_TYPE[render_pass.desc.primitive_type]
 
 		// Vertex layout
-		vertex_binding_descriptions :=
-			VERTEX_BINDINGS_PER_TYPE[p_pipeline.desc.vertex_layout]
-		vertex_attribute_descriptions :=
-			VERTEX_ATTRIBUTES_PER_TYPE[p_pipeline.desc.vertex_layout]
+		vertex_binding_descriptions := VERTEX_BINDINGS_PER_TYPE[p_pipeline.desc.vertex_layout]
+		vertex_attribute_descriptions := VERTEX_ATTRIBUTES_PER_TYPE[p_pipeline.desc.vertex_layout]
 
 		vertex_input_info := vk.PipelineVertexInputStateCreateInfo {
 			sType                           = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -259,8 +256,7 @@ when USE_VULKAN_BACKEND {
 		raster_state := RASTERIZER_STATE_PER_TYPE[render_pass.desc.resterizer_type]
 
 		// Multisampler
-		multisample_state :=
-			MULTISAMPLER_STATE_PER_SAMPLE_TYPE[render_pass.desc.multisampling_type]
+		multisample_state := MULTISAMPLER_STATE_PER_SAMPLE_TYPE[render_pass.desc.multisampling_type]
 
 		// Color attachments blending
 		color_blend_attachments := make(
@@ -288,17 +284,30 @@ when USE_VULKAN_BACKEND {
 		depth_stencil := DEPTH_STENCIL_STATE_PER_TYPE[render_pass.desc.depth_stencil_type]
 
 		// Pipeline layout
-		p_pipeline.pipeline_layout_ref = allocate_pipeline_layout_ref(p_pipeline.desc.name)
-		pipeline_layout := get_pipeline_layout(p_pipeline.pipeline_layout_ref)
 
-		pipeline_layout.desc.name = p_pipeline.desc.name
-		pipeline_layout.desc.vert_shader_ref = p_pipeline.desc.vert_shader
-		pipeline_layout.desc.frag_shader_ref = p_pipeline.desc.frag_shader
+		// First check the cache 
+		pipeline_layout_hash := vert_shader.hash ~ frag_shader.hash
+		if pipeline_layout_hash in INTERNAL.pipeline_layout_cache {
+			cache_entry := &INTERNAL.pipeline_layout_cache[pipeline_layout_hash]
+			cache_entry.ref_count += 1
+			p_pipeline.pipeline_layout_ref = cache_entry.pipeline_layout_ref
+		} else {
+			p_pipeline.pipeline_layout_ref = allocate_pipeline_layout_ref(p_pipeline.desc.name)
+			pipeline_layout := get_pipeline_layout(p_pipeline.pipeline_layout_ref)
 
-		// @TODO Pipeline layout cache
-		if !create_pipeline_layout(p_pipeline.pipeline_layout_ref) {
-			log.warnf("Failed to create pipeline layout when creating the pipeline")
-			return false
+			pipeline_layout.desc.name = p_pipeline.desc.name
+			pipeline_layout.desc.vert_shader_ref = p_pipeline.desc.vert_shader
+			pipeline_layout.desc.frag_shader_ref = p_pipeline.desc.frag_shader
+
+			if !create_pipeline_layout(p_pipeline.pipeline_layout_ref) {
+				log.warnf("Failed to create pipeline layout when creating the pipeline")
+				return false
+			}
+
+			INTERNAL.pipeline_layout_cache[pipeline_layout_hash] = {
+				ref_count           = 1,
+				pipeline_layout_ref = p_pipeline.pipeline_layout_ref,
+			}
 		}
 
 		// Map color attachment formats
@@ -363,8 +372,7 @@ when USE_VULKAN_BACKEND {
 			   &pipeline_info,
 			   nil,
 			   &p_pipeline.vk_pipeline,
-		   );
-		   res != .SUCCESS {
+		   ); res != .SUCCESS {
 			log.warnf("Couldn't create graphics pipeline: %s", res)
 			return false
 		}
@@ -404,6 +412,17 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_destroy_pipeline :: proc(p_pipeline: ^PipelineResource) {
+		pipeline_layout_hash := hash_pipeline_layout(
+			get_pipeline_layout(p_pipeline.pipeline_layout_ref),
+		)
+		assert(pipeline_layout_hash in INTERNAL.pipeline_layout_cache)
+		cache_entry := &INTERNAL.pipeline_layout_cache[pipeline_layout_hash]
+		assert(cache_entry.ref_count > 0)
+		cache_entry.ref_count -= 1
+		if cache_entry.ref_count == 0 {
+			destroy_pipeline_layout(cache_entry.pipeline_layout_ref)
+			delete_key(&INTERNAL.pipeline_layout_cache, pipeline_layout_hash)
+		}
 		vk.DestroyPipeline(G_RENDERER.device, p_pipeline.vk_pipeline, nil)
 	}
 
@@ -417,6 +436,17 @@ when USE_VULKAN_BACKEND {
 		pipeline_layout := get_pipeline_layout(p_pipeline.pipeline_layout_ref)
 		bind_point := map_pipeline_bind_point(pipeline_layout.desc.layout_type)
 		vk.CmdBindPipeline(p_cmd_buff.vk_cmd_buff, bind_point, p_pipeline.vk_pipeline)
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private = "file")
+	hash_pipeline_layout :: #force_inline proc(
+		p_pipeline_layout: ^PipelineLayoutResource,
+	) -> u32 {
+		vert_shader_hash := get_shader(p_pipeline_layout.desc.vert_shader_ref).hash
+		frag_shader_hash := get_shader(p_pipeline_layout.desc.vert_shader_ref).hash
+		return vert_shader_hash ~ frag_shader_hash
 	}
 
 	//---------------------------------------------------------------------------//
