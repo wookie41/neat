@@ -56,6 +56,7 @@ init_pipeline_layouts :: proc() {
 		PipelineLayoutResource,
 		MAX_PIPELINE_LAYOUTS,
 	)
+	backend_init_pipeline_layouts()
 }
 
 //---------------------------------------------------------------------------//

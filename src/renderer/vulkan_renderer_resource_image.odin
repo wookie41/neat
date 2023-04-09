@@ -747,7 +747,7 @@ when USE_VULKAN_BACKEND {
 			descriptor_pool_create_info := vk.DescriptorPoolCreateInfo {
 				sType = .DESCRIPTOR_POOL_CREATE_INFO,
 				maxSets = 1,
-				poolSizeCount = 1,
+				poolSizeCount = u32(len(pool_sizes)),
 				pPoolSizes = raw_data(pool_sizes),
 				flags = {.UPDATE_AFTER_BIND},
 			}
@@ -859,7 +859,7 @@ when USE_VULKAN_BACKEND {
 				G_RENDERER.device,
 				&allocate_info,
 				&VK_BINDLESS.bindless_descriptor_set,
-			)
+			)	
 			assert(res == .SUCCESS)
 		}
 	}

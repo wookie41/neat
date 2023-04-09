@@ -68,6 +68,7 @@ when USE_VULKAN_BACKEND {
 		vma_allocator:                     vma.Allocator,
 		misc_flags:                        BackendMiscFlags,
 		should_wait_on_transfer_semaphore: bool,
+		empty_descriptor_set_layout:       vk.DescriptorSetLayout,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -79,7 +80,6 @@ when USE_VULKAN_BACKEND {
 			vk.KHR_SWAPCHAIN_EXTENSION_NAME,
 			vk.KHR_MAINTENANCE3_EXTENSION_NAME,
 			vk.EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
-			vk.EXT_GRAPHICS_PIPELINE_LIBRARY_EXTENSION_NAME,
 		}
 
 		G_RENDERER.window = p_options.window
@@ -211,7 +211,11 @@ when USE_VULKAN_BACKEND {
 		vk.load_proc_addresses(G_RENDERER.instance)
 
 		// Create a single surface for now
-		if !sdl.Vulkan_CreateSurface(G_RENDERER.window, G_RENDERER.instance, &G_RENDERER.surface) {
+		if !sdl.Vulkan_CreateSurface(
+			   G_RENDERER.window,
+			   G_RENDERER.instance,
+			   &G_RENDERER.surface,
+		   ) {
 			log.error("SDL couldn't create vulkan surface")
 			return false
 		}
@@ -258,12 +262,7 @@ when USE_VULKAN_BACKEND {
 					G_RENDERER_ALLOCATORS.temp_allocator,
 				)
 				defer delete(extensions, G_RENDERER_ALLOCATORS.temp_allocator)
-				vk.EnumerateDeviceExtensionProperties(
-					pd,
-					nil,
-					&extension_count,
-					raw_data(extensions),
-				)
+				vk.EnumerateDeviceExtensionProperties(pd, nil, &extension_count, raw_data(extensions))
 
 				device_has_all_required_extension := true
 				for re, i in &device_extensions {
@@ -300,12 +299,7 @@ when USE_VULKAN_BACKEND {
 					int(format_count),
 					G_RENDERER_ALLOCATORS.main_allocator,
 				)
-				vk.GetPhysicalDeviceSurfaceFormatsKHR(
-					pd,
-					surface,
-					&format_count,
-					raw_data(formats),
-				)
+				vk.GetPhysicalDeviceSurfaceFormatsKHR(pd, surface, &format_count, raw_data(formats))
 
 				// supported present modes
 				present_mode_count: u32
@@ -372,10 +366,8 @@ when USE_VULKAN_BACKEND {
 					}
 				}
 
-				if graphics_index == -1 ||
-				   present_index == -1 ||
-				   compute_index == -1 ||
-				   transfer_index == -1 {
+				if graphics_index == -1 || present_index == -1 || compute_index == -1 || transfer_index ==
+				   -1 {
 					continue
 				}
 
@@ -388,11 +380,8 @@ when USE_VULKAN_BACKEND {
 					transfer_index,
 				)
 
-				if graphics_index != -1 &&
-				   present_index != -1 &&
-				   compute_index != -1 &&
-				   transfer_index != -1 &&
-				   device_props.deviceType != .CPU {
+				if graphics_index != -1 && present_index != -1 && compute_index != -1 && transfer_index !=
+				   -1 && device_props.deviceType != .CPU {
 
 					log.infof("Picked device: %s\n ", device_props.deviceName)
 
@@ -492,12 +481,6 @@ when USE_VULKAN_BACKEND {
 				pNext                                        = &dynamic_rendering_fratures,
 			}
 
-			pipeline_library_features := vk.PhysicalDeviceGraphicsPipelineLibraryFeaturesEXT  {
-				sType = .PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT,
-				graphicsPipelineLibrary = true,
-				pNext = &descriptor_indexing_features,
-			}
-
 			device_create_info := vk.DeviceCreateInfo {
 				sType                   = .DEVICE_CREATE_INFO,
 				queueCreateInfoCount    = u32(len(queue_create_infos)),
@@ -505,11 +488,15 @@ when USE_VULKAN_BACKEND {
 				enabledExtensionCount   = u32(len(device_extensions)),
 				ppEnabledExtensionNames = raw_data(device_extensions),
 				pEnabledFeatures        = &device_features,
-				pNext                   = &pipeline_library_features,
+				pNext                   = &descriptor_indexing_features,
 			}
 
-			if result := vk.CreateDevice(physical_device, &device_create_info, nil, &device);
-			   result != .SUCCESS {
+			if result := vk.CreateDevice(
+				   physical_device,
+				   &device_create_info,
+				   nil,
+				   &device,
+			   ); result != .SUCCESS {
 				log.error("Couldn't create Vulkan device")
 				return false
 			}
@@ -792,9 +779,10 @@ create_swapchain :: proc(p_is_recreating: bool = false) -> bool {
 		}
 	}
 
-	if p_is_recreating &&
-	   (old_present_mode != G_RENDERER.present_mode || old_format != G_RENDERER.swapchain_format) {
-		log.fatal("Changing swapchain format/presnet mode on runtime is currently not supported")
+	if p_is_recreating && (old_present_mode != G_RENDERER.present_mode || old_format != G_RENDERER.swapchain_format) {
+		log.fatal(
+			"Changing swapchain format/presnet mode on runtime is currently not supported",
+		)
 	}
 	// find ideal swap extent from capabilities or sdl2
 	{
@@ -816,8 +804,7 @@ create_swapchain :: proc(p_is_recreating: bool = false) -> bool {
 
 		// prefer min + 1 images on the swapchain but no more than max
 		swap_images_count := G_RENDERER.surface_capabilities.minImageCount + 1
-		if G_RENDERER.surface_capabilities.maxImageCount > 0 &&
-		   swap_images_count > G_RENDERER.surface_capabilities.maxImageCount {
+		if G_RENDERER.surface_capabilities.maxImageCount > 0 && swap_images_count > G_RENDERER.surface_capabilities.maxImageCount {
 			swap_images_count = G_RENDERER.surface_capabilities.maxImageCount
 		}
 		resize(&G_RENDERER.swapchain_images, int(swap_images_count))
@@ -854,8 +841,12 @@ create_swapchain :: proc(p_is_recreating: bool = false) -> bool {
 		}
 
 		// finally the swapchain
-		if vk.CreateSwapchainKHR(G_RENDERER.device, &create_info, nil, &G_RENDERER.swapchain) !=
-		   .SUCCESS {
+		if vk.CreateSwapchainKHR(
+			   G_RENDERER.device,
+			   &create_info,
+			   nil,
+			   &G_RENDERER.swapchain,
+		   ) != .SUCCESS {
 			log.error("Couldn't create swapchain")
 			return false
 		}
@@ -893,8 +884,7 @@ create_swapchain :: proc(p_is_recreating: bool = false) -> bool {
 				   &create_info,
 				   nil,
 				   &G_RENDERER.swapchain_image_views[i],
-			   ) !=
-			   .SUCCESS {
+			   ) != .SUCCESS {
 				log.error("Error creating image view")
 				return false
 			}
@@ -927,7 +917,12 @@ create_synchronization_primitives :: proc() {
 		vk.CreateFence(device, &fence_create_info, nil, &frame_fences[i])
 		vk.CreateSemaphore(device, &semaphore_create_info, nil, &render_finished_semaphores[i])
 		vk.CreateSemaphore(device, &semaphore_create_info, nil, &image_available_semaphores[i])
-		vk.CreateSemaphore(device, &semaphore_create_info, nil, &transfer_finished_semaphores[i])
+		vk.CreateSemaphore(
+			device,
+			&semaphore_create_info,
+			nil,
+			&transfer_finished_semaphores[i],
+		)
 	}
 }
 
@@ -935,7 +930,11 @@ recreate_swapchain :: proc() {
 	using G_RENDERER
 
 	// Refresh capabilties, formats and present modes
-	vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &surface_capabilities)
+	vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(
+		physical_device,
+		surface,
+		&surface_capabilities,
+	)
 
 	format_count: u32
 	vk.GetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &format_count, nil)
@@ -952,7 +951,12 @@ recreate_swapchain :: proc() {
 	)
 
 	present_mode_count: u32
-	vk.GetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &present_mode_count, nil)
+	vk.GetPhysicalDeviceSurfacePresentModesKHR(
+		physical_device,
+		surface,
+		&present_mode_count,
+		nil,
+	)
 	if present_mode_count == 0 {
 		log.fatal("Can't recreate a swapchain - no presnet modes")
 	}

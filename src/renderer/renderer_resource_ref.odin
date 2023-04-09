@@ -7,23 +7,23 @@ import "../common"
 
 //---------------------------------------------------------------------------//
 
-RefArray :: struct(ResourceType: typeid) {
+RefArray :: struct($ResourceType: typeid) {
 	resource_array:   []ResourceType,
 	next_idx:         u32,
 	num_free_indices: u32,
 	free_indices:     []u32,
 	generations:      []u16,
 	names:            []common.Name,
-	alive_refs:       Ref(ResourceType),
+	alive_refs:       [dynamic]Ref(ResourceType),
 }
 
-RefArraySOA :: struct(ResourceType: typeid) {
+RefArraySOA :: struct($ResourceType: typeid) {
 	resource_array:   #soa[]ResourceType,
 	next_idx:         u32,
 	num_free_indices: u32,
 	free_indices:     []u32,
 	generations:      []u16,
-	alive_refs:       Ref(ResourceType),
+	alive_refs:       [dynamic]Ref(ResourceType),
 }
 
 
@@ -49,52 +49,49 @@ get_ref_generation :: #force_inline proc(p_ref: $T) -> u16 {
 //---------------------------------------------------------------------------//
 
 create_ref_array :: proc($R: typeid, p_capacity: u32) -> RefArray(R) {
-	return(
-		RefArray(R){
-			resource_array = make([]R, p_capacity),
-			free_indices = make([]u32, p_capacity),
-			generations = make([]u16, p_capacity),
-			names = make([]common.Name, p_capacity),
-			next_idx = 0,
-			num_free_indices = 0,
-			resource_array = make(
-				[]p_resource_type,
-				p_capacity,
-				G_RENDERER_ALLOCATORS.resource_allocator,
-			),
-			alive_refs = make([dynamic]Ref, p_capacity),
-		} \
-	)
+	return (RefArray(R){
+		free_indices = make([]u32, p_capacity, G_RENDERER_ALLOCATORS.resource_allocator),
+		generations = make([]u16, p_capacity, G_RENDERER_ALLOCATORS.resource_allocator),
+		names = make([]common.Name, p_capacity, G_RENDERER_ALLOCATORS.resource_allocator),
+		next_idx = 0,
+		num_free_indices = 0,
+		resource_array = make([]R, p_capacity, G_RENDERER_ALLOCATORS.resource_allocator),
+		alive_refs = make(
+			[dynamic]Ref(R),
+			p_capacity,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		),
+	})
 }
 
 //---------------------------------------------------------------------------//
 
 create_ref_array_soa :: proc($R: typeid, p_capacity: u32) -> RefArray(R) {
-	return(
-		RefArraySOA(R){
-			resource_array = make([]R, p_capacity),
-			free_indices = make([]u32, p_capacity),
-			generations = make([]u16, p_capacity),
-			names = make([]u32, p_capacity),
-			next_idx = 0,
-			num_free_indices = 0,
-			resource_array = make(
-				[]p_resource_type,
-				p_capacity,
-				G_RENDERER_ALLOCATORS.resource_allocator,
-			),
-			alive_refs = make([dynamic]Ref, p_capacity),
-		} \
-	)
+	return (RefArraySOA(R){
+		resource_array = make([]R, p_capacity, G_RENDERER_ALLOCATORS.resource_allocator),
+		free_indices = make([]u32, p_capacity, G_RENDERER_ALLOCATORS.resource_allocator),
+		generations = make([]u16, p_capacity, G_RENDERER_ALLOCATORS.resource_allocator),
+		names = make([]u32, p_capacity),
+		next_idx = 0,
+		num_free_indices = 0,
+		resource_array = make([]R, p_capacity, G_RENDERER_ALLOCATORS.resource_allocator),
+		alive_refs = make([dynamic]Ref(R), p_capacity, G_RENDERER_ALLOCATORS.resource_allocator),
+	})
 }
 
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-create_ref_aos :: proc($R: typeid, p_ref_array: ^RefArray(R), p_name: common.Name) -> Ref(R) {
+create_ref_aos :: proc(
+	$R: typeid,
+	p_ref_array: ^RefArray(R),
+	p_name: common.Name,
+) -> Ref(R) {
 	assert(
-		p_ref_array.next_idx < u32(len(p_ref_array.free_indices)) ||
-		len(p_ref_array.free_indices) > 0,
+		p_ref_array.next_idx <
+		u32(len(p_ref_array.free_indices)) ||
+		len(p_ref_array.free_indices) >
+		0,
 	)
 
 	idx := u32(0)
@@ -117,10 +114,16 @@ create_ref_aos :: proc($R: typeid, p_ref_array: ^RefArray(R), p_name: common.Nam
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-create_ref_soa :: proc($R: typeid, p_ref_array: ^RefArraySOA(R), p_name: common.Name) -> Ref(R) {
+create_ref_soa :: proc(
+	$R: typeid,
+	p_ref_array: ^RefArraySOA(R),
+	p_name: common.Name,
+) -> Ref(R) {
 	assert(
-		p_ref_array.next_idx < u32(len(p_ref_array.free_indices)) ||
-		len(p_ref_array.free_indices) > 0,
+		p_ref_array.next_idx <
+		u32(len(p_ref_array.free_indices)) ||
+		len(p_ref_array.free_indices) >
+		0,
 	)
 
 	idx := u32(0)
@@ -221,8 +224,10 @@ find_ref_by_name_soa :: proc(
 ) {
 	for name, idx in p_ref_array.names {
 		if common.name_equal(name, p_name) {
-			return Ref(R){name = p_name, ref = u64(idx) << 32 | u64(p_ref_array.generations[idx])},
-				true
+			return Ref(R){
+				name = p_name,
+				ref = u64(idx) << 32 | u64(p_ref_array.generations[idx]),
+			}, true
 		}
 	}
 
@@ -231,37 +236,39 @@ find_ref_by_name_soa :: proc(
 //---------------------------------------------------------------------------//
 
 clear_ref_array_soa :: proc($R: typeid, p_ref_array: ^RefArraySOA(R)) {
+	capacity := len(p_ref_array.resource_array)
+
 	delete(p_ref_array.free_indices)
 	delete(p_ref_array.generations)
-	clear(p_ref_array.alive_refs)
-	p_ref_array = {
-		free_indices     = make([]u32, p_capacity),
-		generations      = make([]u16, p_capacity),
-		next_idx         = 0,
-		num_free_indices = 0,
-		resource_array   = make(
-			[]p_resource_type,
-			p_capacity,
-			G_RENDERER_ALLOCATORS.resource_allocator,
-		),
-	}
+	delete(p_ref_array.resource_array, G_RENDERER_ALLOCATORS.resource_allocator)
+	clear(&p_ref_array.alive_refs)
+	p_ref_array.free_indices = make([]u32, capacity, G_RENDERER_ALLOCATORS.resource_allocator)
+	p_ref_array.generations = make([]u16, capacity, G_RENDERER_ALLOCATORS.resource_allocator)
+	p_ref_array.next_idx = 0
+	p_ref_array.num_free_indices = 0
+	p_ref_array.resource_array = make(
+		[]R,
+		capacity,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
 }
 
-clear_ref_array_aos :: proc($R: typeid, p_ref_array: ^RefArrayAOS(R)) {
+clear_ref_array_aos :: proc($R: typeid, p_ref_array: ^RefArray(R)) {
+	capacity := len(p_ref_array.resource_array)
+
 	delete(p_ref_array.free_indices)
 	delete(p_ref_array.generations)
-	clear(p_ref_array.alive_refs)
-	p_ref_array = {
-		free_indices     = make([]u32, p_capacity),
-		generations      = make([]u16, p_capacity),
-		next_idx         = 0,
-		num_free_indices = 0,
-		resource_array   = make(
-			[]p_resource_type,
-			p_capacity,
-			G_RENDERER_ALLOCATORS.resource_allocator,
-		),
-	}
+	delete(p_ref_array.resource_array, G_RENDERER_ALLOCATORS.resource_allocator)
+	clear(&p_ref_array.alive_refs)
+	p_ref_array.free_indices = make([]u32, capacity, G_RENDERER_ALLOCATORS.resource_allocator)
+	p_ref_array.generations = make([]u16, capacity, G_RENDERER_ALLOCATORS.resource_allocator)
+	p_ref_array.next_idx = 0
+	p_ref_array.num_free_indices = 0
+	p_ref_array.resource_array = make(
+		[]R,
+		capacity,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
 }
 
 //---------------------------------------------------------------------------//

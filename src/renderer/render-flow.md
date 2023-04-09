@@ -12,18 +12,35 @@ MaterialPass
 
 MaterialInstance:
 - MaterialPassRef
-- bind groups
+- bind groups 
 - holds parameter values
 
 
 MeshInstance
 - MeshRef
 - MaterialInstanceRef
-
+- xform
+- visibility mask
 
         []MeshInstance          mesh_instance.material_instance.material_pass
 Culling ---------> MeshRenderTask -------------------------------------> Sort by MaterialPass -> Render
 
+FrustumSet:
+- set of frustums for a given camera
+- camera frustum, directional light frustums to cull meshes for cascade maps
+
+Camera
+- posWS
+- near, far
+- projection type
+- fov
+- frustum ref
+
+Frustum
+- view, projection matrix
+- mark visible instances
+- MeshRenderTask gathers the draw commands based on material passes that were enabled
+  and sorts the draw commands by material pass
 
 Render:
  Get pipeline from the material

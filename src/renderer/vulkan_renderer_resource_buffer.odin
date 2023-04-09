@@ -74,14 +74,21 @@ when USE_VULKAN_BACKEND {
 
 		alloc_flags: vma.AllocationCreateFlags
 
+		has_mapped_ptr := false
+		if .IntegratedGPU in G_RENDERER.gpu_device_flags && .TRANSFER_DST in vk_usage {
+			alloc_flags += {.CREATE_MAPPED}
+			alloc_flags += {.HOST_ACCESS_SEQUENTIAL_WRITE}
+			has_mapped_ptr = true
+		}
+		if .Mapped in p_buffer.desc.flags {
+			alloc_flags += {.CREATE_MAPPED}
+			has_mapped_ptr = true
+		}
+		
 		if .HostWrite in p_buffer.desc.flags {
 			alloc_flags += {.HOST_ACCESS_SEQUENTIAL_WRITE}
 		} else if .HostRead in p_buffer.desc.flags {
 			alloc_flags += {.HOST_ACCESS_RANDOM}
-		}
-
-		if .Mapped in p_buffer.desc.flags {
-			alloc_flags += {.CREATE_MAPPED}
 		}
 
 		if .Dedicated in p_buffer.desc.flags {
@@ -107,7 +114,7 @@ when USE_VULKAN_BACKEND {
 			return false
 		}
 
-		if .Mapped in p_buffer.desc.flags {
+		if has_mapped_ptr {
 			assert(alloc_info.pMappedData != nil)
 			p_buffer.mapped_ptr = cast(^u8)alloc_info.pMappedData
 		}

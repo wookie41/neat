@@ -19,8 +19,9 @@ INDEX_DATA_TYPE :: u16
 @(private = "file")
 ZERO_VECTOR := glsl.vec4{0, 0, 0, 0}
 @(private = "file")
-VERTEX_STRIDE ::
-	size_of(glsl.vec3) + size_of(glsl.vec2) + size_of(glsl.vec3) + size_of(glsl.vec3)// Position// UV// Normal// Tangetn
+VERTEX_STRIDE :: size_of(glsl.vec3) + size_of(glsl.vec2) + size_of(glsl.vec3) + size_of(
+	                 glsl.vec3,
+                 ) // Position// UV// Normal// Tangetn
 
 //---------------------------------------------------------------------------//
 
@@ -37,7 +38,7 @@ g_destroyed_mesh_refs: [dynamic]MeshRef
 //---------------------------------------------------------------------------//
 
 
- @(private)
+@(private)
 MESH_INTERNAL: struct {
 	// Global vertex buffer for mesh data
 	vertex_buffer_ref: BufferRef,
@@ -170,15 +171,25 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 	assert(len(mesh.desc.tangent) == 0 || len(mesh.desc.tangent) == vertex_count)
 
 	assert(
-		.Indexed in mesh.desc.flags && len(mesh.desc.indices) > 0 ||
-		(.Indexed in mesh.desc.flags) == false && len(mesh.desc.indices) == 0,
+		.Indexed in
+		mesh.desc.flags &&
+		len(mesh.desc.indices) >
+		0 ||
+		(.Indexed in
+		mesh.desc.flags) ==
+		false &&
+		len(mesh.desc.indices) ==
+		0,
 	)
 
 	// Check if the the uplaod requests will fit into the staging buffer
 	vertex_data_size := VERTEX_STRIDE * vertex_count
 	index_data_size := index_count * size_of(INDEX_DATA_TYPE)
 
-	if dry_request_buffer_upload(u32(vertex_data_size + index_data_size)) == false {
+	if dry_request_buffer_upload(
+		   MESH_INTERNAL.vertex_buffer_ref,
+		   u32(vertex_data_size + index_data_size),
+	   ) == false {
 		return false
 	}
 
@@ -248,10 +259,7 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 		if .UV in mesh.desc.features {
 			for i in 0 ..< vertex_count {
 				mem.copy(
-					mem.ptr_offset(
-						vertex_data_ptr,
-						VERTEX_STRIDE * i + size_of(mesh.desc.position[0]),
-					),
+					mem.ptr_offset(vertex_data_ptr, VERTEX_STRIDE * i + size_of(mesh.desc.position[0])),
 					&mesh.desc.uv[i],
 					size_of(mesh.desc.uv[0]),
 				)
@@ -259,10 +267,7 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 		} else {
 			for i in 0 ..< vertex_count {
 				mem.copy(
-					mem.ptr_offset(
-						vertex_data_ptr,
-						VERTEX_STRIDE * i + size_of(mesh.desc.position[0]),
-					),
+					mem.ptr_offset(vertex_data_ptr, VERTEX_STRIDE * i + size_of(mesh.desc.position[0])),
 					&ZERO_VECTOR,
 					size_of(mesh.desc.uv[0]),
 				)
@@ -275,9 +280,7 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 				mem.copy(
 					mem.ptr_offset(
 						vertex_data_ptr,
-						VERTEX_STRIDE * i +
-						size_of(mesh.desc.position[0]) +
-						size_of(mesh.desc.uv[0]),
+						VERTEX_STRIDE * i + size_of(mesh.desc.position[0]) + size_of(mesh.desc.uv[0]),
 					),
 					&mesh.desc.normal[i],
 					size_of(mesh.desc.normal[0]),
@@ -288,9 +291,7 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 				mem.copy(
 					mem.ptr_offset(
 						vertex_data_ptr,
-						VERTEX_STRIDE * i +
-						size_of(mesh.desc.position[0]) +
-						size_of(mesh.desc.uv[0]),
+						VERTEX_STRIDE * i + size_of(mesh.desc.position[0]) + size_of(mesh.desc.uv[0]),
 					),
 					&ZERO_VECTOR,
 					size_of(mesh.desc.normal[0]),
@@ -304,7 +305,8 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 				mem.copy(
 					mem.ptr_offset(
 						vertex_data_ptr,
-						VERTEX_STRIDE * i +
+						VERTEX_STRIDE *
+						i +
 						size_of(mesh.desc.position[0]) +
 						size_of(mesh.desc.uv[0]) +
 						size_of(mesh.desc.normal[0]),
@@ -318,7 +320,8 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 				mem.copy(
 					mem.ptr_offset(
 						vertex_data_ptr,
-						VERTEX_STRIDE * i +
+						VERTEX_STRIDE *
+						i +
 						size_of(mesh.desc.position[0]) +
 						size_of(mesh.desc.uv[0]) +
 						size_of(mesh.desc.normal[0]),
@@ -357,10 +360,7 @@ destroy_mesh :: proc(p_ref: MeshRef) {
 	mesh := get_mesh(p_ref)
 
 	// Free index and vertex data
-	buffer_free(
-		MESH_INTERNAL.index_buffer_ref,
-		mesh.index_buffer_allocation.vma_allocation,
-	)
+	buffer_free(MESH_INTERNAL.index_buffer_ref, mesh.index_buffer_allocation.vma_allocation)
 
 	buffer_free(
 		MESH_INTERNAL.vertex_buffer_ref,
@@ -374,7 +374,7 @@ destroy_mesh :: proc(p_ref: MeshRef) {
 //--------------------------------------------------------------------------//
 
 @(private)
-free_mesh_ref ::proc(p_mesh_ref: MeshRef) {
+free_mesh_ref :: proc(p_mesh_ref: MeshRef) {
 	free_ref(MeshResource, &G_MESH_REF_ARRAY, p_mesh_ref)
 
 }

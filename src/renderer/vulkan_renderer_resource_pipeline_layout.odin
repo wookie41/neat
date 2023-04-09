@@ -13,7 +13,7 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	NUM_DESCRIPTOR_SET_LAYOUTS :: u32(3)
+	NUM_DESCRIPTOR_SET_LAYOUTS :: 3
 
 	//---------------------------------------------------------------------------//
 
@@ -25,9 +25,33 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_create_pipeline_layout :: proc(p_pipeline_layout: ^PipelineLayoutResource) -> bool {
+	backend_init_pipeline_layouts :: proc() {
+		// Create an empty descriptor set layout when descriptor sets are skipped
+		create_info := vk.DescriptorSetLayoutCreateInfo {
+			sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			bindingCount = 0,
+		}
+		assert(
+			vk.CreateDescriptorSetLayout(
+				G_RENDERER.device,
+				&create_info,
+				nil,
+				&G_RENDERER.empty_descriptor_set_layout,
+			) ==
+			.SUCCESS,
+		)
+	}
 
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_create_pipeline_layout :: proc(
+		p_pipeline_layout: ^PipelineLayoutResource,
+	) -> bool {
+
+		// @TODO Cache and reuse descriptor set layouts, take a look at vk bind groups file
 		// @TODO support for compute shaders
+
 		vert_shader := get_shader(p_pipeline_layout.desc.vert_shader_ref)
 		frag_shader := get_shader(p_pipeline_layout.desc.frag_shader_ref)
 
@@ -58,7 +82,11 @@ when USE_VULKAN_BACKEND {
 			delete(bindings_per_set)
 		}
 
-		texture_name_by_slot := make(map[u32]common.Name, 32, G_RENDERER_ALLOCATORS.temp_allocator)
+		texture_name_by_slot := make(
+			map[u32]common.Name,
+			32,
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
 		defer delete(texture_name_by_slot)
 
 		// Gather vertex shader descriptor info
@@ -146,27 +174,26 @@ when USE_VULKAN_BACKEND {
 
 
 		// Create the descriptor set layouts
+
 		descriptor_set_layouts := make(
 			[]vk.DescriptorSetLayout,
 			NUM_DESCRIPTOR_SET_LAYOUTS,
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
+		descriptor_set_layouts[0] = G_RENDERER.empty_descriptor_set_layout
+		descriptor_set_layouts[1] = G_RENDERER.empty_descriptor_set_layout
+		descriptor_set_layouts[2] = G_RENDERER.empty_descriptor_set_layout
 
-		descriptor_set_layouts[0] = vk.DescriptorSetLayout(0)
-		descriptor_set_layouts[1] = vk.DescriptorSetLayout(0)
-
-
-		if .UsesBindlessArray in vert_shader.flags || .UsesBindlessArray in frag_shader.flags {
+		uses_bindless_array := .UsesBindlessArray in vert_shader.flags || .UsesBindlessArray in
+                         frag_shader.flags
+		if uses_bindless_array {
 			descriptor_set_layouts[2] = VK_BINDLESS.bindless_descriptor_set_layout
-		} else {
-			descriptor_set_layouts[2] = vk.DescriptorSetLayout(0)
-
 		}
 
 		defer {
 			for descriptor_set_layout in descriptor_set_layouts {
-				if descriptor_set_layout != vk.DescriptorSetLayout(0) &&
-				   descriptor_set_layout != VK_BINDLESS.bindless_descriptor_set_layout {
+				if descriptor_set_layout != VK_BINDLESS.bindless_descriptor_set_layout && descriptor_set_layout !=
+				   G_RENDERER.empty_descriptor_set_layout {
 					vk.DestroyDescriptorSetLayout(G_RENDERER.device, descriptor_set_layout, nil)
 				}
 			}
@@ -185,13 +212,10 @@ when USE_VULKAN_BACKEND {
 					p_pipeline_layout.desc.name,
 				)
 			}
+
 			bind_group_idx := 0
-			for set in bindings_per_set {
+			for set, descriptor_set_bindings in bindings_per_set {
 
-				// @TODO Cache and reuse descriptor set layouts
-
-				// Descriptor set
-				descriptor_set_bindings := bindings_per_set[set]
 				create_info := vk.DescriptorSetLayoutCreateInfo {
 					sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
 					bindingCount = u32(len(descriptor_set_bindings)),
@@ -203,8 +227,7 @@ when USE_VULKAN_BACKEND {
 					   &create_info,
 					   nil,
 					   &descriptor_set_layouts[set],
-				   ) !=
-				   .SUCCESS {
+				   ) != .SUCCESS {
 					log.warn("Failed to create descriptor set layout")
 					return false
 				}
@@ -212,10 +235,7 @@ when USE_VULKAN_BACKEND {
 				image_bindings := make([dynamic]ImageBinding, G_RENDERER_ALLOCATORS.temp_allocator)
 				defer delete(image_bindings)
 
-				buffer_bindings := make(
-					[dynamic]BufferBinding,
-					G_RENDERER_ALLOCATORS.temp_allocator,
-				)
+				buffer_bindings := make([dynamic]BufferBinding, G_RENDERER_ALLOCATORS.temp_allocator)
 				defer delete(buffer_bindings)
 
 				for descriptor in descriptor_set_bindings {
@@ -310,8 +330,7 @@ when USE_VULKAN_BACKEND {
 				   &create_info,
 				   nil,
 				   &p_pipeline_layout.vk_pipeline_layout,
-			   ) !=
-			   .SUCCESS {
+			   ) != .SUCCESS {
 				log.warn("Failed to create pipeline layout")
 				return false
 			}

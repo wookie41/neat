@@ -63,10 +63,11 @@ init_render_tasks :: proc() -> bool {
 deinit_render_tasks :: proc() {
 	backend_deinit_render_tasks()
 	for render_task_ref in G_RENDER_TASK_REF_ARRAY.alive_refs {
-		deinit_render_tasks(allocate_render_task)
+		render_task := get_render_task(render_task_ref)
+		render_task.deinit(render_task)
 		destroy_render_task(render_task_ref)
 	}
-	clear_ref_array(G_RENDER_TASK_REF_ARRAY.alive_refs)
+	clear_ref_array(RenderTaskResource, &G_RENDER_TASK_REF_ARRAY)
 }
 
 //---------------------------------------------------------------------------//

@@ -14,10 +14,9 @@ when USE_VULKAN_BACKEND {
 
 	@(private = "file")
 	INTERNAL: struct {
-		descriptor_pool:                vk.DescriptorPool,
-		descriptor_layouts_cache:       map[u32]vk.DescriptorSetLayout,
-		samplers_descriptor_set_layout: vk.DescriptorSetLayout,
-		samplers_descriptor_set:        vk.DescriptorSet,
+		descriptor_pool:          vk.DescriptorPool,
+		descriptor_layouts_cache: map[u32]vk.DescriptorSetLayout,
+		empty_descriptor_set:     vk.DescriptorSet,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -31,7 +30,6 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_init_bind_groups :: proc() -> bool {
-
 		// Create descriptor pools
 		{
 			pool_sizes := []vk.DescriptorPoolSize{
@@ -66,6 +64,25 @@ when USE_VULKAN_BACKEND {
 			)
 		}
 
+		// Create an empty descriptor set
+		{
+			alloc_info := vk.DescriptorSetAllocateInfo {
+				sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
+				descriptorPool     = INTERNAL.descriptor_pool,
+				descriptorSetCount = 1,
+				pSetLayouts        = &G_RENDERER.empty_descriptor_set_layout,
+			}
+			if vk.AllocateDescriptorSets(
+				   G_RENDERER.device,
+				   &alloc_info,
+				   &INTERNAL.empty_descriptor_set,
+			   ) != .SUCCESS {
+
+				// @TODO Free the allocated pool 
+				return false
+			}
+		}
+
 		return true
 	}
 
@@ -85,8 +102,7 @@ when USE_VULKAN_BACKEND {
 
 			// Use an existing layout if we have one
 			if bind_group_hash in INTERNAL.descriptor_layouts_cache {
-				bind_group.vk_descriptor_set_layout =
-					INTERNAL.descriptor_layouts_cache[bind_group_hash]
+				bind_group.vk_descriptor_set_layout = INTERNAL.descriptor_layouts_cache[bind_group_hash]
 				descriptor_set_layouts[layout_idx] = bind_group.vk_descriptor_set_layout
 				continue
 			}
@@ -279,7 +295,11 @@ when USE_VULKAN_BACKEND {
 		}
 
 		// Create a joint dynamic offsets array
-		dynamic_offsets := make([]u32, dynamic_offsets_count, G_RENDERER_ALLOCATORS.temp_allocator)
+		dynamic_offsets := make(
+			[]u32,
+			dynamic_offsets_count,
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
 		defer delete(dynamic_offsets, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		{
@@ -304,7 +324,7 @@ when USE_VULKAN_BACKEND {
 		{
 			for binding, i in p_bindings {
 				if binding.bind_group_ref == InvalidBindGroupRef {
-					descriptor_sets[i] = vk.DescriptorSet(0)
+					descriptor_sets[i] = INTERNAL.empty_descriptor_set
 					continue
 
 				}
@@ -435,14 +455,13 @@ when USE_VULKAN_BACKEND {
 
 				if .AddressSubresource in image_update.flags {
 					image_writes[image_info_idx].imageView = image.per_mip_vk_view[image_update.mip]
-				} else{
+				} else {
 					image_writes[image_info_idx].imageView = image.all_mips_vk_view
 				}
-				
+
 				image_writes[image_info_idx].imageView = image.per_mip_vk_view[image_update.mip]
 
-				image_writes[image_info_idx].imageLayout =
-					image.vk_layout_per_mip[image_update.mip]
+				image_writes[image_info_idx].imageLayout = image.vk_layout_per_mip[image_update.mip]
 
 				descriptor_writes[write_idx].sType = .WRITE_DESCRIPTOR_SET
 				descriptor_writes[write_idx].descriptorCount = 1
@@ -491,8 +510,7 @@ when USE_VULKAN_BACKEND {
 			original_bind_group := get_bind_group(p_original_bind_group_refs[i])
 			cloned_bind_group := get_bind_group(p_cloned_bind_group_refs[i])
 
-			cloned_bind_group.vk_descriptor_set_layout =
-				original_bind_group.vk_descriptor_set_layout
+			cloned_bind_group.vk_descriptor_set_layout = original_bind_group.vk_descriptor_set_layout
 
 			set_layouts[i] = cloned_bind_group.vk_descriptor_set_layout
 		}

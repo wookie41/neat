@@ -69,7 +69,11 @@ BufferUploadInitOptions :: struct {
 init_buffer_upload :: proc(p_options: BufferUploadInitOptions) -> bool {
 
 	if .IntegratedGPU in G_RENDERER.gpu_device_flags {
-		return false
+		// On integrated GPUs we can leverage the fact, the we're sharing memory
+		// and can upload directly into the buffer by mapping it persistently.
+		// The mapping happens automatically in {platform}_renderer_resource_buffer.odin
+		// It's the user's resposbility to make sure that used parts of the buffer are not uploaded to.
+		return true
 	}
 
 	// Create the staging buffer used as upload src
@@ -113,7 +117,11 @@ buffer_upload_begin_frame :: proc() {
 
 // Used to check if a request of a given size will fit into the buffer
 @(private)
-dry_request_buffer_upload :: proc(p_size: u32) -> bool {
+dry_request_buffer_upload :: proc(p_buffer_ref: BufferRef, p_size: u32) -> bool {
+	if .IntegratedGPU in G_RENDERER.gpu_device_flags {
+		buffer := get_buffer(p_buffer_ref)
+		return p_size <= buffer.desc.size 
+	}
 	return(
 		INTERNAL.staging_buffer_offset + p_size <=
 		INTERNAL.single_staging_region_size
@@ -124,14 +132,35 @@ dry_request_buffer_upload :: proc(p_size: u32) -> bool {
 
 @(private)
 request_buffer_upload :: proc(p_request: BufferUploadRequest) -> BufferUploadResponse {
+	if dry_request_buffer_upload(p_request.dst_buff, p_request.size) == false {
+		return BufferUploadResponse{ptr = nil}
+	}
 
+	if .IntegratedGPU in G_RENDERER.gpu_device_flags {
+		return request_buffer_upload_integrated(p_request)
+	}
+	return request_buffer_upload_dicrete(p_request)
+}
+//---------------------------------------------------------------------------//
+
+@(private)
+run_buffer_upload_requests :: #force_inline proc() {
+	backend_run_buffer_upload_requests(
+		INTERNAL.staging_buffer_ref,
+		INTERNAL.pending_requests,
+	)
+	clear(&INTERNAL.pending_requests)
+	INTERNAL.staging_buffer_offset = 0
+}
+
+//---------------------------------------------------------------------------//
+
+@(private="file")
+request_buffer_upload_dicrete :: proc(p_request :BufferUploadRequest) -> BufferUploadResponse {
 	staging_buffer := get_buffer(INTERNAL.staging_buffer_ref)
 
 	// Check if this request will stil fit in the staging buffer 
 	// or do we have to delay it to the next frame
-	if dry_request_buffer_upload(p_request.size) == false {
-		return BufferUploadResponse{ptr = nil}
-	}
 
 	upload_ptr := mem.ptr_offset(
 		staging_buffer.mapped_ptr,
@@ -149,16 +178,11 @@ request_buffer_upload :: proc(p_request: BufferUploadRequest) -> BufferUploadRes
 
 	return BufferUploadResponse{ptr = upload_ptr}
 }
+
 //---------------------------------------------------------------------------//
 
-@(private)
-run_buffer_upload_requests :: #force_inline proc() {
-	backend_run_buffer_upload_requests(
-		INTERNAL.staging_buffer_ref,
-		INTERNAL.pending_requests,
-	)
-	clear(&INTERNAL.pending_requests)
-	INTERNAL.staging_buffer_offset = 0
+@(private="file")
+request_buffer_upload_integrated :: proc(p_request : BufferUploadRequest) -> BufferUploadResponse {
+	buffer := get_buffer(p_request.dst_buff)
+	return BufferUploadResponse{ptr = mem.ptr_offset(buffer.mapped_ptr, p_request.dst_buff_offset)}
 }
-
-//---------------------------------------------------------------------------//

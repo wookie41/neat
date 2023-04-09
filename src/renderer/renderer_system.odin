@@ -166,9 +166,9 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	init_shaders() or_return
 	assert(init_render_passes())
-	init_bind_groups()
 	init_pipeline_layouts()
 	init_pipelines()
+	init_bind_groups()
 	init_buffers()
 	init_meshes()
 	init_images()

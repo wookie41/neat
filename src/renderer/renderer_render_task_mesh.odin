@@ -60,7 +60,7 @@ init :: proc(p_render_task: ^RenderTaskResource) -> bool {
 
 @(private = "file")
 deinit :: proc(p_render_task: ^RenderTaskResource) {
-	mesh_render_task_data := (^MeshRenderTaskData)(render_task.data_ptr)
+	//mesh_render_task_data := (^MeshRenderTaskData)(p_render_task.data_ptr)
 }
 
 //---------------------------------------------------------------------------//
