@@ -5,7 +5,8 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	import "core:log"
-	import "core:slice"
+	import "core:hash"
+	import "core:mem"
 
 	import vk "vendor:vulkan"
 
@@ -19,13 +20,38 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	BackendPipelineLayoutResource :: struct {
-		vk_pipeline_layout: vk.PipelineLayout,
+		descriptor_set_layouts:       []vk.DescriptorSetLayout,
+		descriptor_set_layout_hashes: []u32,
+		vk_pipeline_layout:           vk.PipelineLayout,
+	}
+
+
+	//---------------------------------------------------------------------------//
+
+	@(private = "file")
+	DescriptorSetLayoutCacheEntry :: struct {
+		ref_count:             u16,
+		descriptor_set_layout: vk.DescriptorSetLayout,
+	}
+	//---------------------------------------------------------------------------//
+
+	@(private = "file")
+	INTERNAL: struct {
+		descriptor_set_layout_cache: map[u32]DescriptorSetLayoutCacheEntry,
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
 	backend_init_pipeline_layouts :: proc() {
+		
+		// Init the cache
+		INTERNAL.descriptor_set_layout_cache = make(
+			map[u32]DescriptorSetLayoutCacheEntry,
+			1024,
+			G_RENDERER_ALLOCATORS.main_allocator,
+		)
+
 		// Create an empty descriptor set layout when descriptor sets are skipped
 		create_info := vk.DescriptorSetLayoutCreateInfo {
 			sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -46,10 +72,12 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_create_pipeline_layout :: proc(
+		p_ref: PipelineLayoutRef,
 		p_pipeline_layout: ^PipelineLayoutResource,
-	) -> bool {
+	) -> (
+		res: bool,
+	) {
 
-		// @TODO Cache and reuse descriptor set layouts, take a look at vk bind groups file
 		// @TODO support for compute shaders
 
 		vert_shader := get_shader(p_pipeline_layout.desc.vert_shader_ref)
@@ -57,17 +85,43 @@ when USE_VULKAN_BACKEND {
 
 		// Determine the number of distinct descriptor sets used across stages
 		num_descriptor_sets_used := 0
-		for descriptor_set in frag_shader.vk_descriptor_sets {
+		for descriptor_set in vert_shader.vk_descriptor_sets {
 			num_descriptor_sets_used += 1
 		}
 
 		for descriptor_set in frag_shader.vk_descriptor_sets {
+			is_duplicate := false
 			for vert_descriptor_set in vert_shader.vk_descriptor_sets {
 				if descriptor_set.set == vert_descriptor_set.set {
+					is_duplicate = true
 					break
 				}
+			}
+			if is_duplicate == false {
 				num_descriptor_sets_used += 1
 			}
+		}
+
+		p_pipeline_layout.descriptor_set_layouts = make(
+			[]vk.DescriptorSetLayout,
+			num_descriptor_sets_used,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
+		p_pipeline_layout.descriptor_set_layout_hashes = make(
+			[]u32,
+			num_descriptor_sets_used,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
+
+		defer if res == false {
+			delete(
+				p_pipeline_layout.descriptor_set_layouts,
+				G_RENDERER_ALLOCATORS.resource_allocator,
+			)
+			delete(
+				p_pipeline_layout.descriptor_set_layout_hashes,
+				G_RENDERER_ALLOCATORS.resource_allocator,
+			)
 		}
 
 		bindings_per_set := make(
@@ -91,11 +145,6 @@ when USE_VULKAN_BACKEND {
 
 		// Gather vertex shader descriptor info
 		for descriptor_set in &vert_shader.vk_descriptor_sets {
-
-			// Skip bindless array
-			if descriptor_set.set == 2 {
-				continue
-			}
 
 			set_number := descriptor_set.set
 			if (set_number in bindings_per_set) == false {
@@ -126,11 +175,6 @@ when USE_VULKAN_BACKEND {
 
 		// Gather fragment shader descriptor info
 		for descriptor_set in frag_shader.vk_descriptor_sets {
-
-			// Skip bindless array
-			if descriptor_set.set == 2 {
-				continue
-			}
 
 			set_number := descriptor_set.set
 			if (set_number in bindings_per_set) == false {
@@ -190,133 +234,52 @@ when USE_VULKAN_BACKEND {
 			descriptor_set_layouts[2] = VK_BINDLESS.bindless_descriptor_set_layout
 		}
 
-		defer {
-			for descriptor_set_layout in descriptor_set_layouts {
-				if descriptor_set_layout != VK_BINDLESS.bindless_descriptor_set_layout && descriptor_set_layout !=
-				   G_RENDERER.empty_descriptor_set_layout {
-					vk.DestroyDescriptorSetLayout(G_RENDERER.device, descriptor_set_layout, nil)
-				}
-			}
-			delete(descriptor_set_layouts, G_RENDERER_ALLOCATORS.temp_allocator)
-		}
+		defer delete(descriptor_set_layouts, G_RENDERER_ALLOCATORS.temp_allocator)
 
-		// Create the descriptor set layout and the bind groups
+		// Create the descriptor set layouts or get from cache
 		{
-			p_pipeline_layout.bind_group_refs = make(
-				[]BindGroupRef,
-				len(bindings_per_set),
-				G_RENDERER_ALLOCATORS.resource_allocator,
-			)
-			for i in 0 ..< len(p_pipeline_layout.bind_group_refs) {
-				p_pipeline_layout.bind_group_refs[i] = allocate_bind_group_ref(
-					p_pipeline_layout.desc.name,
-				)
-			}
-
-			bind_group_idx := 0
+			descriptor_set_layout_idx := 0
 			for set, descriptor_set_bindings in bindings_per_set {
 
-				create_info := vk.DescriptorSetLayoutCreateInfo {
-					sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-					bindingCount = u32(len(descriptor_set_bindings)),
-					pBindings    = raw_data(descriptor_set_bindings),
+				// Get descriptor set layout from cache or create a new one
+				hash := calculate_descriptor_layout_hash(descriptor_set_bindings)
+				p_pipeline_layout.descriptor_set_layout_hashes[descriptor_set_layout_idx] = hash
+
+				if hash in INTERNAL.descriptor_set_layout_cache {
+					// Grab the descriptor set layout and increment ref count
+					cache_entry := &INTERNAL.descriptor_set_layout_cache[hash]
+					cache_entry.ref_count += 1
+					p_pipeline_layout.descriptor_set_layouts[descriptor_set_layout_idx] = cache_entry.descriptor_set_layout
+					descriptor_set_layouts[set] = cache_entry.descriptor_set_layout
+				} else {
+					create_info := vk.DescriptorSetLayoutCreateInfo {
+						sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+						bindingCount = u32(len(descriptor_set_bindings)),
+						pBindings    = raw_data(descriptor_set_bindings),
+					}
+
+					if vk.CreateDescriptorSetLayout(
+						   G_RENDERER.device,
+						   &create_info,
+						   nil,
+						   &descriptor_set_layouts[set],
+					   ) != .SUCCESS {
+						log.warn("Failed to create descriptor set layout")
+						return false
+					}
+					// Add entry to the cache
+					INTERNAL.descriptor_set_layout_cache[hash] = {
+						ref_count             = 1,
+						descriptor_set_layout = descriptor_set_layouts[set],
+					}
+
+					p_pipeline_layout.descriptor_set_layouts[descriptor_set_layout_idx] = descriptor_set_layouts[set]
+
 				}
 
-				if vk.CreateDescriptorSetLayout(
-					   G_RENDERER.device,
-					   &create_info,
-					   nil,
-					   &descriptor_set_layouts[set],
-				   ) != .SUCCESS {
-					log.warn("Failed to create descriptor set layout")
-					return false
-				}
-
-				image_bindings := make([dynamic]ImageBinding, G_RENDERER_ALLOCATORS.temp_allocator)
-				defer delete(image_bindings)
-
-				buffer_bindings := make([dynamic]BufferBinding, G_RENDERER_ALLOCATORS.temp_allocator)
-				defer delete(buffer_bindings)
-
-				for descriptor in descriptor_set_bindings {
-
-					stage_flags: BindingUsageStageFlags
-					if .VERTEX in descriptor.stageFlags {
-						stage_flags += {.Vertex}
-					}
-					if .FRAGMENT in descriptor.stageFlags {
-						stage_flags += {.Fragment}
-					}
-					if .COMPUTE in descriptor.stageFlags {
-						stage_flags += {.Compute}
-					}
-
-					if descriptor.descriptorType == .SAMPLED_IMAGE {
-						image_binding := ImageBinding {
-							name        = texture_name_by_slot[descriptor.binding],
-							count       = descriptor.descriptorCount,
-							slot        = descriptor.binding,
-							stage_flags = stage_flags,
-							usage       = .SampledImage,
-						}
-						append(&image_bindings, image_binding)
-					} else if descriptor.descriptorType == .STORAGE_IMAGE {
-						image_binding := ImageBinding {
-							name        = texture_name_by_slot[descriptor.binding],
-							count       = descriptor.descriptorCount,
-							slot        = descriptor.binding,
-							stage_flags = stage_flags,
-							usage       = .StorageImage,
-						}
-						append(&image_bindings, image_binding)
-					} else if descriptor.descriptorType == .UNIFORM_BUFFER {
-						buffer_binding := BufferBinding {
-							slot         = descriptor.binding,
-							stage_flags  = stage_flags,
-							buffer_usage = .UniformBuffer,
-						}
-						append(&buffer_bindings, buffer_binding)
-					} else if descriptor.descriptorType == .UNIFORM_BUFFER_DYNAMIC {
-						buffer_binding := BufferBinding {
-							slot         = descriptor.binding,
-							stage_flags  = stage_flags,
-							buffer_usage = .DynamicUniformBuffer,
-						}
-						append(&buffer_bindings, buffer_binding)
-					} else if descriptor.descriptorType == .STORAGE_BUFFER {
-						buffer_binding := BufferBinding {
-							slot         = descriptor.binding,
-							stage_flags  = stage_flags,
-							buffer_usage = .StorageBuffer,
-						}
-						append(&buffer_bindings, buffer_binding)
-					} else if descriptor.descriptorType == .STORAGE_BUFFER_DYNAMIC {
-						buffer_binding := BufferBinding {
-							slot         = descriptor.binding,
-							stage_flags  = stage_flags,
-							buffer_usage = .DynamicStorageBuffer,
-						}
-						append(&buffer_bindings, buffer_binding)
-					} else if descriptor.descriptorType != .SAMPLER {
-						assert(false, "Unsupported binding type")
-					}
-				}
-
-				bind_group := get_bind_group(p_pipeline_layout.bind_group_refs[bind_group_idx])
-				bind_group_idx += 1
-
-				bind_group.desc.images = slice.clone(
-					image_bindings[:],
-					G_RENDERER_ALLOCATORS.resource_allocator,
-				)
-				bind_group.desc.buffers = slice.clone(
-					buffer_bindings[:],
-					G_RENDERER_ALLOCATORS.resource_allocator,
-				)
+				descriptor_set_layout_idx += 1
 			}
-			create_bind_groups(p_pipeline_layout.bind_group_refs)
 		}
-
 		// Create pipeline layout
 		{
 			create_info := vk.PipelineLayoutCreateInfo {
@@ -343,9 +306,77 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_destroy_pipeline_layout :: proc(p_pipeline_layout: ^PipelineLayoutResource) {
+		for hash in p_pipeline_layout.descriptor_set_layout_hashes {
+			cache_entry := &INTERNAL.descriptor_set_layout_cache[hash]
+			cache_entry.ref_count -= 1
+			if cache_entry.ref_count == 0 {
+				vk.DestroyDescriptorSetLayout(
+					G_RENDERER.device,
+					cache_entry.descriptor_set_layout,
+					nil,
+				)
+				delete_key(&INTERNAL.descriptor_set_layout_cache, hash)
+			}
+		}
+		delete(
+			p_pipeline_layout.descriptor_set_layouts,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
+		delete(
+			p_pipeline_layout.descriptor_set_layout_hashes,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
 		vk.DestroyPipelineLayout(G_RENDERER.device, p_pipeline_layout.vk_pipeline_layout, nil)
 
 	}
 
 	//---------------------------------------------------------------------------//
+
+	@(private = "file")
+	DescriptorLayoutBindingHashEntry :: struct {
+		type:  u32,
+		slot:  u32,
+		count: u32,
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private = "file")
+	calculate_descriptor_layout_hash :: proc(
+		p_layout_bindings: [dynamic]vk.DescriptorSetLayoutBinding,
+	) -> u32 {
+		hash_entries := make(
+			[]DescriptorLayoutBindingHashEntry,
+			len(p_layout_bindings),
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+		defer delete(hash_entries, G_RENDERER_ALLOCATORS.temp_allocator)
+
+		entry_idx := 0
+		for binding in p_layout_bindings {
+
+			hash_entries[entry_idx].slot = binding.binding
+			hash_entries[entry_idx].count = binding.descriptorCount
+
+			if binding.descriptorType == .SAMPLED_IMAGE {
+				hash_entries[entry_idx].type = 0
+
+			} else if binding.descriptorType == .STORAGE_IMAGE {
+				hash_entries[entry_idx].type = 1
+			} else if binding.descriptorType == .UNIFORM_BUFFER {
+				hash_entries[entry_idx].type = 2
+			} else if binding.descriptorType == .UNIFORM_BUFFER_DYNAMIC {
+				hash_entries[entry_idx].type = 3
+			} else if binding.descriptorType == .STORAGE_BUFFER {
+				hash_entries[entry_idx].type = 4
+			} else if binding.descriptorType == .STORAGE_BUFFER_DYNAMIC {
+				hash_entries[entry_idx].type = 5
+			} else {
+				assert(false, "Unsupported descriptor type")
+			}
+
+			entry_idx += 1
+		}
+		return hash.adler32(mem.slice_to_bytes(hash_entries))
+	}
 }

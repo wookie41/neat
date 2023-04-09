@@ -6,7 +6,6 @@ import "../common"
 import "core:log"
 import c "core:c"
 import "core:math/linalg/glsl"
-import "core:mem"
 
 //---------------------------------------------------------------------------//
 MeshVertexLayout :: struct {
@@ -175,19 +174,6 @@ bind_pipeline :: proc(p_pipeline_ref: PipelineRef, p_cmd_buff_ref: CommandBuffer
 		get_pipeline(p_pipeline_ref),
 		get_command_buffer(p_cmd_buff_ref),
 	)
-}
-
-//---------------------------------------------------------------------------//
-
-create_bind_groups_for_pipeline :: #force_inline proc(
-	p_pipeline_ref: PipelineRef,
-	p_allocator: mem.Allocator,
-) -> (
-	[]BindGroupRef,
-	bool,
-) {
-	pipeline := get_pipeline(p_pipeline_ref)
-	return create_bind_groups_for_pipeline_layout(pipeline.pipeline_layout_ref, p_allocator)
 }
 
 //---------------------------------------------------------------------------//

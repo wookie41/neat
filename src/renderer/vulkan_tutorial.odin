@@ -167,8 +167,8 @@ vt_create_bind_groups :: proc() {
 
 	// Create the bind groups
 	{
-		refs, _ := create_bind_groups_for_pipeline(
-			pipeline_ref,
+		refs := create_bind_groups(
+			get_pipeline(pipeline_ref).pipeline_layout_ref,
 			G_RENDERER_ALLOCATORS.main_allocator,
 		)
 

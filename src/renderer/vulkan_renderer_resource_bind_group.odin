@@ -3,8 +3,6 @@ package renderer
 //---------------------------------------------------------------------------//
 
 import vk "vendor:vulkan"
-import "core:hash"
-import "core:mem"
 
 //---------------------------------------------------------------------------//
 
@@ -14,16 +12,14 @@ when USE_VULKAN_BACKEND {
 
 	@(private = "file")
 	INTERNAL: struct {
-		descriptor_pool:          vk.DescriptorPool,
-		descriptor_layouts_cache: map[u32]vk.DescriptorSetLayout,
-		empty_descriptor_set:     vk.DescriptorSet,
+		descriptor_pool:      vk.DescriptorPool,
+		empty_descriptor_set: vk.DescriptorSet,
 	}
 
 	//---------------------------------------------------------------------------//
 
 	BackendBindGroupResource :: struct {
-		vk_descriptor_set_layout: vk.DescriptorSetLayout,
-		vk_descriptor_set:        vk.DescriptorSet,
+		vk_descriptor_set: vk.DescriptorSet,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -55,15 +51,6 @@ when USE_VULKAN_BACKEND {
 			)
 		}
 
-		// Init the descripor set layouts cache
-		{
-			INTERNAL.descriptor_layouts_cache = make(
-				map[u32]vk.DescriptorSetLayout,
-				512,
-				G_RENDERER_ALLOCATORS.resource_allocator,
-			)
-		}
-
 		// Create an empty descriptor set
 		{
 			alloc_info := vk.DescriptorSetAllocateInfo {
@@ -88,117 +75,16 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	backend_create_bind_groups :: proc(p_ref_array: []BindGroupRef) -> bool {
-		descriptor_set_layouts := make(
-			[]vk.DescriptorSetLayout,
-			len(p_ref_array),
-			G_RENDERER_ALLOCATORS.temp_allocator,
-		)
-		defer delete(descriptor_set_layouts, G_RENDERER_ALLOCATORS.temp_allocator)
-
-		for ref, layout_idx in p_ref_array {
-			bind_group := get_bind_group(ref)
-			bind_group_hash := calculate_bind_group_hash(bind_group)
-
-			// Use an existing layout if we have one
-			if bind_group_hash in INTERNAL.descriptor_layouts_cache {
-				bind_group.vk_descriptor_set_layout = INTERNAL.descriptor_layouts_cache[bind_group_hash]
-				descriptor_set_layouts[layout_idx] = bind_group.vk_descriptor_set_layout
-				continue
-			}
-
-			// Otherwise create a new one
-			{
-				bindings := make(
-					[]vk.DescriptorSetLayoutBinding,
-					len(bind_group.desc.images) + len(bind_group.desc.buffers),
-					G_RENDERER_ALLOCATORS.temp_allocator,
-				)
-				defer delete(bindings, G_RENDERER_ALLOCATORS.temp_allocator)
-
-
-				binding_idx := 0
-
-				// Image bindings
-				for image_binding in bind_group.desc.images {
-					bindings[binding_idx].binding = image_binding.slot
-
-					if .SampledImage == image_binding.usage {
-						bindings[binding_idx].descriptorType = .SAMPLED_IMAGE
-					} else if .StorageImage == image_binding.usage {
-						bindings[binding_idx].descriptorType = .STORAGE_IMAGE
-					} else {
-						assert(false) // Probably added a new flag bit and forgot to handle it here
-					}
-
-					bindings[binding_idx].binding = image_binding.slot
-					bindings[binding_idx].descriptorCount = image_binding.count
-
-					if .Vertex in image_binding.stage_flags {
-						bindings[binding_idx].stageFlags += {.VERTEX}
-					}
-					if .Fragment in image_binding.stage_flags {
-						bindings[binding_idx].stageFlags += {.FRAGMENT}
-					}
-					if .Compute in image_binding.stage_flags {
-						bindings[binding_idx].stageFlags += {.COMPUTE}
-					}
-
-					binding_idx += 1
-				}
-
-				// Buffer bindings
-				for buffer_binding in bind_group.desc.buffers {
-					if buffer_binding.buffer_usage == .UniformBuffer {
-						bindings[binding_idx].descriptorType = .UNIFORM_BUFFER
-					} else if buffer_binding.buffer_usage == .DynamicUniformBuffer {
-						bindings[binding_idx].descriptorType = .UNIFORM_BUFFER_DYNAMIC
-					} else if buffer_binding.buffer_usage == .StorageBuffer {
-						bindings[binding_idx].descriptorType = .STORAGE_BUFFER
-					} else if buffer_binding.buffer_usage == .DynamicStorageBuffer {
-						bindings[binding_idx].descriptorType = .STORAGE_BUFFER_DYNAMIC
-					} else {
-						// Probably added ad new flag bit and forgot to handle it here or it's not a suported buffer type
-						assert(false)
-					}
-
-					if .Vertex in buffer_binding.stage_flags {
-						bindings[binding_idx].stageFlags += {.VERTEX}
-					}
-					if .Fragment in buffer_binding.stage_flags {
-						bindings[binding_idx].stageFlags += {.FRAGMENT}
-					}
-					if .Compute in buffer_binding.stage_flags {
-						bindings[binding_idx].stageFlags += {.COMPUTE}
-					}
-
-					bindings[binding_idx].binding = buffer_binding.slot
-					bindings[binding_idx].descriptorCount = 1
-					binding_idx += 1
-				}
-
-				create_info := vk.DescriptorSetLayoutCreateInfo {
-					sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-					pBindings    = raw_data(bindings),
-					bindingCount = u32(len(bindings)),
-				}
-
-				res := vk.CreateDescriptorSetLayout(
-					G_RENDERER.device,
-					&create_info,
-					nil,
-					&bind_group.vk_descriptor_set_layout,
-				)
-				assert(res == .SUCCESS) // @TODO
-
-				descriptor_set_layouts[layout_idx] = bind_group.vk_descriptor_set_layout
-			}
-		}
+	backend_create_bind_groups :: proc(
+		p_pipeline_layout_ref: PipelineLayoutRef,
+		p_pipeline_layout: ^PipelineLayoutResource,
+		out_bind_group_refs: []BindGroupRef,
+	) -> bool {
 
 		descriptor_set_alloc_info := vk.DescriptorSetAllocateInfo {
 			sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
-			pSetLayouts        = raw_data(descriptor_set_layouts),
-			descriptorSetCount = u32(len(descriptor_set_layouts)),
+			pSetLayouts        = &p_pipeline_layout.descriptor_set_layouts[0],
+			descriptorSetCount = u32(len(p_pipeline_layout.descriptor_set_layouts)),
 			descriptorPool     = INTERNAL.descriptor_pool,
 		}
 		descriptor_sets := make(
@@ -216,7 +102,7 @@ when USE_VULKAN_BACKEND {
 		assert(res == .SUCCESS) // @TODO
 
 		for descriptor_set, i in descriptor_sets {
-			bind_group := get_bind_group(p_ref_array[i])
+			bind_group := get_bind_group(out_bind_group_refs[i])
 			bind_group.vk_descriptor_set = descriptor_set
 		}
 
@@ -225,59 +111,25 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	@(private = "file")
-	BindGroupHashEntry :: struct {
-		type:  u32,
-		slot:  u32,
-		count: u32,
-	}
+	backend_create_bind_group :: proc(
+		p_pipeline_layout_ref: PipelineLayoutRef,
+		p_pipeline_layout: ^PipelineLayoutResource,
+		p_bind_group_idx: u32,
+		out_bind_group: ^BindGroupResource,
+	) -> bool {
 
-	//---------------------------------------------------------------------------//
-
-	@(private = "file")
-	calculate_bind_group_hash :: proc(p_bind_group: ^BindGroupResource) -> u32 {
-		hash_entries := make(
-			[]BindGroupHashEntry,
-			len(p_bind_group.desc.images) + len(p_bind_group.desc.buffers),
-			G_RENDERER_ALLOCATORS.temp_allocator,
-		)
-		defer delete(hash_entries, G_RENDERER_ALLOCATORS.temp_allocator)
-
-
-		entry_idx := 0
-		for image_binding in p_bind_group.desc.images {
-			if image_binding.usage == .SampledImage {
-				hash_entries[entry_idx].type = 0
-			} else if image_binding.usage == .StorageImage {
-				hash_entries[entry_idx].type = 1
-			} else {
-				assert(false) // Probably added ad new flag bit and forgot to handle it here
-			}
-			hash_entries[entry_idx].slot = image_binding.slot
-			hash_entries[entry_idx].count = image_binding.count
-			entry_idx += 1
+		descriptor_set_alloc_info := vk.DescriptorSetAllocateInfo {
+			sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
+			pSetLayouts        = &p_pipeline_layout.descriptor_set_layouts[p_bind_group_idx],
+			descriptorSetCount = 1,
+			descriptorPool     = INTERNAL.descriptor_pool,
 		}
 
-		for buffer_binding in p_bind_group.desc.buffers {
-			if buffer_binding.buffer_usage == .UniformBuffer {
-				hash_entries[entry_idx].type = 2
-			} else if buffer_binding.buffer_usage == .DynamicUniformBuffer {
-				hash_entries[entry_idx].type = 3
-			} else if buffer_binding.buffer_usage == .StorageBuffer {
-				hash_entries[entry_idx].type = 4
-			} else if buffer_binding.buffer_usage == .DynamicStorageBuffer {
-				hash_entries[entry_idx].type = 5
-			} else {
-				// Probably added ad new flag bit and forgot to handle it here or it's not a suported buffer type
-				assert(false)
-			}
-
-			hash_entries[entry_idx].slot = buffer_binding.slot
-			hash_entries[entry_idx].count = 1
-			entry_idx += 1
-		}
-
-		return hash.adler32(mem.slice_to_bytes(hash_entries))
+		return vk.AllocateDescriptorSets(
+			G_RENDERER.device,
+			&descriptor_set_alloc_info,
+			&out_bind_group.vk_descriptor_set,
+		) == .SUCCESS
 	}
 
 	//---------------------------------------------------------------------------//
@@ -359,16 +211,6 @@ when USE_VULKAN_BACKEND {
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(descriptor_sets_to_free, G_RENDERER_ALLOCATORS.temp_allocator)
-
-		for ref, i in p_ref_array {
-			bind_group := get_bind_group(ref)
-			descriptor_sets_to_free[i] = bind_group.vk_descriptor_set
-			vk.DestroyDescriptorSetLayout(
-				G_RENDERER.device,
-				bind_group.vk_descriptor_set_layout,
-				nil,
-			)
-		}
 
 		vk.FreeDescriptorSets(
 			G_RENDERER.device,
@@ -484,57 +326,6 @@ when USE_VULKAN_BACKEND {
 		)
 	}
 
-	//---------------------------------------------------------------------------//
-
-	@(private)
-	backend_clone_bind_groups :: proc(
-		p_original_bind_group_refs: []BindGroupRef,
-		p_cloned_bind_group_refs: []BindGroupRef,
-	) -> bool {
-		// @TODO handle descriptor layout cache
-		set_layouts := make(
-			[]vk.DescriptorSetLayout,
-			len(p_cloned_bind_group_refs),
-			G_RENDERER_ALLOCATORS.temp_allocator,
-		)
-		defer delete(set_layouts, G_RENDERER_ALLOCATORS.temp_allocator)
-
-		descriptor_sets := make(
-			[]vk.DescriptorSet,
-			len(p_cloned_bind_group_refs),
-			G_RENDERER_ALLOCATORS.temp_allocator,
-		)
-		defer delete(set_layouts, G_RENDERER_ALLOCATORS.temp_allocator)
-
-		for i in 0 ..< len(p_original_bind_group_refs) {
-			original_bind_group := get_bind_group(p_original_bind_group_refs[i])
-			cloned_bind_group := get_bind_group(p_cloned_bind_group_refs[i])
-
-			cloned_bind_group.vk_descriptor_set_layout = original_bind_group.vk_descriptor_set_layout
-
-			set_layouts[i] = cloned_bind_group.vk_descriptor_set_layout
-		}
-
-		allocate_descriptor_set_info := vk.DescriptorSetAllocateInfo {
-			sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
-			descriptorPool     = INTERNAL.descriptor_pool,
-			descriptorSetCount = u32(len(set_layouts)),
-			pSetLayouts        = raw_data(set_layouts),
-		}
-
-		res := vk.AllocateDescriptorSets(
-			G_RENDERER.device,
-			&allocate_descriptor_set_info,
-			raw_data(descriptor_sets),
-		)
-		assert(res == .SUCCESS) // @TODO
-
-		for bind_group_ref, i in p_cloned_bind_group_refs {
-			get_bind_group(bind_group_ref).vk_descriptor_set = descriptor_sets[i]
-		}
-
-		return true
-	}
 	//---------------------------------------------------------------------------//
 
 }

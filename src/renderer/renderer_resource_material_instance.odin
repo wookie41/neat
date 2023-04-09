@@ -62,14 +62,7 @@ create_material_instance :: proc(p_material_instance_ref: MaterialInstanceRef) -
 
 	// Create a copy of the material bind group
 	pipeline := get_pipeline(material.pipeline_ref)
-	pipeline_layout := get_pipeline_layout(pipeline.pipeline_layout_ref)
-
-	for bind_group_ref in pipeline_layout.bind_group_refs {
-		bind_group := get_bind_group(bind_group_ref)
-		if bind_group.desc.target == 2 {
-			material_instance.material_bind_group_ref = clone_bind_group(bind_group_ref)
-		}
-	}
+	material_instance.material_bind_group_ref = create_bind_group(pipeline.pipeline_layout_ref, 0)
 
 	// @TODO bind group updates when updating texture bindings
 
