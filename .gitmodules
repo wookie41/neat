@@ -1,0 +1,3 @@
+[submodule "src/third_party/odin-binding-generator"]
+	path = src/third_party/odin-binding-generator
+	url = https://github.com/Breush/odin-binding-generator.git

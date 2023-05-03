@@ -11,7 +11,7 @@ import "../common"
 
 //---------------------------------------------------------------------------//
 
-@private
+@(private)
 USE_VULKAN_BACKEND :: #config(USE_VULKAN_BACKEND, true)
 
 //---------------------------------------------------------------------------//
@@ -23,14 +23,20 @@ InitOptions :: struct {
 //---------------------------------------------------------------------------//
 
 G_ENGINE: struct {
-	window: ^sdl.Window,
-	string_area:        mem.Arena,
-	string_allocator:   mem.Allocator,
+	window:           ^sdl.Window,
+	string_area:      mem.Arena,
+	string_allocator: mem.Allocator,
+}
+
+@(private)
+G_ALLOCATORS: struct {
+	temp_scratch_allocator: mem.Scratch_Allocator,
+	temp_allocator:         mem.Allocator,
 }
 
 //---------------------------------------------------------------------------//
 
-@private
+@(private)
 G_ENGINE_LOG: log.Logger
 
 //---------------------------------------------------------------------------//
@@ -45,8 +51,16 @@ init :: proc(p_options: InitOptions) -> bool {
 		&G_ENGINE.string_area,
 		make([]byte, common.MEGABYTE * 8, context.allocator),
 	)
-	G_ENGINE.string_allocator = mem.arena_allocator(
-		&G_ENGINE.string_area,
+	G_ENGINE.string_allocator = mem.arena_allocator(&G_ENGINE.string_area)
+
+	// Init temp allocator
+	mem.scratch_allocator_init(
+		&G_ALLOCATORS.temp_scratch_allocator,
+		common.MEGABYTE * 8,
+		context.allocator,
+	)
+	G_ALLOCATORS.temp_allocator = mem.scratch_allocator(
+		&G_ALLOCATORS.temp_scratch_allocator,
 	)
 
 	common.init_names(G_ENGINE.string_allocator)
@@ -72,8 +86,7 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	//Init renderer
 	{
-		renderer_init_options := renderer.InitOptions {
-		}
+		renderer_init_options := renderer.InitOptions{}
 
 		when USE_VULKAN_BACKEND {
 			renderer_init_options.window = G_ENGINE.window

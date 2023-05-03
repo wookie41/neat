@@ -12,7 +12,9 @@ main :: proc() {
 	// generate_vma_bindings()
 	// generate_tiny_obj_loader_bindings()
 	// generate_assimp_bindings()
-	generate_spirv_reflect_binding()
+	// generate_spirv_reflect_binding()
+	// generate_tinydds_bindings()
+
 }
 generate_assimp_bindings :: proc() {
 	options: bindgen.GeneratorOptions
@@ -99,6 +101,28 @@ generate_tiny_obj_loader_bindings :: proc() {
 		foreignLibrary = "tiny_obj_loader.lib",
 		outputFile = "src/third_party/tiny_obj_loader/tiny_obj_loader.odin",
 		headerFiles = []string{"src/third_party/tiny_obj_loader/external/tiny_obj_loader.h"},
+		options = options,
+	)
+}
+
+generate_tinydds_bindings :: proc() {
+	options: bindgen.GeneratorOptions
+
+	// We remove defines' prefix.
+	options.defineCase = bindgen.Case.Constant
+	options.functionPrefixes = []string{"TinyDDS_"}
+	options.enumValuePrefixes = []string{"TinyDDS_"}
+	options.definePrefixes = []string{"TINYDDS_"}
+	options.functionCase = bindgen.Case.Snake
+	options.enumValueCase = bindgen.Case.Pascal
+	options.enumValueNameRemove = true
+	options.pseudoTypeTransparentPrefixes = []string{"TinyDDS_"}
+
+	bindgen.generate(
+		packageName = "tinydds",
+		foreignLibrary = "tinydds.lib",
+		outputFile = "src/third_party/tinydds/tinydds.odin",
+		headerFiles = []string{"src/third_party/tinydds/external/tinydds.h"},
 		options = options,
 	)
 }

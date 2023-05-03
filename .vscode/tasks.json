@@ -14,7 +14,7 @@
         {
             "label": "CopyDlls",
             "type": "shell",
-            "command": "cp src/third_party/assimp/external/assimp-vc143-mt.dll bin/",
+            "command": "cp src/third_party/assimp/external/assimp-vc143-mt.dll bin/; cp src/third_party/dlls/SDL2.dll bin/",
             "dependsOn": "MakeBinDir",
         },
         {
