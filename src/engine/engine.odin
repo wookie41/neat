@@ -32,6 +32,7 @@ G_ENGINE: struct {
 G_ALLOCATORS: struct {
 	temp_scratch_allocator: mem.Scratch_Allocator,
 	temp_allocator:         mem.Allocator,
+	main_allocator:         mem.Allocator,
 }
 
 //---------------------------------------------------------------------------//
@@ -45,12 +46,10 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	G_ENGINE_LOG = log.create_console_logger()
 	context.logger = G_ENGINE_LOG
+	G_ALLOCATORS.main_allocator = context.allocator
 
 	// String arena
-	mem.arena_init(
-		&G_ENGINE.string_area,
-		make([]byte, common.MEGABYTE * 8, context.allocator),
-	)
+	mem.arena_init(&G_ENGINE.string_area, make([]byte, common.MEGABYTE * 8, context.allocator))
 	G_ENGINE.string_allocator = mem.arena_allocator(&G_ENGINE.string_area)
 
 	// Init temp allocator
@@ -59,11 +58,12 @@ init :: proc(p_options: InitOptions) -> bool {
 		common.MEGABYTE * 8,
 		context.allocator,
 	)
-	G_ALLOCATORS.temp_allocator = mem.scratch_allocator(
-		&G_ALLOCATORS.temp_scratch_allocator,
-	)
+	G_ALLOCATORS.temp_allocator = mem.scratch_allocator(&G_ALLOCATORS.temp_scratch_allocator)
 
 	common.init_names(G_ENGINE.string_allocator)
+
+	// Initialize assets
+	texture_asset_init()
 
 	// Initialize SDL2
 	if sdl.Init(sdl.INIT_VIDEO) != 0 {

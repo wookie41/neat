@@ -177,9 +177,7 @@ init_render_passes :: proc() -> bool {
 
 
 allocate_render_pass_ref :: proc(p_name: common.Name) -> RenderPassRef {
-	ref := RenderPassRef(
-		create_ref(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_name),
-	)
+	ref := RenderPassRef(create_ref(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_name))
 	get_render_pass(ref).desc.name = p_name
 	return ref
 }
@@ -265,9 +263,7 @@ load_render_passes_from_config_file :: proc() -> bool {
 
 	// Create render passes 
 	for render_pass_entry in render_passes {
-		render_pass_ref := allocate_render_pass_ref(
-			common.create_name(render_pass_entry.name),
-		)
+		render_pass_ref := allocate_render_pass_ref(common.create_name(render_pass_entry.name))
 
 		render_pass := get_render_pass(render_pass_ref)
 
@@ -291,8 +287,7 @@ load_render_passes_from_config_file :: proc() -> bool {
 
 		// Parse resolution
 		assert(render_pass_entry.resolution in G_RESOLUTION_NAME_MAPPING)
-		render_pass.desc.resolution =
-			G_RESOLUTION_NAME_MAPPING[render_pass_entry.resolution]
+		render_pass.desc.resolution = G_RESOLUTION_NAME_MAPPING[render_pass_entry.resolution]
 
 		// Parse render targets
 		assert(len(render_pass_entry.render_targets) > 0)
@@ -327,7 +322,10 @@ load_render_passes_from_config_file :: proc() -> bool {
 
 //--------------------------------------------------------------------------//
 
-find_render_pass_by_name :: proc {find_render_pass_by_name_name, find_render_pass_by_name_str}
+find_render_pass_by_name :: proc {
+	find_render_pass_by_name_name,
+	find_render_pass_by_name_str,
+}
 
 //--------------------------------------------------------------------------//
 
