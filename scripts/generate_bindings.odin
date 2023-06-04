@@ -13,7 +13,7 @@ main :: proc() {
 	// generate_tiny_obj_loader_bindings()
 	// generate_assimp_bindings()
 	// generate_spirv_reflect_binding()
-	// generate_tinydds_bindings()
+	generate_tinydds_bindings()
 
 }
 generate_assimp_bindings :: proc() {

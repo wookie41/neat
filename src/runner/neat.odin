@@ -12,5 +12,4 @@ main :: proc() {
 		os.exit(-1)
 	}
 	engine.run()
-
 }
