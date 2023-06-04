@@ -81,7 +81,7 @@ PipelineResource :: struct {
 
 //---------------------------------------------------------------------------//
 
-PipelineRef :: Ref(PipelineResource)
+PipelineRef :: common.Ref(PipelineResource)
 
 //---------------------------------------------------------------------------//
 
@@ -114,12 +114,23 @@ PipelineStageFlags :: distinct bit_set[PipelineStageFlagBits;u16]
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-G_PIPELINE_REF_ARRAY: RefArray(PipelineResource)
+G_PIPELINE_REF_ARRAY: common.RefArray(PipelineResource)
+@(private = "file")
+G_PIPELINE_RESOURCE_ARRAY: []PipelineResource
 
 //---------------------------------------------------------------------------//
 
 init_pipelines :: proc() {
-	G_PIPELINE_REF_ARRAY = create_ref_array(PipelineResource, MAX_PIPELINES)
+	G_PIPELINE_REF_ARRAY = common.ref_array_create(
+		PipelineResource,
+		MAX_PIPELINES,
+		G_RENDERER_ALLOCATORS.main_allocator,
+	)
+	G_PIPELINE_RESOURCE_ARRAY = make(
+		[]PipelineResource,
+		MAX_PIPELINES,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
 	backend_init_pipelines()
 }
 
@@ -130,7 +141,7 @@ deinit_pipelines :: proc() {
 //---------------------------------------------------------------------------//
 
 allocate_pipeline_ref :: proc(p_name: common.Name) -> PipelineRef {
-	ref := PipelineRef(create_ref(PipelineResource, &G_PIPELINE_REF_ARRAY, p_name))
+	ref := PipelineRef(common.ref_create(PipelineResource, &G_PIPELINE_REF_ARRAY, p_name))
 	get_pipeline(ref).desc.name = p_name
 	return ref
 }
@@ -145,7 +156,7 @@ create_graphics_pipeline :: proc(p_ref: PipelineRef) -> bool {
 
 	if res == false {
 		log.warn("Failed to create pipeline")
-		free_ref(PipelineResource, &G_PIPELINE_REF_ARRAY, p_ref)
+		common.ref_free(&G_PIPELINE_REF_ARRAY, p_ref)
 		return false
 	}
 
@@ -155,7 +166,7 @@ create_graphics_pipeline :: proc(p_ref: PipelineRef) -> bool {
 //---------------------------------------------------------------------------//
 
 get_pipeline :: proc(p_ref: PipelineRef) -> ^PipelineResource {
-	return get_resource(PipelineResource, &G_PIPELINE_REF_ARRAY, p_ref)
+	return &G_PIPELINE_RESOURCE_ARRAY[common.ref_get_idx(&G_PIPELINE_REF_ARRAY, p_ref)]
 }
 
 //---------------------------------------------------------------------------//
@@ -164,16 +175,13 @@ destroy_pipeline :: proc(p_ref: PipelineRef) {
 	pipeline := get_pipeline(p_ref)
 	destroy_pipeline_layout(pipeline.pipeline_layout_ref)
 	backend_destroy_pipeline(pipeline)
-	free_ref(PipelineResource, &G_PIPELINE_REF_ARRAY, p_ref)
+	common.ref_free(&G_PIPELINE_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//
 
 bind_pipeline :: proc(p_pipeline_ref: PipelineRef, p_cmd_buff_ref: CommandBufferRef) {
-	backend_bind_pipeline(
-		get_pipeline(p_pipeline_ref),
-		get_command_buffer(p_cmd_buff_ref),
-	)
+	backend_bind_pipeline(get_pipeline(p_pipeline_ref), get_command_buffer(p_cmd_buff_ref))
 }
 
 //---------------------------------------------------------------------------//

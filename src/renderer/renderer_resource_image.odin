@@ -10,11 +10,13 @@ import "../common"
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-G_IMAGE_REF_ARRAY: RefArray(ImageResource)
+G_IMAGE_REF_ARRAY: common.RefArray(ImageResource)
+@(private = "file")
+G_IMAGE_RESOURCE_ARRAY: []ImageResource
 
 //---------------------------------------------------------------------------//
 
-ImageRef :: Ref(ImageResource)
+ImageRef :: common.Ref(ImageResource)
 
 //---------------------------------------------------------------------------//
 
@@ -112,6 +114,25 @@ ImageFormat :: enum u16 {
 	SRGB_FormatsEnd,
 	ColorFormatsEnd,
 	//---------------------//
+	CompressedFormatsStarts,
+    BC1_RGB_UNorm,
+    BC1_RGB_SRGB,
+    BC1_RGBA_UNorm,
+    BC1_RGBA_SRGB,
+    BC2_UNorm,
+    BC2_SRGB,
+    BC3_UNorm,
+    BC3_SRGB,
+    BC4_UNorm,
+    BC4_SNorm,
+    BC5_UNorm,
+    BC5_SNorm,
+    BC6H_UFloat,
+    BC6H_SFloat,
+    BC7_UNorm,
+    BC7_SRGB,
+	CompressedFormatsEnd,
+	//---------------------//
 }
 
 //---------------------------------------------------------------------------//
@@ -179,7 +200,8 @@ TextureCopy :: struct {
 
 @(private)
 init_images :: proc() {
-	G_IMAGE_REF_ARRAY = create_ref_array(ImageResource, MAX_IMAGES)
+	G_IMAGE_REF_ARRAY = common.ref_array_create(ImageResource, MAX_IMAGES, G_RENDERER_ALLOCATORS.main_allocator)
+	G_IMAGE_RESOURCE_ARRAY = make([]ImageResource, MAX_IMAGES, G_RENDERER_ALLOCATORS.resource_allocator)
 	INTERNAL.next_bindless_idx = 0
 	INTERNAL.free_bindless_indices = make(
 		[dynamic]u32,
@@ -191,7 +213,7 @@ init_images :: proc() {
 //---------------------------------------------------------------------------//
 
 allocate_image_ref :: proc(p_name: common.Name) -> ImageRef {
-	ref := ImageRef(create_ref(ImageResource, &G_IMAGE_REF_ARRAY, p_name))
+	ref := ImageRef(common.ref_create(ImageResource, &G_IMAGE_REF_ARRAY, p_name))
 	get_image(ref).desc.name = p_name
 	return ref
 }
@@ -212,7 +234,7 @@ create_texture_image :: proc(p_ref: ImageRef) -> bool {
 	)
 
 	if backend_create_texture_image(p_ref, image) == false {
-		free_ref(ImageResource, &G_IMAGE_REF_ARRAY, p_ref)
+		common.ref_free(&G_IMAGE_REF_ARRAY, p_ref)
 		return false
 	}
 
@@ -224,11 +246,11 @@ create_depth_buffer :: proc(
 	p_depth_buffer_desc: ImageDesc,
 ) -> ImageRef {
 	ref := allocate_image_ref(p_name)
-	image := &G_IMAGE_REF_ARRAY.resource_array[get_ref_idx(ref)]
+	image := get_image(ref)
 	image.desc = p_depth_buffer_desc
 
 	if backend_create_depth_buffer(p_name, p_depth_buffer_desc, ref, image) == false {
-		free_ref(ImageResource, &G_IMAGE_REF_ARRAY, ref)
+		common.ref_free(&G_IMAGE_REF_ARRAY, ref)
 		return InvalidImageRef
 	}
 
@@ -238,7 +260,7 @@ create_depth_buffer :: proc(
 //---------------------------------------------------------------------------//
 
 get_image :: proc(p_ref: ImageRef) -> ^ImageResource {
-	return get_resource(ImageResource, &G_IMAGE_REF_ARRAY, p_ref)
+	return &G_IMAGE_RESOURCE_ARRAY[common.ref_get_idx(&G_IMAGE_REF_ARRAY, p_ref)]
 }
 
 //---------------------------------------------------------------------------//
@@ -255,7 +277,7 @@ destroy_image :: proc(p_ref: ImageRef) {
 		append(&INTERNAL.free_bindless_indices, image.bindless_idx)
 	}
 	backend_destroy_image(image)
-	free_ref(ImageResource, &G_IMAGE_REF_ARRAY, p_ref)
+	common.ref_free(&G_IMAGE_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//

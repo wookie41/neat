@@ -26,7 +26,7 @@ MaterialPassResource :: struct {
 
 //---------------------------------------------------------------------------//
 
-MaterialPassRef :: Ref(MaterialPassResource)
+MaterialPassRef :: common.Ref(MaterialPassResource)
 
 //---------------------------------------------------------------------------//
 
@@ -37,7 +37,9 @@ InvalidMaterialPassRef := MaterialPassRef {
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-G_MATERIAL_PASS_REF_ARRAY: RefArray(MaterialPassResource)
+G_MATERIAL_PASS_REF_ARRAY: common.RefArray(MaterialPassResource)
+@(private = "file")
+G_MATERIAL_PASS_RESOURCE_ARRAY: []MaterialPassResource
 
 //---------------------------------------------------------------------------//
 
@@ -52,11 +54,16 @@ MaterialPassJSONEntry :: struct {
 
 
 init_material_passs :: proc() -> bool {
-	G_MATERIAL_PASS_REF_ARRAY = create_ref_array(
+	G_MATERIAL_PASS_REF_ARRAY = common.ref_array_create(
 		MaterialPassResource,
 		MAX_MATERIAL_PASSES,
+		G_RENDERER_ALLOCATORS.main_allocator,
 	)
-
+	G_MATERIAL_PASS_RESOURCE_ARRAY = make(
+		[]MaterialPassResource,
+		MAX_MATERIAL_PASSES,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
 	load_material_passes_from_config_file() or_return
 
 	return true
@@ -77,7 +84,7 @@ create_material_pass :: proc(p_material_pass_ref: MaterialPassRef) -> bool {
 
 allocate_material_pass_ref :: proc(p_name: common.Name) -> MaterialPassRef {
 	ref := MaterialPassRef(
-		create_ref(MaterialPassResource, &G_MATERIAL_PASS_REF_ARRAY, p_name),
+		common.ref_create(MaterialPassResource, &G_MATERIAL_PASS_REF_ARRAY, p_name),
 	)
 	get_material_pass(ref).desc.name = p_name
 	return ref
@@ -85,14 +92,14 @@ allocate_material_pass_ref :: proc(p_name: common.Name) -> MaterialPassRef {
 //---------------------------------------------------------------------------//
 
 get_material_pass :: proc(p_ref: MaterialPassRef) -> ^MaterialPassResource {
-	return get_resource(MaterialPassResource, &G_MATERIAL_PASS_REF_ARRAY, p_ref)
+	return &G_MATERIAL_PASS_RESOURCE_ARRAY[common.ref_get_idx(&G_MATERIAL_PASS_REF_ARRAY, p_ref)]
 }
 
 //--------------------------------------------------------------------------//
 
 destroy_material_pass :: proc(p_ref: MaterialPassRef) {
 	// material_pass := get_material_pass(p_ref)
-	free_ref(MaterialPassResource, &G_MATERIAL_PASS_REF_ARRAY, p_ref)
+	common.ref_free(&G_MATERIAL_PASS_REF_ARRAY, p_ref)
 }
 
 //--------------------------------------------------------------------------//
@@ -151,7 +158,7 @@ find_material_pass_by_name :: proc {find_material_pass_by_name_name, find_materi
 
 @(private)
 find_material_pass_by_name_name :: proc(p_name: common.Name) -> MaterialPassRef {
-	ref := find_ref_by_name(MaterialPassResource, &G_MATERIAL_PASS_REF_ARRAY, p_name)
+	ref := common.ref_find_by_name(&G_MATERIAL_PASS_REF_ARRAY, p_name)
 	if ref == InvalidMaterialPassRef {
 		return InvalidMaterialPassRef
 	}
@@ -162,7 +169,7 @@ find_material_pass_by_name_name :: proc(p_name: common.Name) -> MaterialPassRef 
 
 @(private)
 find_material_pass_by_name_str :: proc(p_name: string) -> MaterialPassRef {
-	ref := find_ref_by_name(MaterialPassResource, &G_MATERIAL_PASS_REF_ARRAY, common.make_name(p_name))
+	ref := common.ref_find_by_name(&G_MATERIAL_PASS_REF_ARRAY, common.make_name(p_name))
 	if ref == InvalidMaterialPassRef {
 		return InvalidMaterialPassRef
 	}

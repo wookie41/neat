@@ -102,7 +102,7 @@ MeshResource :: struct {
 
 //---------------------------------------------------------------------------//
 
-MeshRef :: Ref(MeshResource)
+MeshRef :: common.Ref(MeshResource)
 
 //---------------------------------------------------------------------------//
 
@@ -113,17 +113,19 @@ InvalidMeshRef := MeshRef {
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-G_MESH_REF_ARRAY: RefArray(MeshResource)
+G_MESH_REF_ARRAY: common.RefArray(MeshResource)
+@(private = "file")
+G_MESH_RESOURCE_ARRAY: []MeshResource
 
 //---------------------------------------------------------------------------//
-
 
 init_meshes :: proc() -> bool {
 
 	g_created_mesh_refs = make([dynamic]MeshRef, G_RENDERER_ALLOCATORS.frame_allocator)
 	g_destroyed_mesh_refs = make([dynamic]MeshRef, G_RENDERER_ALLOCATORS.frame_allocator)
 
-	G_MESH_REF_ARRAY = create_ref_array(MeshResource, MAX_MESHES)
+	G_MESH_REF_ARRAY = common.ref_array_create(MeshResource, MAX_MESHES, G_RENDERER_ALLOCATORS.main_allocator)
+	G_MESH_RESOURCE_ARRAY = make([]MeshResource, MAX_MESHES, G_RENDERER_ALLOCATORS.resource_allocator)
 
 	// Create vertex buffer for mesh data
 	{
@@ -344,14 +346,14 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 //---------------------------------------------------------------------------//
 
 allocate_mesh_ref :: proc(p_name: common.Name) -> MeshRef {
-	ref := MeshRef(create_ref(MeshResource, &G_MESH_REF_ARRAY, p_name))
+	ref := MeshRef(common.ref_create(MeshResource, &G_MESH_REF_ARRAY, p_name))
 	get_mesh(ref).desc.name = p_name
 	return ref
 }
 //---------------------------------------------------------------------------//
 
 get_mesh :: proc(p_ref: MeshRef) -> ^MeshResource {
-	return get_resource(MeshResource, &G_MESH_REF_ARRAY, p_ref)
+	return &G_MESH_RESOURCE_ARRAY[common.ref_get_idx(&G_MESH_REF_ARRAY, p_ref)]
 }
 
 //--------------------------------------------------------------------------//
@@ -375,7 +377,7 @@ destroy_mesh :: proc(p_ref: MeshRef) {
 
 @(private)
 free_mesh_ref :: proc(p_mesh_ref: MeshRef) {
-	free_ref(MeshResource, &G_MESH_REF_ARRAY, p_mesh_ref)
+	common.ref_free(&G_MESH_REF_ARRAY, p_mesh_ref)
 
 }
 

@@ -74,7 +74,7 @@ ShaderResource :: struct {
 
 //---------------------------------------------------------------------------//
 
-ShaderRef :: Ref(ShaderResource)
+ShaderRef :: common.Ref(ShaderResource)
 
 //---------------------------------------------------------------------------//
 
@@ -85,12 +85,15 @@ InvalidShaderRef := ShaderRef {
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-G_SHADER_REF_ARRAY: RefArray(ShaderResource)
+G_SHADER_REF_ARRAY: common.RefArray(ShaderResource)
+@(private = "file")
+G_SHADER_RESOURCE_ARRAY: []ShaderResource
 
 //---------------------------------------------------------------------------//
 
 init_shaders :: proc() -> bool {
-	G_SHADER_REF_ARRAY = create_ref_array(ShaderResource, MAX_SHADERS)
+	G_SHADER_REF_ARRAY = common.ref_array_create(ShaderResource, MAX_SHADERS, G_RENDERER_ALLOCATORS.main_allocator)
+	G_SHADER_RESOURCE_ARRAY = make([]ShaderResource, MAX_SHADERS, G_RENDERER_ALLOCATORS.resource_allocator)
 
 	context.allocator = G_RENDERER_ALLOCATORS.temp_allocator
 	defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
@@ -153,12 +156,12 @@ init_shaders :: proc() -> bool {
 			shader.desc.type = .COMPUTE
 		} else {
 			log.warnf("Unknown shader type %s...", entry.name)
-			free_ref(ShaderResource, &G_SHADER_REF_ARRAY, shader_ref)
+			common.ref_free(&G_SHADER_REF_ARRAY, shader_ref)
 			return false
 		}
 
 		if create_shader(shader_ref) == false {
-			free_ref(ShaderResource, &G_SHADER_REF_ARRAY, shader_ref)
+			common.ref_free(&G_SHADER_REF_ARRAY, shader_ref)
 			continue
 		}
 	}
@@ -189,14 +192,14 @@ create_shader :: proc(p_shader_ref: ShaderRef) -> bool {
 //---------------------------------------------------------------------------//
 
 allocate_shader_ref :: proc(p_name: common.Name) -> ShaderRef {
-	ref := ShaderRef(create_ref(ShaderResource, &G_SHADER_REF_ARRAY, p_name))
+	ref := ShaderRef(common.ref_create(ShaderResource, &G_SHADER_REF_ARRAY, p_name))
 	get_shader(ref).desc.name = p_name
 	return ref
 }
 //---------------------------------------------------------------------------//
 
 get_shader :: proc(p_ref: ShaderRef) -> ^ShaderResource {
-	return get_resource(ShaderResource, &G_SHADER_REF_ARRAY, p_ref)
+	return &G_SHADER_RESOURCE_ARRAY[common.ref_get_idx(&G_SHADER_REF_ARRAY, p_ref)]
 }
 
 //--------------------------------------------------------------------------//
@@ -208,7 +211,7 @@ destroy_shader :: proc(p_ref: ShaderRef) {
 		delete(feature, G_RENDERER_ALLOCATORS.resource_allocator)
 	}
 	delete(shader.desc.features, G_RENDERER_ALLOCATORS.resource_allocator)
-	free_ref(ShaderResource, &G_SHADER_REF_ARRAY, p_ref)
+	common.ref_free(&G_SHADER_REF_ARRAY, p_ref)
 }
 
 //--------------------------------------------------------------------------//
@@ -221,7 +224,7 @@ find_shader_by_name :: proc {
 //--------------------------------------------------------------------------//
 
 find_shader_by_name_name :: proc(p_name: common.Name) -> ShaderRef {
-	ref := find_ref_by_name(ShaderResource, &G_SHADER_REF_ARRAY, p_name)
+	ref := common.ref_find_by_name(&G_SHADER_REF_ARRAY, p_name)
 	if ref == InvalidShaderRef {
 		return InvalidShaderRef
 	}
@@ -231,7 +234,7 @@ find_shader_by_name_name :: proc(p_name: common.Name) -> ShaderRef {
 //--------------------------------------------------------------------------//
 
 find_shader_by_name_str :: proc(p_name: string) -> ShaderRef {
-	ref := find_ref_by_name(ShaderResource, &G_SHADER_REF_ARRAY, common.make_name(p_name))
+	ref := common.ref_find_by_name(&G_SHADER_REF_ARRAY, common.make_name(p_name))
 	if ref == InvalidShaderRef {
 		return InvalidShaderRef
 	}

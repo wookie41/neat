@@ -33,7 +33,7 @@ CommandBufferResource :: struct {
 
 //---------------------------------------------------------------------------//
 
-CommandBufferRef :: Ref(CommandBufferResource)
+CommandBufferRef :: common.Ref(CommandBufferResource)
 
 //---------------------------------------------------------------------------//
 
@@ -44,13 +44,16 @@ InvalidCommandBufferRef := CommandBufferRef {
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-G_COMMAND_BUFFER_REF_ARRAY: RefArray(CommandBufferResource)
+G_COMMAND_BUFFER_REF_ARRAY: common.RefArray(CommandBufferResource)
+@(private = "file")
+G_COMMAND_BUFFER_RESOURCE_ARRAY: []CommandBufferResource
 
 //---------------------------------------------------------------------------//
 
 @(private)
 init_command_buffers :: #force_inline proc(p_options: InitOptions) -> bool {
-	G_COMMAND_BUFFER_REF_ARRAY = create_ref_array(CommandBufferResource, MAX_COMMAND_BUFFERS)
+	G_COMMAND_BUFFER_REF_ARRAY = common.ref_array_create(CommandBufferResource, MAX_COMMAND_BUFFERS, G_RENDERER_ALLOCATORS.main_allocator)
+	G_COMMAND_BUFFER_RESOURCE_ARRAY = make([]CommandBufferResource, MAX_COMMAND_BUFFERS, G_RENDERER_ALLOCATORS.resource_allocator)
 	return backend_init_command_buffers(p_options)
 }
 
@@ -58,7 +61,7 @@ init_command_buffers :: #force_inline proc(p_options: InitOptions) -> bool {
 
 allocate_command_buffer_ref :: proc(p_name: common.Name) -> CommandBufferRef {
 	ref := CommandBufferRef(
-		create_ref(CommandBufferResource, &G_COMMAND_BUFFER_REF_ARRAY, p_name),
+		common.ref_create(CommandBufferResource, &G_COMMAND_BUFFER_REF_ARRAY, p_name),
 	)
 	get_command_buffer(ref).desc.name = p_name
 	return ref
@@ -72,7 +75,7 @@ create_command_buffer :: #force_inline proc(
 	cmd_buff := get_command_buffer(p_ref)
 
 	if backend_create_command_buffer(p_ref, cmd_buff) == false {
-		free_ref(CommandBufferResource, &G_COMMAND_BUFFER_REF_ARRAY, p_ref)
+		common.ref_free(&G_COMMAND_BUFFER_REF_ARRAY, p_ref)
 		return false
 	}
 
@@ -81,8 +84,9 @@ create_command_buffer :: #force_inline proc(
 
 //---------------------------------------------------------------------------//
 
-get_command_buffer :: proc(p_ref: CommandBufferRef) -> ^CommandBufferResource {
-	return get_resource(CommandBufferResource, &G_COMMAND_BUFFER_REF_ARRAY, p_ref)
+get_command_buffer :: #force_inline proc(p_ref: CommandBufferRef) -> ^CommandBufferResource {
+	return &G_COMMAND_BUFFER_RESOURCE_ARRAY[common.ref_get_idx(&G_COMMAND_BUFFER_REF_ARRAY, p_ref)]
+
 }
 
 //---------------------------------------------------------------------------//
@@ -90,7 +94,7 @@ get_command_buffer :: proc(p_ref: CommandBufferRef) -> ^CommandBufferResource {
 destroy_command_buffer :: proc(p_ref: CommandBufferRef) {
 	cmd_buff := get_command_buffer(p_ref)
 	backend_destroy_command_buffer(cmd_buff)
-	free_ref(CommandBufferResource, &G_COMMAND_BUFFER_REF_ARRAY, p_ref)
+	common.ref_free(&G_COMMAND_BUFFER_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//

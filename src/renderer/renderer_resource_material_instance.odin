@@ -26,7 +26,7 @@ MaterialInstanceResource :: struct {
 
 //---------------------------------------------------------------------------//
 
-MaterialInstanceRef :: Ref(MaterialInstanceResource)
+MaterialInstanceRef :: common.Ref(MaterialInstanceResource)
 
 //---------------------------------------------------------------------------//
 
@@ -37,14 +37,22 @@ InvalidMaterialInstanceRef := MaterialInstanceRef {
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-G_MATERIAL_INSTANCE_REF_ARRAY: RefArray(MaterialInstanceResource)
+G_MATERIAL_INSTANCE_REF_ARRAY: common.RefArray(MaterialInstanceResource)
+@(private = "file")
+G_MATERIAL_INSTANCE_RESOURCE_ARRAY: []MaterialInstanceResource
 
 //---------------------------------------------------------------------------//
 
 init_material_instances :: proc() -> bool {
-	G_MATERIAL_INSTANCE_REF_ARRAY = create_ref_array(
+	G_MATERIAL_INSTANCE_REF_ARRAY = common.ref_array_create(
 		MaterialInstanceResource,
 		MAX_MATERIAL_INSTANCES,
+		G_RENDERER_ALLOCATORS.main_allocator,
+	)
+	G_MATERIAL_INSTANCE_RESOURCE_ARRAY = make(
+		[]MaterialInstanceResource,
+		MAX_MATERIAL_INSTANCES,
+		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
 	return true
 }
@@ -77,7 +85,7 @@ create_material_instance :: proc(p_material_instance_ref: MaterialInstanceRef) -
 
 allocate_material_instance_ref :: proc(p_name: common.Name) -> MaterialInstanceRef {
 	ref := MaterialInstanceRef(
-		create_ref(MaterialInstanceResource, &G_MATERIAL_INSTANCE_REF_ARRAY, p_name),
+		common.ref_create(MaterialInstanceResource, &G_MATERIAL_INSTANCE_REF_ARRAY, p_name),
 	)
 	get_material_instance(ref).desc.name = p_name
 	return ref
@@ -85,7 +93,7 @@ allocate_material_instance_ref :: proc(p_name: common.Name) -> MaterialInstanceR
 //---------------------------------------------------------------------------//
 
 get_material_instance :: proc(p_ref: MaterialInstanceRef) -> ^MaterialInstanceResource {
-	return get_resource(MaterialInstanceResource, &G_MATERIAL_INSTANCE_REF_ARRAY, p_ref)
+	return &G_MATERIAL_INSTANCE_RESOURCE_ARRAY[common.ref_get_idx(&G_MATERIAL_INSTANCE_REF_ARRAY, p_ref)]
 }
 
 //--------------------------------------------------------------------------//
@@ -96,7 +104,7 @@ destroy_material_instance :: proc(p_ref: MaterialInstanceRef) {
 		material_instance.desc.material_ref,
 		material_instance.material_buffer_entry_idx,
 	)
-	free_ref(MaterialInstanceResource, &G_MATERIAL_INSTANCE_REF_ARRAY, p_ref)
+	common.ref_free(&G_MATERIAL_INSTANCE_REF_ARRAY, p_ref)
 }
 
 //--------------------------------------------------------------------------//

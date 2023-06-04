@@ -90,7 +90,7 @@ BindGroupUpdate :: struct {
 //---------------------------------------------------------------------------//
 
 
-BindGroupRef :: Ref(BindGroupResource)
+BindGroupRef :: common.Ref(BindGroupResource)
 
 //---------------------------------------------------------------------------//
 
@@ -101,20 +101,31 @@ InvalidBindGroupRef := BindGroupRef {
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-G_BIND_GROUP_REF_ARRAY: RefArray(BindGroupResource)
+G_BIND_GROUP_REF_ARRAY: common.RefArray(BindGroupResource)
+@(private = "file")
+G_BIND_GROUP_RESOURCE_ARRAY: []BindGroupResource
 
 //---------------------------------------------------------------------------//
 
 @(private)
 init_bind_groups :: proc() {
-	G_BIND_GROUP_REF_ARRAY = create_ref_array(BindGroupResource, MAX_BIND_GROUPS)
+	G_BIND_GROUP_REF_ARRAY = common.ref_array_create(
+		BindGroupResource,
+		MAX_BIND_GROUPS,
+		G_RENDERER_ALLOCATORS.main_allocator,
+	)
+	G_BIND_GROUP_RESOURCE_ARRAY = make(
+		[]BindGroupResource,
+		MAX_BIND_GROUPS,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
 	backend_init_bind_groups()
 }
 
 //---------------------------------------------------------------------------//
 
 allocate_bind_group_ref :: proc(p_name: common.Name) -> BindGroupRef {
-	ref := BindGroupRef(create_ref(BindGroupResource, &G_BIND_GROUP_REF_ARRAY, p_name))
+	ref := BindGroupRef(common.ref_create(BindGroupResource, &G_BIND_GROUP_REF_ARRAY, p_name))
 	get_bind_group(ref).desc.name = p_name
 	return ref
 }
@@ -138,14 +149,11 @@ create_bind_groups :: proc(
 		bind_group_refs[i] = allocate_bind_group_ref(p_pipeline_layout_ref.name)
 	}
 
-	if backend_create_bind_groups(
-		   p_pipeline_layout_ref,
-		   pipeline_layout,
-		   bind_group_refs,
-	   ) == false {
+	if backend_create_bind_groups(p_pipeline_layout_ref, pipeline_layout, bind_group_refs) ==
+	   false {
 		delete(bind_group_refs, p_allocator)
 		for ref in bind_group_refs {
-			free_ref(BindGroupResource, &G_BIND_GROUP_REF_ARRAY, ref)
+			common.ref_free(&G_BIND_GROUP_REF_ARRAY, ref)
 		}
 		return nil
 	}
@@ -166,8 +174,9 @@ create_bind_group :: proc(
 		   pipeline_layout,
 		   p_bind_group_idx,
 		   bind_group,
-	   ) == false {
-		free_ref(BindGroupResource, &G_BIND_GROUP_REF_ARRAY, bind_group_ref)
+	   ) ==
+	   false {
+		common.ref_free(&G_BIND_GROUP_REF_ARRAY, bind_group_ref)
 		return InvalidBindGroupRef
 	}
 	return bind_group_ref
@@ -175,7 +184,7 @@ create_bind_group :: proc(
 //---------------------------------------------------------------------------//
 
 get_bind_group :: proc(p_ref: BindGroupRef) -> ^BindGroupResource {
-	return get_resource(BindGroupResource, &G_BIND_GROUP_REF_ARRAY, p_ref)
+	return &G_BIND_GROUP_RESOURCE_ARRAY[common.ref_get_idx(&G_BIND_GROUP_REF_ARRAY, p_ref)]
 }
 
 //---------------------------------------------------------------------------//
@@ -183,7 +192,7 @@ get_bind_group :: proc(p_ref: BindGroupRef) -> ^BindGroupResource {
 destroy_bind_groups :: proc(p_ref_array: []BindGroupRef) {
 	backend_destroy_bind_groups(p_ref_array)
 	for ref in p_ref_array {
-		free_ref(BindGroupResource, &G_BIND_GROUP_REF_ARRAY, ref)
+		common.ref_free(&G_BIND_GROUP_REF_ARRAY, ref)
 	}
 }
 

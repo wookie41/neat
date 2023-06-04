@@ -10,22 +10,38 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	G_IMAGE_FORMAT_MAPPING := map[ImageFormat]vk.Format {
-		.Depth32SFloat = .D32_SFLOAT,
-		.R32UInt       = .R32_UINT,
-		.R32Int        = .R32_SINT,
-		.R32SFloat     = .R32_SFLOAT,
-		.RG32UInt      = .R32G32_UINT,
-		.RG32Int       = .R32G32_SINT,
-		.RG32SFloat    = .R32G32_SFLOAT,
-		.RGB32UInt     = .R32G32B32_UINT,
-		.RGB32Int      = .R32G32B32_SINT,
-		.RGB32SFloat   = .R32G32B32A32_SFLOAT,
-		.RGBA32UInt    = .R32G32B32A32_UINT,
-		.RGBA32Int     = .R32G32B32A32_SINT,
-		.RGBA32SFloat  = .R32G32B32A32_SFLOAT,
-		.R11G11B10     = .B10G11R11_UFLOAT_PACK32,
-		.RGBA8_SRGB    = .R8G8B8A8_SRGB,
-		.BGRA8_SRGB    = .B8G8R8A8_SRGB,
+		.Depth32SFloat  = .D32_SFLOAT,
+		.R32UInt        = .R32_UINT,
+		.R32Int         = .R32_SINT,
+		.R32SFloat      = .R32_SFLOAT,
+		.RG32UInt       = .R32G32_UINT,
+		.RG32Int        = .R32G32_SINT,
+		.RG32SFloat     = .R32G32_SFLOAT,
+		.RGB32UInt      = .R32G32B32_UINT,
+		.RGB32Int       = .R32G32B32_SINT,
+		.RGB32SFloat    = .R32G32B32A32_SFLOAT,
+		.RGBA32UInt     = .R32G32B32A32_UINT,
+		.RGBA32Int      = .R32G32B32A32_SINT,
+		.RGBA32SFloat   = .R32G32B32A32_SFLOAT,
+		.R11G11B10      = .B10G11R11_UFLOAT_PACK32,
+		.RGBA8_SRGB     = .R8G8B8A8_SRGB,
+		.BGRA8_SRGB     = .B8G8R8A8_SRGB,
+		.BC1_RGB_UNorm  = .BC1_RGB_UNORM_BLOCK,
+		.BC1_RGB_SRGB   = .BC1_RGB_SRGB_BLOCK,
+		.BC1_RGBA_UNorm = .BC1_RGBA_UNORM_BLOCK,
+		.BC1_RGBA_SRGB  = .BC1_RGBA_SRGB_BLOCK,
+		.BC2_UNorm      = .BC2_UNORM_BLOCK,
+		.BC2_SRGB       = .BC2_SRGB_BLOCK,
+		.BC3_UNorm      = .BC3_UNORM_BLOCK,
+		.BC3_SRGB       = .BC3_SRGB_BLOCK,
+		.BC4_UNorm      = .BC4_UNORM_BLOCK,
+		.BC4_SNorm      = .BC4_SNORM_BLOCK,
+		.BC5_UNorm      = .BC5_UNORM_BLOCK,
+		.BC5_SNorm      = .BC5_SNORM_BLOCK,
+		.BC6H_UFloat    = .BC6H_UFLOAT_BLOCK,
+		.BC6H_SFloat    = .BC6H_SFLOAT_BLOCK,
+		.BC7_UNorm      = .BC7_UNORM_BLOCK,
+		.BC7_SRGB       = .BC7_SRGB_BLOCK,
 	}
 
 	@(private)
@@ -46,6 +62,22 @@ when USE_VULKAN_BACKEND {
 		.B10G11R11_UFLOAT_PACK32 = .R11G11B10,
 		.R8G8B8A8_SRGB           = .RGBA8_SRGB,
 		.B8G8R8A8_SRGB           = .BGRA8_SRGB,
+		.BC1_RGB_UNORM_BLOCK     = .BC1_RGB_UNorm,
+		.BC1_RGB_SRGB_BLOCK      = .BC1_RGB_SRGB,
+		.BC1_RGBA_UNORM_BLOCK    = .BC1_RGBA_UNorm,
+		.BC1_RGBA_SRGB_BLOCK     = .BC1_RGBA_SRGB,
+		.BC2_UNORM_BLOCK         = .BC2_UNorm,
+		.BC2_SRGB_BLOCK          = .BC2_SRGB,
+		.BC3_UNORM_BLOCK         = .BC3_UNorm,
+		.BC3_SRGB_BLOCK          = .BC3_SRGB,
+		.BC4_UNORM_BLOCK         = .BC4_UNorm,
+		.BC4_SNORM_BLOCK         = .BC4_SNorm,
+		.BC5_UNORM_BLOCK         = .BC5_UNorm,
+		.BC5_SNORM_BLOCK         = .BC5_SNorm,
+		.BC6H_UFLOAT_BLOCK       = .BC6H_UFloat,
+		.BC6H_SFLOAT_BLOCK       = .BC6H_SFloat,
+		.BC7_UNORM_BLOCK         = .BC7_UNorm,
+		.BC7_SRGB_BLOCK          = .BC7_SRGB,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -89,5 +121,3 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 }
-
-

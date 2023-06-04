@@ -55,7 +55,7 @@ BufferResource :: struct {
 
 //---------------------------------------------------------------------------//
 
-BufferRef :: Ref(BufferResource)
+BufferRef :: common.Ref(BufferResource)
 
 //---------------------------------------------------------------------------//
 
@@ -66,7 +66,9 @@ InvalidBufferRef := BufferRef {
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-G_BUFFER_REF_ARRAY: RefArray(BufferResource)
+G_BUFFER_REF_ARRAY: common.RefArray(BufferResource)
+@(private = "file")
+G_BUFFER_RESOURCE_ARRAY : []BufferResource
 
 //---------------------------------------------------------------------------//
 
@@ -79,14 +81,15 @@ BufferSuballocation :: struct {
 
 @(private)
 init_buffers :: proc() {
-	G_BUFFER_REF_ARRAY = create_ref_array(BufferResource, MAX_BUFFERS)
+	G_BUFFER_REF_ARRAY = common.ref_array_create(BufferResource, MAX_BUFFERS, G_RENDERER_ALLOCATORS.main_allocator)
+	G_BUFFER_RESOURCE_ARRAY = make([]BufferResource, MAX_BUFFERS, G_RENDERER_ALLOCATORS.resource_allocator)
 	backend_init_buffers()
 }
 
 //---------------------------------------------------------------------------//
 
 allocate_buffer_ref :: proc(p_name: common.Name) -> BufferRef {
-	ref := BufferRef(create_ref(BufferResource, &G_BUFFER_REF_ARRAY, p_name))
+	ref := BufferRef(common.ref_create(BufferResource, &G_BUFFER_REF_ARRAY, p_name))
 	get_buffer(ref).desc.name = p_name
 	return ref
 }
@@ -110,7 +113,7 @@ create_buffer :: proc(p_ref: BufferRef) -> bool {
 	}
 
 	if backend_create_buffer(p_ref, buffer) == false {
-		free_ref(BufferResource, &G_BUFFER_REF_ARRAY, p_ref)
+		common.ref_free(&G_BUFFER_REF_ARRAY, p_ref)
 		return false
 	}
 
@@ -120,7 +123,7 @@ create_buffer :: proc(p_ref: BufferRef) -> bool {
 //---------------------------------------------------------------------------//
 
 get_buffer :: proc(p_ref: BufferRef) -> ^BufferResource {
-	return get_resource(BufferResource, &G_BUFFER_REF_ARRAY, p_ref)
+	return &G_BUFFER_RESOURCE_ARRAY[common.ref_get_idx(&G_BUFFER_REF_ARRAY, p_ref)]
 }
 
 //---------------------------------------------------------------------------//
@@ -129,7 +132,7 @@ destroy_buffer :: proc(p_ref: BufferRef) {
 	buffer := get_buffer(p_ref)
 	buffer.mapped_ptr = nil
 	backend_destroy_buffer(buffer)
-	free_ref(BufferResource, &G_BUFFER_REF_ARRAY, p_ref)
+	common.ref_free(&G_BUFFER_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//

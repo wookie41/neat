@@ -78,7 +78,7 @@ RenderPassResource :: struct {
 
 //---------------------------------------------------------------------------//
 
-RenderPassRef :: Ref(RenderPassResource)
+RenderPassRef :: common.Ref(RenderPassResource)
 
 //---------------------------------------------------------------------------//
 
@@ -89,7 +89,9 @@ InvalidRenderPassRef := RenderPassRef {
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-G_RENDER_PASS_REF_ARRAY: RefArray(RenderPassResource)
+G_RENDER_PASS_REF_ARRAY: common.RefArray(RenderPassResource)
+@(private = "file")
+G_RENDER_PASS_RESOURCE_ARRAY: []RenderPassResource
 
 //---------------------------------------------------------------------------//
 
@@ -167,7 +169,16 @@ RenderPassJSONEntry :: struct {
 
 @(private)
 init_render_passes :: proc() -> bool {
-	G_RENDER_PASS_REF_ARRAY = create_ref_array(RenderPassResource, MAX_RENDER_PASSES)
+	G_RENDER_PASS_REF_ARRAY = common.ref_array_create(
+		RenderPassResource,
+		MAX_RENDER_PASSES,
+		G_RENDERER_ALLOCATORS.main_allocator,
+	)
+	G_RENDER_PASS_RESOURCE_ARRAY = make(
+		[]RenderPassResource,
+		MAX_RENDER_PASSES,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
 	backend_init_render_passes()
 	load_render_passes_from_config_file() or_return
 	return true
@@ -177,7 +188,7 @@ init_render_passes :: proc() -> bool {
 
 
 allocate_render_pass_ref :: proc(p_name: common.Name) -> RenderPassRef {
-	ref := RenderPassRef(create_ref(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_name))
+	ref := RenderPassRef(common.ref_create(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_name))
 	get_render_pass(ref).desc.name = p_name
 	return ref
 }
@@ -187,7 +198,7 @@ allocate_render_pass_ref :: proc(p_name: common.Name) -> RenderPassRef {
 create_render_pass :: proc(p_render_pass_ref: RenderPassRef) -> bool {
 	render_pass := get_render_pass(p_render_pass_ref)
 	if backend_create_render_pass(p_render_pass_ref, render_pass) == false {
-		free_ref(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_render_pass_ref)
+		common.ref_free(&G_RENDER_PASS_REF_ARRAY, p_render_pass_ref)
 		return false
 	}
 
@@ -197,7 +208,7 @@ create_render_pass :: proc(p_render_pass_ref: RenderPassRef) -> bool {
 //---------------------------------------------------------------------------//
 
 get_render_pass :: proc(p_ref: RenderPassRef) -> ^RenderPassResource {
-	return get_resource(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_ref)
+	return &G_RENDER_PASS_RESOURCE_ARRAY[common.ref_get_idx(&G_RENDER_PASS_REF_ARRAY, p_ref)]
 }
 
 //---------------------------------------------------------------------------//
@@ -218,7 +229,7 @@ destroy_render_pass :: proc(p_ref: RenderPassRef) {
 		)
 	}
 	backend_destroy_render_pass(render_pass)
-	free_ref(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_ref)
+	common.ref_free(&G_RENDER_PASS_REF_ARRAY, p_ref)
 }
 
 @(private)
@@ -330,7 +341,7 @@ find_render_pass_by_name :: proc {
 //--------------------------------------------------------------------------//
 
 find_render_pass_by_name_name :: proc(p_name: common.Name) -> RenderPassRef {
-	ref := find_ref_by_name(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_name)
+	ref := common.ref_find_by_name(&G_RENDER_PASS_REF_ARRAY, p_name)
 	if ref == InvalidRenderPassRef {
 		return InvalidRenderPassRef
 	}
@@ -340,7 +351,7 @@ find_render_pass_by_name_name :: proc(p_name: common.Name) -> RenderPassRef {
 //--------------------------------------------------------------------------//
 
 find_render_pass_by_name_str :: proc(p_name: string) -> RenderPassRef {
-	ref := find_ref_by_name(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, common.make_name(p_name))
+	ref := common.ref_find_by_name(&G_RENDER_PASS_REF_ARRAY, common.make_name(p_name))
 	if ref == InvalidRenderPassRef {
 		return InvalidRenderPassRef
 	}
