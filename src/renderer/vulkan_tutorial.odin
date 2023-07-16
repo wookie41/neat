@@ -297,16 +297,18 @@ vt_create_texture_image :: proc() {
 		log.debug("Failed to load image")
 	}
 
-	texture_image_ref = allocate_image_ref(common.create_name("VikingRoom"))
-	texture_image := get_image(texture_image_ref)
-	texture_image.desc.type = .TwoDimensional
-	texture_image.desc.format = .RGBA8_SRGB
-	texture_image.desc.mip_count = 1
-	texture_image.desc.data_per_mip = {pixels[0:image_width * image_height * 4]}
-	texture_image.desc.dimensions = {u32(image_width), u32(image_height), 1}
-	texture_image.desc.sample_count_flags = {._1}
+	texture_image_ref =  find_image("VikingRoom")
 
-	create_texture_image(texture_image_ref)
+	// allocate_image_ref(common.create_name("VikingRoom"))
+	// texture_image := get_image(texture_image_ref)
+	// texture_image.desc.type = .TwoDimensional
+	// texture_image.desc.format = .RGBA8_SRGB
+	// texture_image.desc.mip_count = 1
+	// texture_image.desc.data_per_mip = {pixels[0:image_width * image_height * 4]}
+	// texture_image.desc.dimensions = {u32(image_width), u32(image_height), 1}
+	// texture_image.desc.sample_count_flags = {._1}
+
+	// create_texture_image(texture_image_ref)
 
 	stb_image.image_free(pixels)
 }

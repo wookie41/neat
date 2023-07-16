@@ -34,7 +34,9 @@ typedef void (*TinyDDS_ErrorFunc)(void *user, char const *msg);
 typedef struct TinyDDS_Callbacks {
 	TinyDDS_ErrorFunc errorFn;
 	TinyDDS_AllocFunc allocFn;
+	TinyDDS_AllocFunc allocTempFn;
 	TinyDDS_FreeFunc freeFn;
+	TinyDDS_FreeFunc freeTempFn;
 	TinyDDS_ReadFunc readFn;
 	TinyDDS_SeekFunc seekFn;
 	TinyDDS_TellFunc tellFn;
@@ -70,9 +72,9 @@ bool TinyDDS_NeedsEndianCorrecting(TinyDDS_ContextHandle handle);
 
 uint32_t TinyDDS_NumberOfMipmaps(TinyDDS_ContextHandle handle);
 uint32_t TinyDDS_ImageSize(TinyDDS_ContextHandle handle, uint32_t mipmaplevel);
-
+uint32_t TinyDDS_FaceSize(TinyDDS_ContextHandle handle, uint32_t mipmaplevel);
 // data return by ImageRawData is owned by the context. Don't free it!
-void const *TinyDDS_ImageRawData(TinyDDS_ContextHandle handle, uint32_t mipmaplevel);
+void const *TinyDDS_ImageRawData(TinyDDS_ContextHandle handle, uint32_t depth, uint32_t mipmaplevel);
 
 typedef void (*TinyDDS_WriteFunc)(void *user, void const *buffer, size_t byteCount);
 
@@ -832,7 +834,7 @@ static uint32_t TinyDDS_fileIdentifier = TINYDDS_MAKE_RIFFCODE('D', 'D', 'S', ' 
 static void TinyDDS_NullErrorFunc(void *user, char const *msg) {}
 
 TinyDDS_ContextHandle TinyDDS_CreateContext(TinyDDS_Callbacks const *callbacks, void *user) {
-	TinyDDS_Context *ctx = (TinyDDS_Context *) callbacks->allocFn(user, sizeof(TinyDDS_Context));
+	TinyDDS_Context *ctx = (TinyDDS_Context *) callbacks->allocTempFn(user, sizeof(TinyDDS_Context));
 	if (ctx == NULL)
 		return NULL;
 
@@ -849,6 +851,14 @@ TinyDDS_ContextHandle TinyDDS_CreateContext(TinyDDS_Callbacks const *callbacks, 
 	}
 	if (ctx->callbacks.allocFn == NULL) {
 		ctx->callbacks.errorFn(user, "TinyDDS must have alloc callback");
+		return NULL;
+	}
+	if (ctx->callbacks.allocTempFn == NULL) {
+		ctx->callbacks.errorFn(user, "TinyDDS must have alloc temp callback");
+		return NULL;
+	}
+	if (ctx->callbacks.freeTempFn == NULL) {
+		ctx->callbacks.errorFn(user, "TinyDDS must have free temp callback");
 		return NULL;
 	}
 	if (ctx->callbacks.freeFn == NULL) {
@@ -875,7 +885,7 @@ void TinyDDS_DestroyContext(TinyDDS_ContextHandle handle) {
 		return;
 	TinyDDS_Reset(handle);
 
-	ctx->callbacks.freeFn(ctx->user, ctx);
+	ctx->callbacks.freeTempFn(ctx->user, ctx);
 }
 
 void TinyDDS_Reset(TinyDDS_ContextHandle handle) {
@@ -1621,10 +1631,11 @@ uint32_t TinyDDS_ImageSize(TinyDDS_ContextHandle handle, uint32_t mipmaplevel) {
 	}
 }
 
-void const *TinyDDS_ImageRawData(TinyDDS_ContextHandle handle, uint32_t mipmaplevel) {
+void const *TinyDDS_ImageRawData(TinyDDS_ContextHandle handle, uint32_t depth, uint32_t mipmaplevel) {
 	TinyDDS_Context *ctx = (TinyDDS_Context *) handle;
 	if (ctx == NULL)
 		return NULL;
+
 
 	if (!ctx->headerValid) {
 		ctx->callbacks.errorFn(ctx->user, "Header data hasn't been read yet or its invalid");
@@ -1640,9 +1651,6 @@ void const *TinyDDS_ImageRawData(TinyDDS_ContextHandle handle, uint32_t mipmaple
 		ctx->callbacks.errorFn(ctx->user, "Invalid mipmap level");
 		return NULL;
 	}
-
-	if (ctx->mipmaps[mipmaplevel] != NULL)
-		return ctx->mipmaps[mipmaplevel];
 
 	if(	ctx->header.caps2 & TINYDDS_DDSCAPS2_CUBEMAP ||
 			ctx->headerDx10.miscFlag & TINYDDS_D3D10_RESOURCE_MISC_TEXTURECUBE ) {
@@ -1664,6 +1672,7 @@ void const *TinyDDS_ImageRawData(TinyDDS_ContextHandle handle, uint32_t mipmaple
 
 		size_t const faceSize = TinyDDS_FaceSize(handle, mipmaplevel);
 		ctx->mipmaps[mipmaplevel] = (uint8_t const *) ctx->callbacks.allocFn(ctx->user, faceSize * 6);
+		ctx->callbacks.errorFn(ctx->user, "Allocation failed");
 		if(!ctx->mipmaps[mipmaplevel]) return NULL;
 
 		uint8_t *dstPtr = (uint8_t*)ctx->mipmaps[mipmaplevel];
@@ -1671,6 +1680,7 @@ void const *TinyDDS_ImageRawData(TinyDDS_ContextHandle handle, uint32_t mipmaple
 			ctx->callbacks.seekFn(ctx->user, offset + ctx->firstImagePos);
 			size_t read = ctx->callbacks.readFn(ctx->user, (void *) dstPtr, faceSize);
 			if(read != faceSize) {
+				ctx->callbacks.errorFn(ctx->user, "Face size mismatch");
 				ctx->callbacks.freeFn(ctx->user, (void*)&ctx->mipmaps[mipmaplevel]);
 				return NULL;
 			}
@@ -1681,20 +1691,24 @@ void const *TinyDDS_ImageRawData(TinyDDS_ContextHandle handle, uint32_t mipmaple
 	}
 
 	uint64_t offset = 0;
-	for(uint32_t i=0;i < mipmaplevel;++i) {
-		offset += TinyDDS_ImageSize(handle, i);
+	for(uint32_t i=0;i < depth;++i) {
+		for(uint32_t j=0;j < mipmaplevel;++j) {
+			offset += TinyDDS_ImageSize(handle, j);
+		}
 	}
 
 	uint32_t size = TinyDDS_ImageSize(handle, mipmaplevel);
-	if (size == 0)
+	if (size == 0){
+		ctx->callbacks.errorFn(ctx->user, "Invalid size");
 		return NULL;
-
+	}
 	ctx->callbacks.seekFn(ctx->user, offset + ctx->firstImagePos);
 
 	ctx->mipmaps[mipmaplevel] = (uint8_t const *) ctx->callbacks.allocFn(ctx->user, size);
 	if (!ctx->mipmaps[mipmaplevel]) return NULL;
 	size_t read = ctx->callbacks.readFn(ctx->user, (void *) ctx->mipmaps[mipmaplevel], size);
 	if(read != size) {
+		ctx->callbacks.errorFn(ctx->user, "Read failed");
 		ctx->callbacks.freeFn(ctx->user, (void*)&ctx->mipmaps[mipmaplevel]);
 		return NULL;
 	}

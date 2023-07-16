@@ -285,7 +285,9 @@ TinyDDS_Context :: struct {};
 TinyDDS_Callbacks :: struct {
     errorFn : TinyDDS_ErrorFunc,
     allocFn : TinyDDS_AllocFunc,
+    allocTempFn : TinyDDS_AllocFunc,
     freeFn : TinyDDS_FreeFunc,
+    freeTempFn : TinyDDS_FreeFunc,
     readFn : TinyDDS_ReadFunc,
     seekFn : TinyDDS_SeekFunc,
     tellFn : TinyDDS_TellFunc,
@@ -355,8 +357,11 @@ foreign tinydds {
     @(link_name="TinyDDS_ImageSize")
     image_size :: proc(handle : TinyDDS_ContextHandle, mipmaplevel : u32) -> u32 ---;
 
+    @(link_name="TinyDDS_FaceSize")
+    face_size :: proc(handle : TinyDDS_ContextHandle, mipmaplevel : u32) -> u32 ---;
+
     @(link_name="TinyDDS_ImageRawData")
-    image_raw_data :: proc(handle : TinyDDS_ContextHandle, mipmaplevel : u32) -> rawptr ---;
+    image_raw_data :: proc(handle : TinyDDS_ContextHandle, depth : u32, mipmaplevel : u32) -> rawptr ---;
 
     @(link_name="TinyDDS_GetFormat")
     get_format :: proc(handle : TinyDDS_ContextHandle) -> TinyDDS_Format ---;

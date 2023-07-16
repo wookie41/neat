@@ -4,6 +4,8 @@ import "core:hash"
 import "core:mem"
 import "core:slice"
 import "core:strings"
+import "core:fmt"
+
 
 //---------------------------------------------------------------------------//
 
@@ -96,6 +98,15 @@ clone_string_array :: proc(p_strings: []string, p_allocator: mem.Allocator) -> [
 		cloned[i] = strings.clone(str, p_allocator)
 	}
 	return cloned
+}
+
+//---------------------------------------------------------------------------//
+
+aprintf :: proc(allocator: mem.Allocator, format: string, args: ..any) -> string {
+	curr_alloc := context.allocator
+	context.allocator = allocator
+	defer context.allocator = curr_alloc
+	return fmt.aprintf(format, ..args)
 }
 
 //---------------------------------------------------------------------------//

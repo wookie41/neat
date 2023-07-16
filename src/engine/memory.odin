@@ -23,6 +23,7 @@ G_ALLOCATORS: struct {
 	string_scratch_allocator:   mem.Scratch_Allocator,
 	string_allocator:           mem.Allocator,
 	main_allocator:             mem.Allocator,
+	asset_allocator:             mem.Allocator,
 }
 
 //---------------------------------------------------------------------------//
@@ -35,6 +36,7 @@ MemoryInitOptions :: struct {
 
 mem_init :: proc(p_options: MemoryInitOptions) {
 	G_ALLOCATORS.main_allocator = context.allocator
+	G_ALLOCATORS.asset_allocator = context.allocator
 
 	// String allocator
 	mem.scratch_allocator_init(

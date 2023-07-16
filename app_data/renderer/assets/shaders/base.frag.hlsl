@@ -10,8 +10,8 @@ struct FSOutput {
 
 void main(in FSInput pFragmentInput, out FSOutput pFragmentOutput) {
 #if (FEAT_TEST > 0)
-    pFragmentOutput.color = sampleBindless(linearRepeatSampler, pFragmentInput.uv, 0) * float4(1, 0, 0, 1);
+    pFragmentOutput.color = pow(sampleBindless(linearRepeatSampler, pFragmentInput.uv, 0) * float4(1, 0, 0, 1), 2.2);
 #else
-    pFragmentOutput.color = sampleBindless(linearRepeatSampler, pFragmentInput.uv, 0);
+    pFragmentOutput.color = pow(sampleBindless(linearRepeatSampler, pFragmentInput.uv, 0), 2.2);
 #endif
 }

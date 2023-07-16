@@ -22,11 +22,6 @@ AssetLoaderInitOptions :: struct {
 	mode: AssetLoaderMode,
 }
 
-AssetType :: enum {
-	Texture,
-	Mesh,
-}
-
 //---------------------------------------------------------------------------//
 
 

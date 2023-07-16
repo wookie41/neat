@@ -83,7 +83,7 @@ when USE_VULKAN_BACKEND {
 	INTERNAL: struct {
 		// Buffer used to upload the initial contents of the images
 		staging_buffer:           BufferRef,
-		stating_buffer_offset:    u32,
+		staging_buffer_offset:    u32,
 		bindless_descriptor_pool: vk.DescriptorPool,
 		bindless_array_updates:   [dynamic]ImageRef,
 	}
@@ -334,18 +334,18 @@ when USE_VULKAN_BACKEND {
 		for mip_data, i in p_image.desc.data_per_mip {
 
 			// Make sure we have enough space in the staging buffer
-			assert(INTERNAL.stating_buffer_offset + u32(len(mip_data)) < staging_buffer.desc.size)
+			assert(INTERNAL.staging_buffer_offset + u32(len(mip_data)) < staging_buffer.desc.size)
 
 			// Copy mip data into the staging buffer
 			mem.copy(
-				mem.ptr_offset(staging_buffer.mapped_ptr, INTERNAL.stating_buffer_offset),
+				mem.ptr_offset(staging_buffer.mapped_ptr, INTERNAL.staging_buffer_offset),
 				raw_data(mip_data),
 				len(mip_data),
 			)
 
-			texture_copy.mip_buffer_offsets[i] = INTERNAL.stating_buffer_offset
+			texture_copy.mip_buffer_offsets[i] = INTERNAL.staging_buffer_offset
 
-			INTERNAL.stating_buffer_offset += u32(len(mip_data))
+			INTERNAL.staging_buffer_offset += u32(len(mip_data))
 		}
 
 		append(&G_RENDERER.queued_textures_copies, texture_copy)
@@ -582,8 +582,8 @@ when USE_VULKAN_BACKEND {
 						mipLevel = u32(mip),
 					},
 					imageExtent = {
-						width = image.desc.dimensions[0] << u32(mip),
-						height = image.desc.dimensions[1] << u32(mip),
+						width = image.desc.dimensions[0] >> u32(mip),
+						height = image.desc.dimensions[1] >> u32(mip),
 						depth = 1,
 					},
 				}

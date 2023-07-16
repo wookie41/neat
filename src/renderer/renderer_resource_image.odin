@@ -114,7 +114,7 @@ ImageFormat :: enum u16 {
 	SRGB_FormatsEnd,
 	ColorFormatsEnd,
 	//---------------------//
-	CompressedFormatsStarts,
+	CompressedFormatsStart,
     BC1_RGB_UNorm,
     BC1_RGB_SRGB,
     BC1_RGBA_UNorm,
@@ -230,7 +230,8 @@ create_texture_image :: proc(p_ref: ImageRef) -> bool {
 	}
 
 	assert(
-		image.desc.format > .ColorFormatsStart && image.desc.format < .ColorFormatsEnd,
+		(image.desc.format > .ColorFormatsStart && image.desc.format < .ColorFormatsEnd) || 
+		(image.desc.format > .CompressedFormatsStart && image.desc.format < .CompressedFormatsEnd),
 	)
 
 	if backend_create_texture_image(p_ref, image) == false {
@@ -304,3 +305,24 @@ batch_update_bindless_array_entries :: #force_inline proc() {
 }
 
 //---------------------------------------------------------------------------//
+
+find_image :: proc {
+	find_image_by_name,
+	find_image_by_str,
+}
+
+find_image_by_name :: proc(p_name: common.Name) -> ImageRef {
+	ref := common.ref_find_by_name(&G_IMAGE_REF_ARRAY, p_name)
+	if ref == InvalidImageRef {
+		return InvalidImageRef
+	}
+	return ImageRef(ref)
+}
+
+//--------------------------------------------------------------------------//
+
+find_image_by_str :: proc(p_str: string) -> ImageRef {
+	return find_image_by_name(common.make_name(p_str))
+}
+
+//--------------------------------------------------------------------------//
