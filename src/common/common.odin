@@ -21,21 +21,17 @@ GIGABYTE :: MEGABYTE * 1024
 
 //---------------------------------------------------------------------------//
 
-StringTableEntry :: struct {
-	str:       string,
-	ref_count: u32,
-}
-
+Name :: distinct u32
 @(private = "file")
 INTERNAL: struct {
-	string_table: map[Name]StringTableEntry,
+	string_table: map[Name]string,
 }
 
 //---------------------------------------------------------------------------//
 
 init_names :: proc(p_string_allocator: mem.Allocator) {
 	context.allocator = p_string_allocator
-	INTERNAL.string_table = make(map[Name]StringTableEntry)
+	INTERNAL.string_table = make(map[Name]string)
 }
 
 //---------------------------------------------------------------------------//
@@ -49,41 +45,16 @@ make_name :: #force_inline proc(p_name: string) -> Name {
 create_name :: proc(p_name: string) -> Name {
 	assert(len(p_name) > 0)
 	name: Name
-	when ODIN_DEBUG {
-		name = Name(hash.crc32(transmute([]u8)p_name))
-	} else {
-		name = Name(hash.crc32(transmute([]u8)p_name))
-	}
+	name = Name(hash.crc32(transmute([]u8)p_name))
 	if name in INTERNAL.string_table {
-		entry := &INTERNAL.string_table[name]
-		entry.ref_count += 1
 		return name
 	}
-	INTERNAL.string_table[name] = {
-		str       = p_name,
-		ref_count = 0,
-	}
+	INTERNAL.string_table[name] = p_name
 	return name
 }
 
 //---------------------------------------------------------------------------//
 
-when ODIN_DEBUG {
-	destroy_name :: #force_inline proc(p_name: Name) {
-		assert(p_name in INTERNAL.string_table)
-		entry := &INTERNAL.string_table[p_name]
-		if entry.ref_count == 0 {
-			delete_key(&INTERNAL.string_table, p_name)
-		}
-		entry.ref_count -= 1
-	}
-} else {
-	destroy_name :: #force_inline proc(p_name: Name) {
-	}
-}
-
-
-//---------------------------------------------------------------------------//
 
 EMPTY_NAME := Name(0)
 
@@ -95,13 +66,10 @@ name_equal :: proc(p_name_1: Name, p_name_2: Name) -> bool {
 
 //---------------------------------------------------------------------------//
 
-
-Name :: distinct u32
-
 get_string :: proc(p_name: Name) -> string {
 	when ODIN_DEBUG {
 		assert(p_name in INTERNAL.string_table)
-		return INTERNAL.string_table[p_name].str
+		return INTERNAL.string_table[p_name]
 	}
 	return ""
 }

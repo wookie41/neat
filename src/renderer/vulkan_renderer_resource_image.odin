@@ -336,6 +336,7 @@ when USE_VULKAN_BACKEND {
 			// Make sure we have enough space in the staging buffer
 			assert(INTERNAL.stating_buffer_offset + u32(len(mip_data)) < staging_buffer.desc.size)
 
+			// Copy mip data into the staging buffer
 			mem.copy(
 				mem.ptr_offset(staging_buffer.mapped_ptr, INTERNAL.stating_buffer_offset),
 				raw_data(mip_data),

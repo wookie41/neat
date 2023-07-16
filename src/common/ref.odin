@@ -93,7 +93,6 @@ ref_free :: proc(p_ref_array: ^RefArray($R), p_ref: Ref(R)) {
 	p_ref_array.generations[p_ref_array.num_free_indices] = ref_get_generation(p_ref)
 	p_ref_array.num_free_indices += 1
 	p_ref_array.names[ref_get_idx(p_ref_array, p_ref)] = 0
-	destroy_name(p_ref.name)
 }
 
 //---------------------------------------------------------------------------//
