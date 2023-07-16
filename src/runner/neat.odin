@@ -33,6 +33,7 @@ main :: proc() {
 	image.desc.sample_count_flags = {._1}
 
 	assert(renderer.create_texture_image(image_ref))
+	engine.texture_asset_unload(texture_asset_ref)
 
 	engine.run()
 }

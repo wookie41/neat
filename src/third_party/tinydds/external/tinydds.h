@@ -1692,10 +1692,14 @@ void const *TinyDDS_ImageRawData(TinyDDS_ContextHandle handle, uint32_t depth, u
 
 	uint64_t offset = 0;
 	for(uint32_t i=0;i < depth;++i) {
-		for(uint32_t j=0;j < mipmaplevel;++j) {
+		for(uint32_t j=0;j < ctx->header.mipMapCount;++j) {
 			offset += TinyDDS_ImageSize(handle, j);
 		}
 	}
+	for(uint32_t i=0;i < mipmaplevel;++i) {
+		offset += TinyDDS_ImageSize(handle, i);
+	}
+
 
 	uint32_t size = TinyDDS_ImageSize(handle, mipmaplevel);
 	if (size == 0){
