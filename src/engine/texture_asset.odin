@@ -4,6 +4,7 @@ package engine
 
 import "../common"
 import "../third_party/tinydds"
+import "../renderer"
 
 import "core:c"
 import "core:mem"
@@ -15,6 +16,7 @@ import "core:strings"
 import "core:log"
 import "core:encoding/json"
 import "core:path/filepath"
+import "core:math/linalg/glsl"
 
 //---------------------------------------------------------------------------//
 
@@ -353,6 +355,7 @@ texture_asset_import :: proc(p_options: TextureImportOptions) -> TextureImportRe
 	}
 
 	// Pick compression format
+	// https://learn.microsoft.com/en-us/windows/win32/direct3d11/texture-block-compression-in-direct3d-11#block-compression-formats-supported-in-direct3d-11
 	compression_format := "BC3_UNORM"
 	if .IsNormalMap in p_options.flags {
 		compression_format = "BC5_SNORM"
@@ -501,6 +504,7 @@ texture_asset_unload :: proc(p_texture_asset_ref: TextureAssetRef) {
 		delete(texture_asset.texture_datas[i].data_per_mip, G_ALLOCATORS.main_allocator)
 	}
 	delete(texture_asset.texture_datas, G_ALLOCATORS.main_allocator)
+	common.ref_free(&G_TEXTURE_ASSET_REF_ARRAY, p_texture_asset_ref)
 }
 
 //---------------------------------------------------------------------------//
@@ -552,6 +556,66 @@ texture_asset_load_texture_data_tiny_dds :: proc(
 		}
 	}
 	return true
+}
+
+//---------------------------------------------------------------------------//
+
+texture_asset_load_and_create_renderer_image_string :: proc (p_name: string) -> (TextureAssetRef, renderer.ImageRef) {
+	return texture_asset_load_and_create_renderer_image_name(common.create_name(p_name))
+}
+
+texture_asset_load_and_create_renderer_image_name :: proc (p_name: common.Name) -> (TextureAssetRef, renderer.ImageRef) {
+	log.info("Loading texture '%s'...\n", common.get_string(p_name))
+	texture_asset_ref := texture_asset_load(p_name)
+	if texture_asset_ref == InvalidTextureAssetRef {
+		return InvalidTextureAssetRef, renderer.InvalidImageRef
+	}
+	texture_asset := get_texture_asset(texture_asset_ref)
+
+	image_ref := renderer.allocate_image_ref(p_name)
+	image := renderer.get_image(image_ref)
+
+	if image_ref == renderer.InvalidImageRef {
+		texture_asset_unload(texture_asset_ref)
+		return InvalidTextureAssetRef, renderer.InvalidImageRef
+	}
+
+	#partial switch texture_asset.format {
+		case .BC1_Unorm:
+			image.desc.format = .BC1_RGBA_UNorm
+		case .BC3_UNorm:
+			image.desc.format = .BC3_UNorm
+		case .BC4_UNorm:
+			image.desc.format = .BC4_UNorm
+		case .BC5_UNorm:
+			image.desc.format = .BC5_UNorm
+		case .BC6H_UFloat16	:
+			image.desc.format = .BC6H_UFloat
+		case:
+			texture_asset_unload(texture_asset_ref)
+			renderer.destroy_image(image_ref)
+			log.warnf("Unsupported image format for image '%s'\n", common.get_string(p_name))
+			return InvalidTextureAssetRef, renderer.InvalidImageRef	
+	}
+
+	image.desc.type = .TwoDimensional
+	image.desc.mip_count = texture_asset.num_mips
+	// @TODO support for more slices
+	image.desc.data_per_mip = texture_asset.texture_datas[0].data_per_mip
+	image.desc.dimensions = glsl.uvec3{texture_asset.width, texture_asset.height, 1}
+	image.desc.sample_count_flags = {._1}
+
+	if renderer.create_texture_image(image_ref) == false {
+		texture_asset_unload(texture_asset_ref)
+		return InvalidTextureAssetRef, renderer.InvalidImageRef
+	}
+
+	return texture_asset_ref, image_ref
+}
+
+texture_asset_load_and_create_renderer_image :: proc {
+	texture_asset_load_and_create_renderer_image_string,
+	texture_asset_load_and_create_renderer_image_name,
 }
 
 //---------------------------------------------------------------------------//
