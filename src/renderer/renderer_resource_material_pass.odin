@@ -5,23 +5,28 @@ package renderer
 
 import "../common"
 import "core:c"
-import "core:os"
 import "core:encoding/json"
 import "core:log"
+import "core:os"
+import "core:slice"
 
 //---------------------------------------------------------------------------//
 
 MaterialPassDesc :: struct {
 	name:                     common.Name,
-	base_vertex_shader_ref:   ShaderRef,
-	base_fragment_shader_ref: ShaderRef,
+	vertex_shader_path:       common.Name,
+	fragment_shader_path:     common.Name,
 	render_pass_ref:          RenderPassRef,
+	additional_feature_names: []string,
 }
 
 //---------------------------------------------------------------------------//
 
 MaterialPassResource :: struct {
-	desc: MaterialPassDesc,
+	desc:                MaterialPassDesc,
+	vertex_shader_ref:   ShaderRef,
+	fragment_shader_ref: ShaderRef,
+	pipeline_ref:        PipelineRef,
 }
 
 //---------------------------------------------------------------------------//
@@ -44,10 +49,11 @@ G_MATERIAL_PASS_RESOURCE_ARRAY: []MaterialPassResource
 //---------------------------------------------------------------------------//
 
 MaterialPassJSONEntry :: struct {
-	name:                      string,
-	base_vertex_shader_name:   string `json:"baseVertexShader"`,
-	base_fragment_shader_name: string `json:"baseFragmentShader"`,
-	render_pass_name:          string `json:"renderPass"`,
+	name:                     string,
+	vertex_shader_path:       string `json:"vertexShaderPath"`,
+	fragment_shader_path:     string `json:"fragmentShaderPath"`,
+	render_pass_name:         string `json:"renderPass"`,
+	additional_feature_names: []string `json:"additionalFeatureNames"`,
 }
 
 //---------------------------------------------------------------------------//
@@ -98,7 +104,15 @@ get_material_pass :: proc(p_ref: MaterialPassRef) -> ^MaterialPassResource {
 //--------------------------------------------------------------------------//
 
 destroy_material_pass :: proc(p_ref: MaterialPassRef) {
-	// material_pass := get_material_pass(p_ref)
+	material_pass := get_material_pass(p_ref)
+	if len(material_pass.desc.additional_feature_names) > 0 {
+		delete(
+			material_pass.desc.additional_feature_names,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
+	}
+	destroy_shader(material_pass.vertex_shader_ref)
+	destroy_shader(material_pass.fragment_shader_ref)
 	common.ref_free(&G_MATERIAL_PASS_REF_ARRAY, p_ref)
 }
 
@@ -109,9 +123,7 @@ load_material_passes_from_config_file :: proc() -> bool {
 	defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
 
 	material_passes_config := "app_data/renderer/config/material_passes.json"
-	material_passes_json_data, file_read_ok := os.read_entire_file(
-		material_passes_config,
-	)
+	material_passes_json_data, file_read_ok := os.read_entire_file(material_passes_config)
 
 	if file_read_ok == false {
 		return false
@@ -130,18 +142,18 @@ load_material_passes_from_config_file :: proc() -> bool {
 		material_pass_ref := allocate_material_pass_ref(common.create_name(entry.name))
 		material_pass := get_material_pass(material_pass_ref)
 
-		material_pass.desc.base_vertex_shader_ref = find_shader_by_name(
-			entry.base_vertex_shader_name,
-		)
-		assert(material_pass.desc.base_vertex_shader_ref != InvalidShaderRef)
-
-		material_pass.desc.base_fragment_shader_ref = find_shader_by_name(
-			entry.base_fragment_shader_name,
-		)
-		assert(material_pass.desc.base_fragment_shader_ref != InvalidShaderRef)
+		material_pass.desc.vertex_shader_path = common.create_name(entry.vertex_shader_path)
+		material_pass.desc.fragment_shader_path = common.create_name(entry.fragment_shader_path)
 
 		material_pass.desc.render_pass_ref = find_render_pass_by_name(entry.render_pass_name)
 		assert(material_pass.desc.render_pass_ref != InvalidRenderPassRef)
+
+		if len(entry.additional_feature_names) > 0 {
+			material_pass.desc.additional_feature_names = slice.clone(
+				entry.additional_feature_names,
+				G_RENDERER_ALLOCATORS.resource_allocator,
+			)
+		}
 
 		create_material_pass(material_pass_ref)
 	}
@@ -152,7 +164,10 @@ load_material_passes_from_config_file :: proc() -> bool {
 //--------------------------------------------------------------------------//
 
 @(private)
-find_material_pass_by_name :: proc {find_material_pass_by_name_name, find_material_pass_by_name_str}
+find_material_pass_by_name :: proc {
+	find_material_pass_by_name_name,
+	find_material_pass_by_name_str,
+}
 
 //--------------------------------------------------------------------------//
 

@@ -1,0 +1,13 @@
+[
+    {
+        "name": "TestMaterial",
+        "features": [
+            "AlbedoConstColor",
+            "NormalTexture"
+        ],
+        "materialPasses": [
+            "TestMaterialPass",
+            "TestMaterialPassPrepass"
+        ]
+    }
+]

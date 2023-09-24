@@ -1,14 +1,17 @@
 package renderer
 
+//---------------------------------------------------------------------------//
+
+import "../common"
+import vma "../third_party/vma"
+import "core:log"
+import "core:strings"
+import vk "vendor:vulkan"
+
+//---------------------------------------------------------------------------//
+
 when USE_VULKAN_BACKEND {
 
-	//---------------------------------------------------------------------------//
-
-	import "core:log"
-	import vk "vendor:vulkan"
-	import vma "../third_party/vma"
-	import "../common"
-	import "core:strings"
 
 	//---------------------------------------------------------------------------//
 
@@ -47,10 +50,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_create_buffer :: proc(
-		p_buffer_ref: BufferRef,
-		p_buffer: ^BufferResource,
-	) -> bool {
+	backend_create_buffer :: proc(p_buffer_ref: BufferRef, p_buffer: ^BufferResource) -> bool {
 		p_buffer.owning_queue_family_idx = vk.QUEUE_FAMILY_IGNORED
 
 		vk_usage: vk.BufferUsageFlags
@@ -84,7 +84,7 @@ when USE_VULKAN_BACKEND {
 			alloc_flags += {.CREATE_MAPPED}
 			has_mapped_ptr = true
 		}
-		
+
 		if .HostWrite in p_buffer.desc.flags {
 			alloc_flags += {.HOST_ACCESS_SEQUENTIAL_WRITE}
 		} else if .HostRead in p_buffer.desc.flags {
@@ -103,13 +103,13 @@ when USE_VULKAN_BACKEND {
 		alloc_info := vma.AllocationInfo{}
 
 		if res := vma.create_buffer(
-			   G_RENDERER.vma_allocator,
-			   &buffer_create_info,
-			   &alloc_create_info,
-			   &p_buffer.vk_buffer,
-			   &p_buffer.allocation,
-			   &alloc_info,
-		   ); res != .SUCCESS {
+			G_RENDERER.vma_allocator,
+			&buffer_create_info,
+			&alloc_create_info,
+			&p_buffer.vk_buffer,
+			&p_buffer.allocation,
+			&alloc_info,
+		); res != .SUCCESS {
 			log.warnf("Failed to create buffer %s", res)
 			return false
 		}

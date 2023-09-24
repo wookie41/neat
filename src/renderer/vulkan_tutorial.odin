@@ -1,17 +1,17 @@
 package renderer
 
+import "core:c"
+import "core:log"
 import "core:math/linalg/glsl"
 import "core:mem"
-import "core:log"
 import "core:time"
-import "core:c"
 
-import vk "vendor:vulkan"
 import stb_image "vendor:stb/image"
+import vk "vendor:vulkan"
 
-import vma "../third_party/vma"
-import assimp "../third_party/assimp"
 import "../common"
+import assimp "../third_party/assimp"
+import vma "../third_party/vma"
 
 G_VT: struct {
 	ubo_ref:                  BufferRef,
@@ -107,14 +107,12 @@ init_vt :: proc() -> bool {
 		}
 
 		vt_create_uniform_buffer()
-		
+
 		// Create pipeline
 		{
 			vertex_shader_ref := find_shader_by_name(common.create_name("base.vert"))
 			fragment_shader_ref := find_shader_by_name(common.create_name("base.frag"))
-			pipeline_ref = allocate_pipeline_ref(
-				common.create_name("Vulkan Tutorial Pipeline"),
-			)
+			pipeline_ref = allocate_pipeline_ref(common.create_name("Vulkan Tutorial Pipeline"))
 			get_pipeline(pipeline_ref).desc = {
 				name            = common.create_name("Vulkan Tutorial Pipe"),
 				vert_shader     = vertex_shader_ref,
@@ -155,7 +153,7 @@ vt_pre_render :: proc() {
 		cube_draw.instance_count = 1
 		cube_draw.index_count = u32(len(viking_room_mesh.desc.indices))
 		cube_draw.vertex_buffer_ref = MESH_INTERNAL.vertex_buffer_ref
-		cube_draw.index_type = .UInt16
+		cube_draw.index_type = .UInt32
 		draw_stream_reset(&G_VT.draw_stream)
 
 	}
@@ -180,15 +178,10 @@ vt_create_bind_groups :: proc() {
 		ubo_bind_group_update := BindGroupUpdate {
 			bind_group_ref = ubo_bind_group_ref,
 			buffer_updates = {
-				{
-					slot = 0,
-					buffer = ubo_ref,
-					offset = 0,
-					size = size_of(UniformBufferObject),
-				},
+				{slot = 0, buffer = ubo_ref, offset = 0, size = size_of(UniformBufferObject)},
 			},
 		}
-		
+
 		update_bind_groups({ubo_bind_group_update})
 	}
 }
@@ -223,9 +216,7 @@ vt_update :: proc(
 
 	begin_render_pass(render_pass_ref, p_cmd_buff_ref, &begin_info)
 	{
-		bind_group_bindings[1].dynamic_offsets = {
-			size_of(UniformBufferObject) * get_frame_idx(),
-		}
+		bind_group_bindings[1].dynamic_offsets = {size_of(UniformBufferObject) * get_frame_idx()}
 
 		draw_stream_reset(&draw_stream)
 		draw_stream_submit(p_cmd_buff_ref, &draw_stream)
@@ -257,9 +248,7 @@ vt_update_uniform_buffer :: proc() {
 
 
 	ubo := UniformBufferObject {
-		model = glsl.identity(
-			glsl.mat4,
-		) * glsl.mat4Rotate({0, 0, 1}, glsl.radians_f32(90.0) * dt),
+		model = glsl.identity(glsl.mat4) * glsl.mat4Rotate({0, 0, 1}, glsl.radians_f32(90.0) * dt),
 		view  = glsl.mat4LookAt({0, 3.0, 1.5}, {0, 0, 0}, {0, 1, 0}),
 		proj  = glsl.mat4Perspective(
 			glsl.radians_f32(45.0),
@@ -271,10 +260,7 @@ vt_update_uniform_buffer :: proc() {
 
 	uniform_buffer := get_buffer(ubo_ref)
 	mem.copy(
-		mem.ptr_offset(
-			uniform_buffer.mapped_ptr,
-			size_of(UniformBufferObject) * get_frame_idx(),
-		),
+		mem.ptr_offset(uniform_buffer.mapped_ptr, size_of(UniformBufferObject) * get_frame_idx()),
 		&ubo,
 		size_of(UniformBufferObject),
 	)
@@ -297,7 +283,7 @@ vt_create_texture_image :: proc() {
 		log.debug("Failed to load image")
 	}
 
-	texture_image_ref =  find_image("VikingRoom")
+	texture_image_ref = find_image("VikingRoom")
 
 	// allocate_image_ref(common.create_name("VikingRoom"))
 	// texture_image := get_image(texture_image_ref)
@@ -316,7 +302,7 @@ vt_create_texture_image :: proc() {
 vt_load_model :: proc() {
 
 	scene := assimp.import_file(
-		"app_data/renderer/assets/models/viking_room.obj",
+		"D:/glTF-Sample-Models-master/glTF-Sample-Models-master/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
 		{.OptimizeMeshes, .Triangulate, .FlipUVs},
 	)
 	if scene == nil {
@@ -334,7 +320,7 @@ vt_load_model :: proc() {
 	mesh_ref := allocate_mesh_ref(common.create_name("VikingRoom"))
 	mesh := get_mesh(mesh_ref)
 
-	mesh.desc.indices = make([]u16, int(num_indices))
+	mesh.desc.indices = make([]u32, int(num_indices))
 	mesh.desc.position = make([]glsl.vec3, int(num_vertices))
 	mesh.desc.uv = make([]glsl.vec2, int(num_vertices))
 	mesh.desc.sub_meshes = make([]SubMesh, scene.mNumMeshes)
@@ -343,12 +329,20 @@ vt_load_model :: proc() {
 
 	import_ctx: ImportContext
 	import_ctx.mesh = mesh
+	import_ctx.curr_idx = 0
+	import_ctx.curr_vtx = 0
 
 	vt_assimp_load_node(scene, scene.mRootNode, &import_ctx)
 
 	create_mesh(mesh_ref)
 
 	G_VT.viking_room_mesh_ref = mesh_ref
+
+	// @TODO
+
+	for i in 0 ..< scene.mNumTextures {
+		log.info("texture %s", scene.mTextures[i])
+	}
 }
 
 ImportContext :: struct {
@@ -365,7 +359,21 @@ vt_assimp_load_node :: proc(
 ) {
 
 	for i in 0 ..< p_node.mNumMeshes {
-		assimp_mesh := p_scene.mMeshes[i]
+		assimp_mesh := p_scene.mMeshes[p_node.mMeshes[i]]
+
+		material := p_scene.mMaterials[assimp_mesh.mMaterialIndex]
+
+		roughness_tex_path: assimp.String
+		metalness_tex_path: assimp.String
+		occlusion_tex_path: assimp.String
+
+		assimp_get_material_texture(material, .AitexturetypeDiffuseRoughness, &roughness_tex_path)
+		assimp_get_material_texture(material, .AitexturetypeMetalness, &metalness_tex_path)
+		assimp_get_material_texture(material, .AitexturetypeLightmap, &occlusion_tex_path)
+
+		log.infof("Roughness: %s", string(roughness_tex_path.data[:roughness_tex_path.length]))
+		log.infof("Metalness: %s", string(metalness_tex_path.data[:metalness_tex_path.length]))
+		log.infof("Occlusion: %s\n", string(occlusion_tex_path.data[:occlusion_tex_path.length]))
 
 		sub_mesh := &p_import_ctx.mesh.desc.sub_meshes[p_import_ctx.current_sub_mesh]
 		sub_mesh.data_count = assimp_mesh.mNumVertices
@@ -389,9 +397,8 @@ vt_assimp_load_node :: proc(
 
 		for j in 0 ..< assimp_mesh.mNumFaces {
 			for k in 0 ..< assimp_mesh.mFaces[j].mNumIndices {
-				p_import_ctx.mesh.desc.indices[p_import_ctx.curr_idx] = u16(
-					assimp_mesh.mFaces[j].mIndices[k],
-				)
+				idx := sub_mesh.data_offset + assimp_mesh.mFaces[j].mIndices[k]
+				p_import_ctx.mesh.desc.indices[p_import_ctx.curr_idx] = u32(idx)
 				p_import_ctx.curr_idx += 1
 			}
 		}
@@ -402,4 +409,23 @@ vt_assimp_load_node :: proc(
 	for i in 0 ..< p_node.mNumChildren {
 		vt_assimp_load_node(p_scene, p_node.mChildren[i], p_import_ctx)
 	}
+}
+
+assimp_get_material_texture :: #force_inline proc(
+	p_material: ^assimp.Material,
+	p_texture_type: assimp.TextureType,
+	p_path: ^assimp.String,
+) -> assimp.Return {
+	return assimp.get_material_texture(
+		p_material,
+		p_texture_type,
+		0,
+		p_path,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
 }

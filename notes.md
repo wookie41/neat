@@ -5,3 +5,4 @@ TODO:
 - Make sure render targets can be bound as Textures in the shader. Right now only the bindless texture array path is tested.
 - Create a cache for descriptor set layouts and resuse them (vulkan_renderer_resource_pipeline_layout.odin)
 - Support loading volume DDS textures in the Vulkan backend, right now the asset pipeline supports them, but we ignore depth > 1
+- When shaders.json is reloaded, we have to destroy the shaders that were loaded before

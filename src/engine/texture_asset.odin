@@ -398,7 +398,7 @@ texture_asset_import :: proc(p_options: TextureImportOptions) -> TextureImportRe
 //---------------------------------------------------------------------------//
 
 texture_asset_load :: proc(
-	p_texture_name: common.Name
+	p_texture_name: common.Name,
 ) -> TextureAssetRef {
 
 	temp_arena: TempArena

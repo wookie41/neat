@@ -1,20 +1,21 @@
 
 package renderer
+//---------------------------------------------------------------------------//
+
+import "core:c/libc"
+import "core:fmt"
+import "core:hash"
+import "core:log"
+import "core:os"
+import "core:strings"
+import vk "vendor:vulkan"
+
+import "../common"
+import "../third_party/spirv_reflect"
+
+//---------------------------------------------------------------------------//
 
 when USE_VULKAN_BACKEND {
-
-	//---------------------------------------------------------------------------//
-
-	import "core:c/libc"
-	import "core:strings"
-	import "core:log"
-	import "core:fmt"
-	import "core:os"
-	import "core:hash"
-	import vk "vendor:vulkan"
-
-	import "../common"
-	import "../third_party/spirv_reflect"
 
 	//---------------------------------------------------------------------------//
 

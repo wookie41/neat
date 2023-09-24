@@ -1,16 +1,19 @@
 package renderer
 
+
+//---------------------------------------------------------------------------//
+
+import "core:hash"
+import "core:log"
+import "core:mem"
+
+import vk "vendor:vulkan"
+
+import "../common"
+
+//---------------------------------------------------------------------------//
+
 when USE_VULKAN_BACKEND {
-
-	//---------------------------------------------------------------------------//
-
-	import "core:log"
-	import "core:hash"
-	import "core:mem"
-
-	import vk "vendor:vulkan"
-
-	import "../common"
 
 	//---------------------------------------------------------------------------//
 
@@ -44,7 +47,7 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_init_pipeline_layouts :: proc() {
-		
+
 		// Init the cache
 		INTERNAL.descriptor_set_layout_cache = make(
 			map[u32]DescriptorSetLayoutCacheEntry,
@@ -136,11 +139,7 @@ when USE_VULKAN_BACKEND {
 			delete(bindings_per_set)
 		}
 
-		texture_name_by_slot := make(
-			map[u32]common.Name,
-			32,
-			G_RENDERER_ALLOCATORS.temp_allocator,
-		)
+		texture_name_by_slot := make(map[u32]common.Name, 32, G_RENDERER_ALLOCATORS.temp_allocator)
 		defer delete(texture_name_by_slot)
 
 		// Gather vertex shader descriptor info
@@ -228,8 +227,8 @@ when USE_VULKAN_BACKEND {
 		descriptor_set_layouts[1] = G_RENDERER.empty_descriptor_set_layout
 		descriptor_set_layouts[2] = G_RENDERER.empty_descriptor_set_layout
 
-		uses_bindless_array := .UsesBindlessArray in vert_shader.flags || .UsesBindlessArray in
-                         frag_shader.flags
+		uses_bindless_array :=
+			.UsesBindlessArray in vert_shader.flags || .UsesBindlessArray in frag_shader.flags
 		if uses_bindless_array {
 			descriptor_set_layouts[2] = VK_BINDLESS.bindless_descriptor_set_layout
 		}
@@ -249,7 +248,8 @@ when USE_VULKAN_BACKEND {
 					// Grab the descriptor set layout and increment ref count
 					cache_entry := &INTERNAL.descriptor_set_layout_cache[hash]
 					cache_entry.ref_count += 1
-					p_pipeline_layout.descriptor_set_layouts[descriptor_set_layout_idx] = cache_entry.descriptor_set_layout
+					p_pipeline_layout.descriptor_set_layouts[descriptor_set_layout_idx] =
+						cache_entry.descriptor_set_layout
 					descriptor_set_layouts[set] = cache_entry.descriptor_set_layout
 				} else {
 					create_info := vk.DescriptorSetLayoutCreateInfo {
@@ -263,7 +263,8 @@ when USE_VULKAN_BACKEND {
 						   &create_info,
 						   nil,
 						   &descriptor_set_layouts[set],
-					   ) != .SUCCESS {
+					   ) !=
+					   .SUCCESS {
 						log.warn("Failed to create descriptor set layout")
 						return false
 					}
@@ -273,7 +274,8 @@ when USE_VULKAN_BACKEND {
 						descriptor_set_layout = descriptor_set_layouts[set],
 					}
 
-					p_pipeline_layout.descriptor_set_layouts[descriptor_set_layout_idx] = descriptor_set_layouts[set]
+					p_pipeline_layout.descriptor_set_layouts[descriptor_set_layout_idx] =
+						descriptor_set_layouts[set]
 
 				}
 
@@ -293,7 +295,8 @@ when USE_VULKAN_BACKEND {
 				   &create_info,
 				   nil,
 				   &p_pipeline_layout.vk_pipeline_layout,
-			   ) != .SUCCESS {
+			   ) !=
+			   .SUCCESS {
 				log.warn("Failed to create pipeline layout")
 				return false
 			}
@@ -318,10 +321,7 @@ when USE_VULKAN_BACKEND {
 				delete_key(&INTERNAL.descriptor_set_layout_cache, hash)
 			}
 		}
-		delete(
-			p_pipeline_layout.descriptor_set_layouts,
-			G_RENDERER_ALLOCATORS.resource_allocator,
-		)
+		delete(p_pipeline_layout.descriptor_set_layouts, G_RENDERER_ALLOCATORS.resource_allocator)
 		delete(
 			p_pipeline_layout.descriptor_set_layout_hashes,
 			G_RENDERER_ALLOCATORS.resource_allocator,

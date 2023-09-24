@@ -15,7 +15,7 @@ VERTEX_BUFFER_SIZE :: 512 * common.MEGABYTE
 INDEX_BUFFER_SIZE :: 128 * common.MEGABYTE
 
 @(private = "file")
-INDEX_DATA_TYPE :: u16
+INDEX_DATA_TYPE :: u32
 @(private = "file")
 ZERO_VECTOR := glsl.vec4{0, 0, 0, 0}
 @(private = "file")

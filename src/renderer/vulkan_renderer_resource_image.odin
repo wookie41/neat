@@ -1,16 +1,18 @@
 package renderer
 
+
+//---------------------------------------------------------------------------//
+
 import "core:mem"
 import "core:strings"
+import "../common"
+import vma "../third_party/vma"
+import "core:log"
+import vk "vendor:vulkan"
+
+//---------------------------------------------------------------------------//
 
 when USE_VULKAN_BACKEND {
-
-	//---------------------------------------------------------------------------//
-
-	import "core:log"
-	import vk "vendor:vulkan"
-	import vma "../third_party/vma"
-	import "../common"
 
 	//---------------------------------------------------------------------------//
 
@@ -860,7 +862,7 @@ when USE_VULKAN_BACKEND {
 				G_RENDERER.device,
 				&allocate_info,
 				&VK_BINDLESS.bindless_descriptor_set,
-			)	
+			)
 			assert(res == .SUCCESS)
 		}
 	}

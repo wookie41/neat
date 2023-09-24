@@ -1,0 +1,16 @@
+[
+    {
+        "name": "AlbedoConstColor",
+        "flag": "FEAT_ALBEDO_CONST_COLOR",
+        "params": [
+            {"name": "color", "type": "float4"}
+        ]
+    },
+    {
+        "name": "AlbedoTex",
+        "flag": "FEAT_ALBEDO_TEX",
+        "params": [
+            {"name": "albedoTex", "type": "Texture2D"}
+        ]
+    }
+]

@@ -1,11 +1,13 @@
 package renderer
 
+//---------------------------------------------------------------------------//
+
+import "core:log"
+import vk "vendor:vulkan"
+
+//---------------------------------------------------------------------------//
+
 when USE_VULKAN_BACKEND {
-
-	//---------------------------------------------------------------------------//
-
-	import vk "vendor:vulkan"
-	import "core:log"
 
 	//---------------------------------------------------------------------------//
 
@@ -22,9 +24,8 @@ when USE_VULKAN_BACKEND {
 		graphics_command_pools: []vk.CommandPool,
 		transfer_command_pools: []vk.CommandPool,
 		compute_command_pools:  []vk.CommandPool,
-
-		transfer_cmd_buffers: []vk.CommandBuffer,
-		compute_cmd_buffers: []vk.CommandBuffer,
+		transfer_cmd_buffers:   []vk.CommandBuffer,
+		compute_cmd_buffers:    []vk.CommandBuffer,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -47,7 +48,7 @@ when USE_VULKAN_BACKEND {
 		) or_return
 
 		// Create command pools for transfer queue if the GPU has a dedicated one
-		if  .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 			INTERNAL.transfer_command_pools = make(
 				[]vk.CommandPool,
 				int(G_RENDERER.num_frames_in_flight),
@@ -67,7 +68,7 @@ when USE_VULKAN_BACKEND {
 		}
 
 		// Create command pools for compute queue if the GPU has a dedicated one
-		if  .DedicatedComputeQueue in G_RENDERER.gpu_device_flags {
+		if .DedicatedComputeQueue in G_RENDERER.gpu_device_flags {
 			INTERNAL.compute_command_pools = make(
 				[]vk.CommandPool,
 				int(G_RENDERER.num_frames_in_flight),
@@ -105,7 +106,8 @@ when USE_VULKAN_BACKEND {
 		}
 
 		for i in 0 ..< G_RENDERER.num_frames_in_flight {
-			if vk.CreateCommandPool(G_RENDERER.device, &pool_info, nil, &p_cmd_pools[i]) != .SUCCESS {
+			if vk.CreateCommandPool(G_RENDERER.device, &pool_info, nil, &p_cmd_pools[i]) !=
+			   .SUCCESS {
 				log.error("Couldn't create command pool")
 				return false
 			}
@@ -120,11 +122,8 @@ when USE_VULKAN_BACKEND {
 					commandBufferCount = 1,
 				}
 
-				if vk.AllocateCommandBuffers(
-					   G_RENDERER.device,
-					   &alloc_info,
-					   &p_cmd_buffers[i],
-				   ) != .SUCCESS {
+				if vk.AllocateCommandBuffers(G_RENDERER.device, &alloc_info, &p_cmd_buffers[i]) !=
+				   .SUCCESS {
 					return false
 				}
 
@@ -147,11 +146,8 @@ when USE_VULKAN_BACKEND {
 			commandBufferCount = 1,
 		}
 
-		if vk.AllocateCommandBuffers(
-			   G_RENDERER.device,
-			   &alloc_info,
-			   &p_cmd_buff.vk_cmd_buff,
-		   ) != .SUCCESS {
+		if vk.AllocateCommandBuffers(G_RENDERER.device, &alloc_info, &p_cmd_buff.vk_cmd_buff) !=
+		   .SUCCESS {
 			return false
 		}
 

@@ -1,12 +1,14 @@
 package renderer
 
+//---------------------------------------------------------------------------//
+
+import log "core:log"
+import os "core:os"
+import vk "vendor:vulkan"
+
+//---------------------------------------------------------------------------//
+
 when USE_VULKAN_BACKEND {
-
-	//---------------------------------------------------------------------------//
-
-	import vk "vendor:vulkan"
-	import os "core:os"
-	import log "core:log"
 
 	//---------------------------------------------------------------------------//
 
@@ -27,26 +29,26 @@ when USE_VULKAN_BACKEND {
 	VERTEX_ATTRIBUTES_PER_TYPE := map[VertexLayout][]vk.VertexInputAttributeDescription {
 		.Mesh = {
 			{
-				// Position
-				binding = 0,location = 0,
+				binding = 0,// Position
+				location = 0,
 				format = .R32G32B32_SFLOAT,
 				offset = u32(offset_of(MeshVertexLayout, position)),
 			},
 			{
-				// UV
-				binding = 0,location = 1,
+				binding = 0,// UV
+				location = 1,
 				format = .R32G32_SFLOAT,
 				offset = u32(offset_of(MeshVertexLayout, uv)),
 			},
 			{
-				// Normal
-				binding = 0,location = 2,
+				binding = 0,// Normal
+				location = 2,
 				format = .R32G32B32_SFLOAT,
 				offset = u32(offset_of(MeshVertexLayout, normal)),
 			},
 			{
-				// Tangent
-				binding = 0,location = 3,
+				binding = 0,// Tangent
+				location = 3,
 				format = .R32G32B32_SFLOAT,
 				offset = u32(offset_of(MeshVertexLayout, tangent)),
 			},
@@ -56,77 +58,79 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	INPUT_ASSEMBLY_PER_PRIMITIVE_TYPE := map[PrimitiveType]vk.PipelineInputAssemblyStateCreateInfo {
-		.TriangleList = {
-			sType = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-			topology = .TRIANGLE_LIST,
-		},
-	}
+	INPUT_ASSEMBLY_PER_PRIMITIVE_TYPE :=
+		map[PrimitiveType]vk.PipelineInputAssemblyStateCreateInfo {
+			.TriangleList = {
+				sType = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+				topology = .TRIANGLE_LIST,
+			},
+		}
 
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
 	RASTERIZER_STATE_PER_TYPE := map[RasterizerType]vk.PipelineRasterizationStateCreateInfo {
-		.Fill = {
-			sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-			polygonMode = .FILL,
-			lineWidth = 1.0,
-		},
-	}
+			.Fill = {
+				sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+				polygonMode = .FILL,
+				lineWidth = 1.0,
+			},
+		}
 
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	MULTISAMPLER_STATE_PER_SAMPLE_TYPE := map[MultisamplingType]vk.PipelineMultisampleStateCreateInfo {
-		._1 = {sType = .PIPELINE_MULTISAMPLE_STATE_CREATE_INFO, rasterizationSamples = {._1}},
-	}
+	MULTISAMPLER_STATE_PER_SAMPLE_TYPE :=
+		map[MultisamplingType]vk.PipelineMultisampleStateCreateInfo {
+			._1 = {sType = .PIPELINE_MULTISAMPLE_STATE_CREATE_INFO, rasterizationSamples = {._1}},
+		}
 
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
 	DEPTH_STENCIL_STATE_PER_TYPE := map[DepthStencilType]vk.PipelineDepthStencilStateCreateInfo {
-		.None = {
-			sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-			depthTestEnable = false,
-			depthWriteEnable = false,
-			depthCompareOp = .NEVER,
-			stencilTestEnable = false,
-		},
-		.DepthTestWrite = {
-			sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-			depthTestEnable = true,
-			depthWriteEnable = true,
-			depthCompareOp = .LESS,
-			minDepthBounds = 0,
-			maxDepthBounds = 1,
-			stencilTestEnable = false,
-		},
-		.DepthTestReadOnly = {
-			sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-			depthTestEnable = true,
-			depthWriteEnable = false,
-			depthCompareOp = .LESS,
-			minDepthBounds = 0,
-			maxDepthBounds = 1,
-			stencilTestEnable = false,
-		},
-	}
+			.None = {
+				sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+				depthTestEnable = false,
+				depthWriteEnable = false,
+				depthCompareOp = .NEVER,
+				stencilTestEnable = false,
+			},
+			.DepthTestWrite = {
+				sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+				depthTestEnable = true,
+				depthWriteEnable = true,
+				depthCompareOp = .LESS,
+				minDepthBounds = 0,
+				maxDepthBounds = 1,
+				stencilTestEnable = false,
+			},
+			.DepthTestReadOnly = {
+				sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+				depthTestEnable = true,
+				depthWriteEnable = false,
+				depthCompareOp = .LESS,
+				minDepthBounds = 0,
+				maxDepthBounds = 1,
+				stencilTestEnable = false,
+			},
+		}
 
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
 	COLOR_BLEND_PER_TYPE := map[ColorBlendType]vk.PipelineColorBlendAttachmentState {
-		.Default = {
-			colorWriteMask = {.R, .G, .B, .A},
-			blendEnable = false,
-			srcColorBlendFactor = .ONE,
-			dstColorBlendFactor = .ZERO,
-			colorBlendOp = .ADD,
-			srcAlphaBlendFactor = .ONE,
-			dstAlphaBlendFactor = .ZERO,
-			alphaBlendOp = .ADD,
-		},
-	}
+			.Default = {
+				colorWriteMask = {.R, .G, .B, .A},
+				blendEnable = false,
+				srcColorBlendFactor = .ONE,
+				dstColorBlendFactor = .ZERO,
+				colorBlendOp = .ADD,
+				srcAlphaBlendFactor = .ONE,
+				dstAlphaBlendFactor = .ZERO,
+				alphaBlendOp = .ADD,
+			},
+		}
 
 	//---------------------------------------------------------------------------//
 
@@ -178,12 +182,7 @@ when USE_VULKAN_BACKEND {
 			create_info.initialDataSize = len(pipeline_cache)
 		}
 
-		vk.CreatePipelineCache(
-			G_RENDERER.device,
-			&create_info,
-			nil,
-			&INTERNAL.vk_pipeline_cache,
-		)
+		vk.CreatePipelineCache(G_RENDERER.device, &create_info, nil, &INTERNAL.vk_pipeline_cache)
 	}
 
 	//---------------------------------------------------------------------------//
@@ -232,10 +231,7 @@ when USE_VULKAN_BACKEND {
 			pName = "main",
 		}
 
-		shader_stages := []vk.PipelineShaderStageCreateInfo{
-			vertex_stage_info,
-			fragment_stage_info,
-		}
+		shader_stages := []vk.PipelineShaderStageCreateInfo{vertex_stage_info, fragment_stage_info}
 
 		// Input assembly
 		input_assembly_state := INPUT_ASSEMBLY_PER_PRIMITIVE_TYPE[render_pass.desc.primitive_type]
@@ -256,7 +252,8 @@ when USE_VULKAN_BACKEND {
 		raster_state := RASTERIZER_STATE_PER_TYPE[render_pass.desc.resterizer_type]
 
 		// Multisampler
-		multisample_state := MULTISAMPLER_STATE_PER_SAMPLE_TYPE[render_pass.desc.multisampling_type]
+		multisample_state :=
+			MULTISAMPLER_STATE_PER_SAMPLE_TYPE[render_pass.desc.multisampling_type]
 
 		// Color attachments blending
 		color_blend_attachments := make(
@@ -359,20 +356,18 @@ when USE_VULKAN_BACKEND {
 			pMultisampleState   = &multisample_state,
 			pColorBlendState    = &color_blending_state,
 			pDepthStencilState  = &depth_stencil,
-			layout              = get_pipeline_layout(
-				p_pipeline.pipeline_layout_ref,
-			).vk_pipeline_layout,
+			layout              = get_pipeline_layout(p_pipeline.pipeline_layout_ref).vk_pipeline_layout,
 			pViewportState      = &viewport_state,
 		}
 
 		if res := vk.CreateGraphicsPipelines(
-			   G_RENDERER.device,
-			   0,
-			   1,
-			   &pipeline_info,
-			   nil,
-			   &p_pipeline.vk_pipeline,
-		   ); res != .SUCCESS {
+			G_RENDERER.device,
+			0,
+			1,
+			&pipeline_info,
+			nil,
+			&p_pipeline.vk_pipeline,
+		); res != .SUCCESS {
 			log.warnf("Couldn't create graphics pipeline: %s", res)
 			return false
 		}
@@ -402,9 +397,7 @@ when USE_VULKAN_BACKEND {
 		.ALL_COMMANDS,
 	}
 
-	backend_map_pipeline_stage :: proc(
-		p_stage: PipelineStageFlagBits,
-	) -> vk.PipelineStageFlag {
+	backend_map_pipeline_stage :: proc(p_stage: PipelineStageFlagBits) -> vk.PipelineStageFlag {
 		return vk_pipeline_stages_mapping[int(p_stage)]
 	}
 
@@ -441,9 +434,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	hash_pipeline_layout :: #force_inline proc(
-		p_pipeline_layout: ^PipelineLayoutResource,
-	) -> u32 {
+	hash_pipeline_layout :: #force_inline proc(p_pipeline_layout: ^PipelineLayoutResource) -> u32 {
 		vert_shader_hash := get_shader(p_pipeline_layout.desc.vert_shader_ref).hash
 		frag_shader_hash := get_shader(p_pipeline_layout.desc.vert_shader_ref).hash
 		return vert_shader_hash ~ frag_shader_hash
