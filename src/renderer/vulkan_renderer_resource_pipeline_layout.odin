@@ -28,7 +28,6 @@ when USE_VULKAN_BACKEND {
 		vk_pipeline_layout:           vk.PipelineLayout,
 	}
 
-
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
@@ -36,6 +35,7 @@ when USE_VULKAN_BACKEND {
 		ref_count:             u16,
 		descriptor_set_layout: vk.DescriptorSetLayout,
 	}
+
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")

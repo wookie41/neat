@@ -37,7 +37,7 @@ when USE_VULKAN_BACKEND {
 		.IndexBuffer          = .INDEX_BUFFER,
 		.VertexBuffer         = .VERTEX_BUFFER,
 		.StorageBuffer        = .STORAGE_BUFFER,
-		.DynamicStorageBuffer = .UNIFORM_BUFFER,
+		.DynamicStorageBuffer = .STORAGE_BUFFER,
 	}
 
 	//---------------------------------------------------------------------------//

@@ -63,7 +63,8 @@ when USE_VULKAN_BACKEND {
 				   G_RENDERER.device,
 				   &alloc_info,
 				   &INTERNAL.empty_descriptor_set,
-			   ) != .SUCCESS {
+			   ) !=
+			   .SUCCESS {
 
 				// @TODO Free the allocated pool 
 				return false
@@ -125,11 +126,14 @@ when USE_VULKAN_BACKEND {
 			descriptorPool     = INTERNAL.descriptor_pool,
 		}
 
-		return vk.AllocateDescriptorSets(
-			G_RENDERER.device,
-			&descriptor_set_alloc_info,
-			&out_bind_group.vk_descriptor_set,
-		) == .SUCCESS
+		return(
+			vk.AllocateDescriptorSets(
+				G_RENDERER.device,
+				&descriptor_set_alloc_info,
+				&out_bind_group.vk_descriptor_set,
+			) ==
+			.SUCCESS \
+		)
 	}
 
 	//---------------------------------------------------------------------------//
@@ -141,17 +145,14 @@ when USE_VULKAN_BACKEND {
 		p_bindings: []BindGroupBinding,
 	) {
 		dynamic_offsets_count := 0
+
 		// Determine the number of dynamic offsets
 		for binding in p_bindings {
 			dynamic_offsets_count += len(binding.dynamic_offsets)
 		}
 
 		// Create a joint dynamic offsets array
-		dynamic_offsets := make(
-			[]u32,
-			dynamic_offsets_count,
-			G_RENDERER_ALLOCATORS.temp_allocator,
-		)
+		dynamic_offsets := make([]u32, dynamic_offsets_count, G_RENDERER_ALLOCATORS.temp_allocator)
 		defer delete(dynamic_offsets, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		{
@@ -296,14 +297,16 @@ when USE_VULKAN_BACKEND {
 				image := get_image(image_update.image_ref)
 
 				if .AddressSubresource in image_update.flags {
-					image_writes[image_info_idx].imageView = image.per_mip_vk_view[image_update.mip]
+					image_writes[image_info_idx].imageView =
+						image.per_mip_vk_view[image_update.mip]
 				} else {
 					image_writes[image_info_idx].imageView = image.all_mips_vk_view
 				}
 
 				image_writes[image_info_idx].imageView = image.per_mip_vk_view[image_update.mip]
 
-				image_writes[image_info_idx].imageLayout = image.vk_layout_per_mip[image_update.mip]
+				image_writes[image_info_idx].imageLayout =
+					image.vk_layout_per_mip[image_update.mip]
 
 				descriptor_writes[write_idx].sType = .WRITE_DESCRIPTOR_SET
 				descriptor_writes[write_idx].descriptorCount = 1

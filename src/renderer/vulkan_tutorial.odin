@@ -155,7 +155,6 @@ vt_pre_render :: proc() {
 		cube_draw.vertex_buffer_ref = MESH_INTERNAL.vertex_buffer_ref
 		cube_draw.index_type = .UInt32
 		draw_stream_reset(&G_VT.draw_stream)
-
 	}
 }
 

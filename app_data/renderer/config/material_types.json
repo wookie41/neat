@@ -1,6 +1,7 @@
 [
     {
         "name": "TestMaterial",
+        "shadingModel" : "DefaultLit",
         "features": [
             "AlbedoConstColor",
             "NormalTexture"

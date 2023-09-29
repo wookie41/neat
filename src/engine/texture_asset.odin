@@ -97,7 +97,7 @@ INTERNAL: struct {
 
 @(private = "file")
 TinyDDSUserData :: struct {
-	temp_arena:         ^TempArena,
+	temp_arena:         ^common.TempArena,
 	texture_asset_file: ^libc.FILE,
 }
 
@@ -251,9 +251,9 @@ texture_asset_init :: proc() {
 	)
 	G_TEXTURE_ASSET_ARRAY = make([]TextureAsset, MAX_TEXTURE_ASSETS, G_ALLOCATORS.asset_allocator)
 
-	temp_arena: TempArena
-	temp_arena_init(&temp_arena)
-	defer temp_arena_delete(temp_arena)
+	temp_arena: common.TempArena
+	common.temp_arena_init(&temp_arena)
+	defer common.temp_arena_delete(temp_arena)
 
 	// Make sure that the texture database file is created
 	if os.exists(G_TEXTURE_DB_PATH) == false {
@@ -311,9 +311,9 @@ texture_asset_save_db :: proc() {
 
 texture_asset_import :: proc(p_options: TextureImportOptions) -> TextureImportResult {
 
-	temp_arena: TempArena
-	temp_arena_init(&temp_arena)
-	defer temp_arena_delete(temp_arena)
+	temp_arena: common.TempArena
+	common.temp_arena_init(&temp_arena)
+	defer common.temp_arena_delete(temp_arena)
 
 	// Check if the texture already exits
 	texture_name := filepath.short_stem(p_options.file_path)
@@ -401,9 +401,9 @@ texture_asset_load :: proc(
 	p_texture_name: common.Name,
 ) -> TextureAssetRef {
 
-	temp_arena: TempArena
-	temp_arena_init(&temp_arena)
-	defer temp_arena_delete(temp_arena)
+	temp_arena: common.TempArena
+	common.temp_arena_init(&temp_arena)
+	defer common.temp_arena_delete(temp_arena)
 
 	// Open the texture metadata file
 

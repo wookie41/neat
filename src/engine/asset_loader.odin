@@ -78,9 +78,9 @@ asset_load_from_directory :: proc(
 	p_asset_data_allocator: mem.Allocator,
 ) -> AssetLoadResult {
 
-	temp_arena: TempArena
-	temp_arena_init(&temp_arena)
-	defer temp_arena_delete(temp_arena)
+	temp_arena: common.TempArena
+	common.temp_arena_init(&temp_arena)
+	defer common.temp_arena_delete(temp_arena)
 
 	asset_path := asset_loader_build_full_path(p_load_request, temp_arena.allocator)
 

@@ -4,7 +4,9 @@ package renderer
 //---------------------------------------------------------------------------//
 
 import "../common"
+
 import "core:c"
+import "core:container/bit_array"
 import "core:encoding/json"
 import "core:log"
 import "core:mem"
@@ -17,8 +19,14 @@ import "core:strings"
 @(private = "file")
 MATERIAL_PARAMS_BUFFER_SIZE :: 8 * common.MEGABYTE
 
+// @TODO 
+// Right now we just allocate a constant number, but some material types 
+// will be more frequently used than others, so we should handle it more smartly
+// by dynamically resizing the material type buffer section when more instances come
+// and go. This should be faily easy, as we always just bind a single material buffer
+// with a per material type offset and access the material with an index
 @(private = "file")
-INITIAL_MATERIAL_BUFFER_ENTRIES_COUNT :: 64
+MAX_MATERIAL_INSTANCES_PER_MATERIAL_TYPE :: 512
 
 //---------------------------------------------------------------------------//
 
@@ -26,6 +34,7 @@ INITIAL_MATERIAL_BUFFER_ENTRIES_COUNT :: 64
 INTERNAL: struct {
 	material_params_buffer_ref: BufferRef,
 	material_feature_by_name:   map[common.Name]MaterialFeature,
+	material_buffer_bind_group_ref: BindGroupRef,
 }
 
 //---------------------------------------------------------------------------//
@@ -46,16 +55,8 @@ G_MATERIAL_FEATURE_TYPE_MAPPING := map[string]MaterialFeatureParamType {
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-G_MATERIAL_FEATURE_TYPE_SIZE_MAPPING := map[MaterialFeatureParamType]u8 {
-	"float1"    = .Float1,
-	"float2"    = .Float2,
-	"float3"    = .Float3,
-	"float4"    = .Float4,
-	"int1"      = .Int1,
-	"int2"      = .Int2,
-	"int3"      = .Int3,
-	"int4"      = .Int4,
-	"Texture2D" = .Texture2D,
+G_MATERIAL_TYPE_SHADING_MODEL_MAPPING := map[string]MaterialTypeShadingModel {
+	"DefaultLit" = .DefaultLit,
 }
 
 //---------------------------------------------------------------------------//
@@ -111,14 +112,26 @@ MaterialFeatureParam :: struct {
 @(private = "file")
 MaterialTypeJSONEntry :: struct {
 	name:            string,
+	shading_model:   string `json:"shadingModel"`,
 	features:        []string,
 	material_passes: []string `json:"materialPasses"`,
 }
 
 //---------------------------------------------------------------------------//
 
+// The shading model is used to determine in which render passes the 
+// material passes for this materials should be placed in
+// eg. DefaultLit will go through the deferred path for a deferred renderer 
+// but transparent will be placed in the forward render pass
+MaterialTypeShadingModel :: enum {
+	DefaultLit,
+}
+
+//---------------------------------------------------------------------------//
+
 MaterialTypeDesc :: struct {
 	name:                 common.Name,
+	shading_model:        MaterialTypeShadingModel,
 	features:             []common.Name,
 	material_passes_refs: []MaterialPassRef,
 }
@@ -126,12 +139,11 @@ MaterialTypeDesc :: struct {
 //---------------------------------------------------------------------------//
 
 MaterialTypeResource :: struct {
-	desc:                           MaterialTypeDesc,
-	next_material_instance_idx:     u32,
-	max_material_instance_entries:  u32,
-	free_material_instance_indices: [dynamic]u32,
-	params_size_in_bytes:           u16,
-	offset_per_param:               map[common.Name]u16,
+	desc:                               MaterialTypeDesc,
+	params_size_in_bytes:               u16,
+	free_material_buffer_entries_array: bit_array.Bit_Array,
+	params_buffer_suballocation:        BufferSuballocation,
+	offset_per_param:                   map[common.Name]u16,
 }
 
 //---------------------------------------------------------------------------//
@@ -154,14 +166,20 @@ G_MATERIAL_TYPE_RESOURCE_ARRAY: []MaterialTypeResource
 //---------------------------------------------------------------------------//
 
 init_material_types :: proc() -> bool {
+	INTERNAL.material_buffer_bind_group_ref = allocate_bind_group_ref(common.make_name("MaterialBufferBindGroup"))
+	assert(0)
+	{
+		bind_group := get_bind_group(INTERNAL.material_buffer_bind_group_ref)
+		BindGroupBinding{}
+	}
 
 	// Allocate memory for the material types
-	G_MATERIAL_REF_ARRAY = common.ref_array_create(
+	G_MATERIAL_TYPE_REF_ARRAY = common.ref_array_create(
 		MaterialTypeResource,
 		MAX_MATERIAL_TYPES,
 		G_RENDERER_ALLOCATORS.main_allocator,
 	)
-	G_MATERIAL_RESOURCE_ARRAY = make(
+	G_MATERIAL_TYPE_RESOURCE_ARRAY = make(
 		[]MaterialTypeResource,
 		MAX_MATERIAL_TYPES,
 		G_RENDERER_ALLOCATORS.resource_allocator,
@@ -176,12 +194,12 @@ init_material_types :: proc() -> bool {
 
 	material_params_buffer.desc.flags = {.Dedicated}
 	material_params_buffer.desc.size = MATERIAL_PARAMS_BUFFER_SIZE
-	material_params_buffer.desc.usage = {.StorageBuffer}
+	material_params_buffer.desc.usage = {.DynamicStorageBuffer}
 
 	create_buffer(INTERNAL.material_params_buffer_ref) or_return
 
 	load_material_features_from_config_file() or_return
-	load_materials_from_config_file() or_return
+	load_material_types_from_config_file() or_return
 
 	return true
 }
@@ -195,20 +213,16 @@ deinit_material_types :: proc() {
 //---------------------------------------------------------------------------//
 
 create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) {
-	temp_arena: TempArena
-	temp_arena_init(&temp_arena)
-	defer temp_arena_delete(temp_arena)
+	temp_arena: common.TempArena
+	common.temp_arena_init(&temp_arena)
+	defer common.temp_arena_delete(temp_arena)
+	defer if result == false {
+		common.ref_free(&G_MATERIAL_TYPE_REF_ARRAY, p_material_ref)
+	}
 
 	material_type := get_material_type(p_material_ref)
 
-	material_type.next_material_instance_idx = 0
-	material_type.max_material_instance_entries = INITIAL_MATERIAL_BUFFER_ENTRIES_COUNT
-	material_type.free_material_instance_indices = make(
-		[dynamic]u32,
-		G_RENDERER_ALLOCATORS.resource_allocator,
-	)
-
-	// Gather feature strings, calculate size for params
+	// Gather feature strings, calculate size for the paramteres
 	material_feature_defines := []string{}
 	material_type.params_size_in_bytes = 0
 
@@ -220,20 +234,22 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 		)
 	}
 
-	offset_per_param := make(map[common.Name]u16, temp_arena.allocator)
+	offset_per_param := make(map[common.Name]u16, 32, temp_arena.allocator)
+
+	// Iterate over all features, saving the offset for each param and create an unique, per param name
 	for feature_name, i in material_type.desc.features {
 
-		feature_name_str := common.get_string(feature_name)
-		feature := INTERNAL.material_feature_by_name[feature_name_str]
+		feature := INTERNAL.material_feature_by_name[feature_name]
 		material_feature_defines[i] = common.get_string(feature.flag)
 
 		for param in feature.params {
 
-			// Create a joined name by concatenating the feature name and param name, to avoid collisions
+			// Create a joined name by concatenating the feature name and param name to avoid collisions
+			feature_name_str := common.get_string(feature_name)
 			param_name_full := strings.join(
 				{feature_name_str, common.get_string(param.name)},
 				".",
-				temp_area.allocator,
+				temp_arena.allocator,
 			)
 			param_name_full = strings.to_lower(param_name_full, temp_arena.allocator)
 
@@ -242,29 +258,44 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 
 			switch param.type {
 			case .Float1:
-				material_type.params_size_in_bytes += sizeof(f32)
+				material_type.params_size_in_bytes += size_of(f32)
 			case .Float2:
-				material_type.params_size_in_bytes += sizeof(f32) * 2
+				material_type.params_size_in_bytes += size_of(f32) * 2
 			case .Float3:
-				material_type.params_size_in_bytes += sizeof(f32) * 3
+				material_type.params_size_in_bytes += size_of(f32) * 3
 			case .Float4:
-				material_type.params_size_in_bytes += sizeof(f32) * 4
+				material_type.params_size_in_bytes += size_of(f32) * 4
 			case .Int1:
-				material_type.params_size_in_bytes += sizeof(u32)
+				material_type.params_size_in_bytes += size_of(u32)
 			case .Int2:
-				material_type.params_size_in_bytes += sizeof(u32) * 2
+				material_type.params_size_in_bytes += size_of(u32) * 2
 			case .Int3:
-				material_type.params_size_in_bytes += sizeof(u32) * 3
+				material_type.params_size_in_bytes += size_of(u32) * 3
 			case .Int4:
-				material_type.params_size_in_bytes += sizeof(u32) * 4
+				material_type.params_size_in_bytes += size_of(u32) * 4
 			case .Texture2D:
-				material_type.params_size_in_bytes += sizeof(u32)
+				material_type.params_size_in_bytes += size_of(u32)
 			}
 		}
 	}
 
+	// Suballocate the params buffer for this material type
+	// to store material instance data
+	{
+		success, suballocation := buffer_allocate(
+			INTERNAL.material_params_buffer_ref,
+			u32(material_type.params_size_in_bytes * MAX_MATERIAL_INSTANCES_PER_MATERIAL_TYPE),
+		)
+
+		if success == false {
+			return false
+		}
+
+		material_type.params_buffer_suballocation = suballocation
+	}
+
 	// Now that we have the features for the material type, it's time 
-	// to compile the shaders for each material pass this material type is a part of
+	// to compile the shaders for each material passes that use this material
 	for material_pass_ref in material_type.desc.material_passes_refs {
 		material_pass := get_material_pass(material_pass_ref)
 
@@ -273,7 +304,7 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 			{material_feature_defines, material_pass.desc.additional_feature_names},
 			temp_arena.allocator,
 		)
-		
+
 		material_pass.vertex_shader_ref = allocate_shader_ref(material_pass.desc.name)
 		material_pass.fragment_shader_ref = allocate_shader_ref(material_pass.desc.name)
 
@@ -283,7 +314,7 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 		vertex_shader.desc.features = shader_defines
 		vertex_shader.desc.file_path = material_pass.desc.vertex_shader_path
 		vertex_shader.desc.type = .VERTEX
-		
+
 		fragment_shader.desc.features = shader_defines
 		fragment_shader.desc.file_path = material_pass.desc.fragment_shader_path
 		fragment_shader.desc.type = .FRAGMENT
@@ -291,8 +322,8 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 		// @TODO error handling
 		success := create_shader(material_pass.vertex_shader_ref)
 		assert(success)
-		
-		shader_created_successfully =create_shader(material_pass.vertex_shader_ref)
+
+		shader_created_successfully = create_shader(material_pass.vertex_shader_ref)
 		assert(success)
 
 		// Create the PSO
@@ -308,8 +339,17 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 		assert(success)
 	}
 
+	// Initialize the bitarray the will allow to quickly lookup free entries
+	bit_array.init(
+		&material_type.free_material_buffer_entries_array,
+		MAX_MATERIAL_INSTANCES_PER_MATERIAL_TYPE,
+		0,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
 
-	allocate_material_params_buffer(material)
+	for i in 0 ..< MAX_MATERIAL_INSTANCES_PER_MATERIAL_TYPE {
+		bit_array.unsafe_set(&material_type.free_material_buffer_entries_array, i)
+	}
 
 	return true
 }
@@ -320,14 +360,14 @@ allocate_material_type_ref :: proc(p_name: common.Name) -> MaterialTypeRef {
 	ref := MaterialTypeRef(
 		common.ref_create(MaterialTypeResource, &G_MATERIAL_TYPE_REF_ARRAY, p_name),
 	)
-	get_material(ref).desc.name = p_name
+	get_material_type(ref).desc.name = p_name
 	return ref
 }
 
 //---------------------------------------------------------------------------//
 
 get_material_type :: proc(p_ref: MaterialTypeRef) -> ^MaterialTypeResource {
-	return &G_MATERIAL_RESOURCE_ARRAY[common.ref_get_idx(&G_MATERIAL_REF_ARRAY, p_ref)]
+	return &G_MATERIAL_TYPE_RESOURCE_ARRAY[common.ref_get_idx(&G_MATERIAL_TYPE_REF_ARRAY, p_ref)]
 }
 
 //--------------------------------------------------------------------------//
@@ -335,10 +375,10 @@ get_material_type :: proc(p_ref: MaterialTypeRef) -> ^MaterialTypeResource {
 destroy_material_type :: proc(p_ref: MaterialTypeRef) {
 	material_type := get_material_type(p_ref)
 
-	delete(material_type.free_material_instance_indices)
+	bit_array.destroy(&material_type.free_material_buffer_entries_array)
 
 	if len(material_type.offset_per_param) > 0 {
-		delete(material_type.offset_per_param, G_RENDERER_ALLOCATORS.resource_allocator)
+		delete(material_type.offset_per_param)
 	}
 
 	if len(material_type.desc.features) > 0 {
@@ -346,8 +386,12 @@ destroy_material_type :: proc(p_ref: MaterialTypeRef) {
 	}
 
 	delete(material_type.desc.material_passes_refs, G_RENDERER_ALLOCATORS.resource_allocator)
+	buffer_free(
+		INTERNAL.material_params_buffer_ref,
+		material_type.params_buffer_suballocation.vma_allocation,
+	)
 
-	common.ref_free(&G_MATERIAL_REF_ARRAY, p_ref)
+	common.ref_free(&G_MATERIAL_TYPE_REF_ARRAY, p_ref)
 }
 
 //--------------------------------------------------------------------------//
@@ -413,7 +457,7 @@ load_material_features_from_config_file :: proc() -> bool {
 //--------------------------------------------------------------------------//
 
 @(private = "file")
-load_materials_from_config_file :: proc() -> bool {
+load_material_types_from_config_file :: proc() -> bool {
 	context.allocator = G_RENDERER_ALLOCATORS.temp_allocator
 	defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
 
@@ -438,6 +482,11 @@ load_materials_from_config_file :: proc() -> bool {
 		)
 		material_type := get_material_type(material_type_ref)
 		material_type.desc.name = common.make_name(material_type_json_entry.name)
+
+		// Shading model
+		assert(material_type_json_entry.shading_model in G_MATERIAL_TYPE_SHADING_MODEL_MAPPING)
+		material_type.desc.shading_model =
+			G_MATERIAL_TYPE_SHADING_MODEL_MAPPING[material_type_json_entry.shading_model]
 
 		// Features
 		if len(material_type_json_entry.features) > 0 {
@@ -483,130 +532,34 @@ load_materials_from_config_file :: proc() -> bool {
 
 //--------------------------------------------------------------------------//
 
-@(private = "file")
-allocate_material_params_buffer :: proc(
-	p_material: ^MaterialResource,
-) -> (
-	bool,
-	BufferSuballocation,
-) {
+material_type_allocate_params_entry :: proc(p_material_type_ref: MaterialTypeRef) -> (u32, ^byte) {
 
-	// Calculate how many int params we have
-	num_int_records := 0
-	num_components := 0
-
-	for int_param in p_material.desc.int_params {
-		num_components += int(int_param.num_components)
-		if num_components >= 4 {
-			num_int_records += 1
-			num_components = num_components % 4
-		}
-	}
-
-	// Calculate how many float params we have
-	num_float_records := 0
-	num_components = 0
-
-	for float_param in p_material.desc.float_params {
-		num_components += int(float_param.num_components)
-		if num_components >= 4 {
-			num_float_records += 1
-			num_components = num_components % 4
-		}
-	}
-
-	// Calculate how many textureparams we have
-	num_texture_records := 0
-	num_components = 0
-
-	for texture_param in p_material.desc.texture_params {
-		num_components += 1
-		if num_components >= 4 {
-			num_texture_records += 1
-			num_components = num_components % 4
-		}
-	}
-
-	num_records := num_int_records + num_float_records + num_texture_records
-	if num_records == 0 {
-		return true, {}
-	}
-
-	p_material.material_buffer_entry_size_in_bytes =
-		u32(
-			num_float_records * size_of(f32) +
-			num_int_records * size_of(u32) +
-			num_texture_records * size_of(u32),
-		) *
-		4
-
-	initial_material_buffer_size :=
-		p_material.material_buffer_entry_size_in_bytes * INITIAL_MATERIAL_BUFFER_ENTRIES_COUNT
-
-	// Suballocate a chunk of the material buffer 
-	// where we will store material instance data
-	success, suballocation := buffer_allocate(
-		INTERNAL.material_params_buffer_ref,
-		u32(initial_material_buffer_size),
-	)
-
-	if success == false {
-		return false, {}
-	}
-
-	p_material.float_params_offset = u32(num_int_records * size_of(u32) * 4)
-
-	return true, suballocation
-}
-
-//--------------------------------------------------------------------------//
-
-// Allocates an entry in the material buffer. Grows the buffer it the entry cannot 
-// fit into the current buffer anymore.
-material_allocate_entry :: proc(p_material_ref: MaterialTypeRef) -> (u32, ^byte) {
-
-	material := get_material(p_material_ref)
+	material_type := get_material_type(p_material_type_ref)
 	material_buffer := get_buffer(INTERNAL.material_params_buffer_ref)
 
 	// Check if we have some free entries in the free array 
-	if len(material.free_material_instance_indices) > 0 {
-		entry_idx := pop(&material.free_material_instance_indices)
-		entry_ptr := mem.ptr_offset(
-			material_buffer.mapped_ptr,
-			material.params_buffer.offset +
-			entry_idx * material.material_buffer_entry_size_in_bytes,
-		)
-
-		return entry_idx, entry_ptr
+	it := bit_array.make_iterator(&material_type.free_material_buffer_entries_array)
+	free_entry_idx, has_free_entry := bit_array.iterate_by_set(&it)
+	if !has_free_entry {
+		return 0, nil
 	}
 
-	if material.next_material_instance_idx >= material.max_material_instance_entries {
-		// @TODO grow the buffer and copy all of the data currently in there 
-		// to a new material, preserving the indexes for current material instances
-		assert(false)
-	}
-
-	entry_idx := material.next_material_instance_idx
-	material.next_material_instance_idx += 1
+	bit_array.unset(&material_type.free_material_buffer_entries_array, free_entry_idx)
 
 	entry_ptr := mem.ptr_offset(
 		material_buffer.mapped_ptr,
-		material.params_buffer.offset + entry_idx * material.material_buffer_entry_size_in_bytes,
+		material_type.params_buffer_suballocation.offset +
+		u32(free_entry_idx * material_type.params_size_in_bytes),
 	)
 
-	return entry_idx, entry_ptr
+	return free_entry_idx, entry_ptr
 }
 
 //--------------------------------------------------------------------------//
 
-material_free_entry :: proc(p_material_ref: MaterialTypeRef, p_entry_idx: u32) {
-
-	// @TODO shrink the buffer if less than half of the entries are used
-
-	material := get_material(p_material_ref)
-
-	append(&material.free_material_instance_indices, p_entry_idx)
-
+material_type_free_params_entry :: proc(p_material_type_ref: MaterialTypeRef, p_entry_idx: u32) {
+	material_type := get_material_type(p_material_type_ref)
+	bit_array.set(&material_type.free_material_buffer_entries_array, p_entry_idx)
 	return
 }
 

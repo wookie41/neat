@@ -9,16 +9,6 @@ struct VSOutput {
     [[vk::location(0)]] float2 uv        : TEXCOORD0;
 };
 
-struct PerView
-{
-    float4x4 model;
-    float4x4 view;
-    float4x4 proj;
-};
-
-[[vk::binding(0, 1)]]
-ConstantBuffer<PerView> gPerView_Dynamic;
-
 float4 main(in VSInput pVertexInput, out VSOutput pVertexOutput) : SV_Position {
     pVertexOutput.uv = pVertexInput.uv;
     return mul(gPerView_Dynamic.proj, 

@@ -1,13 +1,13 @@
 [
     {
         "name": "TestMaterialPass",
-        "vertexShader": "base.vert",
+        "vertexShaderPatg": "base.vert.hlsl",
         "fragmentShaderPath": "base.frag.hlsl",
         "renderPass": "TestRenderPass"
     },
     {
         "name": "TestMaterialPassPrePass",
-        "vertexShader": "base.vert",
+        "vertexShaderPath": "base.vert.hlsl",
         "fragmentShaderPath": "prepass.frag.hlsl",
         "renderPass": "TestRenderPass",
         "additionalFeatureNames": [

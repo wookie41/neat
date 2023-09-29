@@ -2,8 +2,8 @@ package renderer
 
 //---------------------------------------------------------------------------//
 
-import "core:mem"
 import "core:log"
+import "core:mem"
 
 import "../common"
 
@@ -36,7 +36,7 @@ MAX_BIND_GROUPS :: #config(MAX_PIPELINES, 1024)
 MAX_RENDER_TASKS :: #config(MAX_RENDER_TASKS, 64)
 MAX_MATERIAL_TYPES :: #config(MAX_MATERIAL_TYPES, 64)
 MAX_MATERIAL_PASSES :: #config(MAX_MATERIAL_PASSES, 256)
-MAX_MATERIALS :: #config(MAX_MATERIALS, 2048)
+MAX_MATERIAL_INSTANCES :: #config(MAX_MATERIAL_INSTANCES, 2048)
 MAX_MESHES :: #config(MAX_MESHES, 1024)
 MAX_MESH_INSTANCES :: #config(MAX_MESHES, 4096)
 
@@ -87,6 +87,10 @@ G_RENDERER_ALLOCATORS: struct {
 	resource_allocator:         mem.Allocator,
 	frame_arena:                mem.Arena,
 	frame_allocator:            mem.Allocator,
+
+	// Stack used to sub-allocate scratch arenas from that are used within a function scope 
+	temp_arenas_stack:          mem.Stack,
+	temp_arenas_allocator:      mem.Allocator,
 }
 
 @(private)
@@ -139,9 +143,7 @@ init :: proc(p_options: InitOptions) -> bool {
 		&G_RENDERER_ALLOCATORS.frame_arena,
 		make([]byte, common.MEGABYTE * 8, G_RENDERER_ALLOCATORS.main_allocator),
 	)
-	G_RENDERER_ALLOCATORS.frame_allocator = mem.arena_allocator(
-		&G_RENDERER_ALLOCATORS.frame_arena,
-	)
+	G_RENDERER_ALLOCATORS.frame_allocator = mem.arena_allocator(&G_RENDERER_ALLOCATORS.frame_arena)
 
 	// Names allocator
 	mem.scratch_allocator_init(
@@ -296,19 +298,13 @@ update :: proc(p_dt: f32) {
 		delete(g_created_mesh_refs)
 		delete(g_destroyed_mesh_refs)
 
-		g_created_mesh_refs = make(
-			[dynamic]MeshRef,
-			G_RENDERER_ALLOCATORS.frame_allocator,
-		)
+		g_created_mesh_refs = make([dynamic]MeshRef, G_RENDERER_ALLOCATORS.frame_allocator)
 
 		for mesh_ref in g_destroyed_mesh_refs {
 			free_mesh_ref(mesh_ref)
 		}
 
-		g_destroyed_mesh_refs = make(
-			[dynamic]MeshRef,
-			G_RENDERER_ALLOCATORS.frame_allocator,
-		)
+		g_destroyed_mesh_refs = make([dynamic]MeshRef, G_RENDERER_ALLOCATORS.frame_allocator)
 	}
 
 	advance_frame_idx()
