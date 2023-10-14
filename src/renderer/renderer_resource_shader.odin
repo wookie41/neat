@@ -40,19 +40,21 @@ ShaderJSONEntry :: struct {
 
 ShaderDesc :: struct {
 	name:      common.Name,
-	file_path: string,
-	type:      ShaderType,
+	file_path: common.Name,
+	stage:      ShaderStage,
 	features:  []string,
 }
 
 //---------------------------------------------------------------------------//
 
 @(private)
-ShaderType :: enum u8 {
+ShaderStage :: enum u8 {
 	VERTEX,
 	FRAGMENT,
 	COMPUTE,
 }
+
+ShaderStageFlags :: distinct bit_set[ShaderStage;u8]
 
 //---------------------------------------------------------------------------//
 
@@ -134,7 +136,7 @@ init_shaders :: proc() -> bool {
 		name := common.create_name(entry.name)
 		shader_ref := allocate_shader_ref(name)
 		shader := get_shader(shader_ref)
-		shader.desc.file_path = entry.path
+		shader.desc.file_path = common.create_name(entry.path)
 		shader.desc.features = slice.clone(
 			entry.features,
 			G_RENDERER_ALLOCATORS.resource_allocator,
@@ -148,11 +150,11 @@ init_shaders :: proc() -> bool {
 		}
 
 		if strings.has_suffix(entry.name, ".vert") {
-			shader.desc.type = .VERTEX
+			shader.desc.stage = .VERTEX
 		} else if strings.has_suffix(entry.name, ".frag") {
-			shader.desc.type = .FRAGMENT
+			shader.desc.stage = .FRAGMENT
 		} else if strings.has_suffix(entry.name, ".comp") {
-			shader.desc.type = .COMPUTE
+			shader.desc.stage = .COMPUTE
 		} else {
 			log.warnf("Unknown shader type %s...", entry.name)
 			common.ref_free(&G_SHADER_REF_ARRAY, shader_ref)
@@ -312,7 +314,7 @@ create_shader_permutation :: proc(
 
 @(private = "file")
 calculate_hash_for_shader :: proc(p_shader_desc: ^ShaderDesc) -> u32 {
-	h := hash.crc32(transmute([]u8)p_shader_desc.file_path)
+	h := hash.crc32(transmute([]u8)common.get_string(p_shader_desc.file_path))
 	return h ~ common.hash_string_array(p_shader_desc.features)
 }
 

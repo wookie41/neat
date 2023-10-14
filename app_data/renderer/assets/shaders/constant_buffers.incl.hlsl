@@ -6,4 +6,4 @@ struct PerView
 };
 
 [[vk::binding(0, 1)]]
-ConstantBuffer<PerView> uPerView_Dynamic;
+ConstantBuffer<PerView> uPerView;

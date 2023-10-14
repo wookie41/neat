@@ -12,8 +12,7 @@ when USE_VULKAN_BACKEND {
 
 	@(private = "file")
 	INTERNAL: struct {
-		descriptor_pool:      vk.DescriptorPool,
-		empty_descriptor_set: vk.DescriptorSet,
+		descriptor_pool: vk.DescriptorPool,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -29,6 +28,7 @@ when USE_VULKAN_BACKEND {
 		// Create descriptor pools
 		{
 			pool_sizes := []vk.DescriptorPoolSize{
+				{type = .SAMPLER, descriptorCount = len(SamplerType)},
 				{type = .STORAGE_IMAGE, descriptorCount = 1 << 15},
 				{type = .UNIFORM_BUFFER, descriptorCount = 1 << 15},
 				{type = .UNIFORM_BUFFER_DYNAMIC, descriptorCount = 1 << 15},
@@ -50,87 +50,32 @@ when USE_VULKAN_BACKEND {
 				&INTERNAL.descriptor_pool,
 			)
 		}
-
-		// Create an empty descriptor set
-		{
-			alloc_info := vk.DescriptorSetAllocateInfo {
-				sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
-				descriptorPool     = INTERNAL.descriptor_pool,
-				descriptorSetCount = 1,
-				pSetLayouts        = &G_RENDERER.empty_descriptor_set_layout,
-			}
-			if vk.AllocateDescriptorSets(
-				   G_RENDERER.device,
-				   &alloc_info,
-				   &INTERNAL.empty_descriptor_set,
-			   ) !=
-			   .SUCCESS {
-
-				// @TODO Free the allocated pool 
-				return false
-			}
-		}
-
-		return true
-	}
-
-	//---------------------------------------------------------------------------//
-
-	backend_create_bind_groups :: proc(
-		p_pipeline_layout_ref: PipelineLayoutRef,
-		p_pipeline_layout: ^PipelineLayoutResource,
-		out_bind_group_refs: []BindGroupRef,
-	) -> bool {
-
-		descriptor_set_alloc_info := vk.DescriptorSetAllocateInfo {
-			sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
-			pSetLayouts        = &p_pipeline_layout.descriptor_set_layouts[0],
-			descriptorSetCount = u32(len(p_pipeline_layout.descriptor_set_layouts)),
-			descriptorPool     = INTERNAL.descriptor_pool,
-		}
-		descriptor_sets := make(
-			[]vk.DescriptorSet,
-			descriptor_set_alloc_info.descriptorSetCount,
-			G_RENDERER_ALLOCATORS.temp_allocator,
-		)
-		defer delete(descriptor_sets, G_RENDERER_ALLOCATORS.temp_allocator)
-
-		res := vk.AllocateDescriptorSets(
-			G_RENDERER.device,
-			&descriptor_set_alloc_info,
-			raw_data(descriptor_sets),
-		)
-		assert(res == .SUCCESS) // @TODO
-
-		for descriptor_set, i in descriptor_sets {
-			bind_group := get_bind_group(out_bind_group_refs[i])
-			bind_group.vk_descriptor_set = descriptor_set
-		}
-
 		return true
 	}
 
 	//---------------------------------------------------------------------------//
 
 	backend_create_bind_group :: proc(
-		p_pipeline_layout_ref: PipelineLayoutRef,
-		p_pipeline_layout: ^PipelineLayoutResource,
-		p_bind_group_idx: u32,
-		out_bind_group: ^BindGroupResource,
+		p_bind_group_ref: BindGroupRef,
+		p_bind_group: ^BindGroupResource,
 	) -> bool {
+
+		bind_group_layout := get_bind_group_layout(p_bind_group.desc.layout_ref)
 
 		descriptor_set_alloc_info := vk.DescriptorSetAllocateInfo {
 			sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
-			pSetLayouts        = &p_pipeline_layout.descriptor_set_layouts[p_bind_group_idx],
+			pSetLayouts        = &bind_group_layout.vk_descriptor_set_layout,
 			descriptorSetCount = 1,
 			descriptorPool     = INTERNAL.descriptor_pool,
 		}
+		descriptor_sets := make([]vk.DescriptorSet, 1, G_RENDERER_ALLOCATORS.temp_allocator)
+		defer delete(descriptor_sets, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		return(
 			vk.AllocateDescriptorSets(
 				G_RENDERER.device,
 				&descriptor_set_alloc_info,
-				&out_bind_group.vk_descriptor_set,
+				&p_bind_group.vk_descriptor_set,
 			) ==
 			.SUCCESS \
 		)
@@ -139,101 +84,49 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_bind_bind_groups :: proc(
+	backend_bind_bind_group :: proc(
 		p_cmd_buff: ^CommandBufferResource,
 		p_pipeline: ^PipelineResource,
-		p_bindings: []BindGroupBinding,
+		p_bind_group: ^BindGroupResource,
+		p_target: u32,
 	) {
-		dynamic_offsets_count := 0
 
-		// Determine the number of dynamic offsets
-		for binding in p_bindings {
-			dynamic_offsets_count += len(binding.dynamic_offsets)
-		}
-
-		// Create a joint dynamic offsets array
-		dynamic_offsets := make([]u32, dynamic_offsets_count, G_RENDERER_ALLOCATORS.temp_allocator)
-		defer delete(dynamic_offsets, G_RENDERER_ALLOCATORS.temp_allocator)
-
-		{
-			dyn_offset_idx := 0
-			for binding in p_bindings {
-				for dynamic_offset in binding.dynamic_offsets {
-					dynamic_offsets[dyn_offset_idx] = dynamic_offset
-					dyn_offset_idx += 1
-				}
-			}
-		}
-
-		descriptor_sets_count := u32(len(p_bindings))
-		descriptor_sets := make(
-			[]vk.DescriptorSet,
-			descriptor_sets_count,
-			G_RENDERER_ALLOCATORS.temp_allocator,
-		)
-		defer delete(descriptor_sets, G_RENDERER_ALLOCATORS.temp_allocator)
-
-		// Fill descriptors sets array with the descriptor sets from the bind groups
-		{
-			for binding, i in p_bindings {
-				if binding.bind_group_ref == InvalidBindGroupRef {
-					descriptor_sets[i] = INTERNAL.empty_descriptor_set
-					continue
-
-				}
-				bind_group := get_bind_group(binding.bind_group_ref)
-				descriptor_sets[i] = bind_group.vk_descriptor_set
-			}
-		}
-
-		pipeline_layout := get_pipeline_layout(p_pipeline.pipeline_layout_ref)
-		pipeline_bind_point := map_pipeline_bind_point(pipeline_layout.desc.layout_type)
 
 		vk.CmdBindDescriptorSets(
 			p_cmd_buff.vk_cmd_buff,
-			pipeline_bind_point,
-			pipeline_layout.vk_pipeline_layout,
-			0,
-			descriptor_sets_count,
-			raw_data(descriptor_sets),
-			u32(dynamic_offsets_count),
-			raw_data(dynamic_offsets),
+			map_pipeline_bind_point(p_pipeline.type),
+			p_pipeline.vk_pipeline_layout,
+			p_target,
+			1,
+			&p_bind_group.vk_descriptor_set,
+			u32(len(p_bind_group.dynamic_offsets)),
+			raw_data(p_bind_group.dynamic_offsets),
 		)
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_destroy_bind_groups :: proc(p_ref_array: []BindGroupRef) {
-
-		descriptor_sets_to_free := make(
-			[]vk.DescriptorSet,
-			len(p_ref_array),
-			G_RENDERER_ALLOCATORS.temp_allocator,
-		)
-		defer delete(descriptor_sets_to_free, G_RENDERER_ALLOCATORS.temp_allocator)
-
+	backend_destroy_bind_group :: proc(p_bind_group_ref: BindGroupRef) {
+		bind_group := get_bind_group(p_bind_group_ref)
 		vk.FreeDescriptorSets(
 			G_RENDERER.device,
 			INTERNAL.descriptor_pool,
-			u32(len(descriptor_sets_to_free)),
-			raw_data(descriptor_sets_to_free),
+			1,
+			&bind_group.vk_descriptor_set,
 		)
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_update_bind_groups :: proc(p_updates: []BindGroupUpdate) {
+	backend_bind_group_update :: proc(p_bind_group_ref: BindGroupRef, p_bind_group_update: BindGroupUpdate) {
+
+		bind_group := get_bind_group(p_bind_group_ref)
 
 		// Allocate descriptor write array (for now we just write the entire bind group, no dirty bindings checking)
-		images_infos_count := 0
-		buffer_infos_count := 0
-
-		for update in p_updates {
-			images_infos_count += len(update.image_updates)
-			buffer_infos_count += len(update.buffer_updates)
-		}
+		images_infos_count := len(p_bind_group_update.images)
+		buffer_infos_count := len(p_bind_group_update.buffers)
 		total_writes_count := buffer_infos_count + images_infos_count
 
 		descriptor_writes := make(
@@ -257,66 +150,81 @@ when USE_VULKAN_BACKEND {
 		)
 		defer delete(buffer_writes, G_RENDERER_ALLOCATORS.temp_allocator)
 
-		write_idx := 0
-		image_info_idx := 0
-		buffer_info_idx := 0
+		image_write_idx := 0
+		buffer_write_idx := 0
 
-		for _, i in p_updates {
-			update := &p_updates[i]
-			bind_group := get_bind_group(update.bind_group_ref)
+		bind_group_layout := get_bind_group_layout(bind_group.desc.layout_ref)
 
-			for buffer_update in &update.buffer_updates {
-				buffer := get_buffer(buffer_update.buffer)
-				buffer_writes[buffer_info_idx].buffer = buffer.vk_buffer
-				buffer_writes[buffer_info_idx].offset = vk.DeviceSize(buffer_update.offset)
-				buffer_writes[buffer_info_idx].range = vk.DeviceSize(buffer_update.size)
+		for binding, descriptor_write_idx in bind_group_layout.desc.bindings {
 
-				descriptor_writes[write_idx].sType = .WRITE_DESCRIPTOR_SET
-				descriptor_writes[write_idx].descriptorCount = 1
-				descriptor_writes[write_idx].dstBinding = buffer_update.slot
-				descriptor_writes[write_idx].dstSet = bind_group.vk_descriptor_set
-				descriptor_writes[write_idx].pBufferInfo = &buffer_writes[buffer_info_idx]
+			if binding.type == .UniformBuffer ||
+			   binding.type == .UniformBufferDynamic ||
+			   binding.type == .StorageBuffer ||
+			   binding.type == .StorageBufferDynamic {
+
+				buffer_binding := p_bind_group_update.buffers[buffer_write_idx]
+				buffer := get_buffer(buffer_binding.buffer_ref)
+
+				buffer_writes[buffer_write_idx].buffer = buffer.vk_buffer
+				buffer_writes[buffer_write_idx].offset = vk.DeviceSize(buffer_binding.offset)
+				buffer_writes[buffer_write_idx].range = vk.DeviceSize(buffer_binding.size)
+
+				descriptor_writes[descriptor_write_idx] = vk.WriteDescriptorSet {
+					sType           = .WRITE_DESCRIPTOR_SET,
+					descriptorCount = 1,
+					dstBinding      = u32(descriptor_write_idx),
+					dstSet          = bind_group.vk_descriptor_set,
+					pBufferInfo     = &buffer_writes[buffer_write_idx],
+				}
 
 				if .UniformBuffer in buffer.desc.usage {
-					descriptor_writes[write_idx].descriptorType = .UNIFORM_BUFFER
+					descriptor_writes[descriptor_write_idx].descriptorType = .UNIFORM_BUFFER
 				} else if .DynamicUniformBuffer in buffer.desc.usage {
-					descriptor_writes[write_idx].descriptorType = .UNIFORM_BUFFER_DYNAMIC
+					descriptor_writes[descriptor_write_idx].descriptorType = .UNIFORM_BUFFER_DYNAMIC
 				} else if .StorageBuffer in buffer.desc.usage {
-					descriptor_writes[write_idx].descriptorType = .STORAGE_BUFFER
+					descriptor_writes[descriptor_write_idx].descriptorType = .STORAGE_BUFFER
 				} else if .DynamicStorageBuffer in buffer.desc.usage {
-					descriptor_writes[write_idx].descriptorType = .STORAGE_BUFFER_DYNAMIC
+					descriptor_writes[descriptor_write_idx].descriptorType = .STORAGE_BUFFER_DYNAMIC
 				} else {
-					assert(false) // Probably added a new flag bit and forgot to handle it here
+					assert(false) // Unsupported descriptor type
 				}
 
-				buffer_info_idx += 1
-				write_idx += 1
+				buffer_write_idx += 1
+				continue
 			}
 
-			for image_update in update.image_updates {
-				image := get_image(image_update.image_ref)
+			if binding.type == .Image || binding.type == .StorageImage {
 
-				if .AddressSubresource in image_update.flags {
-					image_writes[image_info_idx].imageView =
-						image.per_mip_vk_view[image_update.mip]
+				image_binding := p_bind_group_update.images[image_write_idx]
+				image := get_image(image_binding.image_ref)
+
+				if image_binding.mip > 0 {
+					image_writes[image_write_idx].imageView =
+						image.per_mip_vk_view[image_binding.mip]
+					image_writes[image_write_idx].imageLayout =
+						image.vk_layout_per_mip[image_binding.mip]
+
 				} else {
-					image_writes[image_info_idx].imageView = image.all_mips_vk_view
+					image_writes[image_write_idx].imageView = image.all_mips_vk_view
+					image_writes[image_write_idx].imageLayout = image.vk_layout_per_mip[0]
 				}
 
-				image_writes[image_info_idx].imageView = image.per_mip_vk_view[image_update.mip]
+				descriptor_writes[descriptor_write_idx] = vk.WriteDescriptorSet {
+					sType           = .WRITE_DESCRIPTOR_SET,
+					descriptorCount = 1,
+					dstBinding      = u32(descriptor_write_idx),
+					dstSet          = bind_group.vk_descriptor_set,
+					pImageInfo      = &image_writes[image_write_idx],
+				}
 
-				image_writes[image_info_idx].imageLayout =
-					image.vk_layout_per_mip[image_update.mip]
+				if binding.type == .Image {
+					descriptor_writes[descriptor_write_idx].descriptorType = .SAMPLED_IMAGE
+				} else {
+					descriptor_writes[descriptor_write_idx].descriptorType = .STORAGE_IMAGE
+				}
 
-				descriptor_writes[write_idx].sType = .WRITE_DESCRIPTOR_SET
-				descriptor_writes[write_idx].descriptorCount = 1
-				descriptor_writes[write_idx].dstBinding = image_update.slot
-				descriptor_writes[write_idx].dstSet = bind_group.vk_descriptor_set
-				descriptor_writes[write_idx].pImageInfo = &image_writes[image_info_idx]
-				descriptor_writes[write_idx].descriptorType = .SAMPLED_IMAGE
-
-				image_info_idx += 1
-				write_idx += 1
+				image_write_idx += 1
+				continue
 			}
 		}
 

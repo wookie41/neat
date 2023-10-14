@@ -1,3 +1,5 @@
+#include "./constant_buffers.incl.hlsl"
+
 struct VSInput {
     [[vk::location(0)]] float3 position  : POSITION; 
     [[vk::location(1)]] float2 uv        : TEXCOORD0;
@@ -11,8 +13,8 @@ struct VSOutput {
 
 float4 main(in VSInput pVertexInput, out VSOutput pVertexOutput) : SV_Position {
     pVertexOutput.uv = pVertexInput.uv;
-    return mul(gPerView_Dynamic.proj, 
-        mul(gPerView_Dynamic.view, 
-        mul(gPerView_Dynamic.model, 
+    return mul(uPerView.proj, 
+        mul(uPerView.view, 
+        mul(uPerView.model, 
         float4(pVertexInput.position, 1.0))));
 }

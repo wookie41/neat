@@ -70,7 +70,6 @@ when USE_VULKAN_BACKEND {
 		vma_allocator:                     vma.Allocator,
 		misc_flags:                        BackendMiscFlags,
 		should_wait_on_transfer_semaphore: bool,
-		empty_descriptor_set_layout:       vk.DescriptorSetLayout,
 	}
 
 	//---------------------------------------------------------------------------//

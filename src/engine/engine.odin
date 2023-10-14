@@ -6,7 +6,6 @@ import sdl "vendor:sdl2"
 
 import "core:log"
 import "../renderer"
-import "core:mem"
 import "../common"
 
 //---------------------------------------------------------------------------//
@@ -24,8 +23,6 @@ InitOptions :: struct {
 
 G_ENGINE: struct {
 	window:           ^sdl.Window,
-	string_area:      mem.Arena,
-	string_allocator: mem.Allocator,
 }
 
 //---------------------------------------------------------------------------//
@@ -44,7 +41,7 @@ init :: proc(p_options: InitOptions) -> bool {
 		total_available_memory = 512 * common.MEGABYTE,
 	})
 
-	common.init_names(G_ENGINE.string_allocator)
+	common.init_names(G_ALLOCATORS.string_allocator)
 
 	// Initialize assets
 	texture_asset_init()

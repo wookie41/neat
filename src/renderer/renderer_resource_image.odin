@@ -115,22 +115,22 @@ ImageFormat :: enum u16 {
 	ColorFormatsEnd,
 	//---------------------//
 	CompressedFormatsStart,
-    BC1_RGB_UNorm,
-    BC1_RGB_SRGB,
-    BC1_RGBA_UNorm,
-    BC1_RGBA_SRGB,
-    BC2_UNorm,
-    BC2_SRGB,
-    BC3_UNorm,
-    BC3_SRGB,
-    BC4_UNorm,
-    BC4_SNorm,
-    BC5_UNorm,
-    BC5_SNorm,
-    BC6H_UFloat,
-    BC6H_SFloat,
-    BC7_UNorm,
-    BC7_SRGB,
+	BC1_RGB_UNorm,
+	BC1_RGB_SRGB,
+	BC1_RGBA_UNorm,
+	BC1_RGBA_SRGB,
+	BC2_UNorm,
+	BC2_SRGB,
+	BC3_UNorm,
+	BC3_SRGB,
+	BC4_UNorm,
+	BC4_SNorm,
+	BC5_UNorm,
+	BC5_SNorm,
+	BC6H_UFloat,
+	BC6H_SFloat,
+	BC7_UNorm,
+	BC7_SRGB,
 	CompressedFormatsEnd,
 	//---------------------//
 }
@@ -195,18 +195,43 @@ TextureCopy :: struct {
 	// offsets at which data for each mip is stored in the buffer
 	mip_buffer_offsets: []u32,
 }
+//---------------------------------------------------------------------------//
 
+SamplerType :: enum {
+	NearestClampToEdge,
+	NearestClampToBorder,
+	NearestRepeat,
+	LinearClampToEdge,
+	LinearClampToBorder,
+	LinearRepeat,
+}
+//---------------------------------------------------------------------------//
+
+@(private)
+SamplerNames := []string{
+	"NearestClampToEdge",
+	"NearestClampToBorder",
+	"NearestRepeat",
+	"LinearClampToEdge",
+	"LinearClampToBorder",
+	"LinearRepeat",
+}
 //---------------------------------------------------------------------------//
 
 @(private)
 init_images :: proc() {
-	G_IMAGE_REF_ARRAY = common.ref_array_create(ImageResource, MAX_IMAGES, G_RENDERER_ALLOCATORS.main_allocator)
-	G_IMAGE_RESOURCE_ARRAY = make([]ImageResource, MAX_IMAGES, G_RENDERER_ALLOCATORS.resource_allocator)
-	INTERNAL.next_bindless_idx = 0
-	INTERNAL.free_bindless_indices = make(
-		[dynamic]u32,
+	G_IMAGE_REF_ARRAY = common.ref_array_create(
+		ImageResource,
+		MAX_IMAGES,
 		G_RENDERER_ALLOCATORS.main_allocator,
 	)
+	G_IMAGE_RESOURCE_ARRAY = make(
+		[]ImageResource,
+		MAX_IMAGES,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
+	INTERNAL.next_bindless_idx = 0
+	INTERNAL.free_bindless_indices = make([dynamic]u32, G_RENDERER_ALLOCATORS.main_allocator)
 	backend_init_images()
 }
 
@@ -230,7 +255,7 @@ create_texture_image :: proc(p_ref: ImageRef) -> bool {
 	}
 
 	assert(
-		(image.desc.format > .ColorFormatsStart && image.desc.format < .ColorFormatsEnd) || 
+		(image.desc.format > .ColorFormatsStart && image.desc.format < .ColorFormatsEnd) ||
 		(image.desc.format > .CompressedFormatsStart && image.desc.format < .CompressedFormatsEnd),
 	)
 
@@ -242,10 +267,7 @@ create_texture_image :: proc(p_ref: ImageRef) -> bool {
 	return true
 }
 
-create_depth_buffer :: proc(
-	p_name: common.Name,
-	p_depth_buffer_desc: ImageDesc,
-) -> ImageRef {
+create_depth_buffer :: proc(p_name: common.Name, p_depth_buffer_desc: ImageDesc) -> ImageRef {
 	ref := allocate_image_ref(p_name)
 	image := get_image(ref)
 	image.desc = p_depth_buffer_desc
@@ -285,14 +307,14 @@ destroy_image :: proc(p_ref: ImageRef) {
 
 bind_bindless_array_and_immutable_sampler :: #force_inline proc(
 	p_cmd_buff_ref: CommandBufferRef,
-	p_pipeline_layout_ref: PipelineLayoutRef,
+	p_pipeline_ref: PipelineRef,
 	p_bind_point: PipelineType,
 	p_target: u32,
 ) {
 
 	backend_bind_bindless_array_and_immutable_samplers(
-		get_command_buffer(p_cmd_buff_ref),
-		get_pipeline_layout(p_pipeline_layout_ref),
+		p_cmd_buff_ref,
+		p_pipeline_ref,
 		p_target,
 		p_bind_point,
 	)

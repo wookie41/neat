@@ -2,8 +2,12 @@ package renderer
 
 //---------------------------------------------------------------------------//
 
-import log "core:log"
-import os "core:os"
+import "../common"
+import "core:hash"
+import "core:log"
+import "core:mem"
+import "core:os"
+import "core:slice"
 import vk "vendor:vulkan"
 
 //---------------------------------------------------------------------------//
@@ -12,8 +16,25 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
+	@(private = "file")
+	INTERNAL: struct {
+		pipeline_layout_cache: map[u32]PipelineLayoutCacheEntry,
+		vk_pipeline_cache:     vk.PipelineCache,
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private = "file")
+	PipelineLayoutCacheEntry :: struct {
+		vk_pipeline_layout: vk.PipelineLayout,
+		ref_count:          u16,
+	}
+
+	//---------------------------------------------------------------------------//
+
 	BackendPipelineResource :: struct {
-		vk_pipeline: vk.Pipeline,
+		vk_pipeline:        vk.Pipeline,
+		vk_pipeline_layout: vk.PipelineLayout,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -29,30 +50,36 @@ when USE_VULKAN_BACKEND {
 	VERTEX_ATTRIBUTES_PER_TYPE := map[VertexLayout][]vk.VertexInputAttributeDescription {
 		.Mesh = {
 			{
-				binding = 0,// Position
+				binding = 0,
 				location = 0,
 				format = .R32G32B32_SFLOAT,
 				offset = u32(offset_of(MeshVertexLayout, position)),
 			},
 			{
-				binding = 0,// UV
+				binding = 0,
 				location = 1,
 				format = .R32G32_SFLOAT,
 				offset = u32(offset_of(MeshVertexLayout, uv)),
 			},
 			{
-				binding = 0,// Normal
+				binding = 0,
 				location = 2,
 				format = .R32G32B32_SFLOAT,
 				offset = u32(offset_of(MeshVertexLayout, normal)),
 			},
 			{
-				binding = 0,// Tangent
+				binding = 0,
 				location = 3,
 				format = .R32G32B32_SFLOAT,
 				offset = u32(offset_of(MeshVertexLayout, tangent)),
 			},
-		},
+		}, // Position
+
+		// UV
+
+		// Normal
+
+		// Tangent
 	}
 
 	//---------------------------------------------------------------------------//
@@ -138,39 +165,20 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	@(private = "file")
-	PipelineLayoutCacheEntry :: struct {
-		pipeline_layout_ref: PipelineLayoutRef,
-		ref_count:           u32,
-	}
-
-	//---------------------------------------------------------------------------//
-
-	@(private = "file")
-	INTERNAL: struct {
-		pipeline_layout_cache: map[u32]PipelineLayoutCacheEntry,
-		vk_pipeline_cache:     vk.PipelineCache,
-	}
-
-	//---------------------------------------------------------------------------//
-
 	backend_init_pipelines :: proc() {
 		// Init pipeline layout cache
 		INTERNAL.pipeline_layout_cache = make(
 			map[u32]PipelineLayoutCacheEntry,
-			MAX_PIPELINE_LAYOUTS,
+			MAX_PIPELINES,
 			G_RENDERER_ALLOCATORS.main_allocator,
 		)
 
+		// Try to read pipeline cache file
 		pipeline_cache, ok := os.read_entire_file(
 			PIPELINE_CACHE_FILE,
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer free(raw_data(pipeline_cache))
-
-		if ok == false {
-			log.warn("Failed to read pipeline cache")
-		}
 
 		// Create pipeline cache
 		create_info := vk.PipelineCacheCreateInfo {
@@ -180,6 +188,8 @@ when USE_VULKAN_BACKEND {
 		if ok && len(pipeline_cache) > 0 {
 			create_info.pInitialData = raw_data(pipeline_cache)
 			create_info.initialDataSize = len(pipeline_cache)
+		} else {
+			log.warn("Failed to read pipeline cache")
 		}
 
 		vk.CreatePipelineCache(G_RENDERER.device, &create_info, nil, &INTERNAL.vk_pipeline_cache)
@@ -212,8 +222,13 @@ when USE_VULKAN_BACKEND {
 		p_ref: PipelineRef,
 		p_pipeline: ^PipelineResource,
 	) -> bool {
-		vert_shader := get_shader(p_pipeline.desc.vert_shader)
-		frag_shader := get_shader(p_pipeline.desc.frag_shader)
+
+		temp_arena: common.TempArena
+		common.temp_arena_init(&temp_arena)
+		defer common.temp_arena_delete(temp_arena)
+
+		vert_shader := get_shader(p_pipeline.desc.vert_shader_ref)
+		frag_shader := get_shader(p_pipeline.desc.frag_shader_ref)
 
 		render_pass := get_render_pass(p_pipeline.desc.render_pass_ref)
 
@@ -280,40 +295,35 @@ when USE_VULKAN_BACKEND {
 		// Depth stencil
 		depth_stencil := DEPTH_STENCIL_STATE_PER_TYPE[render_pass.desc.depth_stencil_type]
 
-		// Pipeline layout
-
-		// First check the cache 
+		// Pipeline layout - first check if we have a matching pipeline layout in the cache
 		pipeline_layout_hash := vert_shader.hash ~ frag_shader.hash
 		if pipeline_layout_hash in INTERNAL.pipeline_layout_cache {
+			// If so, use it
 			cache_entry := &INTERNAL.pipeline_layout_cache[pipeline_layout_hash]
 			cache_entry.ref_count += 1
-			p_pipeline.pipeline_layout_ref = cache_entry.pipeline_layout_ref
+			p_pipeline.vk_pipeline_layout = cache_entry.vk_pipeline_layout
 		} else {
-			p_pipeline.pipeline_layout_ref = allocate_pipeline_layout_ref(p_pipeline.desc.name)
-			pipeline_layout := get_pipeline_layout(p_pipeline.pipeline_layout_ref)
 
-			pipeline_layout.desc.name = p_pipeline.desc.name
-			pipeline_layout.desc.vert_shader_ref = p_pipeline.desc.vert_shader
-			pipeline_layout.desc.frag_shader_ref = p_pipeline.desc.frag_shader
-
-			if !create_pipeline_layout(p_pipeline.pipeline_layout_ref) {
-				log.warnf("Failed to create pipeline layout when creating the pipeline")
+			// Otherwise create a new one 
+			pipeline_layout, success := create_pipeline_layout(
+				p_pipeline,
+				pipeline_layout_hash,
+				temp_arena.allocator,
+			)
+			if success == false {
 				return false
 			}
 
-			INTERNAL.pipeline_layout_cache[pipeline_layout_hash] = {
-				ref_count           = 1,
-				pipeline_layout_ref = p_pipeline.pipeline_layout_ref,
-			}
+			p_pipeline.vk_pipeline_layout = pipeline_layout
 		}
 
 		// Map color attachment formats
 		color_attachment_formats := make(
 			[]vk.Format,
 			len(render_pass.desc.layout.render_target_formats),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			temp_arena.allocator,
 		)
-		defer delete(color_attachment_formats, G_RENDERER_ALLOCATORS.temp_allocator)
+		defer delete(color_attachment_formats, temp_arena.allocator)
 
 
 		for format, i in render_pass.desc.layout.render_target_formats {
@@ -356,7 +366,7 @@ when USE_VULKAN_BACKEND {
 			pMultisampleState   = &multisample_state,
 			pColorBlendState    = &color_blending_state,
 			pDepthStencilState  = &depth_stencil,
-			layout              = get_pipeline_layout(p_pipeline.pipeline_layout_ref).vk_pipeline_layout,
+			layout              = p_pipeline.vk_pipeline_layout,
 			pViewportState      = &viewport_state,
 		}
 
@@ -405,17 +415,19 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_destroy_pipeline :: proc(p_pipeline: ^PipelineResource) {
-		pipeline_layout_hash := hash_pipeline_layout(
-			get_pipeline_layout(p_pipeline.pipeline_layout_ref),
-		)
+		pipeline_layout_hash := hash_pipeline_layout(p_pipeline)
 		assert(pipeline_layout_hash in INTERNAL.pipeline_layout_cache)
+
 		cache_entry := &INTERNAL.pipeline_layout_cache[pipeline_layout_hash]
 		assert(cache_entry.ref_count > 0)
 		cache_entry.ref_count -= 1
+
+		// Delete the pipeline if needed
 		if cache_entry.ref_count == 0 {
-			destroy_pipeline_layout(cache_entry.pipeline_layout_ref)
+			vk.DestroyPipelineLayout(G_RENDERER.device, cache_entry.vk_pipeline_layout, nil)
 			delete_key(&INTERNAL.pipeline_layout_cache, pipeline_layout_hash)
 		}
+
 		vk.DestroyPipeline(G_RENDERER.device, p_pipeline.vk_pipeline, nil)
 	}
 
@@ -426,20 +438,72 @@ when USE_VULKAN_BACKEND {
 		p_pipeline: ^PipelineResource,
 		p_cmd_buff: ^CommandBufferResource,
 	) {
-		pipeline_layout := get_pipeline_layout(p_pipeline.pipeline_layout_ref)
-		bind_point := map_pipeline_bind_point(pipeline_layout.desc.layout_type)
+		bind_point := map_pipeline_bind_point(p_pipeline.type)
 		vk.CmdBindPipeline(p_cmd_buff.vk_cmd_buff, bind_point, p_pipeline.vk_pipeline)
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	hash_pipeline_layout :: #force_inline proc(p_pipeline_layout: ^PipelineLayoutResource) -> u32 {
-		vert_shader_hash := get_shader(p_pipeline_layout.desc.vert_shader_ref).hash
-		frag_shader_hash := get_shader(p_pipeline_layout.desc.vert_shader_ref).hash
+	hash_pipeline_layout :: #force_inline proc(p_pipeline: ^PipelineResource) -> u32 {
+		vert_shader_hash := get_shader(p_pipeline.desc.vert_shader_ref).hash
+		frag_shader_hash := get_shader(p_pipeline.desc.frag_shader_ref).hash
 		return vert_shader_hash ~ frag_shader_hash
 	}
 
 	//---------------------------------------------------------------------------//
 
+	@(private = "file")
+	create_pipeline_layout :: proc(p_pipeline: ^PipelineResource) -> bool {
+
+		// Gather descriptor layouts from each bind group layout
+		descriptor_set_layouts := make(
+			[]vk.DescriptorSetLayout,
+			len(p_pipeline.desc.bind_group_layout_refs),
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+		defer delete(descriptor_set_layouts, G_RENDERER_ALLOCATORS.temp_allocator)
+
+		for bind_group_layout_ref, i in p_pipeline.desc.bind_group_layout_refs {
+			descriptor_set_layouts[i] =
+				get_bind_group_layout(bind_group_layout_ref).vk_descriptor_set_layout
+		}
+
+		// Create pipeline layout
+		create_info := vk.PipelineLayoutCreateInfo {
+			sType          = .PIPELINE_LAYOUT_CREATE_INFO,
+			pSetLayouts    = raw_data(descriptor_set_layouts),
+			setLayoutCount = u32(len(descriptor_set_layouts)),
+		}
+
+		if vk.CreatePipelineLayout(
+			   G_RENDERER.device,
+			   &create_info,
+			   nil,
+			   &p_pipeline.vk_pipeline_layout,
+		   ) !=
+		   .SUCCESS {
+			log.warn("Failed to create pipeline layout")
+			return false
+		}
+
+		// Add entry to cache
+		INTERNAL.pipeline_layout_cache[p_pipeline_layout_hash] = PipelineLayoutCacheEntry {
+			ref_count = 1,
+			vk_pipeline_layout = p_pipeline.vk_pipeline_layout,
+		}
+
+		return true
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private = "file")
+	DescriptorLayoutBindingHashEntry :: struct {
+		type:  u32,
+		slot:  u32,
+		count: u32,
+	}
+
+	//---------------------------------------------------------------------------//
 }

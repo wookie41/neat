@@ -3,11 +3,12 @@ package renderer
 //---------------------------------------------------------------------------//
 
 import "../common"
-import "core:log"
 import c "core:c"
+import "core:log"
 import "core:math/linalg/glsl"
 
 //---------------------------------------------------------------------------//
+
 MeshVertexLayout :: struct {
 	position: glsl.vec3,
 	uv:       glsl.vec2,
@@ -63,12 +64,21 @@ G_BLEND_TYPE_NAME_MAPPING := map[string]ColorBlendType {
 
 //---------------------------------------------------------------------------//
 
+PipelineType :: enum u8 {
+	Graphics,
+	Compute,
+	Raytracing,
+}
+
+//---------------------------------------------------------------------------//
+
 PipelineDesc :: struct {
-	name:            common.Name,
-	render_pass_ref: RenderPassRef,
-	vert_shader:     ShaderRef,
-	frag_shader:     ShaderRef,
-	vertex_layout:   VertexLayout,
+	name:                   common.Name,
+	render_pass_ref:        RenderPassRef,
+	vert_shader_ref:        ShaderRef,
+	bind_group_layout_refs: []BindGroupLayoutRef,
+	frag_shader_ref:        ShaderRef,
+	vertex_layout:          VertexLayout,
 }
 
 //---------------------------------------------------------------------------//
@@ -76,7 +86,7 @@ PipelineDesc :: struct {
 PipelineResource :: struct {
 	using backend_pipeline: BackendPipelineResource,
 	desc:                   PipelineDesc,
-	pipeline_layout_ref:    PipelineLayoutRef,
+	type:                   PipelineType,
 }
 
 //---------------------------------------------------------------------------//
@@ -148,9 +158,8 @@ allocate_pipeline_ref :: proc(p_name: common.Name) -> PipelineRef {
 
 create_graphics_pipeline :: proc(p_ref: PipelineRef) -> bool {
 
-	// @TODO Create a hash based on the description's hash
-
 	pipeline := get_pipeline(p_ref)
+	pipeline.type = .Graphics
 
 	res := backend_create_graphics_pipeline(p_ref, pipeline)
 
@@ -173,7 +182,6 @@ get_pipeline :: proc(p_ref: PipelineRef) -> ^PipelineResource {
 
 destroy_pipeline :: proc(p_ref: PipelineRef) {
 	pipeline := get_pipeline(p_ref)
-	destroy_pipeline_layout(pipeline.pipeline_layout_ref)
 	backend_destroy_pipeline(pipeline)
 	common.ref_free(&G_PIPELINE_REF_ARRAY, p_ref)
 }

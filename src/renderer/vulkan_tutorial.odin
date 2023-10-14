@@ -27,7 +27,6 @@ G_VT: struct {
 	render_target_bindings:   []RenderTargetBinding,
 	ubo_bind_group_ref:       BindGroupRef,
 	draw_stream:              DrawStream,
-	bind_group_bindings:      []BindGroupBinding,
 	viking_room_mesh_ref:     MeshRef,
 }
 
@@ -115,8 +114,8 @@ init_vt :: proc() -> bool {
 			pipeline_ref = allocate_pipeline_ref(common.create_name("Vulkan Tutorial Pipeline"))
 			get_pipeline(pipeline_ref).desc = {
 				name            = common.create_name("Vulkan Tutorial Pipe"),
-				vert_shader     = vertex_shader_ref,
-				frag_shader     = fragment_shader_ref,
+				vert_shader_ref = vertex_shader_ref,
+				frag_shader_ref = fragment_shader_ref,
 				vertex_layout   = .Mesh,
 				render_pass_ref = render_pass_ref,
 			}
@@ -141,13 +140,11 @@ vt_pre_render :: proc() {
 
 		draw_stream_init(G_RENDERER_ALLOCATORS.main_allocator, &G_VT.draw_stream)
 		draw_stream_change_pipeline(&G_VT.draw_stream, G_VT.pipeline_ref)
-		bind_group_bindings = draw_stream_change_bindings(&G_VT.draw_stream, 2)
 
-		bind_group_bindings[0] = EMPTY_BIND_GROUP_BINDING
+		bind_group_change := draw_stream_bind_bind_group(&G_VT.draw_stream)
+		bind_group_change.bind_group_ref = ubo_bind_group_ref
+		bind_group_change.target = 1
 
-		bind_group_bindings[1].bind_group_ref = ubo_bind_group_ref
-		bind_group_bindings[1].dynamic_offsets = make([]u32, 1, draw_stream.allocator)
-		bind_group_bindings[1].dynamic_offsets[0] = size_of(UniformBufferObject) * get_frame_idx()
 		cube_draw := draw_stream_add_indexed_draw(&G_VT.draw_stream)
 		cube_draw.index_buffer_ref = MESH_INTERNAL.index_buffer_ref
 		cube_draw.instance_count = 1
@@ -164,24 +161,16 @@ vt_create_bind_groups :: proc() {
 
 	// Create the bind groups
 	{
-		refs := create_bind_groups(
-			get_pipeline(pipeline_ref).pipeline_layout_ref,
-			G_RENDERER_ALLOCATORS.main_allocator,
-		)
-
-		ubo_bind_group_ref = refs[0]
-	}
-
-	// Update the bind groups
-	{
-		ubo_bind_group_update := BindGroupUpdate {
-			bind_group_ref = ubo_bind_group_ref,
-			buffer_updates = {
-				{slot = 0, buffer = ubo_ref, offset = 0, size = size_of(UniformBufferObject)},
+		ubo_bind_group_ref = allocate_bind_group_ref(common.create_name("VulkanTutorial"))
+		bind_group := get_bind_group(ubo_bind_group_ref)
+		bind_group.desc.buffers = []BindGroupBufferBinding{
+			BindGroupBufferBinding{
+				buffer_ref = ubo_ref,
+				slot = 1,
+				size = size_of(UniformBufferObject),
 			},
 		}
-
-		update_bind_groups({ubo_bind_group_update})
+		create_bind_group(ubo_bind_group_ref)
 	}
 }
 
@@ -193,7 +182,7 @@ deinit_vt :: proc() {
 	vk.DestroyImageView(device, texture_image_view, nil)
 	destroy_image(texture_image_ref)
 	destroy_buffer(ubo_ref)
-	destroy_bind_groups({ubo_bind_group_ref})
+	destroy_bind_group(ubo_bind_group_ref)
 }
 
 vt_update :: proc(
@@ -215,8 +204,6 @@ vt_update :: proc(
 
 	begin_render_pass(render_pass_ref, p_cmd_buff_ref, &begin_info)
 	{
-		bind_group_bindings[1].dynamic_offsets = {size_of(UniformBufferObject) * get_frame_idx()}
-
 		draw_stream_reset(&draw_stream)
 		draw_stream_submit(p_cmd_buff_ref, &draw_stream)
 	}

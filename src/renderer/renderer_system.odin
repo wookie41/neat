@@ -25,14 +25,14 @@ MAX_NUM_FRAMES_IN_FLIGHT :: #config(NUM_FRAMES_IN_FLIGHT, 2)
 @(private)
 MAX_TEST :: #config(MAX_TEST, 128)
 MAX_SHADERS :: #config(MAX_SHADERS, 128)
-MAX_PIPELINE_LAYOUTS :: #config(MAX_PIPELINE_LAYOUTS, 128)
 MAX_IMAGES :: #config(MAX_IMAGES, 256)
 MAX_BUFFERS :: #config(MAX_BUFFERS, 256)
 MAX_RENDER_PASSES :: #config(MAX_RENDER_PASSES, 256)
 MAX_RENDER_PASS_INSTANCES :: #config(MAX_RENDER_PASSES, 256)
 MAX_PIPELINES :: #config(MAX_PIPELINES, 128)
-MAX_COMMAND_BUFFERS :: #config(MAX_PIPELINES, 32)
-MAX_BIND_GROUPS :: #config(MAX_PIPELINES, 1024)
+MAX_COMMAND_BUFFERS :: #config(MAX_COMMAND_BUFFERS, 32)
+MAX_BIND_GROUP_LAYOUTS :: #config(MAX_BIND_GROUP_LAYOUTS, 1024)
+MAX_BIND_GROUPS :: #config(MAX_BIND_GROUPS, 1024)
 MAX_RENDER_TASKS :: #config(MAX_RENDER_TASKS, 64)
 MAX_MATERIAL_TYPES :: #config(MAX_MATERIAL_TYPES, 64)
 MAX_MATERIAL_PASSES :: #config(MAX_MATERIAL_PASSES, 256)
@@ -64,14 +64,16 @@ GPUDeviceFlags :: distinct bit_set[GPUDeviceFlagsBits;u8]
 
 @(private)
 G_RENDERER: struct {
-	using backend_state:          BackendRendererState,
-	num_frames_in_flight:         u32,
-	primary_cmd_buffer_ref:       []CommandBufferRef,
-	queued_textures_copies:       [dynamic]TextureCopy,
-	current_frame_swap_image_idx: u32,
-	swap_image_refs:              []ImageRef,
-	swap_image_render_targets:    []RenderTarget,
-	gpu_device_flags:             GPUDeviceFlags,
+	using backend_state:                           BackendRendererState,
+	num_frames_in_flight:                          u32,
+	primary_cmd_buffer_ref:                        []CommandBufferRef,
+	queued_textures_copies:                        [dynamic]TextureCopy,
+	current_frame_swap_image_idx:                  u32,
+	swap_image_refs:                               []ImageRef,
+	swap_image_render_targets:                     []RenderTarget,
+	gpu_device_flags:                              GPUDeviceFlags,
+	global_uniforms_bind_group_layout_ref:         BindGroupLayoutRef,
+	bindless_textures_array_bind_group_layout_ref: BindGroupLayoutRef,
 }
 
 @(private)
@@ -167,9 +169,9 @@ init :: proc(p_options: InitOptions) -> bool {
 	backend_init(p_options) or_return
 
 	init_shaders() or_return
-	assert(init_render_passes())
-	init_pipeline_layouts()
+	init_render_passes() or_return
 	init_pipelines()
+	init_bind_group_layouts()
 	init_bind_groups()
 	init_buffers()
 	init_meshes()
@@ -177,7 +179,8 @@ init :: proc(p_options: InitOptions) -> bool {
 	init_command_buffers(p_options) or_return
 	init_render_tasks() or_return
 	init_material_passs() or_return
-	init_materials() or_return
+	init_material_types() or_return
+	init_material_instances() or_return
 
 	create_swap_images()
 
@@ -234,6 +237,15 @@ init :: proc(p_options: InitOptions) -> bool {
 			}
 			G_RENDERER.primary_cmd_buffer_ref[i] = cmd_buff_ref
 		}
+	}
+
+	// Create the bind group layouts for per frame/view data
+	{
+		G_RENDERER.global_uniforms_bind_group_layout_ref = allocate_bind_group_layout_ref(
+			common.create_name("GlobalUniforms"),
+		)
+		get_bind_group_layout(G_RENDERER.global_uniforms_bind_group_layout)
+		
 	}
 
 	init_vt()

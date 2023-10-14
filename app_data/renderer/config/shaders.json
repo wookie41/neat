@@ -1,10 +1,1 @@
-[
-    {
-        "name": "base.vert",
-        "path": "base.vert.hlsl"
-    },
-    {
-        "name": "base.frag",
-        "path": "base.frag.hlsl"
-    }
-]
+[]

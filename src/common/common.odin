@@ -1,10 +1,10 @@
 package common
 
+import "core:fmt"
 import "core:hash"
 import "core:mem"
 import "core:slice"
 import "core:strings"
-import "core:fmt"
 
 
 //---------------------------------------------------------------------------//
@@ -26,13 +26,15 @@ GIGABYTE :: MEGABYTE * 1024
 Name :: distinct u32
 @(private = "file")
 INTERNAL: struct {
-	string_table: map[Name]string,
+	string_table:     map[Name]string,
+	string_allocator: mem.Allocator,
 }
 
 //---------------------------------------------------------------------------//
 
 init_names :: proc(p_string_allocator: mem.Allocator) {
 	context.allocator = p_string_allocator
+	INTERNAL.string_allocator = p_string_allocator
 	INTERNAL.string_table = make(map[Name]string)
 }
 
@@ -46,12 +48,11 @@ make_name :: #force_inline proc(p_name: string) -> Name {
 
 create_name :: proc(p_name: string) -> Name {
 	assert(len(p_name) > 0)
-	name: Name
-	name = Name(hash.crc32(transmute([]u8)p_name))
+	name := Name(hash.crc32(transmute([]u8)p_name))
 	if name in INTERNAL.string_table {
 		return name
 	}
-	INTERNAL.string_table[name] = p_name
+	INTERNAL.string_table[name] = strings.clone(p_name, INTERNAL.string_allocator)
 	return name
 }
 
@@ -69,11 +70,8 @@ name_equal :: proc(p_name_1: Name, p_name_2: Name) -> bool {
 //---------------------------------------------------------------------------//
 
 get_string :: proc(p_name: Name) -> string {
-	when ODIN_DEBUG {
-		assert(p_name in INTERNAL.string_table)
-		return INTERNAL.string_table[p_name]
-	}
-	return ""
+	assert(p_name in INTERNAL.string_table)
+	return INTERNAL.string_table[p_name]
 }
 
 //---------------------------------------------------------------------------//

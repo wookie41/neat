@@ -1,4 +1,3 @@
-
 package renderer
 
 //---------------------------------------------------------------------------//
@@ -32,8 +31,8 @@ MAX_MATERIAL_INSTANCES_PER_MATERIAL_TYPE :: 512
 
 @(private = "file")
 INTERNAL: struct {
-	material_params_buffer_ref: BufferRef,
-	material_feature_by_name:   map[common.Name]MaterialFeature,
+	material_params_buffer_ref:     BufferRef,
+	material_feature_by_name:       map[common.Name]MaterialFeature,
 	material_buffer_bind_group_ref: BindGroupRef,
 }
 
@@ -166,12 +165,6 @@ G_MATERIAL_TYPE_RESOURCE_ARRAY: []MaterialTypeResource
 //---------------------------------------------------------------------------//
 
 init_material_types :: proc() -> bool {
-	INTERNAL.material_buffer_bind_group_ref = allocate_bind_group_ref(common.make_name("MaterialBufferBindGroup"))
-	assert(0)
-	{
-		bind_group := get_bind_group(INTERNAL.material_buffer_bind_group_ref)
-		BindGroupBinding{}
-	}
 
 	// Allocate memory for the material types
 	G_MATERIAL_TYPE_REF_ARRAY = common.ref_array_create(
@@ -197,6 +190,25 @@ init_material_types :: proc() -> bool {
 	material_params_buffer.desc.usage = {.DynamicStorageBuffer}
 
 	create_buffer(INTERNAL.material_params_buffer_ref) or_return
+
+
+	// Create the bind group that will hold the material buffer
+	{
+		INTERNAL.material_buffer_bind_group_ref = allocate_bind_group_ref(
+			common.create_name("MaterialBufferBindGroup"),
+		)
+		material_buffer_bind_group := get_bind_group(INTERNAL.material_buffer_bind_group_ref)
+		material_buffer_bind_group.desc = BindGroupDesc {
+			buffers = {
+				{
+					slot = 0,
+					buffer_ref = INTERNAL.material_params_buffer_ref,
+					size = MATERIAL_PARAMS_BUFFER_SIZE,
+				},
+			},
+		}
+		create_bind_group(INTERNAL.material_buffer_bind_group_ref)
+	}
 
 	load_material_features_from_config_file() or_return
 	load_material_types_from_config_file() or_return
@@ -253,7 +265,7 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 			)
 			param_name_full = strings.to_lower(param_name_full, temp_arena.allocator)
 
-			offset_per_param[common.make_name(param_name_full)] =
+			offset_per_param[common.create_name(param_name_full)] =
 				material_type.params_size_in_bytes
 
 			switch param.type {
@@ -301,12 +313,18 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 
 		// Combine defines from the material with defines for the material pass
 		shader_defines, _ := slice.concatenate(
-			{material_feature_defines, material_pass.desc.additional_feature_names},
-			temp_arena.allocator,
+			[][]string{material_feature_defines, material_pass.desc.additional_feature_names},
+			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
 
-		material_pass.vertex_shader_ref = allocate_shader_ref(material_pass.desc.name)
-		material_pass.fragment_shader_ref = allocate_shader_ref(material_pass.desc.name)
+		vert_shader_path := common.get_string(material_pass.desc.vertex_shader_path)
+		vert_shader_path = strings.trim_suffix(vert_shader_path, ".hlsl")
+
+		frag_shader_path := common.get_string(material_pass.desc.fragment_shader_path)
+		frag_shader_path = strings.trim_suffix(frag_shader_path, ".hlsl")
+
+		material_pass.vertex_shader_ref = allocate_shader_ref(common.create_name(vert_shader_path))
+		material_pass.fragment_shader_ref = allocate_shader_ref(common.create_name(frag_shader_path))
 
 		vertex_shader := get_shader(material_pass.vertex_shader_ref)
 		fragment_shader := get_shader(material_pass.fragment_shader_ref)
@@ -323,7 +341,7 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 		success := create_shader(material_pass.vertex_shader_ref)
 		assert(success)
 
-		shader_created_successfully = create_shader(material_pass.vertex_shader_ref)
+		success = create_shader(material_pass.fragment_shader_ref)
 		assert(success)
 
 		// Create the PSO
@@ -331,8 +349,8 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 		pipeline := get_pipeline(material_pass.pipeline_ref)
 
 		pipeline.desc.render_pass_ref = material_pass.desc.render_pass_ref
-		pipeline.desc.vert_shader = material_pass.vertex_shader_ref
-		pipeline.desc.frag_shader = material_pass.fragment_shader_ref
+		pipeline.desc.vert_shader_ref = material_pass.vertex_shader_ref
+		pipeline.desc.frag_shader_ref = material_pass.fragment_shader_ref
 		pipeline.desc.vertex_layout = .Mesh
 
 		success = create_graphics_pipeline(material_pass.pipeline_ref)
@@ -398,12 +416,15 @@ destroy_material_type :: proc(p_ref: MaterialTypeRef) {
 
 @(private = "file")
 load_material_features_from_config_file :: proc() -> bool {
-
-	context.allocator = G_RENDERER_ALLOCATORS.temp_allocator
-	defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
+	temp_arena: common.TempArena
+	common.temp_arena_init(&temp_arena)
+	defer common.temp_arena_delete(temp_arena)
 
 	material_features_config := "app_data/renderer/config/material_features.json"
-	material_features_json_data, file_read_ok := os.read_entire_file(material_features_config)
+	material_features_json_data, file_read_ok := os.read_entire_file(
+		material_features_config,
+		temp_arena.allocator,
+	)
 
 	if file_read_ok == false {
 		return false
@@ -411,8 +432,12 @@ load_material_features_from_config_file :: proc() -> bool {
 
 	// Parse the material features config file
 	material_feature_json_entries: []MaterialFeatureJSONEntry
-	if err := json.unmarshal(material_features_json_data, &material_feature_json_entries);
-	   err != nil {
+	if err := json.unmarshal(
+		material_features_json_data,
+		&material_feature_json_entries,
+		.JSON5,
+		temp_arena.allocator,
+	); err != nil {
 		log.errorf("Failed to read materials features json: %s\n", err)
 		return false
 	}
@@ -423,7 +448,7 @@ load_material_features_from_config_file :: proc() -> bool {
 		G_RENDERER_ALLOCATORS.main_allocator,
 	)
 
-	for material_feature_entry in material_feature_json_entries {
+	for material_feature_entry in &material_feature_json_entries {
 
 		assert(len(material_feature_entry.params) > 0)
 
@@ -443,9 +468,8 @@ load_material_features_from_config_file :: proc() -> bool {
 			material_feature.params[i].name = common.create_name(
 				material_feature_entry.params[i].name,
 			)
-			material_feature.params[i].type = G_MATERIAL_FEATURE_TYPE_MAPPING(
-				material_feature_entry.params[i].type,
-			)
+			material_feature.params[i].type =
+				G_MATERIAL_FEATURE_TYPE_MAPPING[material_feature_entry.params[i].type]
 		}
 
 		INTERNAL.material_feature_by_name[material_feature.name] = material_feature
@@ -458,11 +482,15 @@ load_material_features_from_config_file :: proc() -> bool {
 
 @(private = "file")
 load_material_types_from_config_file :: proc() -> bool {
-	context.allocator = G_RENDERER_ALLOCATORS.temp_allocator
-	defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
+	temp_arena: common.TempArena
+	common.temp_arena_init(&temp_arena)
+	defer common.temp_arena_delete(temp_arena)
 
 	material_types_config := "app_data/renderer/config/material_types.json"
-	material_types_json_data, file_read_ok := os.read_entire_file(material_types_config)
+	material_types_json_data, file_read_ok := os.read_entire_file(
+		material_types_config,
+		temp_arena.allocator,
+	)
 
 	if file_read_ok == false {
 		return false
@@ -471,7 +499,12 @@ load_material_types_from_config_file :: proc() -> bool {
 	// Parse the material types config file
 	material_type_json_entries: []MaterialTypeJSONEntry
 
-	if err := json.unmarshal(material_types_json_data, &material_type_json_entries); err != nil {
+	if err := json.unmarshal(
+		material_types_json_data,
+		&material_type_json_entries,
+		.JSON5,
+		temp_arena.allocator,
+	); err != nil {
 		log.errorf("Failed to read material types json: %s\n", err)
 		return false
 	}
@@ -481,7 +514,7 @@ load_material_types_from_config_file :: proc() -> bool {
 			common.create_name(material_type_json_entry.name),
 		)
 		material_type := get_material_type(material_type_ref)
-		material_type.desc.name = common.make_name(material_type_json_entry.name)
+		material_type.desc.name = common.create_name(material_type_json_entry.name)
 
 		// Shading model
 		assert(material_type_json_entry.shading_model in G_MATERIAL_TYPE_SHADING_MODEL_MAPPING)
@@ -497,8 +530,9 @@ load_material_types_from_config_file :: proc() -> bool {
 			)
 		}
 
+		// Rewrite features from the JSON representation and check if all are supported
 		for feature, i in material_type_json_entry.features {
-			if (feature in INTERNAL.material_feature_by_name) == false {
+			if (common.create_name(feature) in INTERNAL.material_feature_by_name) == false {
 				log.warnf(
 					"Unsupported feature '%s' encountered when loading material type '%s'\n",
 					feature,
@@ -511,17 +545,19 @@ load_material_types_from_config_file :: proc() -> bool {
 			material_type.desc.features[i] = common.create_name(feature)
 		}
 
-		// Material passes
-
 		// A material has to be included in at least one material pass, otherwise something is off
 		assert(len(material_type_json_entry.material_passes) > 0)
+
+		// Gather all of the material passes this material is a part of 
 		material_type.desc.material_passes_refs = make(
 			[]MaterialPassRef,
-			len(material_type_json_entries.material_passes),
+			len(material_type_json_entry.material_passes),
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
 		for material_pass, i in material_type_json_entry.material_passes {
-			material_type.desc.material_passes_refs = common.create_name(material_pass)
+			pass_name := common.create_name(material_pass)
+			material_type.desc.material_passes_refs[i] = find_material_pass_by_name(pass_name)
+			assert(material_type.desc.material_passes_refs[i] != InvalidMaterialPassRef)
 		}
 
 		assert(create_material_type(material_type_ref))
@@ -549,10 +585,10 @@ material_type_allocate_params_entry :: proc(p_material_type_ref: MaterialTypeRef
 	entry_ptr := mem.ptr_offset(
 		material_buffer.mapped_ptr,
 		material_type.params_buffer_suballocation.offset +
-		u32(free_entry_idx * material_type.params_size_in_bytes),
+		u32(free_entry_idx) * u32(material_type.params_size_in_bytes),
 	)
 
-	return free_entry_idx, entry_ptr
+	return u32(free_entry_idx), entry_ptr
 }
 
 //--------------------------------------------------------------------------//

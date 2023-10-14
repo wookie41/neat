@@ -66,7 +66,6 @@ deinit_material_instance :: proc() {
 
 create_material_instance :: proc(p_material_instance_ref: MaterialInstanceRef) -> (ret: bool) {
 	material_instance := get_material_instance(p_material_instance_ref)
-	material_type := get_material_type(material_instance.desc.material_type_ref)
 	defer if ret == false {
 		common.ref_free(&G_MATERIAL_INSTANCE_REF_ARRAY, p_material_instance_ref)
 	}

@@ -47,17 +47,24 @@ DrawStreamOperation :: enum {
 
 //---------------------------------------------------------------------------//
 
+BindGroupChange :: struct {
+	bind_group_ref: BindGroupRef,
+	target:         u32,
+}
+
+//---------------------------------------------------------------------------//
+
 DrawStream :: struct {
-	draw_infos:         [dynamic]DrawInfo,
-	indexed_draw_infos: [dynamic]IndexedDrawInfo,
-	pipeline_changes:   [dynamic]PipelineRef,
-	bindings_changes:   [dynamic][]BindGroupBinding,
-	operations:         [dynamic]DrawStreamOperation,
-	next_draw:          u32,
-	next_indexed_draw:  u32,
-	next_bind_groups:   u32,
-	next_pipeline:      u32,
-	allocator:          mem.Allocator,
+	draw_infos:             [dynamic]DrawInfo,
+	indexed_draw_infos:     [dynamic]IndexedDrawInfo,
+	pipeline_changes:       [dynamic]PipelineRef,
+	bind_group_changes:     [dynamic]BindGroupChange,
+	operations:             [dynamic]DrawStreamOperation,
+	next_draw:              u32,
+	next_indexed_draw:      u32,
+	next_bind_group_change: u32,
+	next_pipeline:          u32,
+	allocator:              mem.Allocator,
 }
 
 //---------------------------------------------------------------------------//
@@ -65,7 +72,7 @@ DrawStream :: struct {
 draw_stream_init :: proc(p_allocator: mem.Allocator, p_draw_stream: ^DrawStream) {
 	p_draw_stream.draw_infos = make([dynamic]DrawInfo, p_allocator)
 	p_draw_stream.indexed_draw_infos = make([dynamic]IndexedDrawInfo, p_allocator)
-	p_draw_stream.bindings_changes = make([dynamic][]BindGroupBinding, p_allocator)
+	p_draw_stream.bind_group_changes = make([dynamic]BindGroupChange, p_allocator)
 	p_draw_stream.pipeline_changes = make([dynamic]PipelineRef, p_allocator)
 	p_draw_stream.operations = make([dynamic]DrawStreamOperation, p_allocator)
 	p_draw_stream.allocator = p_allocator
@@ -74,7 +81,7 @@ draw_stream_init :: proc(p_allocator: mem.Allocator, p_draw_stream: ^DrawStream)
 draw_stream_reset :: proc(p_draw_stream: ^DrawStream) {
 	p_draw_stream.next_draw = 0
 	p_draw_stream.next_indexed_draw = 0
-	p_draw_stream.next_bind_groups = 0
+	p_draw_stream.next_bind_group_change = 0
 	p_draw_stream.next_pipeline = 0
 }
 
@@ -83,24 +90,14 @@ draw_stream_reset :: proc(p_draw_stream: ^DrawStream) {
 draw_stream_free :: proc(p_draw_stream: ^DrawStream) {
 	delete(p_draw_stream.draw_infos)
 	delete(p_draw_stream.indexed_draw_infos)
-	for bindings in p_draw_stream.bindings_changes {
-		for binding in bindings {
-			delete(binding.dynamic_offsets, p_draw_stream.allocator)
-		}
-		delete(bindings, p_draw_stream.allocator)
-	}
-	delete(p_draw_stream.bindings_changes)
+	delete(p_draw_stream.bind_group_changes)
 	delete(p_draw_stream.pipeline_changes)
 	delete(p_draw_stream.operations)
 }
 
-
 //---------------------------------------------------------------------------//
 
-draw_stream_submit :: proc(
-	p_cmd_buff_ref: CommandBufferRef,
-	p_draw_stream: ^DrawStream,
-) {
+draw_stream_submit :: proc(p_cmd_buff_ref: CommandBufferRef, p_draw_stream: ^DrawStream) {
 	cmd_buff := get_command_buffer(p_cmd_buff_ref)
 	for operation in p_draw_stream.operations {
 		draw_stream_operations[operation](p_cmd_buff_ref, cmd_buff, p_draw_stream)
@@ -117,7 +114,7 @@ draw_stream_operations := []proc(
 ){
 	draw_stream_dispatch_draw_cmd,
 	draw_stream_dispatch_indexed_draw_cmd,
-	draw_stream_update_bindings,
+	draw_stream_bind_bind_group,
 	draw_stream_update_pipeline,
 }
 
@@ -139,22 +136,15 @@ draw_stream_add_indexed_draw :: proc(p_draw_stream: ^DrawStream) -> ^IndexedDraw
 }
 //---------------------------------------------------------------------------//
 
-draw_stream_change_bindings :: proc(
-	p_draw_stream: ^DrawStream,
-	p_num_bindings: int,
-) -> []BindGroupBinding {
+draw_stream_bind_bind_group :: proc(p_draw_stream: ^DrawStream) -> ^BindGroupChange {
 	append(&p_draw_stream.operations, DrawStreamOperation.ChangeBindGroups)
-	bindings := make([]BindGroupBinding, p_num_bindings, p_draw_stream.allocator)
-	append(&p_draw_stream.bindings_changes, bindings)
-	return p_draw_stream.bindings_changes[len(p_draw_stream.bindings_changes) - 1]
+	append(&p_draw_stream.bind_group_changes, BindGroupChange{})
+	return &p_draw_stream.bind_group_changes[len(p_draw_stream.bind_group_changes) - 1]
 }
 
 //---------------------------------------------------------------------------//
 
-draw_stream_change_pipeline :: proc(
-	p_draw_stream: ^DrawStream,
-	p_pipeline_ref: PipelineRef,
-) {
+draw_stream_change_pipeline :: proc(p_draw_stream: ^DrawStream, p_pipeline_ref: PipelineRef) {
 	append(&p_draw_stream.operations, DrawStreamOperation.ChangePipeline)
 	append(&p_draw_stream.pipeline_changes, p_pipeline_ref)
 }
@@ -194,18 +184,19 @@ draw_stream_dispatch_indexed_draw_cmd :: #force_inline proc(
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-draw_stream_update_bindings :: #force_inline proc(
+draw_stream_bind_bind_group :: #force_inline proc(
 	p_cmd_buff_ref: CommandBufferRef,
 	p_cmd_buff: ^CommandBufferResource,
 	p_draw_stream: ^DrawStream,
 ) {
-	bind_bind_groups(
+	bind_bind_group(
 		p_cmd_buff_ref,
 		p_draw_stream.pipeline_changes[p_draw_stream.next_pipeline - 1],
-		p_draw_stream.bindings_changes[p_draw_stream.next_bind_groups],
+		p_draw_stream.bind_group_changes[p_draw_stream.next_bind_group_change].bind_group_ref,
+		p_draw_stream.bind_group_changes[p_draw_stream.next_bind_group_change].target,
 	)
 
-	p_draw_stream.next_bind_groups += 1
+	p_draw_stream.next_bind_group_change += 1
 }
 
 //---------------------------------------------------------------------------//
@@ -216,14 +207,14 @@ draw_stream_update_pipeline :: #force_inline proc(
 	p_cmd_buff: ^CommandBufferResource,
 	p_draw_stream: ^DrawStream,
 ) {
-	new_pipeline := get_pipeline(
-		p_draw_stream.pipeline_changes[p_draw_stream.next_pipeline],
-	)
+	new_pipeline_ref := p_draw_stream.pipeline_changes[p_draw_stream.next_pipeline]
 	p_draw_stream.next_pipeline += 1
-	backend_draw_stream_change_pipeline(p_draw_stream, p_cmd_buff, new_pipeline)
+
+	pipeline := get_pipeline(new_pipeline_ref)
+	backend_draw_stream_change_pipeline(p_draw_stream, p_cmd_buff, pipeline)
 	bind_bindless_array_and_immutable_sampler(
 		p_cmd_buff_ref,
-		new_pipeline.pipeline_layout_ref,
+		new_pipeline_ref,
 		.Graphics,
 		2,
 	)

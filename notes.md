@@ -6,3 +6,10 @@ TODO:
 - Create a cache for descriptor set layouts and resuse them (vulkan_renderer_resource_pipeline_layout.odin)
 - Support loading volume DDS textures in the Vulkan backend, right now the asset pipeline supports them, but we ignore depth > 1
 - When shaders.json is reloaded, we have to destroy the shaders that were loaded before
+
+-> Add the bindless images descriptor set layout to the cache
+-> Test material system implementation
+-> Allow for empty fragment shader when loading material types (prepass)
+-> Material types don't verify if a shader with a given path exists -> fix that
+-> Get rid of G_RENDERER_ALLOCATORS.temp_allocator?
+-> Go over string storage (create_name) and make sure it's all stored in the string table

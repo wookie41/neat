@@ -7,8 +7,8 @@
             "NormalTexture"
         ],
         "materialPasses": [
-            "TestMaterialPass",
-            "TestMaterialPassPrepass"
+            "TestMaterialPass"
+            // "TestMaterialPassPrePass"
         ]
     }
 ]

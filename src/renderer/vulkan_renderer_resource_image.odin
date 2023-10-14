@@ -3,11 +3,11 @@ package renderer
 
 //---------------------------------------------------------------------------//
 
-import "core:mem"
-import "core:strings"
 import "../common"
 import vma "../third_party/vma"
 import "core:log"
+import "core:mem"
+import "core:strings"
 import vk "vendor:vulkan"
 
 //---------------------------------------------------------------------------//
@@ -67,15 +67,6 @@ when USE_VULKAN_BACKEND {
 	RunningImageUpload :: struct {
 		image_ref:             ImageRef,
 		upload_finished_fence: vk.Fence,
-	}
-
-	//---------------------------------------------------------------------------//
-
-	@(private)
-	VK_BINDLESS: struct {
-		bindless_descriptor_set_layout: vk.DescriptorSetLayout,
-		bindless_descriptor_set:        vk.DescriptorSet,
-		immutable_samplers:             []vk.Sampler,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -645,260 +636,19 @@ when USE_VULKAN_BACKEND {
 				&to_sample_barriers[i],
 			)
 		}
-
-	}
-	//---------------------------------------------------------------------------//
-
-	@(private = "file")
-	create_bindless_descriptor_array :: proc() {
-
-		// Create samplers
-		{
-			VK_BINDLESS.immutable_samplers = make(
-				[]vk.Sampler,
-				len(SamplerType),
-				G_RENDERER_ALLOCATORS.resource_allocator,
-			)
-
-			sampler_create_info := vk.SamplerCreateInfo {
-				sType        = .SAMPLER_CREATE_INFO,
-				magFilter    = .NEAREST,
-				minFilter    = .NEAREST,
-				addressModeU = .CLAMP_TO_EDGE,
-				addressModeW = .CLAMP_TO_EDGE,
-				addressModeV = .CLAMP_TO_EDGE,
-				// @TODO
-				// anisotropyEnable = true,
-				//maxAnisotropy    = device_properties.limits.maxSamplerAnisotropy,
-				borderColor  = .INT_OPAQUE_BLACK,
-				compareOp    = .ALWAYS,
-				mipmapMode   = .LINEAR,
-			}
-
-			vk.CreateSampler(
-				G_RENDERER.device,
-				&sampler_create_info,
-				nil,
-				&VK_BINDLESS.immutable_samplers[0],
-			)
-
-			sampler_create_info.addressModeU = .CLAMP_TO_BORDER
-			sampler_create_info.addressModeV = .CLAMP_TO_BORDER
-			sampler_create_info.addressModeW = .CLAMP_TO_BORDER
-
-			vk.CreateSampler(
-				G_RENDERER.device,
-				&sampler_create_info,
-				nil,
-				&VK_BINDLESS.immutable_samplers[1],
-			)
-
-			sampler_create_info.addressModeU = .REPEAT
-			sampler_create_info.addressModeV = .REPEAT
-			sampler_create_info.addressModeW = .REPEAT
-
-			vk.CreateSampler(
-				G_RENDERER.device,
-				&sampler_create_info,
-				nil,
-				&VK_BINDLESS.immutable_samplers[2],
-			)
-
-			sampler_create_info.magFilter = .LINEAR
-			sampler_create_info.minFilter = .LINEAR
-
-			sampler_create_info.addressModeU = .CLAMP_TO_EDGE
-			sampler_create_info.addressModeV = .CLAMP_TO_EDGE
-			sampler_create_info.addressModeW = .CLAMP_TO_EDGE
-
-			vk.CreateSampler(
-				G_RENDERER.device,
-				&sampler_create_info,
-				nil,
-				&VK_BINDLESS.immutable_samplers[3],
-			)
-
-			sampler_create_info.addressModeU = .CLAMP_TO_BORDER
-			sampler_create_info.addressModeV = .CLAMP_TO_BORDER
-			sampler_create_info.addressModeW = .CLAMP_TO_BORDER
-
-			vk.CreateSampler(
-				G_RENDERER.device,
-				&sampler_create_info,
-				nil,
-				&VK_BINDLESS.immutable_samplers[4],
-			)
-
-			sampler_create_info.addressModeU = .REPEAT
-			sampler_create_info.addressModeV = .REPEAT
-			sampler_create_info.addressModeW = .REPEAT
-
-			vk.CreateSampler(
-				G_RENDERER.device,
-				&sampler_create_info,
-				nil,
-				&VK_BINDLESS.immutable_samplers[5],
-			)
-		}
-		// Create a descriptor poll for the bindless array and immutable samplers
-		{
-			pool_sizes := []vk.DescriptorPoolSize{
-				{type = .SAMPLER, descriptorCount = len(SamplerType)},
-				{type = .SAMPLED_IMAGE, descriptorCount = MAX_BINDLESS_COUNT},
-			}
-
-			descriptor_pool_create_info := vk.DescriptorPoolCreateInfo {
-				sType = .DESCRIPTOR_POOL_CREATE_INFO,
-				maxSets = 1,
-				poolSizeCount = u32(len(pool_sizes)),
-				pPoolSizes = raw_data(pool_sizes),
-				flags = {.UPDATE_AFTER_BIND},
-			}
-
-			vk.CreateDescriptorPool(
-				G_RENDERER.device,
-				&descriptor_pool_create_info,
-				nil,
-				&INTERNAL.bindless_descriptor_pool,
-			)
-
-		}
-
-		// Create the bindings layout and the layout itself
-		{
-			binding_flags := []vk.DescriptorBindingFlags{
-				{},
-				{},
-				{},
-				{},
-				{},
-				{},
-				{.UPDATE_AFTER_BIND, .PARTIALLY_BOUND},
-			}
-
-			flags_create_info := vk.DescriptorSetLayoutBindingFlagsCreateInfo {
-				sType         = .DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
-				bindingCount  = u32(len(binding_flags)),
-				pBindingFlags = raw_data(binding_flags),
-			}
-
-			set_bindings := []vk.DescriptorSetLayoutBinding{
-				{
-					binding = 0,
-					descriptorCount = 1,
-					descriptorType = .SAMPLER,
-					pImmutableSamplers = raw_data(VK_BINDLESS.immutable_samplers),
-					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
-				},
-				{
-					binding = 1,
-					descriptorCount = 1,
-					descriptorType = .SAMPLER,
-					pImmutableSamplers = raw_data(VK_BINDLESS.immutable_samplers),
-					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
-				},
-				{
-					binding = 2,
-					descriptorCount = 1,
-					descriptorType = .SAMPLER,
-					pImmutableSamplers = raw_data(VK_BINDLESS.immutable_samplers),
-					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
-				},
-				{
-					binding = 3,
-					descriptorCount = 1,
-					descriptorType = .SAMPLER,
-					pImmutableSamplers = raw_data(VK_BINDLESS.immutable_samplers),
-					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
-				},
-				{
-					binding = 4,
-					descriptorCount = 1,
-					descriptorType = .SAMPLER,
-					pImmutableSamplers = raw_data(VK_BINDLESS.immutable_samplers),
-					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
-				},
-				{
-					binding = 5,
-					descriptorCount = 1,
-					descriptorType = .SAMPLER,
-					pImmutableSamplers = raw_data(VK_BINDLESS.immutable_samplers),
-					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
-				},
-				{
-					binding = 6,
-					descriptorCount = MAX_BINDLESS_COUNT,
-					descriptorType = .SAMPLED_IMAGE,
-					pImmutableSamplers = raw_data(VK_BINDLESS.immutable_samplers),
-					stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
-				},
-			}
-
-			descriptor_set_layout_create_info := vk.DescriptorSetLayoutCreateInfo {
-				sType = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-				bindingCount = u32(len(set_bindings)),
-				pBindings = raw_data(set_bindings),
-				pNext = &flags_create_info,
-				flags = {.UPDATE_AFTER_BIND_POOL},
-			}
-
-			res := vk.CreateDescriptorSetLayout(
-				G_RENDERER.device,
-				&descriptor_set_layout_create_info,
-				nil,
-				&VK_BINDLESS.bindless_descriptor_set_layout,
-			)
-			assert(res == .SUCCESS)
-
-			// Finally, allocate the descriptor set 
-			allocate_info := vk.DescriptorSetAllocateInfo {
-				sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
-				pSetLayouts        = &VK_BINDLESS.bindless_descriptor_set_layout,
-				descriptorPool     = INTERNAL.bindless_descriptor_pool,
-				descriptorSetCount = 1,
-			}
-
-			res = vk.AllocateDescriptorSets(
-				G_RENDERER.device,
-				&allocate_info,
-				&VK_BINDLESS.bindless_descriptor_set,
-			)
-			assert(res == .SUCCESS)
-		}
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_bind_bindless_array_and_immutable_samplers :: proc(
-		p_cmd_buffer: ^CommandBufferResource,
-		p_pipeline_layout: ^PipelineLayoutResource,
-		p_target: u32,
-		p_bind_point: PipelineType,
-	) {
-
-		vk.CmdBindDescriptorSets(
-			p_cmd_buffer.vk_cmd_buff,
-			map_pipeline_bind_point(p_bind_point),
-			p_pipeline_layout.vk_pipeline_layout,
-			p_target,
-			1,
-			&VK_BINDLESS.bindless_descriptor_set,
-			0,
-			nil,
-		)
-
-	}
-
-	//---------------------------------------------------------------------------//
-
-	@(private)
-	backend_batch_update_bindless_array_entries :: proc() {
+	backend_batch_update_bindless_array_entries :: proc(p_bindless_bind_group_ref: BindGroupRef) {
 
 		num_writes := len(INTERNAL.bindless_array_updates)
 		if num_writes == 0 {
 			return
 		}
+
+		bindless_bind_group := get_bind_group(p_bindless_bind_group_ref)
 
 		descriptor_writes := make(
 			[]vk.WriteDescriptorSet,
@@ -926,7 +676,7 @@ when USE_VULKAN_BACKEND {
 				sType           = .WRITE_DESCRIPTOR_SET,
 				descriptorCount = 1,
 				descriptorType  = .SAMPLED_IMAGE,
-				dstSet          = VK_BINDLESS.bindless_descriptor_set,
+				dstSet          = bindless_bind_group.vk_descriptor_set,
 				pImageInfo      = &image_infos[i],
 				dstArrayElement = image.bindless_idx,
 				dstBinding      = 6,

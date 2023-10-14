@@ -1,17 +1,17 @@
 [
     {
         "name": "TestMaterialPass",
-        "vertexShaderPatg": "base.vert.hlsl",
+        "vertexShaderPath": "base.vert.hlsl",
         "fragmentShaderPath": "base.frag.hlsl",
         "renderPass": "TestRenderPass"
-    },
-    {
-        "name": "TestMaterialPassPrePass",
-        "vertexShaderPath": "base.vert.hlsl",
-        "fragmentShaderPath": "prepass.frag.hlsl",
-        "renderPass": "TestRenderPass",
-        "additionalFeatureNames": [
-            "FEAT_PREPASS"
-        ]
     }
+    // {
+    //     "name": "TestMaterialPassPrePass",
+    //     "vertexShaderPath": "base.vert.hlsl",
+    //     "fragmentShaderPath": "prepass.frag.hlsl",
+    //     "renderPass": "TestRenderPass",
+    //     "additionalFeatureNames": [
+    //         "FEAT_PREPASS"
+    //     ]
+    // }
 ]

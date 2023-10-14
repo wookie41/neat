@@ -9,9 +9,9 @@ import "core:c"
 //---------------------------------------------------------------------------//
 
 MeshInstanceDesc :: struct {
-	name:         common.Name,
-	mesh_ref:     MeshRef,
-	material_ref: MaterialRef,
+	name:                  common.Name,
+	mesh_ref:              MeshRef,
+	material_instance_ref: MaterialInstanceRef,
 }
 
 //---------------------------------------------------------------------------//

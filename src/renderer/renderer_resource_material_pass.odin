@@ -119,11 +119,15 @@ destroy_material_pass :: proc(p_ref: MaterialPassRef) {
 //--------------------------------------------------------------------------//
 
 load_material_passes_from_config_file :: proc() -> bool {
-	context.allocator = G_RENDERER_ALLOCATORS.temp_allocator
-	defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
+	temp_arena : common.TempArena
+	common.temp_arena_init(&temp_arena)
+	defer common.temp_arena_delete(temp_arena)
 
 	material_passes_config := "app_data/renderer/config/material_passes.json"
-	material_passes_json_data, file_read_ok := os.read_entire_file(material_passes_config)
+	material_passes_json_data, file_read_ok := os.read_entire_file(
+		material_passes_config,
+		temp_arena.allocator,
+	)
 
 	if file_read_ok == false {
 		return false
@@ -132,8 +136,12 @@ load_material_passes_from_config_file :: proc() -> bool {
 	// Parse the material passes config file
 	material_passes_json_entries: []MaterialPassJSONEntry
 
-	if err := json.unmarshal(material_passes_json_data, &material_passes_json_entries);
-	   err != nil {
+	if err := json.unmarshal(
+		material_passes_json_data,
+		&material_passes_json_entries,
+		.JSON5,
+		temp_arena.allocator,
+	); err != nil {
 		log.errorf("Failed to read material passess json: %s\n", err)
 		return false
 	}

@@ -12,5 +12,12 @@
         "params": [
             {"name": "albedoTex", "type": "Texture2D"}
         ]
+    },
+    {
+        "name": "NormalTexture",
+        "flag": "FEAT_NORMAL_TEX",
+        "params": [
+            {"name": "normalTex", "type": "Texture2D"}
+        ]
     }
 ]
