@@ -4,7 +4,6 @@ package renderer
 
 import "../common"
 import c "core:c"
-import "core:log"
 import "core:math/linalg/glsl"
 
 //---------------------------------------------------------------------------//
@@ -130,7 +129,7 @@ G_PIPELINE_RESOURCE_ARRAY: []PipelineResource
 
 //---------------------------------------------------------------------------//
 
-init_pipelines :: proc() {
+init_pipelines :: proc() -> bool {
 	G_PIPELINE_REF_ARRAY = common.ref_array_create(
 		PipelineResource,
 		MAX_PIPELINES,
@@ -141,7 +140,9 @@ init_pipelines :: proc() {
 		MAX_PIPELINES,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
-	backend_init_pipelines()
+	backend_init_pipelines() or_return
+
+	return true
 }
 
 deinit_pipelines :: proc() {
@@ -150,9 +151,19 @@ deinit_pipelines :: proc() {
 
 //---------------------------------------------------------------------------//
 
-allocate_pipeline_ref :: proc(p_name: common.Name) -> PipelineRef {
+allocate_pipeline_ref :: proc(
+	p_name: common.Name,
+	p_bind_group_layouts_count: u32,
+) -> PipelineRef {
 	ref := PipelineRef(common.ref_create(PipelineResource, &G_PIPELINE_REF_ARRAY, p_name))
-	get_pipeline(ref).desc.name = p_name
+	pipeline := get_pipeline(ref)
+	pipeline.desc.name = p_name
+	pipeline.desc.bind_group_layout_refs = make(
+		[]BindGroupLayoutRef,
+		p_bind_group_layouts_count,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
+
 	return ref
 }
 
@@ -164,8 +175,7 @@ create_graphics_pipeline :: proc(p_ref: PipelineRef) -> bool {
 	res := backend_create_graphics_pipeline(p_ref, pipeline)
 
 	if res == false {
-		log.warn("Failed to create pipeline")
-		common.ref_free(&G_PIPELINE_REF_ARRAY, p_ref)
+		destroy_pipeline(p_ref)
 		return false
 	}
 
@@ -182,6 +192,10 @@ get_pipeline :: proc(p_ref: PipelineRef) -> ^PipelineResource {
 
 destroy_pipeline :: proc(p_ref: PipelineRef) {
 	pipeline := get_pipeline(p_ref)
+	if len(pipeline.desc.bind_group_layout_refs) > 0 {
+		delete(pipeline.desc.bind_group_layout_refs, G_RENDERER_ALLOCATORS.resource_allocator)
+	}
+
 	backend_destroy_pipeline(pipeline)
 	common.ref_free(&G_PIPELINE_REF_ARRAY, p_ref)
 }

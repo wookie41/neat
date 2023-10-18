@@ -3,11 +3,8 @@ package renderer
 //---------------------------------------------------------------------------//
 
 import "../common"
-import "core:hash"
 import "core:log"
-import "core:mem"
 import "core:os"
-import "core:slice"
 import vk "vendor:vulkan"
 
 //---------------------------------------------------------------------------//
@@ -18,8 +15,9 @@ when USE_VULKAN_BACKEND {
 
 	@(private = "file")
 	INTERNAL: struct {
-		pipeline_layout_cache: map[u32]PipelineLayoutCacheEntry,
-		vk_pipeline_cache:     vk.PipelineCache,
+		pipeline_layout_cache:          map[u32]PipelineLayoutCacheEntry,
+		vk_pipeline_cache:              vk.PipelineCache,
+		vk_empty_descriptor_set_layout: vk.DescriptorSetLayout,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -165,7 +163,26 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	backend_init_pipelines :: proc() {
+	backend_init_pipelines :: proc() -> bool {
+		// Create an empty descriptor set layout used to fill gaps
+		{
+			create_info := vk.DescriptorSetLayoutCreateInfo {
+					sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+					bindingCount = 0,
+				}
+
+			if vk.CreateDescriptorSetLayout(
+				   G_RENDERER.device,
+				   &create_info,
+				   nil,
+				   &INTERNAL.vk_empty_descriptor_set_layout,
+			   ) !=
+			   .SUCCESS {
+				return false
+			}
+		}
+
+
 		// Init pipeline layout cache
 		INTERNAL.pipeline_layout_cache = make(
 			map[u32]PipelineLayoutCacheEntry,
@@ -193,6 +210,8 @@ when USE_VULKAN_BACKEND {
 		}
 
 		vk.CreatePipelineCache(G_RENDERER.device, &create_info, nil, &INTERNAL.vk_pipeline_cache)
+
+		return true
 	}
 
 	//---------------------------------------------------------------------------//
@@ -303,18 +322,11 @@ when USE_VULKAN_BACKEND {
 			cache_entry.ref_count += 1
 			p_pipeline.vk_pipeline_layout = cache_entry.vk_pipeline_layout
 		} else {
-
 			// Otherwise create a new one 
-			pipeline_layout, success := create_pipeline_layout(
-				p_pipeline,
-				pipeline_layout_hash,
-				temp_arena.allocator,
-			)
+			success := create_pipeline_layout(p_pipeline, pipeline_layout_hash)
 			if success == false {
 				return false
 			}
-
-			p_pipeline.vk_pipeline_layout = pipeline_layout
 		}
 
 		// Map color attachment formats
@@ -454,7 +466,10 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	create_pipeline_layout :: proc(p_pipeline: ^PipelineResource) -> bool {
+	create_pipeline_layout :: proc(
+		p_pipeline: ^PipelineResource,
+		p_pipeline_layout_hash: u32,
+	) -> bool {
 
 		// Gather descriptor layouts from each bind group layout
 		descriptor_set_layouts := make(
@@ -465,6 +480,12 @@ when USE_VULKAN_BACKEND {
 		defer delete(descriptor_set_layouts, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		for bind_group_layout_ref, i in p_pipeline.desc.bind_group_layout_refs {
+
+			if bind_group_layout_ref == InvalidBindGroupLayout {
+				descriptor_set_layouts[i] = INTERNAL.vk_empty_descriptor_set_layout
+				continue
+			}
+
 			descriptor_set_layouts[i] =
 				get_bind_group_layout(bind_group_layout_ref).vk_descriptor_set_layout
 		}
@@ -489,7 +510,7 @@ when USE_VULKAN_BACKEND {
 
 		// Add entry to cache
 		INTERNAL.pipeline_layout_cache[p_pipeline_layout_hash] = PipelineLayoutCacheEntry {
-			ref_count = 1,
+			ref_count          = 1,
 			vk_pipeline_layout = p_pipeline.vk_pipeline_layout,
 		}
 

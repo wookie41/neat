@@ -33,7 +33,6 @@ MAX_MATERIAL_INSTANCES_PER_MATERIAL_TYPE :: 512
 INTERNAL: struct {
 	material_params_buffer_ref:     BufferRef,
 	material_feature_by_name:       map[common.Name]MaterialFeature,
-	material_buffer_bind_group_ref: BindGroupRef,
 }
 
 //---------------------------------------------------------------------------//
@@ -191,25 +190,6 @@ init_material_types :: proc() -> bool {
 
 	create_buffer(INTERNAL.material_params_buffer_ref) or_return
 
-
-	// Create the bind group that will hold the material buffer
-	{
-		INTERNAL.material_buffer_bind_group_ref = allocate_bind_group_ref(
-			common.create_name("MaterialBufferBindGroup"),
-		)
-		material_buffer_bind_group := get_bind_group(INTERNAL.material_buffer_bind_group_ref)
-		material_buffer_bind_group.desc = BindGroupDesc {
-			buffers = {
-				{
-					slot = 0,
-					buffer_ref = INTERNAL.material_params_buffer_ref,
-					size = MATERIAL_PARAMS_BUFFER_SIZE,
-				},
-			},
-		}
-		create_bind_group(INTERNAL.material_buffer_bind_group_ref)
-	}
-
 	load_material_features_from_config_file() or_return
 	load_material_types_from_config_file() or_return
 
@@ -331,11 +311,11 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 
 		vertex_shader.desc.features = shader_defines
 		vertex_shader.desc.file_path = material_pass.desc.vertex_shader_path
-		vertex_shader.desc.type = .VERTEX
+		vertex_shader.desc.stage = .Vertex
 
 		fragment_shader.desc.features = shader_defines
 		fragment_shader.desc.file_path = material_pass.desc.fragment_shader_path
-		fragment_shader.desc.type = .FRAGMENT
+		fragment_shader.desc.stage = .Fragment
 
 		// @TODO error handling
 		success := create_shader(material_pass.vertex_shader_ref)
@@ -345,8 +325,13 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 		assert(success)
 
 		// Create the PSO
-		material_pass.pipeline_ref = allocate_pipeline_ref(material_pass.desc.name)
+		material_pass.pipeline_ref = allocate_pipeline_ref(material_pass.desc.name, 3)
 		pipeline := get_pipeline(material_pass.pipeline_ref)
+		pipeline.desc.bind_group_layout_refs = {
+			InvalidBindGroupLayout, // @TODO material bind group
+			G_RENDERER.global_bind_group_layout_ref,
+			G_RENDERER.bindless_textures_array_bind_group_layout_ref,
+		}
 
 		pipeline.desc.render_pass_ref = material_pass.desc.render_pass_ref
 		pipeline.desc.vert_shader_ref = material_pass.vertex_shader_ref
@@ -357,8 +342,8 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 		assert(success)
 	}
 
-	// Initialize the bitarray the will allow to quickly lookup free entries
-	bit_array.init(
+	// Initialize the bitarray the will allow to quickly lookup free material entries
+	common.bit_array_init(
 		&material_type.free_material_buffer_entries_array,
 		MAX_MATERIAL_INSTANCES_PER_MATERIAL_TYPE,
 		0,

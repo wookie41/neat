@@ -7,12 +7,12 @@ package renderer
 //---------------------------------------------------------------------------//
 
 import "core:c"
-import "core:os"
-import "core:log"
 import "core:encoding/json"
-import "core:strings"
 import "core:hash"
+import "core:log"
+import "core:os"
 import "core:slice"
+import "core:strings"
 
 import "../common"
 
@@ -41,7 +41,7 @@ ShaderJSONEntry :: struct {
 ShaderDesc :: struct {
 	name:      common.Name,
 	file_path: common.Name,
-	stage:      ShaderStage,
+	stage:     ShaderStage,
 	features:  []string,
 }
 
@@ -49,9 +49,9 @@ ShaderDesc :: struct {
 
 @(private)
 ShaderStage :: enum u8 {
-	VERTEX,
-	FRAGMENT,
-	COMPUTE,
+	Vertex,
+	Fragment,
+	Compute,
 }
 
 ShaderStageFlags :: distinct bit_set[ShaderStage;u8]
@@ -93,8 +93,16 @@ G_SHADER_RESOURCE_ARRAY: []ShaderResource
 //---------------------------------------------------------------------------//
 
 init_shaders :: proc() -> bool {
-	G_SHADER_REF_ARRAY = common.ref_array_create(ShaderResource, MAX_SHADERS, G_RENDERER_ALLOCATORS.main_allocator)
-	G_SHADER_RESOURCE_ARRAY = make([]ShaderResource, MAX_SHADERS, G_RENDERER_ALLOCATORS.resource_allocator)
+	G_SHADER_REF_ARRAY = common.ref_array_create(
+		ShaderResource,
+		MAX_SHADERS,
+		G_RENDERER_ALLOCATORS.main_allocator,
+	)
+	G_SHADER_RESOURCE_ARRAY = make(
+		[]ShaderResource,
+		MAX_SHADERS,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
 
 	context.allocator = G_RENDERER_ALLOCATORS.temp_allocator
 	defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
@@ -150,11 +158,11 @@ init_shaders :: proc() -> bool {
 		}
 
 		if strings.has_suffix(entry.name, ".vert") {
-			shader.desc.stage = .VERTEX
+			shader.desc.stage = .Vertex
 		} else if strings.has_suffix(entry.name, ".frag") {
-			shader.desc.stage = .FRAGMENT
+			shader.desc.stage = .Fragment
 		} else if strings.has_suffix(entry.name, ".comp") {
-			shader.desc.stage = .COMPUTE
+			shader.desc.stage = .Compute
 		} else {
 			log.warnf("Unknown shader type %s...", entry.name)
 			common.ref_free(&G_SHADER_REF_ARRAY, shader_ref)
@@ -206,6 +214,7 @@ get_shader :: proc(p_ref: ShaderRef) -> ^ShaderResource {
 //--------------------------------------------------------------------------//
 
 destroy_shader :: proc(p_ref: ShaderRef) {
+	// @TODO remove from cache (shader_by_hash)
 	shader := get_shader(p_ref)
 	backend_destroy_shader(shader)
 	for feature in shader.desc.features {

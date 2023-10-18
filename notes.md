@@ -1,3 +1,4 @@
+
 TODO:
 - Create a black texture on the GPU that we'll use as the default 
 - Check if the bindless descriptor set array is initialized to zeros
@@ -11,5 +12,5 @@ TODO:
 -> Test material system implementation
 -> Allow for empty fragment shader when loading material types (prepass)
 -> Material types don't verify if a shader with a given path exists -> fix that
--> Get rid of G_RENDERER_ALLOCATORS.temp_allocator?
 -> Go over string storage (create_name) and make sure it's all stored in the string table
+-> Create a separate pool for UPDATE_AFTER_BIND vulkan_renderer_resource_bind_group.odin

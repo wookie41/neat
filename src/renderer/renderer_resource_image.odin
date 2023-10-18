@@ -305,23 +305,6 @@ destroy_image :: proc(p_ref: ImageRef) {
 
 //---------------------------------------------------------------------------//
 
-bind_bindless_array_and_immutable_sampler :: #force_inline proc(
-	p_cmd_buff_ref: CommandBufferRef,
-	p_pipeline_ref: PipelineRef,
-	p_bind_point: PipelineType,
-	p_target: u32,
-) {
-
-	backend_bind_bindless_array_and_immutable_samplers(
-		p_cmd_buff_ref,
-		p_pipeline_ref,
-		p_target,
-		p_bind_point,
-	)
-}
-
-//---------------------------------------------------------------------------//
-
 batch_update_bindless_array_entries :: #force_inline proc() {
 	backend_batch_update_bindless_array_entries()
 }

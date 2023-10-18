@@ -19,8 +19,8 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 
-	@(private)
-	INTERNAL: struct {
+	@(private="file")
+	INTERNAL : struct {
 		graphics_command_pools: []vk.CommandPool,
 		transfer_command_pools: []vk.CommandPool,
 		compute_command_pools:  []vk.CommandPool,

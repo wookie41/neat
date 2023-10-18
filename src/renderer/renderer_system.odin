@@ -9,6 +9,9 @@ import "../common"
 
 //---------------------------------------------------------------------------//
 
+BINDLESS_2D_IMAGES_COUNT :: 2048
+
+//---------------------------------------------------------------------------//
 
 @(private)
 USE_VULKAN_BACKEND :: #config(USE_VULKAN_BACKEND, true)
@@ -72,8 +75,10 @@ G_RENDERER: struct {
 	swap_image_refs:                               []ImageRef,
 	swap_image_render_targets:                     []RenderTarget,
 	gpu_device_flags:                              GPUDeviceFlags,
-	global_uniforms_bind_group_layout_ref:         BindGroupLayoutRef,
+	global_bind_group_layout_ref:                  BindGroupLayoutRef,
 	bindless_textures_array_bind_group_layout_ref: BindGroupLayoutRef,
+	global_bind_group_ref:                         BindGroupRef,
+	bindless_textures_array_bind_group_ref:        BindGroupRef,
 }
 
 @(private)
@@ -170,17 +175,13 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	init_shaders() or_return
 	init_render_passes() or_return
-	init_pipelines()
+	init_pipelines() or_return
 	init_bind_group_layouts()
 	init_bind_groups()
 	init_buffers()
 	init_meshes()
 	init_images()
 	init_command_buffers(p_options) or_return
-	init_render_tasks() or_return
-	init_material_passs() or_return
-	init_material_types() or_return
-	init_material_instances() or_return
 
 	create_swap_images()
 
@@ -239,14 +240,103 @@ init :: proc(p_options: InitOptions) -> bool {
 		}
 	}
 
-	// Create the bind group layouts for per frame/view data
+	// Create the bind group for per frame/view data
 	{
-		G_RENDERER.global_uniforms_bind_group_layout_ref = allocate_bind_group_layout_ref(
+		// Bind group layout creation
+		G_RENDERER.global_bind_group_layout_ref = allocate_bind_group_layout_ref(
+			common.create_name("GlobalUniforms"),
+			2, // per frame, per view
+		)
+
+		bind_group_layout := get_bind_group_layout(G_RENDERER.global_bind_group_layout_ref)
+
+		// Per frame uniform buffer
+		bind_group_layout.desc.bindings[0] = BindGroupLayoutBinding {
+			count = 1,
+			shader_stages = {.Vertex, .Fragment, .Compute},
+			type = .UniformBufferDynamic,
+		}
+
+		// Per view uniform buffer
+		bind_group_layout.desc.bindings[1] = BindGroupLayoutBinding {
+			count = 1,
+			shader_stages = {.Vertex, .Fragment, .Compute},
+			type = .UniformBufferDynamic,
+		}
+
+		if create_bind_group_layout(G_RENDERER.global_bind_group_layout_ref) == false {
+			log.error("Failed to create the global uniforms bind group layout")
+			return false
+		}
+
+		// Now create the bind group based on this layout
+		G_RENDERER.global_bind_group_ref = allocate_bind_group_ref(
 			common.create_name("GlobalUniforms"),
 		)
-		get_bind_group_layout(G_RENDERER.global_uniforms_bind_group_layout)
-		
+
+		bind_group := get_bind_group(G_RENDERER.global_bind_group_ref)
+		bind_group.desc.layout_ref = G_RENDERER.global_bind_group_layout_ref
+
+		if create_bind_group(G_RENDERER.global_bind_group_ref) == false {
+			log.error("Failed to create the global uniforms bind group")
+			return false
+		}
 	}
+
+	// Create the bind group layout for per bindless texture array data
+	{
+		// Layout
+		G_RENDERER.bindless_textures_array_bind_group_layout_ref = allocate_bind_group_layout_ref(
+			common.create_name("BindlessArray"),
+			1 + len(SamplerType), // 2D texture array, sampled
+		)
+
+		bind_group_layout := get_bind_group_layout(
+			G_RENDERER.bindless_textures_array_bind_group_layout_ref,
+		)
+
+		bind_group_layout.desc.flags = {.BindlessResources}
+
+		// Samplers
+		for i in 0 ..< len(SamplerType) {
+			bind_group_layout.desc.bindings[i] = BindGroupLayoutBinding {
+				count = 1,
+				shader_stages = {.Vertex, .Fragment, .Compute},
+				type = .Sampler,
+			}
+		}
+
+		// 2D images array
+		bind_group_layout.desc.bindings[len(SamplerType)] = BindGroupLayoutBinding {
+			count = BINDLESS_2D_IMAGES_COUNT,
+			shader_stages = {.Vertex, .Fragment, .Compute},
+			type = .Image,
+			flags = {.BindlessImageArray},
+		}
+
+		if create_bind_group_layout(G_RENDERER.bindless_textures_array_bind_group_layout_ref) ==
+		   false {
+			log.error("Failed to create the bindless images bind group layout")
+			return false
+		}
+
+		G_RENDERER.bindless_textures_array_bind_group_ref = allocate_bind_group_ref(
+			common.create_name("BindlessArray"),
+		)
+
+		bind_group := get_bind_group(G_RENDERER.bindless_textures_array_bind_group_ref)
+		bind_group.desc.layout_ref = G_RENDERER.bindless_textures_array_bind_group_layout_ref
+
+		if create_bind_group(G_RENDERER.bindless_textures_array_bind_group_ref) == false {
+			log.error("Failed to create the bindless images bind group")
+			return false
+		}
+	}
+
+	init_render_tasks() or_return
+	init_material_passs() or_return
+	init_material_types() or_return
+	init_material_instances() or_return
 
 	init_vt()
 

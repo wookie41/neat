@@ -37,10 +37,11 @@ when USE_VULKAN_BACKEND {
 			}
 
 			descriptor_pool_create_info := vk.DescriptorPoolCreateInfo {
-				sType         = .DESCRIPTOR_POOL_CREATE_INFO,
-				maxSets       = 1 << 15,
+				sType = .DESCRIPTOR_POOL_CREATE_INFO,
+				maxSets = 1 << 15,
 				poolSizeCount = u32(len(pool_sizes)),
-				pPoolSizes    = raw_data(pool_sizes),
+				pPoolSizes = raw_data(pool_sizes),
+				flags = {.UPDATE_AFTER_BIND}, // @TODO create a separate pool for that 
 			}
 
 			vk.CreateDescriptorPool(
@@ -89,9 +90,8 @@ when USE_VULKAN_BACKEND {
 		p_pipeline: ^PipelineResource,
 		p_bind_group: ^BindGroupResource,
 		p_target: u32,
+		p_dynamic_offsets: []u32,
 	) {
-
-
 		vk.CmdBindDescriptorSets(
 			p_cmd_buff.vk_cmd_buff,
 			map_pipeline_bind_point(p_pipeline.type),
@@ -99,8 +99,8 @@ when USE_VULKAN_BACKEND {
 			p_target,
 			1,
 			&p_bind_group.vk_descriptor_set,
-			u32(len(p_bind_group.dynamic_offsets)),
-			raw_data(p_bind_group.dynamic_offsets),
+			u32(len(p_dynamic_offsets)),
+			raw_data(p_dynamic_offsets),
 		)
 	}
 
@@ -120,7 +120,10 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_bind_group_update :: proc(p_bind_group_ref: BindGroupRef, p_bind_group_update: BindGroupUpdate) {
+	backend_bind_group_update :: proc(
+		p_bind_group_ref: BindGroupRef,
+		p_bind_group_update: BindGroupUpdate,
+	) {
 
 		bind_group := get_bind_group(p_bind_group_ref)
 
@@ -155,7 +158,8 @@ when USE_VULKAN_BACKEND {
 
 		bind_group_layout := get_bind_group_layout(bind_group.desc.layout_ref)
 
-		for binding, descriptor_write_idx in bind_group_layout.desc.bindings {
+		num_descriptor_writes: u32 = 0
+		for binding in bind_group_layout.desc.bindings {
 
 			if binding.type == .UniformBuffer ||
 			   binding.type == .UniformBufferDynamic ||
@@ -163,32 +167,42 @@ when USE_VULKAN_BACKEND {
 			   binding.type == .StorageBufferDynamic {
 
 				buffer_binding := p_bind_group_update.buffers[buffer_write_idx]
+
+				if buffer_binding.buffer_ref == InvalidBufferRef {
+					// Write null descriptor 
+					buffer_write_idx += 1
+					continue
+				}
+
 				buffer := get_buffer(buffer_binding.buffer_ref)
 
 				buffer_writes[buffer_write_idx].buffer = buffer.vk_buffer
 				buffer_writes[buffer_write_idx].offset = vk.DeviceSize(buffer_binding.offset)
 				buffer_writes[buffer_write_idx].range = vk.DeviceSize(buffer_binding.size)
 
-				descriptor_writes[descriptor_write_idx] = vk.WriteDescriptorSet {
+				descriptor_writes[num_descriptor_writes] = vk.WriteDescriptorSet {
 					sType           = .WRITE_DESCRIPTOR_SET,
 					descriptorCount = 1,
-					dstBinding      = u32(descriptor_write_idx),
+					dstBinding      = u32(num_descriptor_writes),
 					dstSet          = bind_group.vk_descriptor_set,
 					pBufferInfo     = &buffer_writes[buffer_write_idx],
 				}
 
 				if .UniformBuffer in buffer.desc.usage {
-					descriptor_writes[descriptor_write_idx].descriptorType = .UNIFORM_BUFFER
+					descriptor_writes[num_descriptor_writes].descriptorType = .UNIFORM_BUFFER
 				} else if .DynamicUniformBuffer in buffer.desc.usage {
-					descriptor_writes[descriptor_write_idx].descriptorType = .UNIFORM_BUFFER_DYNAMIC
+					descriptor_writes[num_descriptor_writes].descriptorType =
+					.UNIFORM_BUFFER_DYNAMIC
 				} else if .StorageBuffer in buffer.desc.usage {
-					descriptor_writes[descriptor_write_idx].descriptorType = .STORAGE_BUFFER
+					descriptor_writes[num_descriptor_writes].descriptorType = .STORAGE_BUFFER
 				} else if .DynamicStorageBuffer in buffer.desc.usage {
-					descriptor_writes[descriptor_write_idx].descriptorType = .STORAGE_BUFFER_DYNAMIC
+					descriptor_writes[num_descriptor_writes].descriptorType =
+					.STORAGE_BUFFER_DYNAMIC
 				} else {
 					assert(false) // Unsupported descriptor type
 				}
 
+				num_descriptor_writes += 1
 				buffer_write_idx += 1
 				continue
 			}
@@ -196,6 +210,13 @@ when USE_VULKAN_BACKEND {
 			if binding.type == .Image || binding.type == .StorageImage {
 
 				image_binding := p_bind_group_update.images[image_write_idx]
+
+				if image_binding.image_ref == InvalidImageRef {
+					// Write null descriptor
+					image_write_idx += 1
+					continue
+				}
+
 				image := get_image(image_binding.image_ref)
 
 				if image_binding.mip > 0 {
@@ -209,28 +230,29 @@ when USE_VULKAN_BACKEND {
 					image_writes[image_write_idx].imageLayout = image.vk_layout_per_mip[0]
 				}
 
-				descriptor_writes[descriptor_write_idx] = vk.WriteDescriptorSet {
+				descriptor_writes[num_descriptor_writes] = vk.WriteDescriptorSet {
 					sType           = .WRITE_DESCRIPTOR_SET,
 					descriptorCount = 1,
-					dstBinding      = u32(descriptor_write_idx),
+					dstBinding      = u32(num_descriptor_writes),
 					dstSet          = bind_group.vk_descriptor_set,
 					pImageInfo      = &image_writes[image_write_idx],
 				}
 
 				if binding.type == .Image {
-					descriptor_writes[descriptor_write_idx].descriptorType = .SAMPLED_IMAGE
+					descriptor_writes[num_descriptor_writes].descriptorType = .SAMPLED_IMAGE
 				} else {
-					descriptor_writes[descriptor_write_idx].descriptorType = .STORAGE_IMAGE
+					descriptor_writes[num_descriptor_writes].descriptorType = .STORAGE_IMAGE
 				}
 
 				image_write_idx += 1
+				num_descriptor_writes += 1
 				continue
 			}
 		}
 
 		vk.UpdateDescriptorSets(
 			G_RENDERER.device,
-			u32(len(descriptor_writes)),
+			u32(num_descriptor_writes),
 			raw_data(descriptor_writes),
 			0,
 			nil,

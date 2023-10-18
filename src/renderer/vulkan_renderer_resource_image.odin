@@ -16,11 +16,6 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	@(private = "file")
-	MAX_BINDLESS_COUNT :: 2048
-
-	//---------------------------------------------------------------------------//
-
 	@(private)
 	BackendImageResource :: struct {
 		vk_image:          vk.Image,
@@ -91,9 +86,6 @@ when USE_VULKAN_BACKEND {
 		staging_buffer.desc.flags = {.HostWrite, .Mapped}
 		staging_buffer.desc.usage = {.TransferSrc}
 		create_buffer(INTERNAL.staging_buffer)
-
-
-		create_bindless_descriptor_array()
 	}
 
 	//---------------------------------------------------------------------------//
@@ -641,14 +633,14 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_batch_update_bindless_array_entries :: proc(p_bindless_bind_group_ref: BindGroupRef) {
+	backend_batch_update_bindless_array_entries :: proc() {
 
 		num_writes := len(INTERNAL.bindless_array_updates)
 		if num_writes == 0 {
 			return
 		}
 
-		bindless_bind_group := get_bind_group(p_bindless_bind_group_ref)
+		bindless_bind_group := get_bind_group(G_RENDERER.bindless_textures_array_bind_group_ref)
 
 		descriptor_writes := make(
 			[]vk.WriteDescriptorSet,

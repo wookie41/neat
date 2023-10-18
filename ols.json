@@ -1,12 +1,13 @@
 {
+    "$schema": "https://raw.githubusercontent.com/DanielGavin/ols/master/misc/ols.schema.json",
     "collections": [
         {
             "name": "core",
-            "path": "C:\\Tools\\Odin\\core"
+            "path": "D:\\Projects\\Odin\\core"
         },
         {
             "name": "vendor",
-            "path": "C:\\Tools\\Odin\\vendor"
+            "path": "D:\\Projects\\Odin\\vendor"
         }
     ],
     "enable_semantic_tokens": false,

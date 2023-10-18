@@ -138,6 +138,19 @@ when USE_VULKAN_BACKEND {
 		p_bind_group_layout: ^BindGroupLayoutResource,
 	) -> bool {
 
+		binding_flags := make(
+			[]vk.DescriptorBindingFlags,
+			len(p_bind_group_layout.desc.bindings),
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+		defer delete(binding_flags, G_RENDERER_ALLOCATORS.temp_allocator)
+
+		flags_create_info := vk.DescriptorSetLayoutBindingFlagsCreateInfo {
+			sType         = .DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+			bindingCount  = u32(len(binding_flags)),
+			pBindingFlags = raw_data(binding_flags),
+		}
+
 		// First check the cache, maybe we can reuse an existing descriptor layout layout
 		if p_bind_group_layout.hash in INTERNAL.descriptor_set_layout_cache {
 
@@ -162,14 +175,30 @@ when USE_VULKAN_BACKEND {
 			pBindings    = raw_data(descriptor_set_layout_bindings),
 		}
 
+		if .BindlessResources in p_bind_group_layout.desc.flags {
+			create_info.flags += {.UPDATE_AFTER_BIND_POOL}
+		}
+
 		for i in 0 ..< create_info.bindingCount {
 			bind_group_binding := &p_bind_group_layout.desc.bindings[i]
 			descriptor_binding := &descriptor_set_layout_bindings[i]
+
+			stage_flags := vk.ShaderStageFlags{}
+			if .Vertex in bind_group_binding.shader_stages {
+				stage_flags += {.VERTEX}
+			}
+			if .Fragment in bind_group_binding.shader_stages {
+				stage_flags += {.FRAGMENT}
+			}
+			if .Compute in bind_group_binding.shader_stages {
+				stage_flags += {.COMPUTE}
+			}
 
 			descriptor_binding^ = vk.DescriptorSetLayoutBinding {
 				binding            = i,
 				descriptorCount    = bind_group_binding.count,
 				pImmutableSamplers = raw_data(INTERNAL.immutable_samplers),
+				stageFlags         = stage_flags,
 			}
 
 			switch bind_group_binding.type {
@@ -188,7 +217,16 @@ when USE_VULKAN_BACKEND {
 			case .StorageBufferDynamic:
 				descriptor_binding.descriptorType = .STORAGE_BUFFER_DYNAMIC
 			}
+
+			// Add the Vulkan required flags for bindless image arrays
+			// @TODO maybe add
+			if .BindlessImageArray in bind_group_binding.flags {
+				binding_flags[i] = {.UPDATE_AFTER_BIND, .PARTIALLY_BOUND}
+			}
 		}
+
+		flags_create_info.pBindingFlags = raw_data(binding_flags)
+		create_info.pNext = &flags_create_info
 
 		if vk.CreateDescriptorSetLayout(
 			   G_RENDERER.device,

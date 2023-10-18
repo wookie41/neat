@@ -40,7 +40,7 @@ BindGroupLayoutBindingType :: enum u8 {
 
 BindGroupLayoutBindingFlagBits :: enum u8 {
 	WriteAccess,
-	Dynamic, // Only used for buffers
+	BindlessImageArray,
 }
 
 //---------------------------------------------------------------------------//
@@ -58,9 +58,20 @@ BindGroupLayoutBinding :: struct {
 
 //---------------------------------------------------------------------------//
 
+BindGroupLayoutFlagBits :: enum u8 {
+	BindlessResources,
+}
+
+//---------------------------------------------------------------------------//
+
+BindGroupLayoutFlags :: distinct bit_set[BindGroupLayoutFlagBits;u8]
+
+//---------------------------------------------------------------------------//
+
 BindGroupLayoutDesc :: struct {
 	name:     common.Name,
 	bindings: []BindGroupLayoutBinding,
+	flags:    BindGroupLayoutFlags,
 }
 
 //---------------------------------------------------------------------------//
@@ -86,16 +97,26 @@ init_bind_group_layouts :: proc() {
 		MAX_BIND_GROUPS,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
-	backend_init_bind_groups()
+	backend_init_bind_group_layouts()
 }
 
 //---------------------------------------------------------------------------//
 
-allocate_bind_group_layout_ref :: proc(p_name: common.Name) -> BindGroupLayoutRef {
+allocate_bind_group_layout_ref :: proc(
+	p_name: common.Name,
+	p_binding_count: u32,
+) -> BindGroupLayoutRef {
 	ref := BindGroupLayoutRef(
 		common.ref_create(BindGroupLayoutResource, &G_BIND_GROUP_LAYOUT_REF_ARRAY, p_name),
 	)
-	get_bind_group_layout(ref).desc.name = p_name
+	bind_group_layout := get_bind_group_layout(ref)
+
+	bind_group_layout.desc.name = p_name
+	bind_group_layout.desc.bindings = make(
+		[]BindGroupLayoutBinding,
+		p_binding_count,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
 	return ref
 }
 
@@ -128,6 +149,8 @@ get_bind_group_layout :: proc(p_ref: BindGroupLayoutRef) -> ^BindGroupLayoutReso
 
 destroy_bind_group_layout :: proc(p_ref: BindGroupLayoutRef) {
 	bind_group_layout := get_bind_group_layout(p_ref)
+	delete(bind_group_layout.desc.bindings, G_RENDERER_ALLOCATORS.resource_allocator)
+
 	backend_destroy_bind_group_layout(p_ref)
 
 	common.ref_free(&G_BIND_GROUP_LAYOUT_REF_ARRAY, p_ref)

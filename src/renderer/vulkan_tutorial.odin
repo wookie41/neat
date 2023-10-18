@@ -111,13 +111,17 @@ init_vt :: proc() -> bool {
 		{
 			vertex_shader_ref := find_shader_by_name(common.create_name("base.vert"))
 			fragment_shader_ref := find_shader_by_name(common.create_name("base.frag"))
-			pipeline_ref = allocate_pipeline_ref(common.create_name("Vulkan Tutorial Pipeline"))
+			pipeline_ref = allocate_pipeline_ref(common.create_name("Vulkan Tutorial Pipeline"), 2)
 			get_pipeline(pipeline_ref).desc = {
-				name            = common.create_name("Vulkan Tutorial Pipe"),
+				name = common.create_name("Vulkan Tutorial Pipe"),
 				vert_shader_ref = vertex_shader_ref,
 				frag_shader_ref = fragment_shader_ref,
-				vertex_layout   = .Mesh,
+				vertex_layout = .Mesh,
 				render_pass_ref = render_pass_ref,
+				bind_group_layout_refs = {
+					InvalidBindGroupLayout,
+					G_RENDERER.global_bind_group_layout_ref,
+				},
 			}
 			create_graphics_pipeline(pipeline_ref)
 		}
@@ -132,18 +136,17 @@ vt_pre_render :: proc() {
 	using G_RENDERER
 	using G_VT
 
-	vt_create_bind_groups()
-
 	// Setup the draw stream
 	{
 		viking_room_mesh := get_mesh(G_VT.viking_room_mesh_ref)
 
 		draw_stream_init(G_RENDERER_ALLOCATORS.main_allocator, &G_VT.draw_stream)
 		draw_stream_change_pipeline(&G_VT.draw_stream, G_VT.pipeline_ref)
-
-		bind_group_change := draw_stream_bind_bind_group(&G_VT.draw_stream)
-		bind_group_change.bind_group_ref = ubo_bind_group_ref
-		bind_group_change.target = 1
+		draw_stream_update_global_bind_group(
+			&G_VT.draw_stream,
+			0,
+			int(size_of(UniformBufferObject) * get_frame_idx()),
+		)
 
 		cube_draw := draw_stream_add_indexed_draw(&G_VT.draw_stream)
 		cube_draw.index_buffer_ref = MESH_INTERNAL.index_buffer_ref
@@ -154,26 +157,6 @@ vt_pre_render :: proc() {
 		draw_stream_reset(&G_VT.draw_stream)
 	}
 }
-
-vt_create_bind_groups :: proc() {
-	using G_RENDERER
-	using G_VT
-
-	// Create the bind groups
-	{
-		ubo_bind_group_ref = allocate_bind_group_ref(common.create_name("VulkanTutorial"))
-		bind_group := get_bind_group(ubo_bind_group_ref)
-		bind_group.desc.buffers = []BindGroupBufferBinding{
-			BindGroupBufferBinding{
-				buffer_ref = ubo_ref,
-				slot = 1,
-				size = size_of(UniformBufferObject),
-			},
-		}
-		create_bind_group(ubo_bind_group_ref)
-	}
-}
-
 
 deinit_vt :: proc() {
 	using G_VT
@@ -222,6 +205,17 @@ vt_create_uniform_buffer :: proc() {
 	ubo.desc.usage = {.DynamicUniformBuffer}
 
 	create_buffer(ubo_ref)
+
+	// Write this uniform buffer to the global bind group
+	bind_group_update(
+		G_RENDERER.global_bind_group_ref,
+		BindGroupUpdate{
+			buffers = {
+				{buffer_ref = InvalidBufferRef},
+				{buffer_ref = ubo_ref, size = size_of(UniformBufferObject)},
+			},
+		},
+	)
 }
 
 // @TODO use p_dt
@@ -288,7 +282,7 @@ vt_create_texture_image :: proc() {
 vt_load_model :: proc() {
 
 	scene := assimp.import_file(
-		"D:/glTF-Sample-Models-master/glTF-Sample-Models-master/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
+		"app_data/renderer/assets/models/viking_room.obj",
 		{.OptimizeMeshes, .Triangulate, .FlipUVs},
 	)
 	if scene == nil {

@@ -49,7 +49,7 @@ BindGroupImageBinding :: struct {
 BindGroupBufferBinding :: struct {
 	buffer_ref: BufferRef,
 	offset:     u32,
-	size:     u32,
+	size:       u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -64,14 +64,13 @@ BindGroupDesc :: struct {
 BindGroupResource :: struct {
 	using backend_bind_group: BackendBindGroupResource,
 	desc:                     BindGroupDesc,
-	dynamic_offsets:          []u32,
 }
 
 //---------------------------------------------------------------------------//
 
 BindGroupUpdate :: struct {
-	images:     []BindGroupImageBinding,
-	buffers:    []BindGroupBufferBinding,
+	images:  []BindGroupImageBinding,
+	buffers: []BindGroupBufferBinding,
 }
 
 //---------------------------------------------------------------------------//
@@ -103,15 +102,7 @@ allocate_bind_group_ref :: proc(p_name: common.Name) -> BindGroupRef {
 
 create_bind_group :: proc(p_bind_group_ref: BindGroupRef) -> bool {
 	bind_group := get_bind_group(p_bind_group_ref)
-	bind_group_layout := get_bind_group_layout(bind_group.desc.layout_ref)
-
 	backend_create_bind_group(p_bind_group_ref, bind_group) or_return
-	bind_group.dynamic_offsets = make(
-		[]u32,
-		bind_group_layout.num_dynamic_offsets,
-		G_RENDERER_ALLOCATORS.resource_allocator,
-	)
-
 	return true
 }
 
@@ -130,14 +121,8 @@ get_bind_group :: proc(p_ref: BindGroupRef) -> ^BindGroupResource {
 //---------------------------------------------------------------------------//
 
 destroy_bind_group :: proc(p_ref: BindGroupRef) {
-	bind_group := get_bind_group(p_ref)
-	if len(bind_group.dynamic_offsets) > 0 {
-		delete(bind_group.dynamic_offsets, G_RENDERER_ALLOCATORS.resource_allocator)
-	}
 	backend_destroy_bind_group(p_ref)
-
 	common.ref_free(&G_BIND_GROUP_REF_ARRAY, p_ref)
-
 }
 
 //---------------------------------------------------------------------------//
@@ -147,11 +132,12 @@ bind_bind_group :: proc(
 	p_pipeline_ref: PipelineRef,
 	p_bind_group_ref: BindGroupRef,
 	p_target: u32,
+	p_dynamic_offsets: []u32,
 ) {
 	cmd_buff := get_command_buffer(p_cmd_buff_ref)
 	pipeline := get_pipeline(p_pipeline_ref)
 	bind_group := get_bind_group(p_bind_group_ref)
-	backend_bind_bind_group(cmd_buff, pipeline, bind_group, p_target)
+	backend_bind_bind_group(cmd_buff, pipeline, bind_group, p_target, p_dynamic_offsets)
 }
 
 //---------------------------------------------------------------------------//

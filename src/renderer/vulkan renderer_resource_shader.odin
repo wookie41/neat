@@ -3,7 +3,6 @@ package renderer
 //---------------------------------------------------------------------------//
 
 import "core:c/libc"
-import "core:hash"
 import "core:log"
 import "core:os"
 import "core:strings"
@@ -57,14 +56,12 @@ when USE_VULKAN_BACKEND {
 
 		// Determine compile target
 		compile_target: string
-		switch p_shader.desc.type {
-		case .VERTEX:
+		switch p_shader.desc.stage {
+		case .Vertex:
 			compile_target = "vs_6_7"
-
-		case .FRAGMENT:
+		case .Fragment:
 			compile_target = "ps_6_7"
-
-		case .COMPUTE:
+		case .Compute:
 			compile_target = "cs_6_7"
 		}
 
