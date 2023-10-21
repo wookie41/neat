@@ -38,7 +38,7 @@ INTERNAL : struct {{
 //---------------------------------------------------------------------------//
 
 Invalid{resource_name_capitalized}Ref := {resource_name_capitalized}Ref {{
-	ref = c.UINT64_MAX,
+	ref = c.UINT32_MAX,
 }}
 
 //---------------------------------------------------------------------------//
@@ -183,7 +183,7 @@ import "core:c"
 //---------------------------------------------------------------------------//
 
 Invalid{resource_name_capitalized}Ref := {resource_name_capitalized}Ref {{
-	ref = c.UINT64_MAX,
+	ref = c.UINT32_MAX,
 }}
 
 //---------------------------------------------------------------------------//

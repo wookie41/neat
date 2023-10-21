@@ -27,7 +27,7 @@ MeshInstanceRef :: common.Ref(MeshInstanceResource)
 //---------------------------------------------------------------------------//
 
 InvalidMeshInstanceRef := MeshInstanceRef {
-	ref = c.UINT64_MAX,
+	ref = c.UINT32_MAX,
 }
 
 //---------------------------------------------------------------------------//

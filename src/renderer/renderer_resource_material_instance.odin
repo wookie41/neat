@@ -31,7 +31,7 @@ MaterialInstanceRef :: common.Ref(MaterialInstanceResource)
 //---------------------------------------------------------------------------//
 
 InvalidMaterialInstanceRef := MaterialInstanceRef {
-	ref = c.UINT64_MAX,
+	ref = c.UINT32_MAX,
 }
 
 //---------------------------------------------------------------------------//

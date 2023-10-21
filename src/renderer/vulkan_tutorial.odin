@@ -25,7 +25,6 @@ G_VT: struct {
 	pipeline_ref:             PipelineRef,
 	depth_buffer_attachment:  DepthAttachment,
 	render_target_bindings:   []RenderTargetBinding,
-	ubo_bind_group_ref:       BindGroupRef,
 	draw_stream:              DrawStream,
 	viking_room_mesh_ref:     MeshRef,
 }
@@ -126,35 +125,10 @@ init_vt :: proc() -> bool {
 			create_graphics_pipeline(pipeline_ref)
 		}
 
+		draw_stream = draw_stream_create(G_RENDERER_ALLOCATORS.main_allocator)
+
 		vt_load_model()
 		return true
-	}
-}
-
-vt_pre_render :: proc() {
-
-	using G_RENDERER
-	using G_VT
-
-	// Setup the draw stream
-	{
-		viking_room_mesh := get_mesh(G_VT.viking_room_mesh_ref)
-
-		draw_stream_init(G_RENDERER_ALLOCATORS.main_allocator, &G_VT.draw_stream)
-		draw_stream_change_pipeline(&G_VT.draw_stream, G_VT.pipeline_ref)
-		draw_stream_update_global_bind_group(
-			&G_VT.draw_stream,
-			0,
-			int(size_of(UniformBufferObject) * get_frame_idx()),
-		)
-
-		cube_draw := draw_stream_add_indexed_draw(&G_VT.draw_stream)
-		cube_draw.index_buffer_ref = MESH_INTERNAL.index_buffer_ref
-		cube_draw.instance_count = 1
-		cube_draw.index_count = u32(len(viking_room_mesh.desc.indices))
-		cube_draw.vertex_buffer_ref = MESH_INTERNAL.vertex_buffer_ref
-		cube_draw.index_type = .UInt32
-		draw_stream_reset(&G_VT.draw_stream)
 	}
 }
 
@@ -165,7 +139,6 @@ deinit_vt :: proc() {
 	vk.DestroyImageView(device, texture_image_view, nil)
 	destroy_image(texture_image_ref)
 	destroy_buffer(ubo_ref)
-	destroy_bind_group(ubo_bind_group_ref)
 }
 
 vt_update :: proc(
@@ -187,8 +160,40 @@ vt_update :: proc(
 
 	begin_render_pass(render_pass_ref, p_cmd_buff_ref, &begin_info)
 	{
-		draw_stream_reset(&draw_stream)
-		draw_stream_submit(p_cmd_buff_ref, &draw_stream)
+		// Setup the draw stream
+		{
+			draw_stream_reset(&draw_stream)
+
+			viking_room_mesh := get_mesh(G_VT.viking_room_mesh_ref)
+
+			draw_stream_bind_pipeline(&G_VT.draw_stream, G_VT.pipeline_ref)
+
+			draw_stream_set_dynamic_offsets_1(
+				&G_VT.draw_stream,
+				[]u32{0, size_of(UniformBufferObject) * get_frame_idx()},
+			)
+
+			draw_stream_set_bind_group_1(&G_VT.draw_stream, G_RENDERER.global_bind_group_ref)
+			draw_stream_set_bind_group_2(
+				&G_VT.draw_stream,
+				G_RENDERER.bindless_textures_array_bind_group_ref,
+			)
+
+			draw_stream_set_vertex_buffer_0(&G_VT.draw_stream, mesh_get_global_vertex_buffer_ref())
+			draw_stream_set_index_buffer(
+				&G_VT.draw_stream,
+				mesh_get_global_index_buffer_ref(),
+				.UInt32,
+			)
+			draw_stream_set_draw_count(&G_VT.draw_stream, u32(len(viking_room_mesh.desc.indices)))
+			draw_stream_set_instance_count(&G_VT.draw_stream, 1)
+
+			draw_stream_submit_draw(&G_VT.draw_stream)
+		}
+
+
+		draw_stream_dispatch(p_cmd_buff_ref, G_VT.draw_stream)
+
 	}
 	end_render_pass(render_pass_ref, p_cmd_buff_ref)
 }

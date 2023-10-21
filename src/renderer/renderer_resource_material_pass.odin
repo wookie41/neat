@@ -36,7 +36,7 @@ MaterialPassRef :: common.Ref(MaterialPassResource)
 //---------------------------------------------------------------------------//
 
 InvalidMaterialPassRef := MaterialPassRef {
-	ref = c.UINT64_MAX,
+	ref = c.UINT32_MAX,
 }
 
 //---------------------------------------------------------------------------//

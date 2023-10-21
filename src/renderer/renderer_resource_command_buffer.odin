@@ -38,7 +38,7 @@ CommandBufferRef :: common.Ref(CommandBufferResource)
 //---------------------------------------------------------------------------//
 
 InvalidCommandBufferRef := CommandBufferRef {
-	ref = c.UINT64_MAX,
+	ref = c.UINT32_MAX,
 }
 
 //---------------------------------------------------------------------------//

@@ -83,7 +83,7 @@ RenderPassRef :: common.Ref(RenderPassResource)
 //---------------------------------------------------------------------------//
 
 InvalidRenderPassRef := RenderPassRef {
-	ref = c.UINT64_MAX,
+	ref = c.UINT32_MAX,
 }
 
 //---------------------------------------------------------------------------//

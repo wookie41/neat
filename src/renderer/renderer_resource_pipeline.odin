@@ -95,7 +95,7 @@ PipelineRef :: common.Ref(PipelineResource)
 //---------------------------------------------------------------------------//
 
 InvalidPipelineRef := PipelineRef {
-	ref = c.UINT64_MAX,
+	ref = c.UINT32_MAX,
 }
 
 //---------------------------------------------------------------------------//

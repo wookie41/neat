@@ -197,7 +197,7 @@ TextureAssetRef :: common.Ref(TextureAsset)
 //---------------------------------------------------------------------------//
 
 InvalidTextureAssetRef := TextureAssetRef {
-	ref = c.UINT64_MAX,
+	ref = c.UINT32_MAX,
 }
 
 //---------------------------------------------------------------------------//

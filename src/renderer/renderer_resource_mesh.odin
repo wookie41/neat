@@ -19,9 +19,7 @@ INDEX_DATA_TYPE :: u32
 @(private = "file")
 ZERO_VECTOR := glsl.vec4{0, 0, 0, 0}
 @(private = "file")
-VERTEX_STRIDE :: size_of(glsl.vec3) + size_of(glsl.vec2) + size_of(glsl.vec3) + size_of(
-	                 glsl.vec3,
-                 ) // Position// UV// Normal// Tangetn
+VERTEX_STRIDE :: size_of(glsl.vec3) + size_of(glsl.vec2) + size_of(glsl.vec3) + size_of(glsl.vec3) // Position// UV// Normal// Tangetn
 
 //---------------------------------------------------------------------------//
 
@@ -38,8 +36,8 @@ g_destroyed_mesh_refs: [dynamic]MeshRef
 //---------------------------------------------------------------------------//
 
 
-@(private)
-MESH_INTERNAL: struct {
+@(private = "file")
+INTERNAL: struct {
 	// Global vertex buffer for mesh data
 	vertex_buffer_ref: BufferRef,
 	// Global index buffer for mesh data
@@ -107,7 +105,7 @@ MeshRef :: common.Ref(MeshResource)
 //---------------------------------------------------------------------------//
 
 InvalidMeshRef := MeshRef {
-	ref = c.UINT64_MAX,
+	ref = c.UINT32_MAX,
 }
 
 //---------------------------------------------------------------------------//
@@ -124,12 +122,20 @@ init_meshes :: proc() -> bool {
 	g_created_mesh_refs = make([dynamic]MeshRef, G_RENDERER_ALLOCATORS.frame_allocator)
 	g_destroyed_mesh_refs = make([dynamic]MeshRef, G_RENDERER_ALLOCATORS.frame_allocator)
 
-	G_MESH_REF_ARRAY = common.ref_array_create(MeshResource, MAX_MESHES, G_RENDERER_ALLOCATORS.main_allocator)
-	G_MESH_RESOURCE_ARRAY = make([]MeshResource, MAX_MESHES, G_RENDERER_ALLOCATORS.resource_allocator)
+	G_MESH_REF_ARRAY = common.ref_array_create(
+		MeshResource,
+		MAX_MESHES,
+		G_RENDERER_ALLOCATORS.main_allocator,
+	)
+	G_MESH_RESOURCE_ARRAY = make(
+		[]MeshResource,
+		MAX_MESHES,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
 
 	// Create vertex buffer for mesh data
 	{
-		using MESH_INTERNAL
+		using INTERNAL
 		vertex_buffer_ref = allocate_buffer_ref(common.create_name("MeshVertexBuffer"))
 		vertex_buffer := get_buffer(vertex_buffer_ref)
 
@@ -141,7 +147,7 @@ init_meshes :: proc() -> bool {
 
 	// Create index buffer for mesh data
 	{
-		using MESH_INTERNAL
+		using INTERNAL
 		index_buffer_ref = allocate_buffer_ref(common.create_name("MeshIndexBuffer"))
 		index_buffer := get_buffer(index_buffer_ref)
 
@@ -173,15 +179,8 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 	assert(len(mesh.desc.tangent) == 0 || len(mesh.desc.tangent) == vertex_count)
 
 	assert(
-		.Indexed in
-		mesh.desc.flags &&
-		len(mesh.desc.indices) >
-		0 ||
-		(.Indexed in
-		mesh.desc.flags) ==
-		false &&
-		len(mesh.desc.indices) ==
-		0,
+		.Indexed in mesh.desc.flags && len(mesh.desc.indices) > 0 ||
+		(.Indexed in mesh.desc.flags) == false && len(mesh.desc.indices) == 0,
 	)
 
 	// Check if the the uplaod requests will fit into the staging buffer
@@ -189,15 +188,16 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 	index_data_size := index_count * size_of(INDEX_DATA_TYPE)
 
 	if dry_request_buffer_upload(
-		   MESH_INTERNAL.vertex_buffer_ref,
+		   INTERNAL.vertex_buffer_ref,
 		   u32(vertex_data_size + index_data_size),
-	   ) == false {
+	   ) ==
+	   false {
 		return false
 	}
 
 	// Suballocate the vertex and index buffers
 	vertex_allocation_successful, vertex_allocation := buffer_allocate(
-		MESH_INTERNAL.vertex_buffer_ref,
+		INTERNAL.vertex_buffer_ref,
 		u32(vertex_data_size),
 	)
 
@@ -206,19 +206,19 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 	}
 
 	index_allocation_successful, index_allocation := buffer_allocate(
-		MESH_INTERNAL.index_buffer_ref,
+		INTERNAL.index_buffer_ref,
 		u32(index_data_size),
 	)
 
 	if index_allocation_successful == false {
-		buffer_free(MESH_INTERNAL.vertex_buffer_ref, vertex_allocation.vma_allocation)
+		buffer_free(INTERNAL.vertex_buffer_ref, vertex_allocation.vma_allocation)
 		return false
 	}
 
 	// Upload index data to the staging buffer
 	if .Indexed in mesh.desc.flags {
 		index_buffer_upload_request := BufferUploadRequest {
-			dst_buff          = MESH_INTERNAL.index_buffer_ref,
+			dst_buff          = INTERNAL.index_buffer_ref,
 			dst_buff_offset   = index_allocation.offset,
 			dst_queue_usage   = .Graphics,
 			first_usage_stage = .VertexInput,
@@ -237,7 +237,7 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 	// Upload vertex data to the staging buffer
 	{
 		vertex_buffer_upload_request := BufferUploadRequest {
-			dst_buff          = MESH_INTERNAL.vertex_buffer_ref,
+			dst_buff          = INTERNAL.vertex_buffer_ref,
 			dst_buff_offset   = vertex_allocation.offset,
 			dst_queue_usage   = .Graphics,
 			first_usage_stage = .VertexInput,
@@ -261,7 +261,10 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 		if .UV in mesh.desc.features {
 			for i in 0 ..< vertex_count {
 				mem.copy(
-					mem.ptr_offset(vertex_data_ptr, VERTEX_STRIDE * i + size_of(mesh.desc.position[0])),
+					mem.ptr_offset(
+						vertex_data_ptr,
+						VERTEX_STRIDE * i + size_of(mesh.desc.position[0]),
+					),
 					&mesh.desc.uv[i],
 					size_of(mesh.desc.uv[0]),
 				)
@@ -269,7 +272,10 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 		} else {
 			for i in 0 ..< vertex_count {
 				mem.copy(
-					mem.ptr_offset(vertex_data_ptr, VERTEX_STRIDE * i + size_of(mesh.desc.position[0])),
+					mem.ptr_offset(
+						vertex_data_ptr,
+						VERTEX_STRIDE * i + size_of(mesh.desc.position[0]),
+					),
 					&ZERO_VECTOR,
 					size_of(mesh.desc.uv[0]),
 				)
@@ -282,7 +288,9 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 				mem.copy(
 					mem.ptr_offset(
 						vertex_data_ptr,
-						VERTEX_STRIDE * i + size_of(mesh.desc.position[0]) + size_of(mesh.desc.uv[0]),
+						VERTEX_STRIDE * i +
+						size_of(mesh.desc.position[0]) +
+						size_of(mesh.desc.uv[0]),
 					),
 					&mesh.desc.normal[i],
 					size_of(mesh.desc.normal[0]),
@@ -293,7 +301,9 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 				mem.copy(
 					mem.ptr_offset(
 						vertex_data_ptr,
-						VERTEX_STRIDE * i + size_of(mesh.desc.position[0]) + size_of(mesh.desc.uv[0]),
+						VERTEX_STRIDE * i +
+						size_of(mesh.desc.position[0]) +
+						size_of(mesh.desc.uv[0]),
 					),
 					&ZERO_VECTOR,
 					size_of(mesh.desc.normal[0]),
@@ -307,8 +317,7 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 				mem.copy(
 					mem.ptr_offset(
 						vertex_data_ptr,
-						VERTEX_STRIDE *
-						i +
+						VERTEX_STRIDE * i +
 						size_of(mesh.desc.position[0]) +
 						size_of(mesh.desc.uv[0]) +
 						size_of(mesh.desc.normal[0]),
@@ -322,8 +331,7 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 				mem.copy(
 					mem.ptr_offset(
 						vertex_data_ptr,
-						VERTEX_STRIDE *
-						i +
+						VERTEX_STRIDE * i +
 						size_of(mesh.desc.position[0]) +
 						size_of(mesh.desc.uv[0]) +
 						size_of(mesh.desc.normal[0]),
@@ -362,12 +370,9 @@ destroy_mesh :: proc(p_ref: MeshRef) {
 	mesh := get_mesh(p_ref)
 
 	// Free index and vertex data
-	buffer_free(MESH_INTERNAL.index_buffer_ref, mesh.index_buffer_allocation.vma_allocation)
+	buffer_free(INTERNAL.index_buffer_ref, mesh.index_buffer_allocation.vma_allocation)
 
-	buffer_free(
-		MESH_INTERNAL.vertex_buffer_ref,
-		mesh.vertex_buffer_allocation.vma_allocation,
-	)
+	buffer_free(INTERNAL.vertex_buffer_ref, mesh.vertex_buffer_allocation.vma_allocation)
 
 	// Add the mesh ref to the destroyed meshes queue
 	append(&g_created_mesh_refs, p_ref)
@@ -379,6 +384,20 @@ destroy_mesh :: proc(p_ref: MeshRef) {
 free_mesh_ref :: proc(p_mesh_ref: MeshRef) {
 	common.ref_free(&G_MESH_REF_ARRAY, p_mesh_ref)
 
+}
+
+//--------------------------------------------------------------------------//
+
+@(private)
+mesh_get_global_vertex_buffer_ref :: proc() -> BufferRef {
+	return INTERNAL.vertex_buffer_ref
+}
+
+//--------------------------------------------------------------------------//
+
+@(private)
+mesh_get_global_index_buffer_ref :: proc() -> BufferRef {
+	return INTERNAL.index_buffer_ref
 }
 
 //--------------------------------------------------------------------------//

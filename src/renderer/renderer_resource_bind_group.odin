@@ -19,7 +19,7 @@ BindGroupRef :: common.Ref(BindGroupResource)
 //---------------------------------------------------------------------------//
 
 InvalidBindGroup := BindGroupRef {
-	ref = c.UINT64_MAX,
+	ref = c.UINT32_MAX,
 }
 
 //---------------------------------------------------------------------------//

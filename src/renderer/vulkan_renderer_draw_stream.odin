@@ -10,85 +10,88 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
+	@(private = "file")
 	INDEX_TYPE_MAPPING := []vk.IndexType{.UINT16, .UINT32}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_draw_stream_dispatch_draw_cmd :: #force_inline proc(
-		p_draw_stream: ^DrawStream,
-		p_cmd_buff: ^CommandBufferResource,
-		p_draw_info: ^DrawInfo,
+	backend_draw_stream_dispatch_bind_vertex_buffer :: #force_inline proc(
+		p_cmd_buff_ref: CommandBufferRef,
+		p_vertex_buffer_ref: BufferRef,
+		p_bind_point: u32,
+		p_offset: u32,
 	) {
-		vertex_buffer := get_buffer(p_draw_info.vertex_buffer_ref).vk_buffer
-		vertex_buffer_offset := vk.DeviceSize(p_draw_info.vertex_buffer_offset)
+		cmd_buffer := get_command_buffer(p_cmd_buff_ref)
+		vertex_buffer := get_buffer(p_vertex_buffer_ref)
+		vertex_buffer_offset := vk.DeviceSize(p_offset)
 
 		vk.CmdBindVertexBuffers(
-			p_cmd_buff.vk_cmd_buff,
-			0,
+			cmd_buffer.vk_cmd_buff,
+			p_bind_point,
 			1,
-			&vertex_buffer,
+			&vertex_buffer.vk_buffer,
 			&vertex_buffer_offset,
-		)
-		vk.CmdDraw(
-			p_cmd_buff.vk_cmd_buff,
-			p_draw_info.vertex_count,
-			p_draw_info.instance_count,
-			p_draw_info.vertex_offset,
-			p_draw_info.instance_offset,
 		)
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_draw_stream_dispatch_indexed_draw_cmd :: #force_inline proc(
-		p_draw_stream: ^DrawStream,
-		p_cmd_buff: ^CommandBufferResource,
-		p_draw_info: ^IndexedDrawInfo,
+	backend_draw_stream_dispatch_bind_index_buffer :: #force_inline proc(
+		p_cmd_buff_ref: CommandBufferRef,
+		p_index_buffer_ref: BufferRef,
+		p_offset: u32,
+		p_index_type: IndexType,
 	) {
-		vertex_buffer := get_buffer(p_draw_info.vertex_buffer_ref).vk_buffer
-		vertex_buffer_offset := vk.DeviceSize(p_draw_info.vertex_buffer_offset)
-
-		index_buffer := get_buffer(p_draw_info.index_buffer_ref).vk_buffer
-		index_buffer_offset := vk.DeviceSize(p_draw_info.index_buffer_offset)
-
-		vk.CmdBindVertexBuffers(
-			p_cmd_buff.vk_cmd_buff,
-			0,
-			1,
-			&vertex_buffer,
-			&vertex_buffer_offset,
-		)
+		cmd_buff := get_command_buffer(p_cmd_buff_ref)
+		index_buffer := get_buffer(p_index_buffer_ref)
+		index_buffer_offset := vk.DeviceSize(p_offset)
 
 		vk.CmdBindIndexBuffer(
-			p_cmd_buff.vk_cmd_buff,
-			index_buffer,
+			cmd_buff.vk_cmd_buff,
+			index_buffer.vk_buffer,
 			index_buffer_offset,
-			INDEX_TYPE_MAPPING[p_draw_info.index_type],
-		)
-
-		vk.CmdDrawIndexed(
-			p_cmd_buff.vk_cmd_buff,
-			p_draw_info.index_count,
-			p_draw_info.instance_count,
-			p_draw_info.index_offset,
-			0,
-			p_draw_info.instance_offset,
+			INDEX_TYPE_MAPPING[u32(p_index_type)],
 		)
 	}
 
 	//---------------------------------------------------------------------------//
 
+	@(private)
+	backend_draw_stream_submit_indexed_draw :: #force_inline proc(
+		p_cmd_buff_ref: CommandBufferRef,
+		p_vertex_offset: u32,
+		p_index_offset: u32,
+		p_index_count: u32,
+		p_instance_count: u32,
+	) {
+
+		cmd_buff := get_command_buffer(p_cmd_buff_ref)
+		vk.CmdDrawIndexed(
+			cmd_buff.vk_cmd_buff,
+			p_index_count,
+			p_instance_count,
+			p_index_offset,
+			i32(p_vertex_offset),
+			0,
+		)
+	}
+
+	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_draw_stream_change_pipeline :: #force_inline proc(
-		p_draw_stream: ^DrawStream,
-		p_cmd_buff: ^CommandBufferResource,
-		p_pipeline: ^PipelineResource,
+	backend_draw_stream_submit_draw :: #force_inline proc(
+		p_cmd_buff_ref: CommandBufferRef,
+		p_vertex_offset: u32,
+		p_vertex_count: u32,
+		p_instance_count: u32,
 	) {
-		vk.CmdBindPipeline(p_cmd_buff.vk_cmd_buff, .GRAPHICS, p_pipeline.vk_pipeline)
+
+		cmd_buff := get_command_buffer(p_cmd_buff_ref)
+		vk.CmdDraw(cmd_buff.vk_cmd_buff, p_vertex_count, p_instance_count, p_vertex_offset, 0)
 	}
+
 
 	//---------------------------------------------------------------------------//
 }

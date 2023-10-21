@@ -354,8 +354,6 @@ init :: proc(p_options: InitOptions) -> bool {
 		end_command_buffer(cmd_buff)
 		submit_pre_render(cmd_buff)
 
-		vt_pre_render()
-
 		// Advance the frame index when using unified queues, as we don't want to wait for the 0th
 		// command buffer to finish before we start recording the frame
 		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {

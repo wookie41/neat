@@ -39,7 +39,7 @@ RenderTaskRef :: common.Ref(RenderTaskResource)
 //---------------------------------------------------------------------------//
 
 InvalidRenderTaskRef := RenderTaskRef {
-	ref = c.UINT64_MAX,
+	ref = c.UINT32_MAX,
 }
 
 //---------------------------------------------------------------------------//

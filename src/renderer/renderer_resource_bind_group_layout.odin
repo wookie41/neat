@@ -21,7 +21,7 @@ BindGroupLayoutRef :: common.Ref(BindGroupLayoutResource)
 //---------------------------------------------------------------------------//
 
 InvalidBindGroupLayout := BindGroupLayoutRef {
-	ref = c.UINT64_MAX,
+	ref = c.UINT32_MAX,
 }
 
 //---------------------------------------------------------------------------//
