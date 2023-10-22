@@ -3,20 +3,20 @@ package engine
 //---------------------------------------------------------------------------//
 
 import "../common"
-import "../third_party/tinydds"
 import "../renderer"
+import "../third_party/tinydds"
 
 import "core:c"
-import "core:mem"
-import "core:slice"
 import "core:c/libc"
-import "core:os"
-import "core:fmt"
-import "core:strings"
-import "core:log"
 import "core:encoding/json"
-import "core:path/filepath"
+import "core:fmt"
+import "core:log"
 import "core:math/linalg/glsl"
+import "core:mem"
+import "core:os"
+import "core:path/filepath"
+import "core:slice"
+import "core:strings"
 
 //---------------------------------------------------------------------------//
 
@@ -31,25 +31,25 @@ G_TEXTURE_ASSETS_DIR :: "app_data/engine/assets/textures/"
 
 //---------------------------------------------------------------------------//
 
-TextureImportFlagBits :: enum u16 {
+TextureAssetImportFlagBits :: enum u16 {
 	IsHDR,
 	IsNormalMap,
 	IsGrayScale,
 	IsCutout,
 }
 
-TextureImportFlags :: distinct bit_set[TextureImportFlagBits;u16]
+TextureAssetImportFlags :: distinct bit_set[TextureAssetImportFlagBits;u16]
 
 //---------------------------------------------------------------------------//
 
-TextureImportOptions :: struct {
+TextureAssetImportOptions :: struct {
 	file_path: string,
-	flags:     TextureImportFlags,
+	flags:     TextureAssetImportFlags,
 }
 
 //---------------------------------------------------------------------------//
 
-TextureImportResultStatus :: enum u16 {
+TextureAssetImportResultStatus :: enum u16 {
 	Ok,
 	Duplicate,
 	Error,
@@ -57,14 +57,14 @@ TextureImportResultStatus :: enum u16 {
 
 //---------------------------------------------------------------------------//
 
-TextureImportResult :: struct {
-	status: TextureImportResultStatus,
+TextureAssetImportResult :: struct {
+	status: TextureAssetImportResultStatus,
 }
 
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-TextureDatabaseEntry :: struct {
+TextureAssetDatabaseEntry :: struct {
 	uuid:      UUID,
 	name:      string, // User readable name of the texture
 	file_name: string `json:"fileName"`, // Name of the texture file inside assets/textures dir
@@ -73,7 +73,7 @@ TextureDatabaseEntry :: struct {
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-TextureMetadata :: struct {
+TextureAssetMetadata :: struct {
 	uuid:    UUID,
 	version: uint, // Metadata file version
 }
@@ -81,8 +81,8 @@ TextureMetadata :: struct {
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-TEXTURE_DATABASE: struct {
-	db_entries: [dynamic]TextureDatabaseEntry,
+TEXTURE_ASSET_DATABASE: struct {
+	db_entries: [dynamic]TextureAssetDatabaseEntry,
 }
 
 //---------------------------------------------------------------------------//
@@ -110,6 +110,7 @@ tinydds_alloc :: proc(user: rawptr, size: c.size_t) -> rawptr {
 
 //---------------------------------------------------------------------------//
 
+@(private="file")
 tinydds_alloc_temp :: proc(user: rawptr, size: c.size_t) -> rawptr {
 	user_data := (^TinyDDSUserData)(user)
 	return raw_data(make([]byte, size, user_data.temp_arena.allocator))
@@ -137,12 +138,8 @@ tinydds_free_temp :: proc(user: rawptr, memory: rawptr) {
 @(private = "file")
 tinydds_read :: proc(user: rawptr, buffer: rawptr, byte_count: c.size_t) -> c.size_t {
 	user_data := (^TinyDDSUserData)(user)
-	return libc.fread(
-		buffer, 
-		byte_count,
-		1,
-		user_data.texture_asset_file) * byte_count
-}		
+	return libc.fread(buffer, byte_count, 1, user_data.texture_asset_file) * byte_count
+}
 
 //---------------------------------------------------------------------------//
 
@@ -176,13 +173,13 @@ TextureAssetType :: enum {
 
 //---------------------------------------------------------------------------//
 
-TextureData :: struct {
+TextureAssetData :: struct {
 	data_per_mip: [][]byte,
 }
 
 //---------------------------------------------------------------------------//
 
-TextureFormat :: enum {
+TextureAssetFormat :: enum {
 	BC1_Unorm,
 	BC3_UNorm,
 	BC4_UNorm,
@@ -219,8 +216,8 @@ TextureAsset :: struct {
 	width:         u32,
 	height:        u32,
 	depth:         u32,
-	texture_datas: []TextureData,
-	format:        TextureFormat,
+	texture_datas: []TextureAssetData,
+	format:        TextureAssetFormat,
 }
 
 //---------------------------------------------------------------------------//
@@ -270,7 +267,7 @@ texture_asset_init :: proc() {
 
 	err := json.unmarshal(
 		db_data,
-		&TEXTURE_DATABASE.db_entries,
+		&TEXTURE_ASSET_DATABASE.db_entries,
 		json.DEFAULT_SPECIFICATION,
 		G_ALLOCATORS.main_allocator,
 	)
@@ -278,14 +275,14 @@ texture_asset_init :: proc() {
 
 	// Setup tiny dds callbacks
 	INTERNAL.tinydds_callbacks = {
-		allocFn = tinydds_alloc,
+		allocFn     = tinydds_alloc,
 		allocTempFn = tinydds_alloc_temp,
-		freeFn  = tinydds_free,
+		freeFn      = tinydds_free,
 		freeTempFn  = tinydds_free_temp,
-		readFn  = tinydds_read,
-		seekFn  = tinydds_seek,
-		tellFn  = tinydds_tell,
-		errorFn = tinydds_error,
+		readFn      = tinydds_read,
+		seekFn      = tinydds_seek,
+		tellFn      = tinydds_tell,
+		errorFn     = tinydds_error,
 	}
 }
 //---------------------------------------------------------------------------//
@@ -293,7 +290,7 @@ texture_asset_init :: proc() {
 @(private = "file")
 texture_asset_save_db :: proc() {
 	json_data, err := json.marshal(
-		TEXTURE_DATABASE.db_entries,
+		TEXTURE_ASSET_DATABASE.db_entries,
 		json.Marshal_Options{spec = .JSON5, pretty = true},
 		context.temp_allocator,
 	)
@@ -309,7 +306,7 @@ texture_asset_save_db :: proc() {
 
 //---------------------------------------------------------------------------//
 
-texture_asset_import :: proc(p_options: TextureImportOptions) -> TextureImportResult {
+texture_asset_import :: proc(p_options: TextureAssetImportOptions) -> TextureAssetImportResult {
 
 	temp_arena: common.TempArena
 	common.temp_arena_init(&temp_arena)
@@ -331,7 +328,7 @@ texture_asset_import :: proc(p_options: TextureImportOptions) -> TextureImportRe
 	texture_uuid := uuid_create()
 	// Write the metadata file
 	{
-		texture_metadata := TextureMetadata {
+		texture_metadata := TextureAssetMetadata {
 			uuid    = texture_uuid,
 			version = G_METADATA_FILE_VERSION,
 		}
@@ -345,7 +342,12 @@ texture_asset_import :: proc(p_options: TextureImportOptions) -> TextureImportRe
 			return {status = .Error}
 		}
 		if os.write_entire_file(
-			   common.aprintf(temp_arena.allocator, "%s%s.metadata", G_TEXTURE_ASSETS_DIR, texture_name),
+			   common.aprintf(
+				   temp_arena.allocator,
+				   "%s%s.metadata",
+				   G_TEXTURE_ASSETS_DIR,
+				   texture_name,
+			   ),
 			   json_data,
 		   ) ==
 		   false {
@@ -382,12 +384,12 @@ texture_asset_import :: proc(p_options: TextureImportOptions) -> TextureImportRe
 	}
 
 	// Add an entry to the database
-	db_entry := TextureDatabaseEntry {
+	db_entry := TextureAssetDatabaseEntry {
 		uuid      = texture_uuid,
 		name      = texture_name,
 		file_name = texture_file_name,
 	}
-	append(&TEXTURE_DATABASE.db_entries, db_entry)
+	append(&TEXTURE_ASSET_DATABASE.db_entries, db_entry)
 
 	// Save the database
 	texture_asset_save_db()
@@ -397,9 +399,7 @@ texture_asset_import :: proc(p_options: TextureImportOptions) -> TextureImportRe
 
 //---------------------------------------------------------------------------//
 
-texture_asset_load :: proc(
-	p_texture_name: common.Name,
-) -> TextureAssetRef {
+texture_asset_load :: proc(p_texture_name: common.Name) -> TextureAssetRef {
 
 	temp_arena: common.TempArena
 	common.temp_arena_init(&temp_arena)
@@ -428,18 +428,31 @@ texture_asset_load :: proc(
 		texture_asset_file = texture_asset_file,
 	}
 
-	texture_metadata : TextureMetadata
+	texture_metadata: TextureAssetMetadata
 	texture_name := common.get_string(p_texture_name)
 
 	// Load texture metadata
 	{
-		texture_metadata_file_path := common.aprintf(temp_arena.allocator, "%s%s.metadata", G_TEXTURE_ASSETS_DIR, texture_name)
-		texture_metadata_json, success := os.read_entire_file(texture_metadata_file_path, temp_arena.allocator)
+		texture_metadata_file_path := common.aprintf(
+			temp_arena.allocator,
+			"%s%s.metadata",
+			G_TEXTURE_ASSETS_DIR,
+			texture_name,
+		)
+		texture_metadata_json, success := os.read_entire_file(
+			texture_metadata_file_path,
+			temp_arena.allocator,
+		)
 		if !success {
 			log.warnf("Failed to load texture '%s' - couldn't load metadata\n", texture_name)
 			return InvalidTextureAssetRef
 		}
-		err := json.unmarshal(texture_metadata_json, &texture_metadata, .JSON5, temp_arena.allocator)
+		err := json.unmarshal(
+			texture_metadata_json,
+			&texture_metadata,
+			.JSON5,
+			temp_arena.allocator,
+		)
 		if err != nil {
 			log.warnf("Failed to load texture '%s' - couldn't read metadata\n", texture_name)
 			return InvalidTextureAssetRef
@@ -478,12 +491,16 @@ texture_asset_load :: proc(
 		texture_asset.format = .BC5_UNorm
 	case .TddsBc6HUfloatBlock:
 		texture_asset.format = .BC6H_UFloat16
-		case:
-			assert(false, "Unsupported texture format")
+	case:
+		assert(false, "Unsupported texture format")
 	}
 
 	// Get the texture data
-	if  !texture_asset_load_texture_data_tiny_dds(tinydds_ctx, texture_asset, temp_arena.allocator) {
+	if !texture_asset_load_texture_data_tiny_dds(
+		   tinydds_ctx,
+		   texture_asset,
+		   temp_arena.allocator,
+	   ) {
 		common.ref_free(&G_TEXTURE_ASSET_REF_ARRAY, texture_ref)
 		return InvalidTextureAssetRef
 	}
@@ -509,17 +526,18 @@ texture_asset_unload :: proc(p_texture_asset_ref: TextureAssetRef) {
 
 //---------------------------------------------------------------------------//
 
-@(private="file")
+@(private = "file")
 texture_asset_load_texture_data_tiny_dds :: proc(
-	p_tinydds_ctx: tinydds.TinyDDS_ContextHandle, 
-	p_texture_asset: ^TextureAsset, 
-	p_allocator: mem.Allocator) -> bool {
+	p_tinydds_ctx: tinydds.TinyDDS_ContextHandle,
+	p_texture_asset: ^TextureAsset,
+	p_allocator: mem.Allocator,
+) -> bool {
 
 	// For easier cleanup on failure
 	loaded_mips := make([dynamic][]byte, p_allocator)
 
 	p_texture_asset.texture_datas = make(
-		[]TextureData,
+		[]TextureAssetData,
 		int(p_texture_asset.depth),
 		G_ALLOCATORS.asset_allocator,
 	)
@@ -538,7 +556,10 @@ texture_asset_load_texture_data_tiny_dds :: proc(
 			// Cleanup on failure
 			if image_data == nil {
 				for k in 0 ..= i {
-					delete(p_texture_asset.texture_datas[i].data_per_mip, G_ALLOCATORS.asset_allocator)
+					delete(
+						p_texture_asset.texture_datas[i].data_per_mip,
+						G_ALLOCATORS.asset_allocator,
+					)
 				}
 				delete(p_texture_asset.texture_datas, G_ALLOCATORS.asset_allocator)
 				for mip_data in loaded_mips {
@@ -560,11 +581,21 @@ texture_asset_load_texture_data_tiny_dds :: proc(
 
 //---------------------------------------------------------------------------//
 
-texture_asset_load_and_create_renderer_image_string :: proc (p_name: string) -> (TextureAssetRef, renderer.ImageRef) {
+texture_asset_load_and_create_renderer_image_string :: proc(
+	p_name: string,
+) -> (
+	TextureAssetRef,
+	renderer.ImageRef,
+) {
 	return texture_asset_load_and_create_renderer_image_name(common.create_name(p_name))
 }
 
-texture_asset_load_and_create_renderer_image_name :: proc (p_name: common.Name) -> (TextureAssetRef, renderer.ImageRef) {
+texture_asset_load_and_create_renderer_image_name :: proc(
+	p_name: common.Name,
+) -> (
+	TextureAssetRef,
+	renderer.ImageRef,
+) {
 	log.info("Loading texture '%s'...\n", common.get_string(p_name))
 	texture_asset_ref := texture_asset_load(p_name)
 	if texture_asset_ref == InvalidTextureAssetRef {
@@ -581,21 +612,21 @@ texture_asset_load_and_create_renderer_image_name :: proc (p_name: common.Name) 
 	}
 
 	#partial switch texture_asset.format {
-		case .BC1_Unorm:
-			image.desc.format = .BC1_RGBA_UNorm
-		case .BC3_UNorm:
-			image.desc.format = .BC3_UNorm
-		case .BC4_UNorm:
-			image.desc.format = .BC4_UNorm
-		case .BC5_UNorm:
-			image.desc.format = .BC5_UNorm
-		case .BC6H_UFloat16	:
-			image.desc.format = .BC6H_UFloat
-		case:
-			texture_asset_unload(texture_asset_ref)
-			renderer.destroy_image(image_ref)
-			log.warnf("Unsupported image format for image '%s'\n", common.get_string(p_name))
-			return InvalidTextureAssetRef, renderer.InvalidImageRef	
+	case .BC1_Unorm:
+		image.desc.format = .BC1_RGBA_UNorm
+	case .BC3_UNorm:
+		image.desc.format = .BC3_UNorm
+	case .BC4_UNorm:
+		image.desc.format = .BC4_UNorm
+	case .BC5_UNorm:
+		image.desc.format = .BC5_UNorm
+	case .BC6H_UFloat16:
+		image.desc.format = .BC6H_UFloat
+	case:
+		texture_asset_unload(texture_asset_ref)
+		renderer.destroy_image(image_ref)
+		log.warnf("Unsupported image format for image '%s'\n", common.get_string(p_name))
+		return InvalidTextureAssetRef, renderer.InvalidImageRef
 	}
 
 	image.desc.type = .TwoDimensional
