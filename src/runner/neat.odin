@@ -12,7 +12,7 @@ main :: proc() {
 		os.exit(-1)
 	}
 
-	// engine.texture_asset_import(engine.TextureAssertImportOptions {
+	// engine.texture_asset_import(engine.TextureAssetImportOptions {
 	// 	file_path = "app_data/renderer/assets/textures/viking_room.png",
 	// })
 

@@ -47,19 +47,6 @@ TextureAssetImportOptions :: struct {
 	flags:     TextureAssetImportFlags,
 }
 
-//---------------------------------------------------------------------------//
-
-TextureAssetImportResultStatus :: enum u16 {
-	Ok,
-	Duplicate,
-	Error,
-}
-
-//---------------------------------------------------------------------------//
-
-TextureAssetImportResult :: struct {
-	status: TextureAssetImportResultStatus,
-}
 
 //---------------------------------------------------------------------------//
 
@@ -74,8 +61,7 @@ TextureAssetDatabaseEntry :: struct {
 
 @(private = "file")
 TextureAssetMetadata :: struct {
-	uuid:    UUID,
-	version: uint, // Metadata file version
+	using base: AssetMetadataBase,
 }
 
 //---------------------------------------------------------------------------//
@@ -93,76 +79,6 @@ INTERNAL: struct {
 }
 
 
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-TinyDDSUserData :: struct {
-	temp_arena:         ^common.TempArena,
-	texture_asset_file: ^libc.FILE,
-}
-
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-tinydds_alloc :: proc(user: rawptr, size: c.size_t) -> rawptr {
-	return raw_data(make([]byte, size, G_ALLOCATORS.asset_allocator))
-}
-
-//---------------------------------------------------------------------------//
-
-@(private="file")
-tinydds_alloc_temp :: proc(user: rawptr, size: c.size_t) -> rawptr {
-	user_data := (^TinyDDSUserData)(user)
-	return raw_data(make([]byte, size, user_data.temp_arena.allocator))
-}
-
-
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-tinydds_free :: proc(user: rawptr, memory: rawptr) {
-	// We're not resetting the tinydds context, instead we manually free the texture data explcilty
-	// so we don't care about this call
-}
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-tinydds_free_temp :: proc(user: rawptr, memory: rawptr) {
-	// We use an arena when loading the dds that is freed at the end of the call
-	// So no need to free memory here
-}
-
-
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-tinydds_read :: proc(user: rawptr, buffer: rawptr, byte_count: c.size_t) -> c.size_t {
-	user_data := (^TinyDDSUserData)(user)
-	return libc.fread(buffer, byte_count, 1, user_data.texture_asset_file) * byte_count
-}
-
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-tinydds_seek :: proc(user: rawptr, offset: i64) -> bool {
-	user_data := (^TinyDDSUserData)(user)
-	return libc.fseek(user_data.texture_asset_file, i32(offset), 0) == 0
-}
-
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-tinydds_tell :: proc(user: rawptr) -> i64 {
-	user_data := (^TinyDDSUserData)(user)
-	return i64(libc.ftell(user_data.texture_asset_file))
-}
-
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-tinydds_error :: proc(user: rawptr, msg: cstring) {
-	fmt.printf("TinyDDS error: %s\n", string(msg))
-}
 //---------------------------------------------------------------------------//
 
 TextureAssetType :: enum {
@@ -211,23 +127,13 @@ G_TEXTURE_ASSET_ARRAY: []TextureAsset
 //---------------------------------------------------------------------------//
 
 TextureAsset :: struct {
-	using asset:   AssetBase,
-	num_mips:      u8,
-	width:         u32,
-	height:        u32,
-	depth:         u32,
-	texture_datas: []TextureAssetData,
-	format:        TextureAssetFormat,
-}
-
-//---------------------------------------------------------------------------//
-
-allocate_texture_asset_ref :: proc(p_name: common.Name) -> TextureAssetRef {
-	ref := TextureAssetRef(common.ref_create(TextureAsset, &G_TEXTURE_ASSET_REF_ARRAY, p_name))
-	texture := get_texture_asset(ref)
-	texture.name = p_name
-	texture.type = .Texture
-	return ref
+	using metadata: TextureAssetMetadata,
+	num_mips:       u8,
+	width:          u32,
+	height:         u32,
+	depth:          u32,
+	texture_datas:  []TextureAssetData,
+	format:         TextureAssetFormat,
 }
 
 //---------------------------------------------------------------------------//
@@ -306,7 +212,7 @@ texture_asset_save_db :: proc() {
 
 //---------------------------------------------------------------------------//
 
-texture_asset_import :: proc(p_options: TextureAssetImportOptions) -> TextureAssetImportResult {
+texture_asset_import :: proc(p_options: TextureAssetImportOptions) -> AssetImportResult {
 
 	temp_arena: common.TempArena
 	common.temp_arena_init(&temp_arena)
@@ -326,33 +232,32 @@ texture_asset_import :: proc(p_options: TextureAssetImportOptions) -> TextureAss
 
 
 	texture_uuid := uuid_create()
+
 	// Write the metadata file
 	{
 		texture_metadata := TextureAssetMetadata {
+			name    = common.create_name(texture_name),
 			uuid    = texture_uuid,
 			version = G_METADATA_FILE_VERSION,
+			type    = .Texture,
 		}
-		json_data, err := json.marshal(
-			texture_metadata,
-			json.Marshal_Options{spec = .JSON5, pretty = true},
+		texture_metadata_file_path := common.aprintf(
 			temp_arena.allocator,
+			"%s%s.metadata",
+			G_TEXTURE_ASSETS_DIR,
+			texture_name,
 		)
-		if err != nil {
-			log.warnf("Failed to import texture '%s' - couldn't prepare metadata\n", texture_name)
-			return {status = .Error}
-		}
-		if os.write_entire_file(
-			   common.aprintf(
-				   temp_arena.allocator,
-				   "%s%s.metadata",
-				   G_TEXTURE_ASSETS_DIR,
-				   texture_name,
-			   ),
-			   json_data,
+
+		if common.write_json_file(
+			   texture_metadata_file_path,
+			   TextureAssetMetadata,
+			   texture_metadata,
+			   temp_arena.allocator,
 		   ) ==
 		   false {
 			log.warnf("Failed to import texture '%s' - couldn't save metadata\n", texture_name)
 			return {status = .Error}
+
 		}
 	}
 
@@ -404,9 +309,6 @@ texture_asset_load :: proc(p_texture_name: common.Name) -> TextureAssetRef {
 	temp_arena: common.TempArena
 	common.temp_arena_init(&temp_arena)
 	defer common.temp_arena_delete(temp_arena)
-
-	// Open the texture metadata file
-
 
 	// Open the texture file
 	asset_path := asset_loader_build_full_path(
@@ -644,9 +546,93 @@ texture_asset_load_and_create_renderer_image_name :: proc(
 	return texture_asset_ref, image_ref
 }
 
+//---------------------------------------------------------------------------//
+
 texture_asset_load_and_create_renderer_image :: proc {
 	texture_asset_load_and_create_renderer_image_string,
 	texture_asset_load_and_create_renderer_image_name,
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+TinyDDSUserData :: struct {
+	temp_arena:         ^common.TempArena,
+	texture_asset_file: ^libc.FILE,
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+tinydds_alloc :: proc(user: rawptr, size: c.size_t) -> rawptr {
+	return raw_data(make([]byte, size, G_ALLOCATORS.asset_allocator))
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+tinydds_alloc_temp :: proc(user: rawptr, size: c.size_t) -> rawptr {
+	user_data := (^TinyDDSUserData)(user)
+	return raw_data(make([]byte, size, user_data.temp_arena.allocator))
+}
+
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+tinydds_free :: proc(user: rawptr, memory: rawptr) {
+	// We're not resetting the tinydds context, instead we manually free the texture data explcilty
+	// so we don't care about this call
+}
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+tinydds_free_temp :: proc(user: rawptr, memory: rawptr) {
+	// We use an arena when loading the dds that is freed at the end of the call
+	// So no need to free memory here
+}
+
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+tinydds_read :: proc(user: rawptr, buffer: rawptr, byte_count: c.size_t) -> c.size_t {
+	user_data := (^TinyDDSUserData)(user)
+	return libc.fread(buffer, byte_count, 1, user_data.texture_asset_file) * byte_count
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+tinydds_seek :: proc(user: rawptr, offset: i64) -> bool {
+	user_data := (^TinyDDSUserData)(user)
+	return libc.fseek(user_data.texture_asset_file, i32(offset), 0) == 0
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+tinydds_tell :: proc(user: rawptr) -> i64 {
+	user_data := (^TinyDDSUserData)(user)
+	return i64(libc.ftell(user_data.texture_asset_file))
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+tinydds_error :: proc(user: rawptr, msg: cstring) {
+	fmt.printf("TinyDDS error: %s\n", string(msg))
+}
+//---------------------------------------------------------------------------//
+
+// @TODO make public when we make it possible to create textures inside the engine
+@(private = "file")
+allocate_texture_asset_ref :: proc(p_name: common.Name) -> TextureAssetRef {
+	ref := TextureAssetRef(common.ref_create(TextureAsset, &G_TEXTURE_ASSET_REF_ARRAY, p_name))
+	texture := get_texture_asset(ref)
+	texture.name = p_name
+	texture.type = .Texture
+	return ref
 }
 
 //---------------------------------------------------------------------------//

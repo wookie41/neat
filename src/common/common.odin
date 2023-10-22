@@ -1,11 +1,15 @@
 package common
 
+//---------------------------------------------------------------------------//
+
 import "core:container/bit_array"
 import "core:fmt"
 import "core:hash"
 import "core:mem"
 import "core:slice"
 import "core:strings"
+import "core:os"
+import "core:encoding/json"
 
 //---------------------------------------------------------------------------//
 
@@ -137,4 +141,28 @@ bit_array_init :: proc(
 
 	return true
 }
+
+//---------------------------------------------------------------------------//
+
+write_json_file :: proc(
+	p_file_path: string,
+	$T: typeid,
+	p_value: T,
+	p_allocator: mem.Allocator,
+) -> bool {
+	json_data, err := json.marshal(
+		p_value,
+		json.Marshal_Options{spec = .JSON5, pretty = true},
+		p_allocator,
+	)
+	if err != nil {
+		return false
+	}
+	defer delete(json_data, p_allocator)
+	if os.write_entire_file(p_file_path, json_data) == false {
+		return false
+	}
+	return true
+}
+
 //---------------------------------------------------------------------------//

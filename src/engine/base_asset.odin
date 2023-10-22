@@ -1,10 +1,12 @@
 package engine
 
-import "core:time"
+//---------------------------------------------------------------------------//
+
+import "../common"
+import "core:fmt"
 import "core:math/rand"
 import "core:strings"
-import "core:fmt"
-import "../common"
+import "core:time"
 
 //---------------------------------------------------------------------------//
 
@@ -15,11 +17,13 @@ AssetType :: enum {
 
 //---------------------------------------------------------------------------//
 
-AssetBase :: struct {
-	name: common.Name,
-	uuid: UUID,
-    type: AssetType,
+AssetMetadataBase :: struct {
+	name:    common.Name,
+	uuid:    UUID,
+	type:    AssetType,
+	version: u32,
 }
+
 
 //---------------------------------------------------------------------------//
 
@@ -90,6 +94,20 @@ uuid_create_string :: proc(version: u16 = 0, allocator := context.allocator) -> 
 	)
 
 	return to_string(sb)
+}
+
+//---------------------------------------------------------------------------//
+
+AssetImportResultStatus :: enum u16 {
+	Ok,
+	Duplicate,
+	Error,
+}
+
+//---------------------------------------------------------------------------//
+
+AssetImportResult :: struct {
+	status: AssetImportResultStatus,
 }
 
 //---------------------------------------------------------------------------//
