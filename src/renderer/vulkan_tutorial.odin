@@ -161,37 +161,27 @@ vt_update :: proc(
 	begin_render_pass(render_pass_ref, p_cmd_buff_ref, &begin_info)
 	{
 		// Setup the draw stream
-		{
-			draw_stream_reset(&draw_stream)
+		draw_stream_reset(&draw_stream)
 
+		// Viking room draw 
+		{
 			viking_room_mesh := get_mesh(G_VT.viking_room_mesh_ref)
 
-			draw_stream_bind_pipeline(&G_VT.draw_stream, G_VT.pipeline_ref)
-
-			draw_stream_set_dynamic_offsets_1(
-				&G_VT.draw_stream,
-				[]u32{0, size_of(UniformBufferObject) * get_frame_idx()},
+			draw_stream_add_draw(
+				&draw_stream,
+				p_pipeline_ref = G_VT.pipeline_ref,
+				p_dynamic_offsets_1 = []u32{0, size_of(UniformBufferObject) * get_frame_idx()},
+				p_bind_group_1_ref = G_RENDERER.global_bind_group_ref,
+				p_bind_group_2_ref = G_RENDERER.bindless_textures_array_bind_group_ref,
+				p_vertex_buffer_ref_0 = mesh_get_global_vertex_buffer_ref(),
+				p_index_buffer_ref = mesh_get_global_index_buffer_ref(),
+				p_index_type = IndexType.UInt32,
+				p_draw_count = u32(len(viking_room_mesh.desc.indices)),
+				p_instance_count = 1,
 			)
-
-			draw_stream_set_bind_group_1(&G_VT.draw_stream, G_RENDERER.global_bind_group_ref)
-			draw_stream_set_bind_group_2(
-				&G_VT.draw_stream,
-				G_RENDERER.bindless_textures_array_bind_group_ref,
-			)
-
-			draw_stream_set_vertex_buffer_0(&G_VT.draw_stream, mesh_get_global_vertex_buffer_ref())
-			draw_stream_set_index_buffer(
-				&G_VT.draw_stream,
-				mesh_get_global_index_buffer_ref(),
-				.UInt32,
-			)
-			draw_stream_set_draw_count(&G_VT.draw_stream, u32(len(viking_room_mesh.desc.indices)))
-			draw_stream_set_instance_count(&G_VT.draw_stream, 1)
-
-			draw_stream_submit_draw(&G_VT.draw_stream)
 		}
 
-
+		// Dispatch the stream
 		draw_stream_dispatch(p_cmd_buff_ref, G_VT.draw_stream)
 
 	}

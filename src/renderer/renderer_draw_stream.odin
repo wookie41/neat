@@ -30,7 +30,7 @@ g_draw_stream_ops := []proc(_: ^DrawStreamDispatch){
 	draw_stream_dispatch_set_dynamic_offsets_0,
 	draw_stream_dispatch_set_dynamic_offsets_1,
 	draw_stream_dispatch_set_dynamic_offsets_2,
-	draw_stream_submit_draw,
+	draw_stream_dispatcher_submit_draw,
 }
 
 //---------------------------------------------------------------------------//
@@ -81,7 +81,7 @@ DrawInfo :: struct {
 	dynamic_offsets_0:   []u32, // 52
 	dynamic_offsets_1:   []u32, // 56
 	dynamic_offsets_2:   []u32, // 60
-	index_type:          u32, //pad to 64 byte cacheline
+	index_type:          IndexType, //pad to 64 byte cacheline
 }
 
 //---------------------------------------------------------------------------//
@@ -89,6 +89,7 @@ DrawInfo :: struct {
 DrawStream :: struct {
 	// Encoded draw stream data: field id and it's values
 	encoded_draw_stream_data: [dynamic]u32,
+	current_index_buffer:     BufferRef,
 }
 
 //---------------------------------------------------------------------------//
@@ -111,6 +112,8 @@ draw_stream_create :: proc(p_draw_stream_allocator: mem.Allocator) -> DrawStream
 		(8 * common.KILOBYTE) / size_of(u32),
 		p_draw_stream_allocator,
 	)
+
+	draw_stream.current_index_buffer = InvalidBufferRef
 
 	return draw_stream
 }
@@ -140,6 +143,82 @@ draw_stream_reset :: proc(p_draw_stream: ^DrawStream) {
 
 draw_stream_destroy :: proc(p_draw_stream: DrawStream) {
 	delete(p_draw_stream.encoded_draw_stream_data)
+}
+
+//---------------------------------------------------------------------------//
+
+
+// Helper method to issue the draw stream call in the right order
+draw_stream_add_draw :: proc(
+	p_draw_stream: ^DrawStream,
+	p_pipeline_ref: PipelineRef = InvalidPipelineRef,
+	p_vertex_buffer_ref_0: BufferRef = InvalidBufferRef,
+	p_vertex_buffer_ref_1: BufferRef = InvalidBufferRef,
+	p_vertex_buffer_ref_2: BufferRef = InvalidBufferRef,
+	p_index_buffer_ref: BufferRef = InvalidBufferRef,
+	p_index_offset: u32 = 0,
+	p_vertex_offset: u32 = 0,
+	p_draw_count: u32 = 0,
+	p_instance_count: u32 = 0,
+	p_index_type: IndexType = .UInt16,
+	p_bind_group_0_ref: BindGroupRef = InvalidBindGroup,
+	p_bind_group_1_ref: BindGroupRef = InvalidBindGroup,
+	p_bind_group_2_ref: BindGroupRef = InvalidBindGroup,
+	p_dynamic_offsets_0: []u32 = nil,
+	p_dynamic_offsets_1: []u32 = nil,
+	p_dynamic_offsets_2: []u32 = nil,
+) {
+
+	if p_pipeline_ref != InvalidPipelineRef {
+		draw_stream_bind_pipeline(p_draw_stream, p_pipeline_ref)
+	}
+
+	if p_dynamic_offsets_0 != nil {
+		draw_stream_set_dynamic_offsets_0(p_draw_stream, p_dynamic_offsets_0)
+	}
+
+	if p_dynamic_offsets_1 != nil {
+		draw_stream_set_dynamic_offsets_1(p_draw_stream, p_dynamic_offsets_1)
+	}
+
+	if p_dynamic_offsets_2 != nil {
+		draw_stream_set_dynamic_offsets_2(p_draw_stream, p_dynamic_offsets_2)
+	}
+
+	if p_bind_group_0_ref != InvalidBindGroup {
+		draw_stream_set_bind_group_0(p_draw_stream, p_bind_group_0_ref)
+	}
+
+	if p_bind_group_1_ref != InvalidBindGroup {
+		draw_stream_set_bind_group_1(p_draw_stream, p_bind_group_1_ref)
+	}
+
+	if p_bind_group_2_ref != InvalidBindGroup {
+		draw_stream_set_bind_group_2(p_draw_stream, p_bind_group_2_ref)
+	}
+
+	if p_vertex_buffer_ref_0 != InvalidBufferRef {
+		draw_stream_set_vertex_buffer_0(p_draw_stream, p_vertex_buffer_ref_0)
+	}
+
+	if p_vertex_buffer_ref_1 != InvalidBufferRef {
+		draw_stream_set_vertex_buffer_1(p_draw_stream, p_vertex_buffer_ref_1)
+	}
+
+	if p_vertex_buffer_ref_2 != InvalidBufferRef {
+		draw_stream_set_vertex_buffer_2(p_draw_stream, p_vertex_buffer_ref_2)
+	}
+
+	if p_index_buffer_ref != p_draw_stream.current_index_buffer {
+		draw_stream_set_index_buffer(p_draw_stream, p_index_buffer_ref, p_index_type)
+	}
+
+
+	draw_stream_set_vertex_offset(p_draw_stream, p_vertex_offset)
+	draw_stream_set_index_offset(p_draw_stream, p_index_offset)
+	draw_stream_set_draw_count(p_draw_stream, p_draw_count)
+	draw_stream_set_instance_count(p_draw_stream, p_instance_count)
+	draw_stream_submit_draw(p_draw_stream)
 }
 
 //---------------------------------------------------------------------------//
@@ -468,7 +547,7 @@ draw_stream_dispatch_bind_vertex_buffer :: #force_inline proc(
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-draw_stream_submit_draw :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
+draw_stream_dispatcher_submit_draw :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
 	assert(p_draw_stream_dispatch.draw_info.pipeline_ref != InvalidPipelineRef)
 	assert(
 		p_draw_stream_dispatch.draw_info.vertex_buffer_ref_0 != InvalidBufferRef ||
