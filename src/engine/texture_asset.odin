@@ -506,7 +506,7 @@ texture_asset_load_and_create_renderer_image_name :: proc(
 	texture_asset := get_texture_asset(texture_asset_ref)
 
 	image_ref := renderer.allocate_image_ref(p_name)
-	image := renderer.get_image(image_ref)
+	image := &renderer.g_resources.image_resources[renderer.get_image_idx(image_ref)]
 
 	if image_ref == renderer.InvalidImageRef {
 		texture_asset_unload(texture_asset_ref)

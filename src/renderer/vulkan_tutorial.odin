@@ -76,7 +76,9 @@ init_vt :: proc() -> bool {
 
 		// Create render pass
 		{
-			swap_image_format := get_image(G_RENDERER.swap_image_refs[0]).desc.format
+			swap_image_format :=
+				g_resources.image_resources[get_image_idx(G_RENDERER.swap_image_refs[0])].desc.format
+			depth_image := &g_resources.image_resources[get_image_idx(depth_buffer_ref)]
 
 			render_pass_ref = allocate_render_pass_ref(
 				common.create_name("Vulkan tutorial Render Pass"),
@@ -86,7 +88,7 @@ init_vt :: proc() -> bool {
 				resolution = .Full,
 				layout = {
 					render_target_blend_types = {.Default},
-					depth_format = get_image(depth_buffer_ref).desc.format,
+					depth_format = depth_image.desc.format,
 				},
 				primitive_type = .TriangleList,
 				resterizer_type = .Fill,

@@ -217,17 +217,17 @@ when USE_VULKAN_BACKEND {
 					continue
 				}
 
-				image := get_image(image_binding.image_ref)
+				image := &g_resources.image_resources[get_image_idx(image_binding.image_ref)]
 
 				if image_binding.mip > 0 {
 					image_writes[image_write_idx].imageView =
-						image.per_mip_vk_view[image_binding.mip]
+						image.backend_image.per_mip_vk_view[image_binding.mip]
 					image_writes[image_write_idx].imageLayout =
-						image.vk_layout_per_mip[image_binding.mip]
+						image.backend_image.vk_layout_per_mip[image_binding.mip]
 
 				} else {
-					image_writes[image_write_idx].imageView = image.all_mips_vk_view
-					image_writes[image_write_idx].imageLayout = image.vk_layout_per_mip[0]
+					image_writes[image_write_idx].imageView = image.backend_image.all_mips_vk_view
+					image_writes[image_write_idx].imageLayout = image.backend_image.vk_layout_per_mip[0]
 				}
 
 				descriptor_writes[num_descriptor_writes] = vk.WriteDescriptorSet {

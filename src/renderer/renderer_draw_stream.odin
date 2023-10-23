@@ -240,7 +240,7 @@ draw_stream_set_vertex_buffer_0 :: proc(
 	p_buffer_ref: BufferRef,
 	p_offset: u32 = 0,
 ) {
-	draw_stream_write(p_draw_stream, .BindVertexBuffer0, []u32{p_buffer_ref.ref, p_offset})
+	draw_stream_write(p_draw_stream, .BindVertexBuffer0, p_buffer_ref.ref, p_offset)
 }
 //---------------------------------------------------------------------------//
 
@@ -249,7 +249,7 @@ draw_stream_set_vertex_buffer_1 :: proc(
 	p_buffer_ref: BufferRef,
 	p_offset: u32 = 0,
 ) {
-	draw_stream_write(p_draw_stream, .BindVertexBuffer1, []u32{p_buffer_ref.ref, p_offset})
+	draw_stream_write(p_draw_stream, .BindVertexBuffer1, p_buffer_ref.ref, p_offset)
 }
 
 //---------------------------------------------------------------------------//
@@ -259,7 +259,7 @@ draw_stream_set_vertex_buffer_2 :: proc(
 	p_buffer_ref: BufferRef,
 	p_offset: u32 = 0,
 ) {
-	draw_stream_write(p_draw_stream, .BindVertexBuffer2, []u32{p_buffer_ref.ref, p_offset})
+	draw_stream_write(p_draw_stream, .BindVertexBuffer2, p_buffer_ref.ref, p_offset)
 }
 
 //---------------------------------------------------------------------------//
@@ -273,7 +273,9 @@ draw_stream_set_index_buffer :: proc(
 	draw_stream_write(
 		p_draw_stream,
 		.BindIndexBuffer,
-		[]u32{p_buffer_ref.ref, p_offset, u32(p_index_type)},
+		p_buffer_ref.ref,
+		p_offset,
+		u32(p_index_type),
 	)
 }
 
@@ -600,7 +602,7 @@ draw_stream_write_value :: #force_inline proc(
 draw_stream_write_values :: #force_inline proc(
 	p_draw_stream: ^DrawStream,
 	p_op: DrawStreamOp,
-	p_values: []u32,
+	p_values: ..u32,
 ) {
 	append(&p_draw_stream.encoded_draw_stream_data, u32(p_op))
 	for value in p_values {

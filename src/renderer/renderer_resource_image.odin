@@ -11,8 +11,6 @@ import "../common"
 
 @(private = "file")
 G_IMAGE_REF_ARRAY: common.RefArray(ImageResource)
-@(private = "file")
-G_IMAGE_RESOURCE_ARRAY: []ImageResource
 
 //---------------------------------------------------------------------------//
 
@@ -172,7 +170,7 @@ ImageDesc :: struct {
 //---------------------------------------------------------------------------//
 
 ImageResource :: struct {
-	using backend_image: BackendImageResource,
+	backend_image: BackendImageResource,
 	desc:                ImageDesc,
 	bindless_idx:        u32,
 }
@@ -190,8 +188,8 @@ INTERNAL: struct {
 
 @(private)
 TextureCopy :: struct {
-	buffer:             BufferRef,
-	image:              ImageRef,
+	buffer_ref:         BufferRef,
+	image_ref:          ImageRef,
 	// offsets at which data for each mip is stored in the buffer
 	mip_buffer_offsets: []u32,
 }
@@ -225,8 +223,8 @@ init_images :: proc() {
 		MAX_IMAGES,
 		G_RENDERER_ALLOCATORS.main_allocator,
 	)
-	G_IMAGE_RESOURCE_ARRAY = make(
-		[]ImageResource,
+	g_resources.image_resources = make_soa(
+		#soa[]ImageResource,
 		MAX_IMAGES,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
@@ -239,13 +237,14 @@ init_images :: proc() {
 
 allocate_image_ref :: proc(p_name: common.Name) -> ImageRef {
 	ref := ImageRef(common.ref_create(ImageResource, &G_IMAGE_REF_ARRAY, p_name))
-	get_image(ref).desc.name = p_name
+	g_resources.image_resources[get_image_idx(ref)].desc.name = p_name
 	return ref
 }
 
 /** Creates an image that can later be used as a sampled image inside a shader */
 create_texture_image :: proc(p_ref: ImageRef) -> bool {
-	image := get_image(p_ref)
+
+	image := &g_resources.image_resources[get_image_idx(p_ref)]
 
 	if len(INTERNAL.free_bindless_indices) > 0 {
 		image.bindless_idx = pop(&INTERNAL.free_bindless_indices)
@@ -259,7 +258,7 @@ create_texture_image :: proc(p_ref: ImageRef) -> bool {
 		(image.desc.format > .CompressedFormatsStart && image.desc.format < .CompressedFormatsEnd),
 	)
 
-	if backend_create_texture_image(p_ref, image) == false {
+	if backend_create_texture_image(p_ref) == false {
 		common.ref_free(&G_IMAGE_REF_ARRAY, p_ref)
 		return false
 	}
@@ -269,10 +268,10 @@ create_texture_image :: proc(p_ref: ImageRef) -> bool {
 
 create_depth_buffer :: proc(p_name: common.Name, p_depth_buffer_desc: ImageDesc) -> ImageRef {
 	ref := allocate_image_ref(p_name)
-	image := get_image(ref)
+	image := &g_resources.image_resources[get_image_idx(ref)]
 	image.desc = p_depth_buffer_desc
 
-	if backend_create_depth_buffer(p_name, p_depth_buffer_desc, ref, image) == false {
+	if backend_create_depth_buffer(p_name, p_depth_buffer_desc, ref) == false {
 		common.ref_free(&G_IMAGE_REF_ARRAY, ref)
 		return InvalidImageRef
 	}
@@ -282,8 +281,8 @@ create_depth_buffer :: proc(p_name: common.Name, p_depth_buffer_desc: ImageDesc)
 
 //---------------------------------------------------------------------------//
 
-get_image :: proc(p_ref: ImageRef) -> ^ImageResource {
-	return &G_IMAGE_RESOURCE_ARRAY[common.ref_get_idx(&G_IMAGE_REF_ARRAY, p_ref)]
+get_image_idx :: proc(p_ref: ImageRef) -> u32 {
+	return common.ref_get_idx(&G_IMAGE_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//
@@ -295,11 +294,11 @@ create_swap_images :: #force_inline proc() {
 //---------------------------------------------------------------------------//
 
 destroy_image :: proc(p_ref: ImageRef) {
-	image := get_image(p_ref)
+	image := &g_resources.image_resources[get_image_idx(p_ref)]
 	if image.bindless_idx != c.UINT32_MAX {
 		append(&INTERNAL.free_bindless_indices, image.bindless_idx)
 	}
-	backend_destroy_image(image)
+	backend_destroy_image(p_ref)
 	common.ref_free(&G_IMAGE_REF_ARRAY, p_ref)
 }
 

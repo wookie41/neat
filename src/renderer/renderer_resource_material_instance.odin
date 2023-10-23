@@ -1,4 +1,3 @@
-
 package renderer
 
 //---------------------------------------------------------------------------//
@@ -92,7 +91,9 @@ allocate_material_instance_ref :: proc(p_name: common.Name) -> MaterialInstanceR
 //---------------------------------------------------------------------------//
 
 get_material_instance :: proc(p_ref: MaterialInstanceRef) -> ^MaterialInstanceResource {
-	return &G_MATERIAL_INSTANCE_RESOURCE_ARRAY[common.ref_get_idx(&G_MATERIAL_INSTANCE_REF_ARRAY, p_ref)]
+	return(
+		&G_MATERIAL_INSTANCE_RESOURCE_ARRAY[common.ref_get_idx(&G_MATERIAL_INSTANCE_REF_ARRAY, p_ref)] \
+	)
 }
 
 //--------------------------------------------------------------------------//
@@ -108,7 +109,11 @@ destroy_material_instance :: proc(p_ref: MaterialInstanceRef) {
 
 //--------------------------------------------------------------------------//
 
-material_instance_set_int1_param :: proc(p_material_instance_ref: MaterialInstanceRef, p_name: common.Name, p_value: int) {
+material_instance_set_int1_param :: proc(
+	p_material_instance_ref: MaterialInstanceRef,
+	p_name: common.Name,
+	p_value: int,
+) {
 	__material_instance_set_param(int, p_material_instance_ref, p_name, p_value)
 }
 
@@ -157,7 +162,7 @@ material_instance_set_texture_slot :: proc(
 	p_slot_name: common.Name,
 	p_image_ref: ImageRef,
 ) {
-	image := get_image(p_image_ref)
+	image := &g_resources.image_resources[get_image_idx(p_image_ref)]
 	material_instance_set_int1_param(p_material_instance_ref, p_slot_name, int(image.bindless_idx))
 }
 
@@ -183,7 +188,10 @@ __material_instance_set_param :: #force_inline proc(
 	}
 
 	val := (^T)(
-		mem.ptr_offset(material_instance.material_params_buffer_ptr, material_type.offset_per_param[p_name]),
+		mem.ptr_offset(
+			material_instance.material_params_buffer_ptr,
+			material_type.offset_per_param[p_name],
+		),
 	)
 
 	val^ = p_value

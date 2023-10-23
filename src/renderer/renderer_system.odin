@@ -53,6 +53,11 @@ INTERNAL: struct {
 
 //---------------------------------------------------------------------------//
 
+g_resources: struct {
+	image_resources: #soa[]ImageResource,
+}
+
+//---------------------------------------------------------------------------//
 
 GPUDeviceFlagsBits :: enum u8 {
 	DedicatedTransferQueue,
