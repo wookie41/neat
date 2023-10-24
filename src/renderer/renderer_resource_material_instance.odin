@@ -162,7 +162,7 @@ material_instance_set_texture_slot :: proc(
 	p_slot_name: common.Name,
 	p_image_ref: ImageRef,
 ) {
-	image := &g_resources.image_resources[get_image_idx(p_image_ref)]
+	image := &g_resources.images[get_image_idx(p_image_ref)]
 	material_instance_set_int1_param(p_material_instance_ref, p_slot_name, int(image.bindless_idx))
 }
 

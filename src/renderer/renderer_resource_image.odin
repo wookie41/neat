@@ -170,9 +170,8 @@ ImageDesc :: struct {
 //---------------------------------------------------------------------------//
 
 ImageResource :: struct {
-	backend_image: BackendImageResource,
-	desc:                ImageDesc,
-	bindless_idx:        u32,
+	desc:         ImageDesc,
+	bindless_idx: u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -223,11 +222,17 @@ init_images :: proc() {
 		MAX_IMAGES,
 		G_RENDERER_ALLOCATORS.main_allocator,
 	)
-	g_resources.image_resources = make_soa(
+	g_resources.images = make_soa(
 		#soa[]ImageResource,
 		MAX_IMAGES,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
+	g_resources.backend_images = make_soa(
+		#soa[]BackendImageResource,
+		MAX_IMAGES,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
+
 	INTERNAL.next_bindless_idx = 0
 	INTERNAL.free_bindless_indices = make([dynamic]u32, G_RENDERER_ALLOCATORS.main_allocator)
 	backend_init_images()
@@ -237,14 +242,15 @@ init_images :: proc() {
 
 allocate_image_ref :: proc(p_name: common.Name) -> ImageRef {
 	ref := ImageRef(common.ref_create(ImageResource, &G_IMAGE_REF_ARRAY, p_name))
-	g_resources.image_resources[get_image_idx(ref)].desc.name = p_name
+	img_idx := get_image_idx(ref)
+	g_resources.images[img_idx].desc.name = p_name
 	return ref
 }
 
 /** Creates an image that can later be used as a sampled image inside a shader */
 create_texture_image :: proc(p_ref: ImageRef) -> bool {
 
-	image := &g_resources.image_resources[get_image_idx(p_ref)]
+	image := &g_resources.images[get_image_idx(p_ref)]
 
 	if len(INTERNAL.free_bindless_indices) > 0 {
 		image.bindless_idx = pop(&INTERNAL.free_bindless_indices)
@@ -268,7 +274,7 @@ create_texture_image :: proc(p_ref: ImageRef) -> bool {
 
 create_depth_buffer :: proc(p_name: common.Name, p_depth_buffer_desc: ImageDesc) -> ImageRef {
 	ref := allocate_image_ref(p_name)
-	image := &g_resources.image_resources[get_image_idx(ref)]
+	image := &g_resources.images[get_image_idx(ref)]
 	image.desc = p_depth_buffer_desc
 
 	if backend_create_depth_buffer(p_name, p_depth_buffer_desc, ref) == false {
@@ -294,7 +300,7 @@ create_swap_images :: #force_inline proc() {
 //---------------------------------------------------------------------------//
 
 destroy_image :: proc(p_ref: ImageRef) {
-	image := &g_resources.image_resources[get_image_idx(p_ref)]
+	image := &g_resources.images[get_image_idx(p_ref)]
 	if image.bindless_idx != c.UINT32_MAX {
 		append(&INTERNAL.free_bindless_indices, image.bindless_idx)
 	}

@@ -77,8 +77,8 @@ init_vt :: proc() -> bool {
 		// Create render pass
 		{
 			swap_image_format :=
-				g_resources.image_resources[get_image_idx(G_RENDERER.swap_image_refs[0])].desc.format
-			depth_image := &g_resources.image_resources[get_image_idx(depth_buffer_ref)]
+				g_resources.images[get_image_idx(G_RENDERER.swap_image_refs[0])].desc.format
+			depth_image := &g_resources.images[get_image_idx(depth_buffer_ref)]
 
 			render_pass_ref = allocate_render_pass_ref(
 				common.create_name("Vulkan tutorial Render Pass"),

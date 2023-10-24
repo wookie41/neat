@@ -72,8 +72,10 @@ when USE_VULKAN_BACKEND {
 
 				render_target_binding := &p_begin_info.render_targets_bindings[i]
 
-				attachment_image :=
-					&g_resources.image_resources[get_image_idx(render_target_binding.target.image_ref)]
+				attachment_image_idx := get_image_idx(render_target_binding.target.image_ref)
+				attachment_image := &g_resources.images[attachment_image_idx]
+				backend_attachment_image := &g_resources.backend_images[attachment_image_idx]
+
 				assert(attachment_image.desc.format == render_target_format)
 
 				// Transition image to the .ATTACHMENT_OPTIMAL format if it's not already in one
@@ -93,7 +95,7 @@ when USE_VULKAN_BACKEND {
 						dstAccessMask = {.COLOR_ATTACHMENT_WRITE},
 						oldLayout = old_layout,
 						newLayout = .ATTACHMENT_OPTIMAL,
-						image = attachment_image.backend_image.vk_image,
+						image = backend_attachment_image.vk_image,
 						subresourceRange = {
 							aspectMask = {.COLOR},
 							baseArrayLayer = 0,
@@ -108,10 +110,10 @@ when USE_VULKAN_BACKEND {
 				}
 
 				// Create the Vulkan attachment
-				image_view := attachment_image.backend_image.all_mips_vk_view
+				image_view := backend_attachment_image.all_mips_vk_view
 				if render_target_binding.target.image_mip > -1 {
 					image_view =
-						attachment_image.backend_image.per_mip_vk_view[render_target_binding.target.image_mip]
+						backend_attachment_image.per_mip_vk_view[render_target_binding.target.image_mip]
 				}
 				color_attachments[render_target_index] = {
 					sType = .RENDERING_ATTACHMENT_INFO,
@@ -134,7 +136,11 @@ when USE_VULKAN_BACKEND {
 		// Prepare the depth attachment
 		depth_attachment: vk.RenderingAttachmentInfo
 		if p_begin_info.depth_attachment.image != InvalidImageRef {
-			depth_image := &g_resources.image_resources[get_image_idx(p_begin_info.depth_attachment.image)]
+
+			depth_image_idx := get_image_idx(p_begin_info.depth_attachment.image)
+			depth_image := &g_resources.images[depth_image_idx]
+			backend_depth_image := &g_resources.backend_images[depth_image_idx]
+
 			assert(
 				depth_image.desc.format > .DepthFormatsStart &&
 				depth_image.desc.format < .DepthFormatsEnd,
@@ -146,7 +152,7 @@ when USE_VULKAN_BACKEND {
 				pNext = nil,
 				clearValue = {depthStencil = {depth = 1, stencil = 0}},
 				imageLayout = .DEPTH_ATTACHMENT_OPTIMAL,
-				imageView = depth_image.backend_image.all_mips_vk_view,
+				imageView = backend_depth_image.all_mips_vk_view,
 				loadOp = .CLEAR,
 				storeOp = .DONT_CARE,
 			}
@@ -163,7 +169,7 @@ when USE_VULKAN_BACKEND {
 					},
 					oldLayout = .UNDEFINED,
 					newLayout = .DEPTH_ATTACHMENT_OPTIMAL,
-					image = depth_image.backend_image.vk_image,
+					image = backend_depth_image.vk_image,
 					subresourceRange = {
 						aspectMask = {.DEPTH},
 						baseArrayLayer = 0,
