@@ -11,8 +11,6 @@ import "core:mem"
 
 @(private = "file")
 G_BIND_GROUP_LAYOUT_REF_ARRAY: common.RefArray(BindGroupLayoutResource)
-@(private = "file")
-G_BIND_GROUP_LAYOUT_RESOURCE_ARRAY: []BindGroupLayoutResource
 
 //---------------------------------------------------------------------------//
 
@@ -77,10 +75,9 @@ BindGroupLayoutDesc :: struct {
 //---------------------------------------------------------------------------//
 
 BindGroupLayoutResource :: struct {
-	using backend_bind_group_layout: BackendBindGroupLayoutResource,
-	desc:                            BindGroupLayoutDesc,
-	hash:                            u32,
-	num_dynamic_offsets:             u8,
+	desc:                BindGroupLayoutDesc,
+	hash:                u32,
+	num_dynamic_offsets: u8,
 }
 
 //---------------------------------------------------------------------------//
@@ -92,8 +89,13 @@ init_bind_group_layouts :: proc() {
 		MAX_BIND_GROUPS,
 		G_RENDERER_ALLOCATORS.main_allocator,
 	)
-	G_BIND_GROUP_LAYOUT_RESOURCE_ARRAY = make(
-		[]BindGroupLayoutResource,
+	g_resources.bind_group_layouts = make_soa(
+		#soa[]BindGroupLayoutResource,
+		MAX_BIND_GROUPS,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
+	g_resources.backend_bind_group_layouts = make_soa(
+		#soa[]BackendBindGroupLayoutResource,
 		MAX_BIND_GROUPS,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
@@ -109,7 +111,8 @@ allocate_bind_group_layout_ref :: proc(
 	ref := BindGroupLayoutRef(
 		common.ref_create(BindGroupLayoutResource, &G_BIND_GROUP_LAYOUT_REF_ARRAY, p_name),
 	)
-	bind_group_layout := get_bind_group_layout(ref)
+	
+	bind_group_layout := &g_resources.bind_group_layouts[get_bind_group_layout_idx(ref)]
 
 	bind_group_layout.desc.name = p_name
 	bind_group_layout.desc.bindings = make(
@@ -123,10 +126,10 @@ allocate_bind_group_layout_ref :: proc(
 //---------------------------------------------------------------------------//
 
 create_bind_group_layout :: proc(p_bind_group_layout_ref: BindGroupLayoutRef) -> bool {
-	bind_group_layout := get_bind_group_layout(p_bind_group_layout_ref)
+	bind_group_layout := &g_resources.bind_group_layouts[get_bind_group_layout_idx(p_bind_group_layout_ref)]
 	bind_group_layout.hash = hash.adler32(mem.slice_to_bytes(bind_group_layout.desc.bindings))
 
-	backend_create_bind_group_layout(p_bind_group_layout_ref, bind_group_layout) or_return
+	backend_create_bind_group_layout(p_bind_group_layout_ref) or_return
 
 	bind_group_layout.num_dynamic_offsets = 0
 	for binding in bind_group_layout.desc.bindings {
@@ -139,16 +142,14 @@ create_bind_group_layout :: proc(p_bind_group_layout_ref: BindGroupLayoutRef) ->
 
 //---------------------------------------------------------------------------//
 
-get_bind_group_layout :: proc(p_ref: BindGroupLayoutRef) -> ^BindGroupLayoutResource {
-	return(
-		&G_BIND_GROUP_LAYOUT_RESOURCE_ARRAY[common.ref_get_idx(&G_BIND_GROUP_LAYOUT_REF_ARRAY, p_ref)] \
-	)
+get_bind_group_layout_idx :: proc(p_ref: BindGroupLayoutRef) -> u32 {
+	return common.ref_get_idx(&G_BIND_GROUP_LAYOUT_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//
 
 destroy_bind_group_layout :: proc(p_ref: BindGroupLayoutRef) {
-	bind_group_layout := get_bind_group_layout(p_ref)
+	bind_group_layout := &g_resources.bind_group_layouts[get_bind_group_layout_idx(p_ref)]
 	delete(bind_group_layout.desc.bindings, G_RENDERER_ALLOCATORS.resource_allocator)
 
 	backend_destroy_bind_group_layout(p_ref)

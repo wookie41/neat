@@ -61,11 +61,11 @@ when USE_VULKAN_BACKEND {
 		p_bind_group: ^BindGroupResource,
 	) -> bool {
 
-		bind_group_layout := get_bind_group_layout(p_bind_group.desc.layout_ref)
+		backend_bind_group_layout := &g_resources.backend_bind_group_layouts[get_bind_group_layout_idx(p_bind_group.desc.layout_ref)]
 
 		descriptor_set_alloc_info := vk.DescriptorSetAllocateInfo {
 			sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
-			pSetLayouts        = &bind_group_layout.vk_descriptor_set_layout,
+			pSetLayouts        = &backend_bind_group_layout.vk_descriptor_set_layout,
 			descriptorSetCount = 1,
 			descriptorPool     = INTERNAL.descriptor_pool,
 		}
@@ -156,7 +156,8 @@ when USE_VULKAN_BACKEND {
 		image_write_idx := 0
 		buffer_write_idx := 0
 
-		bind_group_layout := get_bind_group_layout(bind_group.desc.layout_ref)
+		bind_group_layout_idx := get_bind_group_layout_idx(bind_group.desc.layout_ref)
+		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_idx]
 
 		num_descriptor_writes: u32 = 0
 		for binding in bind_group_layout.desc.bindings {

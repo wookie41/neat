@@ -54,11 +54,12 @@ INTERNAL: struct {
 //---------------------------------------------------------------------------//
 
 g_resources: struct {
-	images:          #soa[]ImageResource,
-	backend_images:  #soa[]BackendImageResource,
-	
-	buffers:         #soa[]BufferResource,
-	backend_buffers: #soa[]BackendBufferResource,
+	images:                     #soa[]ImageResource,
+	backend_images:             #soa[]BackendImageResource,
+	buffers:                    #soa[]BufferResource,
+	backend_buffers:            #soa[]BackendBufferResource,
+	bind_group_layouts:         #soa[]BindGroupLayoutResource,
+	backend_bind_group_layouts: #soa[]BackendBindGroupLayoutResource,
 }
 
 //---------------------------------------------------------------------------//
@@ -257,7 +258,8 @@ init :: proc(p_options: InitOptions) -> bool {
 			2, // per frame, per view
 		)
 
-		bind_group_layout := get_bind_group_layout(G_RENDERER.global_bind_group_layout_ref)
+		bind_group_layout_idx := get_bind_group_layout_idx(G_RENDERER.global_bind_group_layout_ref)
+		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_idx]
 
 		// Per frame uniform buffer
 		bind_group_layout.desc.bindings[0] = BindGroupLayoutBinding {
@@ -300,9 +302,10 @@ init :: proc(p_options: InitOptions) -> bool {
 			1 + len(SamplerType), // 2D texture array, sampled
 		)
 
-		bind_group_layout := get_bind_group_layout(
+		bind_group_layout_idx := get_bind_group_layout_idx(
 			G_RENDERER.bindless_textures_array_bind_group_layout_ref,
 		)
+		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_idx]
 
 		bind_group_layout.desc.flags = {.BindlessResources}
 

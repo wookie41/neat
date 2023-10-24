@@ -133,14 +133,15 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	backend_create_bind_group_layout :: proc(
-		p_bind_group_layout_ref: BindGroupLayoutRef,
-		p_bind_group_layout: ^BindGroupLayoutResource,
-	) -> bool {
+	backend_create_bind_group_layout :: proc(p_bind_group_layout_ref: BindGroupLayoutRef) -> bool {
+
+		bind_group_layout_idx := get_bind_group_layout_idx(p_bind_group_layout_ref)
+		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_idx]
+		backend_bind_group_layout := &g_resources.backend_bind_group_layouts[bind_group_layout_idx]
 
 		binding_flags := make(
 			[]vk.DescriptorBindingFlags,
-			len(p_bind_group_layout.desc.bindings),
+			len(bind_group_layout.desc.bindings),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(binding_flags, G_RENDERER_ALLOCATORS.temp_allocator)
@@ -152,19 +153,19 @@ when USE_VULKAN_BACKEND {
 		}
 
 		// First check the cache, maybe we can reuse an existing descriptor layout layout
-		if p_bind_group_layout.hash in INTERNAL.descriptor_set_layout_cache {
+		if bind_group_layout.hash in INTERNAL.descriptor_set_layout_cache {
 
-			hash_entry := &INTERNAL.descriptor_set_layout_cache[p_bind_group_layout.hash]
+			hash_entry := &INTERNAL.descriptor_set_layout_cache[bind_group_layout.hash]
 			hash_entry.ref_count += 1
 
-			p_bind_group_layout.vk_descriptor_set_layout = hash_entry.descriptor_set_layout
+			backend_bind_group_layout.vk_descriptor_set_layout = hash_entry.descriptor_set_layout
 			return true
 		}
 
 		// Create a new descriptor set layout
 		descriptor_set_layout_bindings := make(
 			[]vk.DescriptorSetLayoutBinding,
-			u32(len(p_bind_group_layout.desc.bindings)),
+			u32(len(bind_group_layout.desc.bindings)),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(descriptor_set_layout_bindings, G_RENDERER_ALLOCATORS.temp_allocator)
@@ -175,12 +176,12 @@ when USE_VULKAN_BACKEND {
 			pBindings    = raw_data(descriptor_set_layout_bindings),
 		}
 
-		if .BindlessResources in p_bind_group_layout.desc.flags {
+		if .BindlessResources in bind_group_layout.desc.flags {
 			create_info.flags += {.UPDATE_AFTER_BIND_POOL}
 		}
 
 		for i in 0 ..< create_info.bindingCount {
-			bind_group_binding := &p_bind_group_layout.desc.bindings[i]
+			bind_group_binding := &bind_group_layout.desc.bindings[i]
 			descriptor_binding := &descriptor_set_layout_bindings[i]
 
 			stage_flags := vk.ShaderStageFlags{}
@@ -232,17 +233,17 @@ when USE_VULKAN_BACKEND {
 			   G_RENDERER.device,
 			   &create_info,
 			   nil,
-			   &p_bind_group_layout.vk_descriptor_set_layout,
+			   &backend_bind_group_layout.vk_descriptor_set_layout,
 		   ) !=
 		   .SUCCESS {
 			return false
 		}
 
 		// Cache this descriptor set layout
-		INTERNAL.descriptor_set_layout_cache[p_bind_group_layout.hash] =
+		INTERNAL.descriptor_set_layout_cache[bind_group_layout.hash] =
 			DescriptorSetLayoutCacheEntry {
 				ref_count             = 1,
-				descriptor_set_layout = p_bind_group_layout.vk_descriptor_set_layout,
+				descriptor_set_layout = backend_bind_group_layout.vk_descriptor_set_layout,
 			}
 
 		return true
@@ -252,14 +253,17 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_destroy_bind_group_layout :: proc(p_bind_group_ref: BindGroupLayoutRef) {
-		bind_group_layout := get_bind_group_layout(p_bind_group_ref)
+		bind_group_idx := get_bind_group_layout_idx(p_bind_group_ref)
+		bind_group_layout := &g_resources.bind_group_layouts[bind_group_idx]
+		backend_bind_group_layout := &g_resources.backend_bind_group_layouts[bind_group_idx]
+		
 		cache_entry := &INTERNAL.descriptor_set_layout_cache[bind_group_layout.hash]
 		cache_entry.ref_count -= 1
 
 		if cache_entry.ref_count == 0 {
 			vk.DestroyDescriptorSetLayout(
 				G_RENDERER.device,
-				bind_group_layout.vk_descriptor_set_layout,
+				backend_bind_group_layout.vk_descriptor_set_layout,
 				nil,
 			)
 			delete_key(&INTERNAL.descriptor_set_layout_cache, bind_group_layout.hash)
