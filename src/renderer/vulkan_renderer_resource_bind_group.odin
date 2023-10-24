@@ -174,9 +174,11 @@ when USE_VULKAN_BACKEND {
 					continue
 				}
 
-				buffer := get_buffer(buffer_binding.buffer_ref)
+				binding_buffer_idx := get_buffer_idx(buffer_binding.buffer_ref)
+				buffer := &g_resources.buffers[binding_buffer_idx]
+				backend_buffer := &g_resources.backend_buffers[binding_buffer_idx]
 
-				buffer_writes[buffer_write_idx].buffer = buffer.vk_buffer
+				buffer_writes[buffer_write_idx].buffer = backend_buffer.vk_buffer
 				buffer_writes[buffer_write_idx].offset = vk.DeviceSize(buffer_binding.offset)
 				buffer_writes[buffer_write_idx].range = vk.DeviceSize(buffer_binding.size)
 

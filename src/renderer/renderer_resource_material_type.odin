@@ -31,8 +31,8 @@ MAX_MATERIAL_INSTANCES_PER_MATERIAL_TYPE :: 512
 
 @(private = "file")
 INTERNAL: struct {
-	material_params_buffer_ref:     BufferRef,
-	material_feature_by_name:       map[common.Name]MaterialFeature,
+	material_params_buffer_ref: BufferRef,
+	material_feature_by_name:   map[common.Name]MaterialFeature,
 }
 
 //---------------------------------------------------------------------------//
@@ -182,7 +182,7 @@ init_material_types :: proc() -> bool {
 		common.create_name("MaterialParamsBuffer"),
 	)
 
-	material_params_buffer := get_buffer(INTERNAL.material_params_buffer_ref)
+	material_params_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.material_params_buffer_ref)]
 
 	material_params_buffer.desc.flags = {.Dedicated}
 	material_params_buffer.desc.size = MATERIAL_PARAMS_BUFFER_SIZE
@@ -304,7 +304,9 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 		frag_shader_path = strings.trim_suffix(frag_shader_path, ".hlsl")
 
 		material_pass.vertex_shader_ref = allocate_shader_ref(common.create_name(vert_shader_path))
-		material_pass.fragment_shader_ref = allocate_shader_ref(common.create_name(frag_shader_path))
+		material_pass.fragment_shader_ref = allocate_shader_ref(
+			common.create_name(frag_shader_path),
+		)
 
 		vertex_shader := get_shader(material_pass.vertex_shader_ref)
 		fragment_shader := get_shader(material_pass.fragment_shader_ref)
@@ -556,7 +558,7 @@ load_material_types_from_config_file :: proc() -> bool {
 material_type_allocate_params_entry :: proc(p_material_type_ref: MaterialTypeRef) -> (u32, ^byte) {
 
 	material_type := get_material_type(p_material_type_ref)
-	material_buffer := get_buffer(INTERNAL.material_params_buffer_ref)
+	material_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.material_params_buffer_ref)]
 
 	// Check if we have some free entries in the free array 
 	it := bit_array.make_iterator(&material_type.free_material_buffer_entries_array)

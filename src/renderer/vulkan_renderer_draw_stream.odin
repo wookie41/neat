@@ -23,7 +23,7 @@ when USE_VULKAN_BACKEND {
 		p_offset: u32,
 	) {
 		cmd_buffer := get_command_buffer(p_cmd_buff_ref)
-		vertex_buffer := get_buffer(p_vertex_buffer_ref)
+		vertex_buffer := &g_resources.backend_buffers[get_buffer_idx(p_vertex_buffer_ref)]
 		vertex_buffer_offset := vk.DeviceSize(p_offset)
 
 		vk.CmdBindVertexBuffers(
@@ -45,7 +45,7 @@ when USE_VULKAN_BACKEND {
 		p_index_type: IndexType,
 	) {
 		cmd_buff := get_command_buffer(p_cmd_buff_ref)
-		index_buffer := get_buffer(p_index_buffer_ref)
+		index_buffer := &g_resources.backend_buffers[get_buffer_idx(p_index_buffer_ref)]
 		index_buffer_offset := vk.DeviceSize(p_offset)
 
 		vk.CmdBindIndexBuffer(

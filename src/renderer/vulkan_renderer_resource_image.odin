@@ -80,7 +80,7 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_init_images :: proc() {
 		INTERNAL.staging_buffer = allocate_buffer_ref(common.create_name("ImageStagingBuffer"))
-		staging_buffer := get_buffer(INTERNAL.staging_buffer)
+		staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer)]
 		staging_buffer.desc.size = common.MEGABYTE * 128
 		staging_buffer.desc.flags = {.HostWrite, .Mapped}
 		staging_buffer.desc.usage = {.TransferSrc}
@@ -322,7 +322,7 @@ when USE_VULKAN_BACKEND {
 			),
 		}
 
-		staging_buffer := get_buffer(INTERNAL.staging_buffer)
+		staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer)]
 
 		// Queue image copies
 		for mip_data, i in image.desc.data_per_mip {
@@ -534,7 +534,9 @@ when USE_VULKAN_BACKEND {
 			image := &g_resources.images[image_idx]
 			backend_image := &g_resources.backend_images[image_idx]
 
-			buffer := get_buffer(texture_copy.buffer_ref)
+			buffer_idx := get_buffer_idx(texture_copy.buffer_ref)
+			buffer := &g_resources.buffers[buffer_idx]
+			backend_buffer := &g_resources.backend_buffers[buffer_idx]
 
 			// Crate a transfer barrier for the entire texture, including all of it's mips
 			{
@@ -565,7 +567,7 @@ when USE_VULKAN_BACKEND {
 			}
 
 			vk_copy_entry := VkCopyEntry {
-				buffer     = buffer.vk_buffer,
+				buffer     = backend_buffer.vk_buffer,
 				image      = backend_image.vk_image,
 				mip_copies = make(
 					[]vk.BufferImageCopy,

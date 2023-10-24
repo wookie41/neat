@@ -83,7 +83,7 @@ init_buffer_upload :: proc(p_options: BufferUploadInitOptions) -> bool {
 		INTERNAL.staging_buffer_ref = allocate_buffer_ref(
 			common.create_name("UploadStagingBuffer"),
 		)
-		staging_buffer := get_buffer(INTERNAL.staging_buffer_ref)
+		staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer_ref)]
 		// make the buffer n-times large, so we can upload data from the CPU while the GPU is still doing the transfer
 		staging_buffer.desc.size =
 			p_options.staging_buffer_size * p_options.num_staging_regions
@@ -119,7 +119,7 @@ buffer_upload_begin_frame :: proc() {
 @(private)
 dry_request_buffer_upload :: proc(p_buffer_ref: BufferRef, p_size: u32) -> bool {
 	if .IntegratedGPU in G_RENDERER.gpu_device_flags {
-		buffer := get_buffer(p_buffer_ref)
+		buffer := &g_resources.buffers[get_buffer_idx(p_buffer_ref)]
 		return p_size <= buffer.desc.size 
 	}
 	return(
@@ -157,7 +157,7 @@ run_buffer_upload_requests :: #force_inline proc() {
 
 @(private="file")
 request_buffer_upload_dicrete :: proc(p_request :BufferUploadRequest) -> BufferUploadResponse {
-	staging_buffer := get_buffer(INTERNAL.staging_buffer_ref)
+	staging_buffer := &g_resources.buffers[ get_buffer_idx(INTERNAL.staging_buffer_ref)]
 
 	// Check if this request will stil fit in the staging buffer 
 	// or do we have to delay it to the next frame
@@ -183,6 +183,6 @@ request_buffer_upload_dicrete :: proc(p_request :BufferUploadRequest) -> BufferU
 
 @(private="file")
 request_buffer_upload_integrated :: proc(p_request : BufferUploadRequest) -> BufferUploadResponse {
-	buffer := get_buffer(p_request.dst_buff)
+	buffer := &g_resources.buffers[ get_buffer_idx(p_request.dst_buff)]
 	return BufferUploadResponse{ptr = mem.ptr_offset(buffer.mapped_ptr, p_request.dst_buff_offset)}
 }

@@ -54,8 +54,11 @@ INTERNAL: struct {
 //---------------------------------------------------------------------------//
 
 g_resources: struct {
-	images:         #soa[]ImageResource,
-	backend_images: #soa[]BackendImageResource,
+	images:          #soa[]ImageResource,
+	backend_images:  #soa[]BackendImageResource,
+	
+	buffers:         #soa[]BufferResource,
+	backend_buffers: #soa[]BackendBufferResource,
 }
 
 //---------------------------------------------------------------------------//

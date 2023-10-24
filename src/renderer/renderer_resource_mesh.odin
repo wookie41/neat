@@ -137,7 +137,7 @@ init_meshes :: proc() -> bool {
 	{
 		using INTERNAL
 		vertex_buffer_ref = allocate_buffer_ref(common.create_name("MeshVertexBuffer"))
-		vertex_buffer := get_buffer(vertex_buffer_ref)
+		vertex_buffer := &g_resources.buffers[get_buffer_idx(vertex_buffer_ref)]
 
 		vertex_buffer.desc.size = VERTEX_BUFFER_SIZE
 		vertex_buffer.desc.usage = {.VertexBuffer, .TransferDst}
@@ -149,7 +149,7 @@ init_meshes :: proc() -> bool {
 	{
 		using INTERNAL
 		index_buffer_ref = allocate_buffer_ref(common.create_name("MeshIndexBuffer"))
-		index_buffer := get_buffer(index_buffer_ref)
+		index_buffer := &g_resources.buffers[get_buffer_idx(index_buffer_ref)]
 
 		index_buffer.desc.size = INDEX_BUFFER_SIZE
 		index_buffer.desc.usage = {.IndexBuffer, .TransferDst}

@@ -95,10 +95,11 @@ when USE_VULKAN_BACKEND {
 			vk.BeginCommandBuffer(transfer_cmd_buff, &begin_info)
 		}
 
-		staging_buff := get_buffer(p_staging_buffer_ref)
+		backend_staging_buff := &g_resources.backend_buffers[get_buffer_idx(p_staging_buffer_ref)]
 
 		for request in p_upload_requests {
-			dst_buffer := get_buffer(request.dst_buff)
+			dst_buffer := &g_resources.buffers[get_buffer_idx(request.dst_buff)]
+			backend_dst_buffer := &g_resources.backend_buffers[get_buffer_idx(request.dst_buff)]
 
 			access_mask := vk.AccessFlags{}
 			if .VertexBuffer in dst_buffer.desc.usage {
@@ -118,9 +119,10 @@ when USE_VULKAN_BACKEND {
 			dst_stages += {backend_map_pipeline_stage(request.first_usage_stage)}
 
 			// Issue an acquire barrier for the dst buffer if we're using a dedicated transfer queue
-			is_not_first_usage := dst_buffer.owning_queue_family_idx != max(u32)
+			is_not_first_usage := backend_dst_buffer.owning_queue_family_idx != max(u32)
 			not_owning_buffer :=
-				dst_buffer.owning_queue_family_idx != G_RENDERER.queue_family_transfer_index
+				backend_dst_buffer.owning_queue_family_idx !=
+				G_RENDERER.queue_family_transfer_index
 			if (is_not_first_usage && not_owning_buffer) &&
 			   .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 
@@ -129,7 +131,7 @@ when USE_VULKAN_BACKEND {
 					pNext = nil,
 					size = vk.DeviceSize(request.size),
 					offset = vk.DeviceSize(request.dst_buff_offset),
-					buffer = dst_buffer.vk_buffer,
+					buffer = backend_dst_buffer.vk_buffer,
 					dstAccessMask = {.TRANSFER_WRITE},
 					srcQueueFamilyIndex = G_RENDERER.queue_family_graphics_index,
 					dstQueueFamilyIndex = G_RENDERER.queue_family_transfer_index,
@@ -159,8 +161,8 @@ when USE_VULKAN_BACKEND {
 			}
 			vk.CmdCopyBuffer(
 				transfer_cmd_buff,
-				staging_buff.vk_buffer,
-				dst_buffer.vk_buffer,
+				backend_staging_buff.vk_buffer,
+				backend_dst_buffer.vk_buffer,
 				1,
 				&region,
 			)
@@ -170,7 +172,7 @@ when USE_VULKAN_BACKEND {
 				pNext = nil,
 				size = vk.DeviceSize(request.size),
 				offset = vk.DeviceSize(request.dst_buff_offset),
-				buffer = dst_buffer.vk_buffer,
+				buffer = backend_dst_buffer.vk_buffer,
 				srcAccessMask = {.TRANSFER_WRITE},
 				srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
 				dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,

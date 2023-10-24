@@ -195,7 +195,7 @@ vt_create_uniform_buffer :: proc() {
 	using G_VT
 
 	ubo_ref = allocate_buffer_ref(common.create_name("UBO"))
-	ubo := get_buffer(ubo_ref)
+	ubo := &g_resources.buffers[get_buffer_idx(ubo_ref)]
 
 	ubo.desc.flags = {.HostWrite, .Mapped}
 	ubo.desc.size = size_of(UniformBufferObject) * num_frames_in_flight
@@ -235,7 +235,7 @@ vt_update_uniform_buffer :: proc() {
 		),
 	}
 
-	uniform_buffer := get_buffer(ubo_ref)
+	uniform_buffer := &g_resources.buffers[get_buffer_idx(ubo_ref)]
 	mem.copy(
 		mem.ptr_offset(uniform_buffer.mapped_ptr, size_of(UniformBufferObject) * get_frame_idx()),
 		&ubo,
