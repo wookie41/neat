@@ -147,7 +147,6 @@ vt_update :: proc(
 	p_frame_idx: u32,
 	p_image_idx: u32,
 	p_cmd_buff_ref: CommandBufferRef,
-	p_cmd_buff: ^CommandBufferResource,
 ) {
 	using G_VT
 

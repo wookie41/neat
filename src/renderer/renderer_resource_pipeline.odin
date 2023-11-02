@@ -203,7 +203,7 @@ destroy_pipeline :: proc(p_ref: PipelineRef) {
 //---------------------------------------------------------------------------//
 
 bind_pipeline :: proc(p_pipeline_ref: PipelineRef, p_cmd_buff_ref: CommandBufferRef) {
-	backend_bind_pipeline(get_pipeline(p_pipeline_ref), get_command_buffer(p_cmd_buff_ref))
+	backend_bind_pipeline(get_pipeline(p_pipeline_ref), p_cmd_buff_ref)
 }
 
 //---------------------------------------------------------------------------//

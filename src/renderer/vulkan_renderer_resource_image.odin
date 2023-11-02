@@ -497,7 +497,7 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_execute_queued_texture_copies :: proc(p_cmd_buff_ref: CommandBufferRef) {
 
-		cmd_buff := get_command_buffer(p_cmd_buff_ref)
+		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
 
 		VkCopyEntry :: struct {
 			buffer:     vk.Buffer,
@@ -611,7 +611,7 @@ when USE_VULKAN_BACKEND {
 
 		// Transition the images to transfer
 		vk.CmdPipelineBarrier(
-			cmd_buff.vk_cmd_buff,
+			backend_cmd_buffer.vk_cmd_buff,
 			{.TOP_OF_PIPE},
 			{.TRANSFER},
 			nil,
@@ -627,7 +627,7 @@ when USE_VULKAN_BACKEND {
 		for copy, i in vk_copies {
 
 			vk.CmdCopyBufferToImage(
-				cmd_buff.vk_cmd_buff,
+				backend_cmd_buffer.vk_cmd_buff,
 				copy.buffer,
 				copy.image,
 				.TRANSFER_DST_OPTIMAL,
@@ -637,7 +637,7 @@ when USE_VULKAN_BACKEND {
 
 			// Transition the image to sample
 			vk.CmdPipelineBarrier(
-				cmd_buff.vk_cmd_buff,
+				backend_cmd_buffer.vk_cmd_buff,
 				{.TRANSFER},
 				{.VERTEX_SHADER, .FRAGMENT_SHADER, .COMPUTE_SHADER},
 				nil,

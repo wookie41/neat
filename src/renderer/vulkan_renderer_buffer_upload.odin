@@ -183,8 +183,9 @@ when USE_VULKAN_BACKEND {
 
 				// @TODO This should check to which queue this buffer belongs to hand back
 				// ownership to the appropriate queue
-				graphics_cmd_buff_ref := get_frame_cmd_buffer()
-				graphics_cmd_buff := get_command_buffer(graphics_cmd_buff_ref).vk_cmd_buff
+				graphics_cmd_buff_ref := get_frame_cmd_buffer_ref()
+				backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(graphics_cmd_buff_ref)]
+				graphics_cmd_buff := backend_cmd_buffer.vk_cmd_buff
 
 				buffer_barrier.srcQueueFamilyIndex = G_RENDERER.queue_family_transfer_index
 				buffer_barrier.dstQueueFamilyIndex = G_RENDERER.queue_family_graphics_index

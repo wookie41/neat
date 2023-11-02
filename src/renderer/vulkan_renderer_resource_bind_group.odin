@@ -86,14 +86,15 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_bind_bind_group :: proc(
-		p_cmd_buff: ^CommandBufferResource,
+		p_cmd_buff_ref: CommandBufferRef,
 		p_pipeline: ^PipelineResource,
 		p_bind_group: ^BindGroupResource,
 		p_target: u32,
 		p_dynamic_offsets: []u32,
 	) {
+		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
 		vk.CmdBindDescriptorSets(
-			p_cmd_buff.vk_cmd_buff,
+			backend_cmd_buffer.vk_cmd_buff,
 			map_pipeline_bind_point(p_pipeline.type),
 			p_pipeline.vk_pipeline_layout,
 			p_target,

@@ -131,7 +131,8 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
-		cmd_buff := get_command_buffer(p_cmd_buff_ref)
+		cmd_buffer_idx := get_cmd_buffer_idx(p_cmd_buff_ref)
+		backend_cmd_buffer := &g_resources.backend_cmd_buffers[cmd_buffer_idx]
 
 		// Prepare the depth attachment
 		depth_attachment: vk.RenderingAttachmentInfo
@@ -199,7 +200,7 @@ when USE_VULKAN_BACKEND {
 				}
 
 				vk.CmdPipelineBarrier(
-					cmd_buff.vk_cmd_buff,
+					backend_cmd_buffer.vk_cmd_buff,
 					{.TOP_OF_PIPE},
 					{.EARLY_FRAGMENT_TESTS},
 					{},
@@ -219,7 +220,7 @@ when USE_VULKAN_BACKEND {
 		// Insert the attachment barriers
 		if len(render_target_barriers) > 0 {
 			vk.CmdPipelineBarrier(
-				cmd_buff.vk_cmd_buff,
+				backend_cmd_buffer.vk_cmd_buff,
 				{.TOP_OF_PIPE},
 				{.COLOR_ATTACHMENT_OUTPUT},
 				{},
@@ -268,9 +269,9 @@ when USE_VULKAN_BACKEND {
 			extent = render_area,
 		}
 
-		vk.CmdBeginRendering(cmd_buff.vk_cmd_buff, &rendering_info)
-		vk.CmdSetViewport(cmd_buff.vk_cmd_buff, 0, 1, &viewport)
-		vk.CmdSetScissor(cmd_buff.vk_cmd_buff, 0, 1, &scissor)
+		vk.CmdBeginRendering(backend_cmd_buffer.vk_cmd_buff, &rendering_info)
+		vk.CmdSetViewport(backend_cmd_buffer.vk_cmd_buff, 0, 1, &viewport)
+		vk.CmdSetScissor(backend_cmd_buffer.vk_cmd_buff, 0, 1, &scissor)
 	}
 
 	//---------------------------------------------------------------------------//
@@ -285,7 +286,7 @@ when USE_VULKAN_BACKEND {
 		render_pass.flags -= {.IsActive}
 
 
-		cmd_buf := get_command_buffer(p_cmd_buff_ref)
-		vk.CmdEndRendering(cmd_buf.vk_cmd_buff)
+		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
+		vk.CmdEndRendering(backend_cmd_buffer.vk_cmd_buff)
 	}
 }

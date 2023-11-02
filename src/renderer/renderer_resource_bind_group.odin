@@ -134,10 +134,9 @@ bind_bind_group :: proc(
 	p_target: u32,
 	p_dynamic_offsets: []u32,
 ) {
-	cmd_buff := get_command_buffer(p_cmd_buff_ref)
 	pipeline := get_pipeline(p_pipeline_ref)
 	bind_group := get_bind_group(p_bind_group_ref)
-	backend_bind_bind_group(cmd_buff, pipeline, bind_group, p_target, p_dynamic_offsets)
+	backend_bind_bind_group(p_cmd_buff_ref, pipeline, bind_group, p_target, p_dynamic_offsets)
 }
 
 //---------------------------------------------------------------------------//

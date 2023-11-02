@@ -648,11 +648,10 @@ backend_update :: proc(p_dt: f32) {
 	// Reset the swap chain render target that we'll use this frame
 	G_RENDERER.swap_image_render_targets[INTERNAL.swap_img_idx].current_usage = .Undefined
 
-	cmd_buff_ref := get_frame_cmd_buffer()
-	cmd_buff := get_command_buffer(cmd_buff_ref)
-
 	// Render Vulkan tutorial
-	vt_update(frame_idx, INTERNAL.swap_img_idx, cmd_buff_ref, cmd_buff)
+	frame_cmd_buffer_ref := get_frame_cmd_buffer_ref()
+	backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(frame_cmd_buffer_ref)]
+	vt_update(frame_idx, INTERNAL.swap_img_idx, frame_cmd_buffer_ref)
 
 	// Transition the swapchain to present 
 	to_present_barrier := vk.ImageMemoryBarrier {
@@ -671,7 +670,7 @@ backend_update :: proc(p_dt: f32) {
 	}
 
 	vk.CmdPipelineBarrier(
-		cmd_buff.vk_cmd_buff,
+		backend_cmd_buffer.vk_cmd_buff,
 		{.COLOR_ATTACHMENT_OUTPUT},
 		{.BOTTOM_OF_PIPE},
 		{},
@@ -686,11 +685,11 @@ backend_update :: proc(p_dt: f32) {
 
 @(private)
 backend_submit_pre_render :: proc(p_cmd_buff_ref: CommandBufferRef) {
-	cmd_buff := get_command_buffer(p_cmd_buff_ref)
+	backend_cmd_buff := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
 	submit_info := vk.SubmitInfo {
 		sType              = .SUBMIT_INFO,
 		commandBufferCount = 1,
-		pCommandBuffers    = &cmd_buff.vk_cmd_buff,
+		pCommandBuffers    = &backend_cmd_buff.vk_cmd_buff,
 	}
 	vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[get_frame_idx()])
 
@@ -708,7 +707,7 @@ backend_submit_pre_render :: proc(p_cmd_buff_ref: CommandBufferRef) {
 @(private)
 backend_submit_current_frame :: proc(p_cmd_buff_ref: CommandBufferRef) {
 
-	cmd_buff := get_command_buffer(p_cmd_buff_ref)
+	backend_cmd_buff := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
 
 	// Submit
 	{
@@ -718,7 +717,7 @@ backend_submit_current_frame :: proc(p_cmd_buff_ref: CommandBufferRef) {
 			sType                = .SUBMIT_INFO,
 			pWaitDstStageMask    = &vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT},
 			commandBufferCount   = 1,
-			pCommandBuffers      = &cmd_buff.vk_cmd_buff,
+			pCommandBuffers      = &backend_cmd_buff.vk_cmd_buff,
 			waitSemaphoreCount   = u32(len(wait_semaphores)),
 			pWaitSemaphores      = raw_data(wait_semaphores),
 			signalSemaphoreCount = 1,

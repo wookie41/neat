@@ -448,10 +448,11 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_bind_pipeline :: proc(
 		p_pipeline: ^PipelineResource,
-		p_cmd_buff: ^CommandBufferResource,
+		p_cmd_buffer_ref: CommandBufferRef,
 	) {
 		bind_point := map_pipeline_bind_point(p_pipeline.type)
-		vk.CmdBindPipeline(p_cmd_buff.vk_cmd_buff, bind_point, p_pipeline.vk_pipeline)
+		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buffer_ref)]
+		vk.CmdBindPipeline(backend_cmd_buffer.vk_cmd_buff, bind_point, p_pipeline.vk_pipeline)
 	}
 
 	//---------------------------------------------------------------------------//

@@ -60,6 +60,8 @@ g_resources: struct {
 	backend_buffers:            #soa[]BackendBufferResource,
 	bind_group_layouts:         #soa[]BindGroupLayoutResource,
 	backend_bind_group_layouts: #soa[]BackendBindGroupLayoutResource,
+	cmd_buffers:                #soa[]CommandBufferResource,
+	backend_cmd_buffers:        #soa[]BackendCommandBufferResource,
 }
 
 //---------------------------------------------------------------------------//
@@ -237,7 +239,8 @@ init :: proc(p_options: InitOptions) -> bool {
 				log.error("Failed to allocate command buffer")
 				return false
 			}
-			get_command_buffer(cmd_buff_ref).desc = {
+			cmd_buffer := &g_resources.cmd_buffers[get_cmd_buffer_idx(cmd_buff_ref)]
+			cmd_buffer.desc = {
 				flags = {.Primary},
 				thread = 0,
 				frame = u8(i),
@@ -358,7 +361,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	// This is the initial frame, where everything inside the renderer 
 	// is guaranteed to be created and so things like transfers can be requested 
 	{
-		cmd_buff := get_frame_cmd_buffer()
+		cmd_buff := get_frame_cmd_buffer_ref()
 		begin_command_buffer(cmd_buff)
 		vt_create_texture_image()
 		run_buffer_upload_requests()
@@ -383,7 +386,7 @@ update :: proc(p_dt: f32) {
 
 	// @TODO Render tasks - begin_frame()
 
-	cmd_buff_ref := get_frame_cmd_buffer()
+	cmd_buff_ref := get_frame_cmd_buffer_ref()
 
 	backend_wait_for_frame_resources()
 
@@ -500,7 +503,7 @@ setup_renderer_context :: proc() {
 //---------------------------------------------------------------------------//
 
 @(private)
-get_frame_cmd_buffer :: proc() -> CommandBufferRef {
+get_frame_cmd_buffer_ref :: proc() -> CommandBufferRef {
 	return G_RENDERER.primary_cmd_buffer_ref[get_frame_idx()]
 }
 
@@ -508,7 +511,7 @@ get_frame_cmd_buffer :: proc() -> CommandBufferRef {
 
 @(private)
 execute_queued_texture_copies :: proc() {
-	cmd_buff_ref := get_frame_cmd_buffer()
+	cmd_buff_ref := get_frame_cmd_buffer_ref()
 	if len(G_RENDERER.queued_textures_copies) > 0 {
 		backend_execute_queued_texture_copies(cmd_buff_ref)
 		clear(&G_RENDERER.queued_textures_copies)
