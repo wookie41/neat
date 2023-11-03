@@ -9,8 +9,6 @@ import "core:c"
 
 @(private = "file")
 G_BIND_GROUP_REF_ARRAY: common.RefArray(BindGroupResource)
-@(private = "file")
-G_BIND_GROUP_RESOURCE_ARRAY: []BindGroupResource
 
 //---------------------------------------------------------------------------//
 
@@ -62,7 +60,6 @@ BindGroupDesc :: struct {
 //---------------------------------------------------------------------------//
 
 BindGroupResource :: struct {
-	using backend_bind_group: BackendBindGroupResource,
 	desc:                     BindGroupDesc,
 }
 
@@ -82,11 +79,17 @@ init_bind_groups :: proc() {
 		MAX_BIND_GROUPS,
 		G_RENDERER_ALLOCATORS.main_allocator,
 	)
-	G_BIND_GROUP_RESOURCE_ARRAY = make(
-		[]BindGroupResource,
+	g_resources.bind_groups = make_soa(
+		#soa[]BindGroupResource,
 		MAX_BIND_GROUPS,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
+	g_resources.backend_bind_groups = make_soa(
+		#soa[]BackendBindGroupResource,
+		MAX_BIND_GROUPS,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
+
 	backend_init_bind_groups()
 }
 
@@ -94,15 +97,15 @@ init_bind_groups :: proc() {
 
 allocate_bind_group_ref :: proc(p_name: common.Name) -> BindGroupRef {
 	ref := BindGroupRef(common.ref_create(BindGroupResource, &G_BIND_GROUP_REF_ARRAY, p_name))
-	get_bind_group(ref).desc.name = p_name
+	bind_group := &g_resources.bind_groups[get_bind_group_idx(ref)]
+	bind_group.desc.name = p_name
 	return ref
 }
 
 //---------------------------------------------------------------------------//
 
 create_bind_group :: proc(p_bind_group_ref: BindGroupRef) -> bool {
-	bind_group := get_bind_group(p_bind_group_ref)
-	backend_create_bind_group(p_bind_group_ref, bind_group) or_return
+	backend_create_bind_group(p_bind_group_ref) or_return
 	return true
 }
 
@@ -114,8 +117,8 @@ bind_group_update :: proc(p_bind_group_ref: BindGroupRef, p_bind_group_update: B
 
 //---------------------------------------------------------------------------//
 
-get_bind_group :: proc(p_ref: BindGroupRef) -> ^BindGroupResource {
-	return &G_BIND_GROUP_RESOURCE_ARRAY[common.ref_get_idx(&G_BIND_GROUP_REF_ARRAY, p_ref)]
+get_bind_group_idx :: #force_inline proc(p_ref: BindGroupRef) -> u32 {
+	return common.ref_get_idx(&G_BIND_GROUP_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//
@@ -135,8 +138,7 @@ bind_bind_group :: proc(
 	p_dynamic_offsets: []u32,
 ) {
 	pipeline := get_pipeline(p_pipeline_ref)
-	bind_group := get_bind_group(p_bind_group_ref)
-	backend_bind_bind_group(p_cmd_buff_ref, pipeline, bind_group, p_target, p_dynamic_offsets)
+	backend_bind_bind_group(p_cmd_buff_ref, pipeline, p_bind_group_ref, p_target, p_dynamic_offsets)
 }
 
 //---------------------------------------------------------------------------//

@@ -59,6 +59,8 @@ g_resources: struct {
 	buffers:                    #soa[]BufferResource,
 	backend_buffers:            #soa[]BackendBufferResource,
 	bind_group_layouts:         #soa[]BindGroupLayoutResource,
+	bind_groups:                #soa[]BindGroupResource,
+	backend_bind_groups:        #soa[]BackendBindGroupResource,
 	backend_bind_group_layouts: #soa[]BackendBindGroupLayoutResource,
 	cmd_buffers:                #soa[]CommandBufferResource,
 	backend_cmd_buffers:        #soa[]BackendCommandBufferResource,
@@ -288,7 +290,8 @@ init :: proc(p_options: InitOptions) -> bool {
 			common.create_name("GlobalUniforms"),
 		)
 
-		bind_group := get_bind_group(G_RENDERER.global_bind_group_ref)
+		bind_group_idx := get_bind_group_idx(G_RENDERER.global_bind_group_ref)
+		bind_group := &g_resources.bind_groups[bind_group_idx]
 		bind_group.desc.layout_ref = G_RENDERER.global_bind_group_layout_ref
 
 		if create_bind_group(G_RENDERER.global_bind_group_ref) == false {
@@ -339,7 +342,8 @@ init :: proc(p_options: InitOptions) -> bool {
 			common.create_name("BindlessArray"),
 		)
 
-		bind_group := get_bind_group(G_RENDERER.bindless_textures_array_bind_group_ref)
+		bind_group_idx := get_bind_group_idx(G_RENDERER.bindless_textures_array_bind_group_ref)
+		bind_group := &g_resources.bind_groups[bind_group_idx]
 		bind_group.desc.layout_ref = G_RENDERER.bindless_textures_array_bind_group_layout_ref
 
 		if create_bind_group(G_RENDERER.bindless_textures_array_bind_group_ref) == false {

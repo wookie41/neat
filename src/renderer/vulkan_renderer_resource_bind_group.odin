@@ -56,12 +56,13 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	backend_create_bind_group :: proc(
-		p_bind_group_ref: BindGroupRef,
-		p_bind_group: ^BindGroupResource,
-	) -> bool {
+	backend_create_bind_group :: proc(p_bind_group_ref: BindGroupRef) -> bool {
 
-		backend_bind_group_layout := &g_resources.backend_bind_group_layouts[get_bind_group_layout_idx(p_bind_group.desc.layout_ref)]
+		bind_group_idx := get_bind_group_idx(p_bind_group_ref)
+		bind_group := &g_resources.bind_groups[bind_group_idx]
+		backend_bind_group := &g_resources.backend_bind_groups[bind_group_idx]
+
+		backend_bind_group_layout := &g_resources.backend_bind_group_layouts[get_bind_group_layout_idx(bind_group.desc.layout_ref)]
 
 		descriptor_set_alloc_info := vk.DescriptorSetAllocateInfo {
 			sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -76,7 +77,7 @@ when USE_VULKAN_BACKEND {
 			vk.AllocateDescriptorSets(
 				G_RENDERER.device,
 				&descriptor_set_alloc_info,
-				&p_bind_group.vk_descriptor_set,
+				&backend_bind_group.vk_descriptor_set,
 			) ==
 			.SUCCESS \
 		)
@@ -88,18 +89,20 @@ when USE_VULKAN_BACKEND {
 	backend_bind_bind_group :: proc(
 		p_cmd_buff_ref: CommandBufferRef,
 		p_pipeline: ^PipelineResource,
-		p_bind_group: ^BindGroupResource,
+		p_bind_group_ref: BindGroupRef,
 		p_target: u32,
 		p_dynamic_offsets: []u32,
 	) {
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
+		backend_bind_group := &g_resources.backend_bind_groups[get_bind_group_idx(p_bind_group_ref)]
+
 		vk.CmdBindDescriptorSets(
 			backend_cmd_buffer.vk_cmd_buff,
 			map_pipeline_bind_point(p_pipeline.type),
 			p_pipeline.vk_pipeline_layout,
 			p_target,
 			1,
-			&p_bind_group.vk_descriptor_set,
+			&backend_bind_group.vk_descriptor_set,
 			u32(len(p_dynamic_offsets)),
 			raw_data(p_dynamic_offsets),
 		)
@@ -109,12 +112,13 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_destroy_bind_group :: proc(p_bind_group_ref: BindGroupRef) {
-		bind_group := get_bind_group(p_bind_group_ref)
+		bind_group_idx := get_bind_group_idx(p_bind_group_ref)
+		backend_bind_group := &g_resources.backend_bind_groups[bind_group_idx]
 		vk.FreeDescriptorSets(
 			G_RENDERER.device,
 			INTERNAL.descriptor_pool,
 			1,
-			&bind_group.vk_descriptor_set,
+			&backend_bind_group.vk_descriptor_set,
 		)
 	}
 
@@ -126,7 +130,9 @@ when USE_VULKAN_BACKEND {
 		p_bind_group_update: BindGroupUpdate,
 	) {
 
-		bind_group := get_bind_group(p_bind_group_ref)
+		bind_group_idx := get_bind_group_idx(p_bind_group_ref)
+		bind_group := &g_resources.bind_groups[bind_group_idx]
+		backend_bind_group := &g_resources.backend_bind_groups[bind_group_idx]
 
 		// Allocate descriptor write array (for now we just write the entire bind group, no dirty bindings checking)
 		images_infos_count := len(p_bind_group_update.images)
@@ -188,7 +194,7 @@ when USE_VULKAN_BACKEND {
 					sType           = .WRITE_DESCRIPTOR_SET,
 					descriptorCount = 1,
 					dstBinding      = u32(num_descriptor_writes),
-					dstSet          = bind_group.vk_descriptor_set,
+					dstSet          = backend_bind_group.vk_descriptor_set,
 					pBufferInfo     = &buffer_writes[buffer_write_idx],
 				}
 
@@ -238,7 +244,7 @@ when USE_VULKAN_BACKEND {
 					sType           = .WRITE_DESCRIPTOR_SET,
 					descriptorCount = 1,
 					dstBinding      = u32(num_descriptor_writes),
-					dstSet          = bind_group.vk_descriptor_set,
+					dstSet          = backend_bind_group.vk_descriptor_set,
 					pImageInfo      = &image_writes[image_write_idx],
 				}
 
