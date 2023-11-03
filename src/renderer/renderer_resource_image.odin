@@ -287,7 +287,7 @@ create_depth_buffer :: proc(p_name: common.Name, p_depth_buffer_desc: ImageDesc)
 
 //---------------------------------------------------------------------------//
 
-get_image_idx :: proc(p_ref: ImageRef) -> u32 {
+get_image_idx :: #force_inline proc(p_ref: ImageRef) -> u32 {
 	return common.ref_get_idx(&G_IMAGE_REF_ARRAY, p_ref)
 }
 

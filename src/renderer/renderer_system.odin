@@ -446,7 +446,7 @@ get_frame_id :: #force_inline proc() -> u32 {
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-advance_frame_idx :: proc() {
+advance_frame_idx :: #force_inline proc() {
 	INTERNAL.frame_id += 1
 	INTERNAL.frame_idx = (INTERNAL.frame_idx + 1) % G_RENDERER.num_frames_in_flight
 }

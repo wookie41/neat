@@ -142,7 +142,7 @@ create_bind_group_layout :: proc(p_bind_group_layout_ref: BindGroupLayoutRef) ->
 
 //---------------------------------------------------------------------------//
 
-get_bind_group_layout_idx :: proc(p_ref: BindGroupLayoutRef) -> u32 {
+get_bind_group_layout_idx :: #force_inline proc(p_ref: BindGroupLayoutRef) -> u32 {
 	return common.ref_get_idx(&G_BIND_GROUP_LAYOUT_REF_ARRAY, p_ref)
 }
 

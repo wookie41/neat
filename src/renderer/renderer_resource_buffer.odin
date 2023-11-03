@@ -132,7 +132,7 @@ create_buffer :: proc(p_ref: BufferRef) -> bool {
 
 //---------------------------------------------------------------------------//
 
-get_buffer_idx :: proc(p_ref: BufferRef) -> u32 {
+get_buffer_idx :: #force_inline proc(p_ref: BufferRef) -> u32 {
 	return common.ref_get_idx(&G_BUFFER_REF_ARRAY, p_ref)
 }
 
