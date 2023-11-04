@@ -64,6 +64,8 @@ g_resources: struct {
 	backend_bind_group_layouts: #soa[]BackendBindGroupLayoutResource,
 	cmd_buffers:                #soa[]CommandBufferResource,
 	backend_cmd_buffers:        #soa[]BackendCommandBufferResource,
+	pipelines:                  #soa[]PipelineResource,
+	backend_pipelines:          #soa[]BackendPipelineResource,
 }
 
 //---------------------------------------------------------------------------//

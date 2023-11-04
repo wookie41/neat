@@ -83,9 +83,8 @@ PipelineDesc :: struct {
 //---------------------------------------------------------------------------//
 
 PipelineResource :: struct {
-	using backend_pipeline: BackendPipelineResource,
-	desc:                   PipelineDesc,
-	type:                   PipelineType,
+	desc: PipelineDesc,
+	type: PipelineType,
 }
 
 //---------------------------------------------------------------------------//
@@ -124,8 +123,6 @@ PipelineStageFlags :: distinct bit_set[PipelineStageFlagBits;u16]
 
 @(private = "file")
 G_PIPELINE_REF_ARRAY: common.RefArray(PipelineResource)
-@(private = "file")
-G_PIPELINE_RESOURCE_ARRAY: []PipelineResource
 
 //---------------------------------------------------------------------------//
 
@@ -135,8 +132,13 @@ init_pipelines :: proc() -> bool {
 		MAX_PIPELINES,
 		G_RENDERER_ALLOCATORS.main_allocator,
 	)
-	G_PIPELINE_RESOURCE_ARRAY = make(
-		[]PipelineResource,
+	g_resources.pipelines = make_soa(
+		#soa[]PipelineResource,
+		MAX_PIPELINES,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
+	g_resources.backend_pipelines = make_soa(
+		#soa[]BackendPipelineResource,
 		MAX_PIPELINES,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
@@ -156,7 +158,7 @@ allocate_pipeline_ref :: proc(
 	p_bind_group_layouts_count: u32,
 ) -> PipelineRef {
 	ref := PipelineRef(common.ref_create(PipelineResource, &G_PIPELINE_REF_ARRAY, p_name))
-	pipeline := get_pipeline(ref)
+	pipeline := &g_resources.pipelines[get_pipeline_idx(ref)]
 	pipeline.desc.name = p_name
 	pipeline.desc.bind_group_layout_refs = make(
 		[]BindGroupLayoutRef,
@@ -169,10 +171,10 @@ allocate_pipeline_ref :: proc(
 
 create_graphics_pipeline :: proc(p_ref: PipelineRef) -> bool {
 
-	pipeline := get_pipeline(p_ref)
+	pipeline := &g_resources.pipelines[get_pipeline_idx(p_ref)]
 	pipeline.type = .Graphics
 
-	res := backend_create_graphics_pipeline(p_ref, pipeline)
+	res := backend_create_graphics_pipeline(p_ref)
 
 	if res == false {
 		destroy_pipeline(p_ref)
@@ -184,26 +186,26 @@ create_graphics_pipeline :: proc(p_ref: PipelineRef) -> bool {
 
 //---------------------------------------------------------------------------//
 
-get_pipeline :: proc(p_ref: PipelineRef) -> ^PipelineResource {
-	return &G_PIPELINE_RESOURCE_ARRAY[common.ref_get_idx(&G_PIPELINE_REF_ARRAY, p_ref)]
+get_pipeline_idx :: proc(p_ref: PipelineRef) -> u32 {
+	return common.ref_get_idx(&G_PIPELINE_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//
 
 destroy_pipeline :: proc(p_ref: PipelineRef) {
-	pipeline := get_pipeline(p_ref)
+	pipeline := &g_resources.pipelines[get_pipeline_idx(p_ref)]
 	if len(pipeline.desc.bind_group_layout_refs) > 0 {
 		delete(pipeline.desc.bind_group_layout_refs, G_RENDERER_ALLOCATORS.resource_allocator)
 	}
 
-	backend_destroy_pipeline(pipeline)
+	backend_destroy_pipeline(p_ref)
 	common.ref_free(&G_PIPELINE_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//
 
 bind_pipeline :: proc(p_pipeline_ref: PipelineRef, p_cmd_buff_ref: CommandBufferRef) {
-	backend_bind_pipeline(get_pipeline(p_pipeline_ref), p_cmd_buff_ref)
+	backend_bind_pipeline(p_pipeline_ref, p_cmd_buff_ref)
 }
 
 //---------------------------------------------------------------------------//

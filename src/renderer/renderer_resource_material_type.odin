@@ -328,7 +328,7 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 
 		// Create the PSO
 		material_pass.pipeline_ref = allocate_pipeline_ref(material_pass.desc.name, 3)
-		pipeline := get_pipeline(material_pass.pipeline_ref)
+		pipeline := &g_resources.pipelines[get_pipeline_idx(material_pass.pipeline_ref)]
 		pipeline.desc.bind_group_layout_refs = {
 			InvalidBindGroupLayout, // @TODO material bind group
 			G_RENDERER.global_bind_group_layout_ref,

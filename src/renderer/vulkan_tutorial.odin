@@ -113,7 +113,8 @@ init_vt :: proc() -> bool {
 			vertex_shader_ref := find_shader_by_name(common.create_name("base.vert"))
 			fragment_shader_ref := find_shader_by_name(common.create_name("base.frag"))
 			pipeline_ref = allocate_pipeline_ref(common.create_name("Vulkan Tutorial Pipeline"), 2)
-			get_pipeline(pipeline_ref).desc = {
+			pipeline := &g_resources.pipelines[get_pipeline_idx(pipeline_ref)]
+			pipeline.desc = {
 				name = common.create_name("Vulkan Tutorial Pipe"),
 				vert_shader_ref = vertex_shader_ref,
 				frag_shader_ref = fragment_shader_ref,

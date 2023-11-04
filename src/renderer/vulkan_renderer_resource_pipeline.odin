@@ -237,19 +237,20 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	backend_create_graphics_pipeline :: proc(
-		p_ref: PipelineRef,
-		p_pipeline: ^PipelineResource,
-	) -> bool {
+	backend_create_graphics_pipeline :: proc(p_ref: PipelineRef) -> bool {
+
+		pipeline_idx := get_pipeline_idx(p_ref)
+		pipeline := &g_resources.pipelines[pipeline_idx]
+		backend_pipeline := &g_resources.backend_pipelines[pipeline_idx]
 
 		temp_arena: common.TempArena
 		common.temp_arena_init(&temp_arena)
 		defer common.temp_arena_delete(temp_arena)
 
-		vert_shader := get_shader(p_pipeline.desc.vert_shader_ref)
-		frag_shader := get_shader(p_pipeline.desc.frag_shader_ref)
+		vert_shader := get_shader(pipeline.desc.vert_shader_ref)
+		frag_shader := get_shader(pipeline.desc.frag_shader_ref)
 
-		render_pass := get_render_pass(p_pipeline.desc.render_pass_ref)
+		render_pass := get_render_pass(pipeline.desc.render_pass_ref)
 
 		// create stage info for each shader
 		vertex_stage_info := vk.PipelineShaderStageCreateInfo {
@@ -271,8 +272,8 @@ when USE_VULKAN_BACKEND {
 		input_assembly_state := INPUT_ASSEMBLY_PER_PRIMITIVE_TYPE[render_pass.desc.primitive_type]
 
 		// Vertex layout
-		vertex_binding_descriptions := VERTEX_BINDINGS_PER_TYPE[p_pipeline.desc.vertex_layout]
-		vertex_attribute_descriptions := VERTEX_ATTRIBUTES_PER_TYPE[p_pipeline.desc.vertex_layout]
+		vertex_binding_descriptions := VERTEX_BINDINGS_PER_TYPE[pipeline.desc.vertex_layout]
+		vertex_attribute_descriptions := VERTEX_ATTRIBUTES_PER_TYPE[pipeline.desc.vertex_layout]
 
 		vertex_input_info := vk.PipelineVertexInputStateCreateInfo {
 			sType                           = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -320,10 +321,10 @@ when USE_VULKAN_BACKEND {
 			// If so, use it
 			cache_entry := &INTERNAL.pipeline_layout_cache[pipeline_layout_hash]
 			cache_entry.ref_count += 1
-			p_pipeline.vk_pipeline_layout = cache_entry.vk_pipeline_layout
+			backend_pipeline.vk_pipeline_layout = cache_entry.vk_pipeline_layout
 		} else {
 			// Otherwise create a new one 
-			success := create_pipeline_layout(p_pipeline, pipeline_layout_hash)
+			success := create_pipeline_layout(pipeline_idx, pipeline_layout_hash)
 			if success == false {
 				return false
 			}
@@ -378,7 +379,7 @@ when USE_VULKAN_BACKEND {
 			pMultisampleState   = &multisample_state,
 			pColorBlendState    = &color_blending_state,
 			pDepthStencilState  = &depth_stencil,
-			layout              = p_pipeline.vk_pipeline_layout,
+			layout              = backend_pipeline.vk_pipeline_layout,
 			pViewportState      = &viewport_state,
 		}
 
@@ -388,7 +389,7 @@ when USE_VULKAN_BACKEND {
 			1,
 			&pipeline_info,
 			nil,
-			&p_pipeline.vk_pipeline,
+			&backend_pipeline.vk_pipeline,
 		); res != .SUCCESS {
 			log.warnf("Couldn't create graphics pipeline: %s", res)
 			return false
@@ -426,8 +427,12 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_destroy_pipeline :: proc(p_pipeline: ^PipelineResource) {
-		pipeline_layout_hash := hash_pipeline_layout(p_pipeline)
+	backend_destroy_pipeline :: proc(p_pipeline_ref: PipelineRef) {
+
+		pipeline_idx := get_pipeline_idx(p_pipeline_ref)
+		backend_pipeline := &g_resources.backend_pipelines[pipeline_idx]
+
+		pipeline_layout_hash := hash_pipeline_layout(pipeline_idx)
 		assert(pipeline_layout_hash in INTERNAL.pipeline_layout_cache)
 
 		cache_entry := &INTERNAL.pipeline_layout_cache[pipeline_layout_hash]
@@ -440,47 +445,52 @@ when USE_VULKAN_BACKEND {
 			delete_key(&INTERNAL.pipeline_layout_cache, pipeline_layout_hash)
 		}
 
-		vk.DestroyPipeline(G_RENDERER.device, p_pipeline.vk_pipeline, nil)
+		vk.DestroyPipeline(G_RENDERER.device, backend_pipeline.vk_pipeline, nil)
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
 	backend_bind_pipeline :: proc(
-		p_pipeline: ^PipelineResource,
+		p_pipeline_ref: PipelineRef,
 		p_cmd_buffer_ref: CommandBufferRef,
 	) {
-		bind_point := map_pipeline_bind_point(p_pipeline.type)
+		pipeline_idx := get_pipeline_idx(p_pipeline_ref)
+		pipeline := &g_resources.pipelines[pipeline_idx]
+		backend_pipeline := &g_resources.backend_pipelines[pipeline_idx]
+
+		bind_point := map_pipeline_bind_point(pipeline.type)
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buffer_ref)]
-		vk.CmdBindPipeline(backend_cmd_buffer.vk_cmd_buff, bind_point, p_pipeline.vk_pipeline)
+		vk.CmdBindPipeline(backend_cmd_buffer.vk_cmd_buff, bind_point, backend_pipeline.vk_pipeline)
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	hash_pipeline_layout :: #force_inline proc(p_pipeline: ^PipelineResource) -> u32 {
-		vert_shader_hash := get_shader(p_pipeline.desc.vert_shader_ref).hash
-		frag_shader_hash := get_shader(p_pipeline.desc.frag_shader_ref).hash
+	hash_pipeline_layout :: #force_inline proc(p_pipeline_idx: u32) -> u32 {
+		pipeline := &g_resources.pipelines[p_pipeline_idx]
+		vert_shader_hash := get_shader(pipeline.desc.vert_shader_ref).hash
+		frag_shader_hash := get_shader(pipeline.desc.frag_shader_ref).hash
 		return vert_shader_hash ~ frag_shader_hash
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	create_pipeline_layout :: proc(
-		p_pipeline: ^PipelineResource,
-		p_pipeline_layout_hash: u32,
-	) -> bool {
+	create_pipeline_layout :: proc(p_pipeline_idx: u32, p_pipeline_layout_hash: u32) -> bool {
+
+		pipeline := &g_resources.pipelines[p_pipeline_idx]
+		backend_pipeline := &g_resources.backend_pipelines[p_pipeline_idx]
 
 		// Gather descriptor layouts from each bind group layout
 		descriptor_set_layouts := make(
 			[]vk.DescriptorSetLayout,
-			len(p_pipeline.desc.bind_group_layout_refs),
+			len(pipeline.desc.bind_group_layout_refs),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(descriptor_set_layouts, G_RENDERER_ALLOCATORS.temp_allocator)
 
-		for bind_group_layout_ref, i in p_pipeline.desc.bind_group_layout_refs {
+		for bind_group_layout_ref, i in pipeline.desc.bind_group_layout_refs {
 
 			if bind_group_layout_ref == InvalidBindGroupLayout {
 				descriptor_set_layouts[i] = INTERNAL.vk_empty_descriptor_set_layout
@@ -503,7 +513,7 @@ when USE_VULKAN_BACKEND {
 			   G_RENDERER.device,
 			   &create_info,
 			   nil,
-			   &p_pipeline.vk_pipeline_layout,
+			   &backend_pipeline.vk_pipeline_layout,
 		   ) !=
 		   .SUCCESS {
 			log.warn("Failed to create pipeline layout")
@@ -513,7 +523,7 @@ when USE_VULKAN_BACKEND {
 		// Add entry to cache
 		INTERNAL.pipeline_layout_cache[p_pipeline_layout_hash] = PipelineLayoutCacheEntry {
 			ref_count          = 1,
-			vk_pipeline_layout = p_pipeline.vk_pipeline_layout,
+			vk_pipeline_layout = backend_pipeline.vk_pipeline_layout,
 		}
 
 		return true
