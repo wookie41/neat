@@ -68,6 +68,7 @@ g_resources: struct {
 	backend_pipelines:          #soa[]BackendPipelineResource,
 	render_passes:              #soa[]RenderPassResource,
 	backend_render_passes:      #soa[]BackendRenderPassResource,
+	render_tasks:               []RenderTaskResource,
 }
 
 //---------------------------------------------------------------------------//

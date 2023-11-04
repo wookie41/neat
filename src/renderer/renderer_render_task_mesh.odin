@@ -2,78 +2,68 @@ package renderer
 
 //---------------------------------------------------------------------------//
 
-import "../common"
-
-//---------------------------------------------------------------------------//
-
 @(private = "file")
 MeshRenderTaskData :: struct {
-	render_pass_ref:    RenderPassRef,
+	render_pass_ref: RenderPassRef,
 }
 
 //---------------------------------------------------------------------------//
 
-create_mesh_render_task :: proc(p_render_task_config: RenderTaskConfig) -> RenderTaskRef {
-	mesh_render_task_ref := allocate_render_task_ref(common.create_name("MeshRenderTask"))
+mesh_render_task_init :: proc(p_render_task_functions: ^RenderTaskFunctions) {
+	p_render_task_functions.create_instance = create_instance
+	p_render_task_functions.destroy_instance = destroy_instance
+	p_render_task_functions.begin_frame = begin_frame
+	p_render_task_functions.end_frame = end_frame
+	p_render_task_functions.render = render
+}
 
-	defer if mesh_render_task_ref == InvalidRenderTaskRef {
-		destroy_render_task(mesh_render_task_ref)
-	}
 
-	if create_render_task(mesh_render_task_ref, p_render_task_config) == false {
-		return InvalidRenderTaskRef
-	}
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+create_instance :: proc(
+	p_render_task_ref: RenderTaskRef,
+	p_render_task_config: ^RenderTaskConfig,
+) -> bool {
 
 	render_pass_ref := find_render_pass_by_name(p_render_task_config["RenderPass"])
 	if render_pass_ref == InvalidRenderPassRef {
-		return InvalidRenderTaskRef
+		return false
 	}
 
-	render_task := get_render_task(mesh_render_task_ref)
-	render_task.init = init
-	render_task.deinit = deinit
-	render_task.begin_frame = begin_frame
-	render_task.end_frame = end_frame
-	render_task.render = render
-
-	// @TODO Replace this with a custom allocator that will allocate only objects of this type
+	mesh_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
 	mesh_render_task_data := new(MeshRenderTaskData, G_RENDERER_ALLOCATORS.resource_allocator)
 	mesh_render_task_data.render_pass_ref = render_pass_ref
-	render_task.data_ptr = rawptr(mesh_render_task_data)
+	mesh_render_task.data_ptr = rawptr(mesh_render_task_data)
 
-	return mesh_render_task_ref
-}
-
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-init :: proc(p_render_task: ^RenderTaskResource) -> bool {
 	return true
 }
 
 //---------------------------------------------------------------------------//
 
+//---------------------------------------------------------------------------//
+
 @(private = "file")
-deinit :: proc(p_render_task: ^RenderTaskResource) {
+destroy_instance :: proc(p_render_task_ref: RenderTaskRef) {
 	//mesh_render_task_data := (^MeshRenderTaskData)(p_render_task.data_ptr)
 }
 
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-begin_frame :: proc(p_render_task: ^RenderTaskResource) {
+begin_frame :: proc(p_render_task_ref: RenderTaskRef) {
 }
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-end_frame :: proc(p_render_task: ^RenderTaskResource) {
+end_frame :: proc(p_render_task_ref: RenderTaskRef) {
 }
 
 
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-render :: proc(p_render_task: ^RenderTaskResource, dt: f32) {
+render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 }
 
 //---------------------------------------------------------------------------//
