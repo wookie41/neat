@@ -4,10 +4,10 @@ package renderer
 
 import "../common"
 import c "core:c"
-import "core:math/linalg/glsl"
 import "core:encoding/json"
-import "core:os"
 import "core:log"
+import "core:math/linalg/glsl"
+import "core:os"
 
 //---------------------------------------------------------------------------//
 
@@ -71,9 +71,8 @@ RenderPassFlags :: distinct bit_set[RenderPassFlagBits;u32]
 //---------------------------------------------------------------------------//
 
 RenderPassResource :: struct {
-	using backend_render_pass: BackendRenderPassResource,
-	desc:                      RenderPassDesc,
-	flags:                     RenderPassFlags,
+	desc:  RenderPassDesc,
+	flags: RenderPassFlags,
 }
 
 //---------------------------------------------------------------------------//
@@ -90,8 +89,6 @@ InvalidRenderPassRef := RenderPassRef {
 
 @(private = "file")
 G_RENDER_PASS_REF_ARRAY: common.RefArray(RenderPassResource)
-@(private = "file")
-G_RENDER_PASS_RESOURCE_ARRAY: []RenderPassResource
 
 //---------------------------------------------------------------------------//
 
@@ -174,8 +171,13 @@ init_render_passes :: proc() -> bool {
 		MAX_RENDER_PASSES,
 		G_RENDERER_ALLOCATORS.main_allocator,
 	)
-	G_RENDER_PASS_RESOURCE_ARRAY = make(
-		[]RenderPassResource,
+	g_resources.render_passes = make_soa(
+		#soa[]RenderPassResource,
+		MAX_RENDER_PASSES,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
+	g_resources.backend_render_passes = make_soa(
+		#soa[]BackendRenderPassResource,
 		MAX_RENDER_PASSES,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
@@ -189,32 +191,30 @@ init_render_passes :: proc() -> bool {
 
 allocate_render_pass_ref :: proc(p_name: common.Name) -> RenderPassRef {
 	ref := RenderPassRef(common.ref_create(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_name))
-	get_render_pass(ref).desc.name = p_name
+	g_resources.render_passes[get_render_pass_idx(ref)].desc.name = p_name
 	return ref
 }
 
 //---------------------------------------------------------------------------//
 
 create_render_pass :: proc(p_render_pass_ref: RenderPassRef) -> bool {
-	render_pass := get_render_pass(p_render_pass_ref)
-	if backend_create_render_pass(p_render_pass_ref, render_pass) == false {
+	if backend_create_render_pass(p_render_pass_ref) == false {
 		common.ref_free(&G_RENDER_PASS_REF_ARRAY, p_render_pass_ref)
 		return false
 	}
-
 	return true
 }
 
 //---------------------------------------------------------------------------//
 
-get_render_pass :: proc(p_ref: RenderPassRef) -> ^RenderPassResource {
-	return &G_RENDER_PASS_RESOURCE_ARRAY[common.ref_get_idx(&G_RENDER_PASS_REF_ARRAY, p_ref)]
+get_render_pass_idx :: #force_inline proc(p_ref: RenderPassRef) -> u32 {
+	return common.ref_get_idx(&G_RENDER_PASS_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//
 
 destroy_render_pass :: proc(p_ref: RenderPassRef) {
-	render_pass := get_render_pass(p_ref)
+	render_pass := &g_resources.render_passes[get_render_pass_idx(p_ref)]
 	if len(render_pass.desc.layout.render_target_formats) > 0 {
 		delete(
 			render_pass.desc.layout.render_target_formats,
@@ -228,7 +228,7 @@ destroy_render_pass :: proc(p_ref: RenderPassRef) {
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
 	}
-	backend_destroy_render_pass(render_pass)
+	backend_destroy_render_pass(p_ref)
 	common.ref_free(&G_RENDER_PASS_REF_ARRAY, p_ref)
 }
 
@@ -276,7 +276,7 @@ load_render_passes_from_config_file :: proc() -> bool {
 	for render_pass_entry in render_passes {
 		render_pass_ref := allocate_render_pass_ref(common.create_name(render_pass_entry.name))
 
-		render_pass := get_render_pass(render_pass_ref)
+		render_pass := &g_resources.render_passes[get_render_pass_idx(render_pass_ref)]
 
 		// Check if this render pass has a depth test 
 		if len(render_pass_entry.depth_format) > 0 {

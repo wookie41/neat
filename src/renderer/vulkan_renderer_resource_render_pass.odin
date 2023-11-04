@@ -25,7 +25,6 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_create_render_pass :: proc(
 		p_ref: RenderPassRef,
-		p_render_pass: ^RenderPassResource,
 	) -> bool {
 		return true
 	}
@@ -33,7 +32,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//	
 
 	@(private)
-	backend_destroy_render_pass :: proc(p_render_pass: ^RenderPassResource) {
+	backend_destroy_render_pass :: proc(p_render_pass_ref: RenderPassRef) {
 		// nothing to do
 	}
 
@@ -45,7 +44,9 @@ when USE_VULKAN_BACKEND {
 		p_cmd_buff_ref: CommandBufferRef,
 		p_begin_info: ^RenderPassBeginInfo,
 	) {
-		render_pass := get_render_pass(p_render_pass_ref)
+		render_pass_idx := get_render_pass_idx(p_render_pass_ref)
+		render_pass := &g_resources.render_passes[render_pass_idx]
+
 		assert((.IsActive in render_pass.flags) == false)
 
 		render_pass.flags += {.IsActive}
@@ -281,10 +282,9 @@ when USE_VULKAN_BACKEND {
 		p_render_pass_ref: RenderPassRef,
 		p_cmd_buff_ref: CommandBufferRef,
 	) {
-		render_pass := get_render_pass(p_render_pass_ref)
+		render_pass := &g_resources.render_passes[get_render_pass_idx(p_render_pass_ref)]
 		assert(.IsActive in render_pass.flags)
 		render_pass.flags -= {.IsActive}
-
 
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
 		vk.CmdEndRendering(backend_cmd_buffer.vk_cmd_buff)

@@ -250,7 +250,7 @@ when USE_VULKAN_BACKEND {
 		vert_shader := get_shader(pipeline.desc.vert_shader_ref)
 		frag_shader := get_shader(pipeline.desc.frag_shader_ref)
 
-		render_pass := get_render_pass(pipeline.desc.render_pass_ref)
+		render_pass := &g_resources.render_passes[get_render_pass_idx(pipeline.desc.render_pass_ref)]
 
 		// create stage info for each shader
 		vertex_stage_info := vk.PipelineShaderStageCreateInfo {
@@ -461,7 +461,11 @@ when USE_VULKAN_BACKEND {
 
 		bind_point := map_pipeline_bind_point(pipeline.type)
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buffer_ref)]
-		vk.CmdBindPipeline(backend_cmd_buffer.vk_cmd_buff, bind_point, backend_pipeline.vk_pipeline)
+		vk.CmdBindPipeline(
+			backend_cmd_buffer.vk_cmd_buff,
+			bind_point,
+			backend_pipeline.vk_pipeline,
+		)
 	}
 
 	//---------------------------------------------------------------------------//

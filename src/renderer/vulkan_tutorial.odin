@@ -83,8 +83,8 @@ init_vt :: proc() -> bool {
 			render_pass_ref = allocate_render_pass_ref(
 				common.create_name("Vulkan tutorial Render Pass"),
 			)
-			render_pas := get_render_pass(render_pass_ref)
-			render_pas.desc = RenderPassDesc {
+			render_pass := &g_resources.render_passes[get_render_pass_idx(render_pass_ref)]
+			render_pass.desc = RenderPassDesc {
 				resolution = .Full,
 				layout = {
 					render_target_blend_types = {.Default},
@@ -96,13 +96,13 @@ init_vt :: proc() -> bool {
 				depth_stencil_type = .DepthTestWrite,
 			}
 
-			render_pas.desc.layout.render_target_formats = make(
+			render_pass.desc.layout.render_target_formats = make(
 				[]ImageFormat,
 				1,
 				G_RENDERER_ALLOCATORS.resource_allocator,
 			)
 
-			render_pas.desc.layout.render_target_formats[0] = swap_image_format
+			render_pass.desc.layout.render_target_formats[0] = swap_image_format
 			create_render_pass(render_pass_ref)
 		}
 

@@ -186,7 +186,7 @@ create_graphics_pipeline :: proc(p_ref: PipelineRef) -> bool {
 
 //---------------------------------------------------------------------------//
 
-get_pipeline_idx :: proc(p_ref: PipelineRef) -> u32 {
+get_pipeline_idx :: #force_inline proc(p_ref: PipelineRef) -> u32 {
 	return common.ref_get_idx(&G_PIPELINE_REF_ARRAY, p_ref)
 }
 
