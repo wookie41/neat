@@ -69,6 +69,8 @@ g_resources: struct {
 	render_passes:              #soa[]RenderPassResource,
 	backend_render_passes:      #soa[]BackendRenderPassResource,
 	render_tasks:               []RenderTaskResource,
+	shaders:                    #soa[]ShaderResource,
+	backend_shaders:                    #soa[]BackendShaderResource,
 }
 
 //---------------------------------------------------------------------------//

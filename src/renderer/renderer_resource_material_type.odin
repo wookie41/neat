@@ -308,8 +308,8 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 			common.create_name(frag_shader_path),
 		)
 
-		vertex_shader := get_shader(material_pass.vertex_shader_ref)
-		fragment_shader := get_shader(material_pass.fragment_shader_ref)
+		vertex_shader := &g_resources.shaders[get_shader_idx(material_pass.vertex_shader_ref)]
+		fragment_shader := &g_resources.shaders[get_shader_idx(material_pass.fragment_shader_ref)]
 
 		vertex_shader.desc.features = shader_defines
 		vertex_shader.desc.file_path = material_pass.desc.vertex_shader_path

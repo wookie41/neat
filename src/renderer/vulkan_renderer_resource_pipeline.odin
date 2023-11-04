@@ -247,8 +247,14 @@ when USE_VULKAN_BACKEND {
 		common.temp_arena_init(&temp_arena)
 		defer common.temp_arena_delete(temp_arena)
 
-		vert_shader := get_shader(pipeline.desc.vert_shader_ref)
-		frag_shader := get_shader(pipeline.desc.frag_shader_ref)
+		vertex_shader_idx := get_shader_idx(pipeline.desc.vert_shader_ref)
+		fragment_shader_idx := get_shader_idx(pipeline.desc.frag_shader_ref)
+
+		vert_shader := &g_resources.shaders[vertex_shader_idx]
+		frag_shader := &g_resources.shaders[fragment_shader_idx]
+
+		backend_vert_shader := &g_resources.backend_shaders[vertex_shader_idx]
+		backend_frag_shader := &g_resources.backend_shaders[fragment_shader_idx]
 
 		render_pass := &g_resources.render_passes[get_render_pass_idx(pipeline.desc.render_pass_ref)]
 
@@ -256,13 +262,13 @@ when USE_VULKAN_BACKEND {
 		vertex_stage_info := vk.PipelineShaderStageCreateInfo {
 			sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
 			stage = {.VERTEX},
-			module = vert_shader.vk_module,
+			module = backend_vert_shader.vk_module,
 			pName = "main",
 		}
 		fragment_stage_info := vk.PipelineShaderStageCreateInfo {
 			sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
 			stage = {.FRAGMENT},
-			module = frag_shader.vk_module,
+			module = backend_frag_shader.vk_module,
 			pName = "main",
 		}
 
@@ -473,8 +479,8 @@ when USE_VULKAN_BACKEND {
 	@(private = "file")
 	hash_pipeline_layout :: #force_inline proc(p_pipeline_idx: u32) -> u32 {
 		pipeline := &g_resources.pipelines[p_pipeline_idx]
-		vert_shader_hash := get_shader(pipeline.desc.vert_shader_ref).hash
-		frag_shader_hash := get_shader(pipeline.desc.frag_shader_ref).hash
+		vert_shader_hash := g_resources.shaders[get_shader_idx(pipeline.desc.vert_shader_ref)].hash
+		frag_shader_hash := g_resources.shaders[get_shader_idx(pipeline.desc.frag_shader_ref)].hash
 		return vert_shader_hash ~ frag_shader_hash
 	}
 

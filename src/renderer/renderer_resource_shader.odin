@@ -67,10 +67,9 @@ ShaderFlags :: distinct bit_set[ShaderFlagBits;u16]
 //---------------------------------------------------------------------------//
 
 ShaderResource :: struct {
-	using backend_shader: BackendShaderResource,
-	desc:                 ShaderDesc,
-	flags:                ShaderFlags,
-	hash:                 u32,
+	desc:  ShaderDesc,
+	flags: ShaderFlags,
+	hash:  u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -87,8 +86,6 @@ InvalidShaderRef := ShaderRef {
 
 @(private = "file")
 G_SHADER_REF_ARRAY: common.RefArray(ShaderResource)
-@(private = "file")
-G_SHADER_RESOURCE_ARRAY: []ShaderResource
 
 //---------------------------------------------------------------------------//
 
@@ -98,8 +95,14 @@ init_shaders :: proc() -> bool {
 		MAX_SHADERS,
 		G_RENDERER_ALLOCATORS.main_allocator,
 	)
-	G_SHADER_RESOURCE_ARRAY = make(
-		[]ShaderResource,
+	g_resources.shaders = make_soa(
+		#soa[]ShaderResource,
+		MAX_SHADERS,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
+
+	g_resources.backend_shaders = make_soa(
+		#soa[]BackendShaderResource,
 		MAX_SHADERS,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
@@ -143,7 +146,7 @@ init_shaders :: proc() -> bool {
 
 		name := common.create_name(entry.name)
 		shader_ref := allocate_shader_ref(name)
-		shader := get_shader(shader_ref)
+		shader := &g_resources.shaders[get_shader_idx(shader_ref)]
 		shader.desc.file_path = common.create_name(entry.path)
 		shader.desc.features = slice.clone(
 			entry.features,
@@ -187,10 +190,10 @@ deinit_shaders :: proc() {
 //---------------------------------------------------------------------------//
 
 create_shader :: proc(p_shader_ref: ShaderRef) -> bool {
-	shader := get_shader(p_shader_ref)
+	shader := &g_resources.shaders[get_shader_idx(p_shader_ref)]
 	shader_hash := calculate_hash_for_shader(&shader.desc)
 	assert((shader_hash in INTERNAL.shader_by_hash) == false)
-	if backend_create_shader(p_shader_ref, shader) == false {
+	if backend_create_shader(p_shader_ref) == false {
 		destroy_shader(p_shader_ref)
 		return false
 	}
@@ -202,21 +205,21 @@ create_shader :: proc(p_shader_ref: ShaderRef) -> bool {
 
 allocate_shader_ref :: proc(p_name: common.Name) -> ShaderRef {
 	ref := ShaderRef(common.ref_create(ShaderResource, &G_SHADER_REF_ARRAY, p_name))
-	get_shader(ref).desc.name = p_name
+	g_resources.shaders[get_shader_idx(ref)].desc.name = p_name
 	return ref
 }
 //---------------------------------------------------------------------------//
 
-get_shader :: proc(p_ref: ShaderRef) -> ^ShaderResource {
-	return &G_SHADER_RESOURCE_ARRAY[common.ref_get_idx(&G_SHADER_REF_ARRAY, p_ref)]
+get_shader_idx :: #force_inline proc(p_ref: ShaderRef) -> u32 {
+	return common.ref_get_idx(&G_SHADER_REF_ARRAY, p_ref)
 }
 
 //--------------------------------------------------------------------------//
 
 destroy_shader :: proc(p_ref: ShaderRef) {
 	// @TODO remove from cache (shader_by_hash)
-	shader := get_shader(p_ref)
-	backend_destroy_shader(shader)
+	shader := &g_resources.shaders[get_shader_idx(p_ref)]
+	backend_destroy_shader(p_ref)
 	for feature in shader.desc.features {
 		delete(feature, G_RENDERER_ALLOCATORS.resource_allocator)
 	}
@@ -260,7 +263,7 @@ create_shader_permutation :: proc(
 	p_features: []string,
 	p_merge_features: bool,
 ) -> ShaderRef {
-	base_shader := get_shader(p_base_shader_ref)
+	base_shader := &g_resources.shaders[get_shader_idx(p_base_shader_ref)]
 
 	permutation_desc := base_shader.desc
 
@@ -308,7 +311,7 @@ create_shader_permutation :: proc(
 	}
 
 	permutation_ref := allocate_shader_ref(p_name)
-	permutation := get_shader(permutation_ref)
+	permutation := &g_resources.shaders[get_shader_idx(permutation_ref)]
 
 	permutation.desc = permutation_desc
 

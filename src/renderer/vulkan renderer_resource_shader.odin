@@ -45,10 +45,13 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_create_shader :: proc(
 		p_ref: ShaderRef,
-		p_shader: ^ShaderResource,
 	) -> (
 		create_result: bool,
 	) {
+
+		shader_idx := get_shader_idx(p_ref)
+		shader := &g_resources.shaders[shader_idx]
+		backend_shader := &g_resources.backend_shaders[shader_idx]
 
 		temp_arena: common.TempArena
 		common.temp_arena_init(&temp_arena)
@@ -56,7 +59,7 @@ when USE_VULKAN_BACKEND {
 
 		// Determine compile target
 		compile_target: string
-		switch p_shader.desc.stage {
+		switch shader.desc.stage {
 		case .Vertex:
 			compile_target = "vs_6_7"
 		case .Fragment:
@@ -65,7 +68,7 @@ when USE_VULKAN_BACKEND {
 			compile_target = "cs_6_7"
 		}
 
-		shader_path := common.get_string(p_shader.desc.file_path)
+		shader_path := common.get_string(shader.desc.file_path)
 		shader_src_path := common.aprintf(
 			temp_arena.allocator,
 			"app_data/renderer/assets/shaders/%s",
@@ -82,7 +85,7 @@ when USE_VULKAN_BACKEND {
 			// Add defines for macros
 			shader_defines := ""
 			shader_defines_log := ""
-			for feature in p_shader.desc.features {
+			for feature in shader.desc.features {
 				shader_defines = common.aprintf(
 					temp_arena.allocator,
 					"%s -D %s",
@@ -133,7 +136,7 @@ when USE_VULKAN_BACKEND {
 				G_RENDERER.device,
 				&module_create_info,
 				nil,
-				&p_shader.vk_module,
+				&backend_shader.vk_module,
 			); create_res != .SUCCESS {
 				log.warnf("Failed to create module for shader %s: %s", shader_path, create_res)
 				return false
@@ -145,8 +148,9 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_destroy_shader :: proc(p_shader: ^ShaderResource) {
-		vk.DestroyShaderModule(G_RENDERER.device, p_shader.vk_module, nil)
+	backend_destroy_shader :: proc(p_shader_ref: ShaderRef) {
+		shader := &g_resources.backend_shaders[get_shader_idx(p_shader_ref)]
+		vk.DestroyShaderModule(G_RENDERER.device, shader.vk_module, nil)
 	}
 
 	//---------------------------------------------------------------------------//
