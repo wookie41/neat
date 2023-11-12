@@ -12,9 +12,9 @@ main :: proc() {
 		os.exit(-1)
 	}
 
-	// engine.texture_asset_import(engine.TextureAssetImportOptions {
-	// 	file_path = "app_data/renderer/assets/textures/viking_room.png",
-	// })
+	engine.texture_asset_import(engine.TextureAssetImportOptions {
+		file_path = "app_data/renderer/assets/textures/viking_room.png",
+	})
 
 	engine.texture_asset_load_and_create_renderer_image("viking_room")
 	engine.run()

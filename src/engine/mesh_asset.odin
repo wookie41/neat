@@ -2,7 +2,32 @@ package engine
 
 //---------------------------------------------------------------------------//
 
-// import "../common"
+import "core:c"
+import "core:encoding/json"
+import "core:log"
+import "core:math/linalg/glsl"
+import "core:os"
+import "core:path/filepath"
+import "core:strings"
+
+import "../common"
+import "../renderer"
+import assimp "../third_party/assimp"
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+G_METADATA_FILE_VERSION :: 1
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+G_MESH_DB_PATH :: "app_data/engine/assets/meshes/db.json"
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+G_MESH_ASSETS_DIR :: "app_data/engine/assets/meshes/"
 
 //---------------------------------------------------------------------------//
 
@@ -19,19 +44,557 @@ MeshAssetImportOptions :: struct {
 
 //---------------------------------------------------------------------------//
 
+MeshAssetFlagBits :: enum u16 {}
+
+MeshAssetFlags :: distinct bit_set[MeshAssetFlagBits;u16]
+
+//---------------------------------------------------------------------------//
+
+MeshFeatureFlagBits :: enum u16 {
+	Normal,
+	UV,
+	Tangent,
+	IndexedDraw,
+}
+
+MeshFeatureFlags :: distinct bit_set[MeshFeatureFlagBits;u16]
+
+//---------------------------------------------------------------------------//
+
 @(private = "file")
-MeshAssetMetadata :: struct {
-	uuid:    UUID,
-	version: uint, // Metadata file version
+SubMeshMetadata :: struct {
+	data_count:          u32,
+	data_offset:         u32,
+	material_asset_name: common.Name,
 }
 
 //---------------------------------------------------------------------------//
 
-// mesh_asset_import :: proc(p_import_options: ^MeshAssetImportOptions) -> AssetImportResult {
+@(private = "file")
+MeshAssetMetadata :: struct {
+	using base:        AssetMetadataBase,
+	feature_flags:     MeshFeatureFlags `json:"featureFlags"`,
+	sub_meshes:        []SubMeshMetadata `json:"subMeshes"`,
+	total_vertex_size: u32 `json:"totalVertexSize"`,
+	total_index_size:  u32 `json:"totalIndexSize"`,
+}
 
-// 	temp_arena: common.TempArena
-// 	common.temp_arena_init(&temp_arena)
-// 	defer common.temp_arena_delete(temp_arena)
-// }
+//---------------------------------------------------------------------------//
+
+MeshAsset :: struct {
+	using metadata: MeshAssetMetadata,
+	ref_count:      u32,
+	mesh_ref:       renderer.MeshRef,
+}
+
+//---------------------------------------------------------------------------//
+
+MAX_MESH_ASSETS :: 2048
+
+//---------------------------------------------------------------------------//
+
+MeshAssetRef :: common.Ref(MeshAsset)
+
+//---------------------------------------------------------------------------//
+
+InvalidMeshAssetRef := MeshAssetRef {
+	ref = c.UINT32_MAX,
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+G_MESH_ASSET_REF_ARRAY: common.RefArray(MeshAsset)
+@(private = "file")
+G_MESH_ASSET_ARRAY: []MeshAsset
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+INTERNAL: struct {
+	mesh_database: AssetDatabase,
+}
+
+//---------------------------------------------------------------------------//
+
+mesh_asset_init :: proc() {
+
+	G_MESH_ASSET_REF_ARRAY = common.ref_array_create(
+		MeshAsset,
+		MAX_MESH_ASSETS,
+		G_ALLOCATORS.asset_allocator,
+	)
+	G_MESH_ASSET_ARRAY = make([]MeshAsset, MAX_MESH_ASSETS, G_ALLOCATORS.asset_allocator)
+
+	temp_arena: common.TempArena
+	common.temp_arena_init(&temp_arena)
+	defer common.temp_arena_delete(temp_arena)
+
+	context.temp_allocator = temp_arena.allocator
+
+	asset_database_init(&INTERNAL.mesh_database, G_MESH_DB_PATH)
+	asset_database_read(&INTERNAL.mesh_database)
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+SubMesh :: struct {
+	data_offset:        u32,
+	data_count:         u32,
+	material_asset_ref: MaterialAssetRef,
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+MeshImportContext :: struct {
+	curr_vtx:           u32,
+	curr_idx:           u32,
+	current_sub_mesh:   u32,
+	indices:            []u32,
+	positions:          []glsl.vec3,
+	normals:            []glsl.vec3,
+	tangents:           []glsl.vec3,
+	uvs:                []glsl.vec2,
+	mesh_feature_flags: MeshFeatureFlags,
+	sub_meshes:         []SubMesh,
+	mesh_dir:           string,
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+allocate_mesh_asset_ref :: proc(p_name: common.Name) -> MeshAssetRef {
+	ref := MeshAssetRef(common.ref_create(MeshAsset, &G_MESH_ASSET_REF_ARRAY, p_name))
+	mesh := mesh_asset_get(ref)
+	mesh.name = p_name
+	mesh.type = .Texture
+	return ref
+}
+
+//---------------------------------------------------------------------------//
+
+mesh_asset_get :: proc(p_ref: MeshAssetRef) -> ^MeshAsset {
+	return &G_MESH_ASSET_ARRAY[common.ref_get_idx(&G_MESH_ASSET_REF_ARRAY, p_ref)]
+}
+
+//---------------------------------------------------------------------------//
+
+mesh_asset_import :: proc(p_import_options: ^MeshAssetImportOptions) -> AssetImportResult {
+
+	temp_arena: common.TempArena
+	common.temp_arena_init(&temp_arena)
+	defer common.temp_arena_delete(temp_arena)
+
+	context.temp_allocator = temp_arena.allocator
+
+	mesh_file_path := strings.clone_to_cstring(p_import_options.file_path, context.temp_allocator)
+
+	scene := assimp.import_file(mesh_file_path, {.OptimizeMeshes, .Triangulate, .FlipUVs})
+	if scene == nil {
+		return AssetImportResult{status = .Error}
+	}
+	defer assimp.release_import(scene)
+
+	mesh_import_ctx := MeshImportContext {
+		curr_idx = 0,
+		curr_vtx = 0,
+		mesh_dir = filepath.dir(p_import_options.file_path, temp_arena.allocator),
+	}
+
+	// Calculate the number of vertices and indices
+	num_vertices: u32 = 0
+	num_indices: u32 = 0
+
+	// Assuming all submeshes will also have those features. I mean, it makes sense
+	if (scene.mMeshes[0].mNormals != nil) {
+		mesh_import_ctx.mesh_feature_flags += {.Normal}
+	}
+	if (scene.mMeshes[0].mTangents != nil) {
+		mesh_import_ctx.mesh_feature_flags += {.Tangent}
+	}
+	if (len(scene.mMeshes[0].mTextureCoords) > 0) {
+		mesh_import_ctx.mesh_feature_flags += {.UV}
+	}
+
+	for i in 0 ..< scene.mNumMeshes {
+		num_vertices += u32(scene.mMeshes[i].mNumVertices)
+		num_indices += u32(scene.mMeshes[i].mNumFaces * 3)
+	}
+
+	if num_indices > 0 {
+		mesh_import_ctx.mesh_feature_flags += {.IndexedDraw}
+		mesh_import_ctx.indices = make([]u32, int(num_indices))
+	}
+
+	mesh_import_ctx.positions = make([]glsl.vec3, int(num_vertices))
+	mesh_import_ctx.normals = make([]glsl.vec3, int(num_vertices))
+	mesh_import_ctx.tangents = make([]glsl.vec3, int(num_vertices))
+	mesh_import_ctx.uvs = make([]glsl.vec2, int(num_vertices))
+	mesh_import_ctx.sub_meshes = make([]SubMesh, scene.mNumMeshes)
+
+	// Recursivly load the nodes
+	assimp_load_node(scene, scene.mRootNode, &mesh_import_ctx)
+
+	mesh_asset_name := string(scene.mName.data[:scene.mName.length])
+
+	// Save the metadata
+	mesh_metadata_file_path := common.aprintf(
+		temp_arena.allocator,
+		"%s%s.metadata",
+		G_MESH_ASSETS_DIR,
+		mesh_asset_name,
+	)
+	{
+		mesh_metadata := MeshAssetMetadata {
+			name          = common.create_name(mesh_asset_name),
+			uuid          = uuid_create(),
+			version       = G_METADATA_FILE_VERSION,
+			type          = .Mesh,
+			feature_flags = mesh_import_ctx.mesh_feature_flags,
+			sub_meshes    = make(
+				[]SubMeshMetadata,
+				len(mesh_import_ctx.sub_meshes),
+				temp_arena.allocator,
+			),
+		}
+
+		if .IndexedDraw in mesh_import_ctx.mesh_feature_flags {
+			mesh_metadata.total_index_size = size_of(u32) * u32(len(mesh_import_ctx.indices))
+		}
+
+		mesh_metadata.total_vertex_size = size_of(glsl.vec3)
+		if .Normal in mesh_import_ctx.mesh_feature_flags {
+			mesh_metadata.total_vertex_size += size_of(glsl.vec3)
+		}
+		if .Tangent in mesh_import_ctx.mesh_feature_flags {
+			mesh_metadata.total_vertex_size += size_of(glsl.vec3)
+		}
+		if .UV in mesh_import_ctx.mesh_feature_flags {
+			mesh_metadata.total_vertex_size += size_of(glsl.vec2)
+		}
+
+		for sub_mesh, i in mesh_import_ctx.sub_meshes {
+			mesh_metadata.sub_meshes[i] = SubMeshMetadata {
+				data_count          = sub_mesh.data_count,
+				data_offset         = sub_mesh.data_offset,
+				material_asset_name = material_asset_get(sub_mesh.material_asset_ref).name,
+			}
+		}
+
+		if common.write_json_file(
+			   mesh_metadata_file_path,
+			   MeshAssetMetadata,
+			   mesh_metadata,
+			   temp_arena.allocator,
+		   ) ==
+		   false {
+			log.warnf("Failed to save mesh '%s' - couldn't save metadata\n", mesh_asset_name)
+			return AssetImportResult{status = .Error}
+
+		}
+	}
+
+	// Save the data itself
+	mesh_asset_path := filepath.join(
+		{G_MESH_ASSETS_DIR, mesh_asset_name, "bin"},
+		temp_arena.allocator,
+	)
+
+	fd, err := os.open(mesh_asset_path, os.O_WRONLY | os.O_CREATE)
+	if err != 0 {
+		os.remove(mesh_metadata_file_path)
+		log.warnf(
+			"Failed to save mesh '%s' - couldn't open file %s\n",
+			mesh_asset_name,
+			mesh_asset_path,
+		)
+
+		return AssetImportResult{status = .Error}
+	}
+
+	if .IndexedDraw in mesh_import_ctx.mesh_feature_flags {
+		os.write_ptr(
+			fd,
+			raw_data(mesh_import_ctx.indices),
+			len(mesh_import_ctx.indices) * size_of(mesh_import_ctx.indices[0]),
+		)
+	}
+
+	os.write_ptr(
+		fd,
+		raw_data(mesh_import_ctx.positions),
+		len(mesh_import_ctx.positions) * size_of(mesh_import_ctx.positions[0]),
+	)
+
+	if .Normal in mesh_import_ctx.mesh_feature_flags {
+		os.write_ptr(
+			fd,
+			raw_data(mesh_import_ctx.normals),
+			len(mesh_import_ctx.positions) * size_of(mesh_import_ctx.normals[0]),
+		)
+	}
+
+	if .Tangent in mesh_import_ctx.mesh_feature_flags {
+		os.write_ptr(
+			fd,
+			raw_data(mesh_import_ctx.tangents),
+			len(mesh_import_ctx.tangents) * size_of(mesh_import_ctx.tangents[0]),
+		)
+	}
+
+	if .UV in mesh_import_ctx.mesh_feature_flags {
+		os.write_ptr(
+			fd,
+			raw_data(mesh_import_ctx.uvs),
+			len(mesh_import_ctx.uvs) * size_of(mesh_import_ctx.uvs[0]),
+		)
+	}
+
+
+	return AssetImportResult{name = common.make_name(mesh_asset_name), status = .Ok}
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+mesh_asset_load_name :: proc(p_mesh_asset_name: common.Name) -> MeshAssetRef {
+
+	// Check if it's already loaded
+	{
+		mesh_asset_ref := common.ref_find_by_name(&G_MESH_ASSET_REF_ARRAY, p_mesh_asset_name)
+		if mesh_asset_ref != InvalidMeshAssetRef {
+			mesh_asset_get(mesh_asset_ref).ref_count += 1
+			return mesh_asset_ref
+		}
+	}
+
+	temp_arena: common.TempArena
+	common.temp_arena_init(&temp_arena)
+	defer common.temp_arena_delete(temp_arena)
+	context.temp_allocator = temp_arena.allocator
+
+	// Load metadata
+	mesh_metadata: MeshAssetMetadata
+	mesh_name := common.get_string(p_mesh_asset_name)
+
+	{
+		mesh_metadata_file_path := common.aprintf(
+			temp_arena.allocator,
+			"%s%s.metadata",
+			G_MESH_ASSETS_DIR,
+			mesh_name,
+		)
+		mesh_metadata_json, success := os.read_entire_file(
+			mesh_metadata_file_path,
+			context.temp_allocator,
+		)
+		if !success {
+			log.warnf("Failed to load mesh '%s' - couldn't load metadata\n", mesh_name)
+			return InvalidMeshAssetRef
+		}
+		err := json.unmarshal(mesh_metadata_json, &mesh_metadata, .JSON5, context.temp_allocator)
+		if err != nil {
+			log.warnf("Failed to load mesh '%s' - couldn't read metadata\n", mesh_name)
+			return InvalidMeshAssetRef
+		}
+	}
+
+	// Load mesh data
+	vertex_data := make([]byte, mesh_metadata.total_vertex_size, temp_arena.allocator)
+	index_data: []byte = nil
+	if .IndexedDraw in mesh_metadata.feature_flags {
+		index_data = make([]byte, mesh_metadata.total_index_size, temp_arena.allocator)
+	}
+
+	// Create renderer mesh
+	mesh_resource_ref := renderer.allocate_mesh_ref(p_mesh_asset_name)
+
+}
+
+mesh_asset_unload :: proc(p_mesh_asset_ref: MeshAssetRef) {
+	mesh_asset := mesh_asset_get(p_mesh_asset_ref)
+	mesh_asset.ref_count -= 1
+	if mesh_asset.ref_count > 0 {
+		return
+	}
+	renderer.destroy_mesh(mesh_asset.mesh_ref)
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+assimp_load_node :: proc(
+	p_scene: ^assimp.Scene,
+	p_node: ^assimp.Node,
+	p_import_ctx: ^MeshImportContext,
+) {
+
+	default_material_type_ref := renderer.find_material_type("Default")
+
+	for i in 0 ..< p_node.mNumMeshes {
+		assimp_mesh := p_scene.mMeshes[p_node.mMeshes[i]]
+		assimp_mesh_name := string(assimp_mesh.mName.data[:assimp_mesh.mName.length])
+
+		assimp_material := p_scene.mMaterials[assimp_mesh.mMaterialIndex]
+
+		// Create a new material asset for this submesh
+		material_props := DefaultMaterialPropertiesAssetJSON {
+			flags = 0,
+		}
+
+		material_asset_ref := allocate_material_asset_ref(common.create_name(assimp_mesh_name))
+		material_asset := material_asset_get(material_asset_ref)
+		material_asset.material_type_name = common.make_name("Default")
+		material_asset_create(material_asset_ref)
+
+		// Set default scalar values
+		material_props.albedo = {1, 1, 1}
+		material_props.normal = {0, 1, 0}
+		material_props.roughness = 0.5
+		material_props.metalness = 0
+		material_props.occlusion = 1
+
+		// Import all of the textures for this submesh and set it in the material
+		assimp_material_import_texture(
+			assimp_material,
+			.AitexturetypeBaseColor,
+			p_import_ctx.mesh_dir,
+			&material_props.albedo_image_name,
+		)
+		assimp_material_import_texture(
+			assimp_material,
+			.AitexturetypeNormals,
+			p_import_ctx.mesh_dir,
+			&material_props.normal_image_name,
+		)
+		assimp_material_import_texture(
+			assimp_material,
+			.AitexturetypeDiffuseRoughness,
+			p_import_ctx.mesh_dir,
+			&material_props.roughness_image_name,
+		)
+		assimp_material_import_texture(
+			assimp_material,
+			.AitexturetypeMetalness,
+			p_import_ctx.mesh_dir,
+			&material_props.metalness_image_name,
+		)
+		assimp_material_import_texture(
+			assimp_material,
+			.AitexturetypeLightmap,
+			p_import_ctx.mesh_dir,
+			&material_props.occlusion_image_name,
+		)
+
+		// Save the newly created material asset
+		material_asset_save_new_default(material_asset_ref, material_props)
+		p_import_ctx.sub_meshes[p_import_ctx.curr_idx].material_asset_ref = material_asset_ref
+		material_asset_unload(material_asset_ref)
+
+		// Load mesh data
+		sub_mesh := &p_import_ctx.sub_meshes[p_import_ctx.current_sub_mesh]
+		sub_mesh.data_count = assimp_mesh.mNumVertices
+		sub_mesh.data_offset = p_import_ctx.curr_vtx
+
+		for j in 0 ..< assimp_mesh.mNumVertices {
+
+			p_import_ctx.positions[p_import_ctx.curr_vtx] = {
+				assimp_mesh.mVertices[j].x,
+				assimp_mesh.mVertices[j].y,
+				assimp_mesh.mVertices[j].z,
+			}
+
+			if .Normal in p_import_ctx.mesh_feature_flags {
+				p_import_ctx.normals[p_import_ctx.curr_vtx] = {
+					assimp_mesh.mNormals[j].x,
+					assimp_mesh.mNormals[j].y,
+					assimp_mesh.mNormals[j].z,
+				}
+			}
+
+			if .Tangent in p_import_ctx.mesh_feature_flags {
+				p_import_ctx.tangents[p_import_ctx.curr_vtx] = {
+					assimp_mesh.mTangents[j].x,
+					assimp_mesh.mTangents[j].y,
+					assimp_mesh.mTangents[j].z,
+				}
+			}
+
+			if .UV in p_import_ctx.mesh_feature_flags {
+				p_import_ctx.uvs[p_import_ctx.curr_vtx] = {
+					assimp_mesh.mTextureCoords[0][j].x,
+					assimp_mesh.mTextureCoords[0][j].y,
+				}
+			}
+
+			p_import_ctx.curr_vtx += 1
+		}
+
+		for j in 0 ..< assimp_mesh.mNumFaces {
+			for k in 0 ..< assimp_mesh.mFaces[j].mNumIndices {
+				idx := sub_mesh.data_offset + assimp_mesh.mFaces[j].mIndices[k]
+				p_import_ctx.indices[p_import_ctx.curr_idx] = u32(idx)
+				p_import_ctx.curr_idx += 1
+			}
+		}
+
+		p_import_ctx.current_sub_mesh += 1
+	}
+
+	for i in 0 ..< p_node.mNumChildren {
+		assimp_load_node(p_scene, p_node.mChildren[i], p_import_ctx)
+	}
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+assimp_material_import_texture :: proc(
+	p_assimp_material: ^assimp.Material,
+	p_assimp_texture_type: assimp.TextureType,
+	p_mesh_dir: string,
+	p_out_texture_name: ^string,
+) {
+	texture_path: assimp.String
+	assimp_get_material_texture(p_assimp_material, p_assimp_texture_type, &texture_path)
+
+	if texture_path.length == 0 {
+		return
+	}
+
+	texture_import_options := TextureAssetImportOptions {
+		file_path = filepath.join(
+			{p_mesh_dir, string(texture_path.data[:texture_path.length])},
+			context.temp_allocator,
+		),
+	}
+
+	import_result := texture_asset_import(texture_import_options)
+	if import_result.status != .Error {
+		p_out_texture_name^ = common.get_string(import_result.name)
+	}
+}
+
+@(private = "file")
+assimp_get_material_texture :: #force_inline proc(
+	p_material: ^assimp.Material,
+	p_texture_type: assimp.TextureType,
+	p_path: ^assimp.String,
+) -> assimp.Return {
+	return assimp.get_material_texture(
+		p_material,
+		p_texture_type,
+		0,
+		p_path,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+}
 
 //---------------------------------------------------------------------------//

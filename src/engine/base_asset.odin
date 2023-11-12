@@ -3,8 +3,10 @@ package engine
 //---------------------------------------------------------------------------//
 
 import "../common"
+import "core:encoding/json"
 import "core:fmt"
 import "core:math/rand"
+import "core:os"
 import "core:strings"
 import "core:time"
 
@@ -13,6 +15,7 @@ import "core:time"
 AssetType :: enum {
 	Texture,
 	Mesh,
+	Material,
 }
 
 //---------------------------------------------------------------------------//
@@ -106,7 +109,96 @@ AssetImportResultStatus :: enum u16 {
 //---------------------------------------------------------------------------//
 
 AssetImportResult :: struct {
+	name:   common.Name,
 	status: AssetImportResultStatus,
+}
+
+//---------------------------------------------------------------------------//
+
+AssetDatabaseEntry :: struct {
+	uuid:      UUID,
+	name:      string, // User readable name of the asset
+	file_name: string `json:"fileName"`, // Name of the asset file inside assets dir
+}
+
+//---------------------------------------------------------------------------//
+
+AssetDatabase :: struct {
+	db_entries:   [dynamic]AssetDatabaseEntry,
+	db_file_path: string,
+}
+
+//---------------------------------------------------------------------------//
+
+asset_database_init :: proc(p_asset_database: ^AssetDatabase, p_db_file_path: string) {
+	p_asset_database.db_file_path = p_db_file_path
+	p_asset_database.db_entries = make([dynamic]AssetDatabaseEntry, G_ALLOCATORS.main_allocator)
+}
+
+//---------------------------------------------------------------------------//
+
+asset_database_read :: proc(p_asset_database: ^AssetDatabase) -> bool {
+	// Make sure that the database file is created
+	if os.exists(p_asset_database.db_file_path) == false {
+		f, err := os.open(p_asset_database.db_file_path, os.O_CREATE)
+		assert(err == 0)
+		_, err = os.write_string(f, "[]")
+		assert(err == 0)
+		os.close(f)
+	}
+
+	// Read the database file
+	db_data, db_read_ok := os.read_entire_file(
+		p_asset_database.db_file_path,
+		context.temp_allocator,
+	)
+	if db_read_ok == false {
+		return false
+	}
+
+	err := json.unmarshal(
+		db_data,
+		&p_asset_database.db_entries,
+		json.DEFAULT_SPECIFICATION,
+		G_ALLOCATORS.main_allocator,
+	)
+
+	if (err != nil) {
+		return false
+	}
+
+	return true
+}
+
+//---------------------------------------------------------------------------//
+
+asset_database_save :: proc(p_asset_database: ^AssetDatabase) -> bool {
+	json_data, err := json.marshal(
+		p_asset_database.db_entries,
+		json.Marshal_Options{spec = .JSON5, pretty = true},
+		context.temp_allocator,
+	)
+	if err != nil {
+		return false
+	}
+	defer delete(json_data, context.temp_allocator)
+	if os.write_entire_file(p_asset_database.db_file_path, json_data) == false {
+		return false
+	}
+	return true
+}
+
+//---------------------------------------------------------------------------//
+
+asset_database_add :: proc(
+	p_asset_database: ^AssetDatabase,
+	p_new_entry: AssetDatabaseEntry,
+	p_save: bool = false,
+) {
+	append(&p_asset_database.db_entries, p_new_entry)
+	if (p_save) {
+		asset_database_save(p_asset_database)
+	}
 }
 
 //---------------------------------------------------------------------------//

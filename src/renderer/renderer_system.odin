@@ -70,7 +70,10 @@ g_resources: struct {
 	backend_render_passes:      #soa[]BackendRenderPassResource,
 	render_tasks:               []RenderTaskResource,
 	shaders:                    #soa[]ShaderResource,
-	backend_shaders:                    #soa[]BackendShaderResource,
+	backend_shaders:            #soa[]BackendShaderResource,
+	material_types:             #soa[]MaterialTypeResource,
+	material_instances:         #soa[]MaterialInstanceResource,
+	meshes:                     #soa[]MeshResource,
 }
 
 //---------------------------------------------------------------------------//
@@ -101,6 +104,8 @@ G_RENDERER: struct {
 	global_bind_group_ref:                         BindGroupRef,
 	bindless_textures_array_bind_group_ref:        BindGroupRef,
 }
+
+//---------------------------------------------------------------------------//
 
 @(private)
 G_RENDERER_ALLOCATORS: struct {
@@ -418,20 +423,6 @@ update :: proc(p_dt: f32) {
 	submit_current_frame(cmd_buff_ref)
 
 	// @TODO Render tasks - end_frame()
-
-	// Recreate mesh queues
-	{
-		delete(g_created_mesh_refs)
-		delete(g_destroyed_mesh_refs)
-
-		g_created_mesh_refs = make([dynamic]MeshRef, G_RENDERER_ALLOCATORS.frame_allocator)
-
-		for mesh_ref in g_destroyed_mesh_refs {
-			free_mesh_ref(mesh_ref)
-		}
-
-		g_destroyed_mesh_refs = make([dynamic]MeshRef, G_RENDERER_ALLOCATORS.frame_allocator)
-	}
 
 	advance_frame_idx()
 

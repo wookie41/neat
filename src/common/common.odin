@@ -3,13 +3,13 @@ package common
 //---------------------------------------------------------------------------//
 
 import "core:container/bit_array"
+import "core:encoding/json"
 import "core:fmt"
 import "core:hash"
 import "core:mem"
+import "core:os"
 import "core:slice"
 import "core:strings"
-import "core:os"
-import "core:encoding/json"
 
 //---------------------------------------------------------------------------//
 

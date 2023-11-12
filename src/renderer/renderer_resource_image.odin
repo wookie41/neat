@@ -321,6 +321,8 @@ find_image :: proc {
 	find_image_by_str,
 }
 
+//---------------------------------------------------------------------------//
+
 find_image_by_name :: proc(p_name: common.Name) -> ImageRef {
 	ref := common.ref_find_by_name(&G_IMAGE_REF_ARRAY, p_name)
 	if ref == InvalidImageRef {

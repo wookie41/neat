@@ -1,13 +1,21 @@
-struct MaterialInstanceParams
-{
-    #if FEAT_ALBEDO_CONST_COLOR > 0
-    float4 color;
-    #endif
+#if (FEAT_MAT_DEFAULT > 0)
 
-    #if FEAT_ALBEDO_TEX > 0
-    uint albedoTexId;
-    #endif
+struct MaterialParams
+{
+    uint flags;
+    float3 albedo;
+    float3 normal;
+    float roughness;
+    float metalness;
+    float occlusion;
+    uint albedoTex;
+    uint normalTex;
+    uint roughnessTex;
+    uint metalnessTex
+    uint occlusionTex;
 };
 
+#endif // FEAT_MAT_DEFAULT
+
 [[vk::binding(0, 1)]]
-StructuredBuffer<MaterialInstanceParams> gMaterialBuffer_Dynamic;
+StructuredBuffer<MaterialParams> gMaterialBuffer;

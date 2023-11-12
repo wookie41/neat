@@ -23,19 +23,6 @@ VERTEX_STRIDE :: size_of(glsl.vec3) + size_of(glsl.vec2) + size_of(glsl.vec3) + 
 
 //---------------------------------------------------------------------------//
 
-
-// Array where we store refs of the meshes that were created during this frame 
-// so that different systems get a chance to react to it. 
-// For example, the mesh render can create and store draw commands.
-@(private)
-g_created_mesh_refs: [dynamic]MeshRef
-
-@(private)
-g_destroyed_mesh_refs: [dynamic]MeshRef
-
-//---------------------------------------------------------------------------//
-
-
 @(private = "file")
 INTERNAL: struct {
 	// Global vertex buffer for mesh data
@@ -112,23 +99,18 @@ InvalidMeshRef := MeshRef {
 
 @(private = "file")
 G_MESH_REF_ARRAY: common.RefArray(MeshResource)
-@(private = "file")
-G_MESH_RESOURCE_ARRAY: []MeshResource
 
 //---------------------------------------------------------------------------//
 
 init_meshes :: proc() -> bool {
-
-	g_created_mesh_refs = make([dynamic]MeshRef, G_RENDERER_ALLOCATORS.frame_allocator)
-	g_destroyed_mesh_refs = make([dynamic]MeshRef, G_RENDERER_ALLOCATORS.frame_allocator)
 
 	G_MESH_REF_ARRAY = common.ref_array_create(
 		MeshResource,
 		MAX_MESHES,
 		G_RENDERER_ALLOCATORS.main_allocator,
 	)
-	G_MESH_RESOURCE_ARRAY = make(
-		[]MeshResource,
+	g_resources.meshes = make_soa(
+		#soa[]MeshResource,
 		MAX_MESHES,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
@@ -168,7 +150,7 @@ deinit_meshes :: proc() {
 //---------------------------------------------------------------------------//
 
 create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
-	mesh := get_mesh(p_mesh_ref)
+	mesh := &g_resources.meshes[get_mesh_idx(p_mesh_ref)]
 
 	index_count := len(mesh.desc.indices)
 	vertex_count := len(mesh.desc.position)
@@ -346,8 +328,6 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 	mesh.index_buffer_allocation = index_allocation
 	mesh.vertex_buffer_allocation = vertex_allocation
 
-	append(&g_created_mesh_refs, p_mesh_ref)
-
 	return true
 }
 
@@ -355,27 +335,23 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 
 allocate_mesh_ref :: proc(p_name: common.Name) -> MeshRef {
 	ref := MeshRef(common.ref_create(MeshResource, &G_MESH_REF_ARRAY, p_name))
-	get_mesh(ref).desc.name = p_name
+	g_resources.meshes[get_mesh_idx(ref)].desc.name = p_name
 	return ref
 }
 //---------------------------------------------------------------------------//
 
-get_mesh :: proc(p_ref: MeshRef) -> ^MeshResource {
-	return &G_MESH_RESOURCE_ARRAY[common.ref_get_idx(&G_MESH_REF_ARRAY, p_ref)]
+get_mesh_idx :: proc(p_ref: MeshRef) -> u32 {
+	return common.ref_get_idx(&G_MESH_REF_ARRAY, p_ref)
 }
 
 //--------------------------------------------------------------------------//
 
 destroy_mesh :: proc(p_ref: MeshRef) {
-	mesh := get_mesh(p_ref)
+	mesh := &g_resources.meshes[get_mesh_idx(p_ref)]
 
 	// Free index and vertex data
 	buffer_free(INTERNAL.index_buffer_ref, mesh.index_buffer_allocation.vma_allocation)
-
 	buffer_free(INTERNAL.vertex_buffer_ref, mesh.vertex_buffer_allocation.vma_allocation)
-
-	// Add the mesh ref to the destroyed meshes queue
-	append(&g_created_mesh_refs, p_ref)
 }
 
 //--------------------------------------------------------------------------//

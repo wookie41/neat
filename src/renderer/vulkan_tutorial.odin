@@ -279,7 +279,7 @@ vt_create_texture_image :: proc() {
 vt_load_model :: proc() {
 
 	scene := assimp.import_file(
-		"app_data/renderer/assets/models/viking_room.obj",
+		"D:/glTF-Sample-Models-master/glTF-Sample-Models-master/2.0/Sponza/glTF/Sponza.gltf",
 		{.OptimizeMeshes, .Triangulate, .FlipUVs},
 	)
 	if scene == nil {
