@@ -74,6 +74,7 @@ g_resources: struct {
 	material_types:             #soa[]MaterialTypeResource,
 	material_instances:         #soa[]MaterialInstanceResource,
 	meshes:                     #soa[]MeshResource,
+	mesh_instances:             #soa[]MeshInstanceResource,
 }
 
 //---------------------------------------------------------------------------//

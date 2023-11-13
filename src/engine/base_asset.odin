@@ -6,7 +6,9 @@ import "../common"
 import "core:encoding/json"
 import "core:fmt"
 import "core:math/rand"
+import "core:mem"
 import "core:os"
+import "core:path/filepath"
 import "core:strings"
 import "core:time"
 
@@ -199,6 +201,20 @@ asset_database_add :: proc(
 	if (p_save) {
 		asset_database_save(p_asset_database)
 	}
+}
+
+//---------------------------------------------------------------------------//
+
+asset_create_path :: proc(
+	p_dir: string,
+	p_name: common.Name,
+	p_extension: string,
+	p_allocator: mem.Allocator,
+) -> string {
+	return filepath.join(
+		{p_dir, strings.join({common.get_string(p_name), p_extension}, ".", p_allocator)},
+		p_allocator,
+	)
 }
 
 //---------------------------------------------------------------------------//

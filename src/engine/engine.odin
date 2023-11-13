@@ -45,6 +45,8 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	// Initialize assets
 	texture_asset_init()
+	material_asset_init()
+	mesh_asset_init()
 
 	// Initialize SDL2
 	if sdl.Init(sdl.INIT_VIDEO) != 0 {

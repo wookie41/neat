@@ -55,8 +55,9 @@ MeshFeatureFlags :: distinct bit_set[MeshFeatureFlagBits;u16]
 SubMesh :: struct {
 	// Offset and number of vertices/indices for this submesh
 	// Usage depends on wether the mesh is using indexed draw or not
-	data_offset: u32,
-	data_count:  u32,
+	data_offset:           u32,
+	data_count:            u32,
+	material_instance_ref: MaterialInstanceRef,
 }
 
 //---------------------------------------------------------------------------//
@@ -333,9 +334,16 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 
 //---------------------------------------------------------------------------//
 
-allocate_mesh_ref :: proc(p_name: common.Name) -> MeshRef {
+allocate_mesh_ref :: proc(p_name: common.Name, p_num_submeshes: u32) -> MeshRef {
 	ref := MeshRef(common.ref_create(MeshResource, &G_MESH_REF_ARRAY, p_name))
-	g_resources.meshes[get_mesh_idx(ref)].desc.name = p_name
+	mesh_idx := get_mesh_idx(ref)
+	g_resources.meshes[mesh_idx] = MeshResource{}
+	g_resources.meshes[mesh_idx].desc.name = p_name
+	g_resources.meshes[mesh_idx].desc.sub_meshes = make(
+		[]SubMesh,
+		p_num_submeshes,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
 	return ref
 }
 //---------------------------------------------------------------------------//
@@ -348,6 +356,8 @@ get_mesh_idx :: proc(p_ref: MeshRef) -> u32 {
 
 destroy_mesh :: proc(p_ref: MeshRef) {
 	mesh := &g_resources.meshes[get_mesh_idx(p_ref)]
+
+	delete(mesh.desc.sub_meshes, G_RENDERER_ALLOCATORS.resource_allocator)
 
 	// Free index and vertex data
 	buffer_free(INTERNAL.index_buffer_ref, mesh.index_buffer_allocation.vma_allocation)

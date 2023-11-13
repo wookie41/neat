@@ -334,7 +334,7 @@ find_image_by_name :: proc(p_name: common.Name) -> ImageRef {
 //--------------------------------------------------------------------------//
 
 find_image_by_str :: proc(p_str: string) -> ImageRef {
-	return find_image_by_name(common.make_name(p_str))
+	return find_image_by_name(common.create_name(p_str))
 }
 
 //--------------------------------------------------------------------------//

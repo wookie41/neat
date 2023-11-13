@@ -77,6 +77,8 @@ MeshAssetMetadata :: struct {
 	sub_meshes:        []SubMeshMetadata `json:"subMeshes"`,
 	total_vertex_size: u32 `json:"totalVertexSize"`,
 	total_index_size:  u32 `json:"totalIndexSize"`,
+	num_vertices:      u32 `json:"numVertices"`,
+	num_indices:       u32 `json:"numIndices"`,
 }
 
 //---------------------------------------------------------------------------//
@@ -181,7 +183,7 @@ mesh_asset_get :: proc(p_ref: MeshAssetRef) -> ^MeshAsset {
 
 //---------------------------------------------------------------------------//
 
-mesh_asset_import :: proc(p_import_options: ^MeshAssetImportOptions) -> AssetImportResult {
+mesh_asset_import :: proc(p_import_options: MeshAssetImportOptions) -> AssetImportResult {
 
 	temp_arena: common.TempArena
 	common.temp_arena_init(&temp_arena)
@@ -237,7 +239,8 @@ mesh_asset_import :: proc(p_import_options: ^MeshAssetImportOptions) -> AssetImp
 	// Recursivly load the nodes
 	assimp_load_node(scene, scene.mRootNode, &mesh_import_ctx)
 
-	mesh_asset_name := string(scene.mName.data[:scene.mName.length])
+	mesh_asset_name := filepath.short_stem(p_import_options.file_path)
+
 
 	// Save the metadata
 	mesh_metadata_file_path := common.aprintf(
@@ -253,6 +256,7 @@ mesh_asset_import :: proc(p_import_options: ^MeshAssetImportOptions) -> AssetImp
 			version       = G_METADATA_FILE_VERSION,
 			type          = .Mesh,
 			feature_flags = mesh_import_ctx.mesh_feature_flags,
+			num_vertices  = u32(len(mesh_import_ctx.positions)),
 			sub_meshes    = make(
 				[]SubMeshMetadata,
 				len(mesh_import_ctx.sub_meshes),
@@ -261,6 +265,7 @@ mesh_asset_import :: proc(p_import_options: ^MeshAssetImportOptions) -> AssetImp
 		}
 
 		if .IndexedDraw in mesh_import_ctx.mesh_feature_flags {
+			mesh_metadata.num_indices = u32(len(mesh_import_ctx.indices))
 			mesh_metadata.total_index_size = size_of(u32) * u32(len(mesh_import_ctx.indices))
 		}
 
@@ -296,10 +301,14 @@ mesh_asset_import :: proc(p_import_options: ^MeshAssetImportOptions) -> AssetImp
 		}
 	}
 
+	mesh_name := common.create_name(mesh_asset_name)
+
 	// Save the data itself
-	mesh_asset_path := filepath.join(
-		{G_MESH_ASSETS_DIR, mesh_asset_name, "bin"},
-		temp_arena.allocator,
+	mesh_asset_path := asset_create_path(
+		G_MESH_ASSETS_DIR,
+		mesh_name,
+		"bin",
+		context.temp_allocator,
 	)
 
 	fd, err := os.open(mesh_asset_path, os.O_WRONLY | os.O_CREATE)
@@ -352,8 +361,21 @@ mesh_asset_import :: proc(p_import_options: ^MeshAssetImportOptions) -> AssetImp
 		)
 	}
 
+	return AssetImportResult{name = mesh_name, status = .Ok}
+}
 
-	return AssetImportResult{name = common.make_name(mesh_asset_name), status = .Ok}
+//---------------------------------------------------------------------------//
+
+mesh_asset_load :: proc {
+	mesh_asset_load_name,
+	mesh_asset_load_str,
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+mesh_asset_load_str :: proc(p_mesh_asset_name: string) -> MeshAssetRef {
+	return mesh_asset_load_name(common.create_name(p_mesh_asset_name))
 }
 
 //---------------------------------------------------------------------------//
@@ -402,16 +424,113 @@ mesh_asset_load_name :: proc(p_mesh_asset_name: common.Name) -> MeshAssetRef {
 	}
 
 	// Load mesh data
-	vertex_data := make([]byte, mesh_metadata.total_vertex_size, temp_arena.allocator)
-	index_data: []byte = nil
-	if .IndexedDraw in mesh_metadata.feature_flags {
-		index_data = make([]byte, mesh_metadata.total_index_size, temp_arena.allocator)
+	mesh_asset_path := asset_create_path(
+		G_MESH_ASSETS_DIR,
+		p_mesh_asset_name,
+		"bin",
+		context.temp_allocator,
+	)
+	mesh_data, success := os.read_entire_file(mesh_asset_path, context.temp_allocator)
+	if success == false {
+		log.warnf("Failed to load mesh '%s' - couldn't open file %s\n", mesh_name, mesh_asset_path)
+		return InvalidMeshAssetRef
 	}
 
 	// Create renderer mesh
-	mesh_resource_ref := renderer.allocate_mesh_ref(p_mesh_asset_name)
+	mesh_resource_ref := renderer.allocate_mesh_ref(
+		p_mesh_asset_name,
+		u32(len(mesh_metadata.sub_meshes)),
+	)
+	mesh_resource_idx := renderer.get_mesh_idx(mesh_resource_ref)
+	mesh_resource := &renderer.g_resources.meshes[mesh_resource_idx]
 
+	mesh_resource.desc.position = common.slice_cast(
+		glsl.vec3,
+		raw_data(mesh_data),
+		0,
+		mesh_metadata.num_vertices,
+	)
+
+	mesh_data_offset := size_of(glsl.vec3) * mesh_metadata.num_vertices
+
+	// Setup mesh flags, features and data pointer
+	if .IndexedDraw in mesh_metadata.feature_flags {
+		mesh_resource.desc.flags += {.Indexed}
+		mesh_resource.desc.indices = common.slice_cast(
+			u32,
+			raw_data(mesh_data),
+			mesh_metadata.total_vertex_size,
+			mesh_metadata.num_indices,
+		)
+	}
+
+	if .Normal in mesh_metadata.feature_flags {
+
+		mesh_resource.desc.normal = common.slice_cast(
+			glsl.vec3,
+			raw_data(mesh_data),
+			mesh_data_offset,
+			mesh_metadata.num_vertices,
+		)
+
+		mesh_resource.desc.features += {.Normal}
+		mesh_data_offset += size_of(glsl.vec3) * mesh_metadata.num_vertices
+	}
+
+	if .Tangent in mesh_metadata.feature_flags {
+		mesh_resource.desc.tangent = common.slice_cast(
+			glsl.vec3,
+			raw_data(mesh_data),
+			mesh_data_offset,
+			mesh_metadata.num_vertices,
+		)
+
+		mesh_resource.desc.features += {.Tangent}
+		mesh_data_offset += size_of(glsl.vec3) * mesh_metadata.num_vertices
+	}
+
+	if .UV in mesh_metadata.feature_flags {
+		mesh_resource.desc.uv = common.slice_cast(
+			glsl.vec2,
+			raw_data(mesh_data),
+			mesh_data_offset,
+			mesh_metadata.num_vertices,
+		)
+
+		mesh_resource.desc.features += {.UV}
+		mesh_data_offset += size_of(glsl.vec2) * mesh_metadata.num_vertices
+	}
+
+	// Setup submeshes information
+	for sub_mesh_metadata, i in mesh_metadata.sub_meshes {
+
+		material_asset_ref := material_asset_load(sub_mesh_metadata.material_asset_name)
+		material_asset := material_asset_get(material_asset_ref)
+
+		mesh_resource.desc.sub_meshes[i] = renderer.SubMesh {
+			data_offset           = sub_mesh_metadata.data_offset,
+			data_count            = sub_mesh_metadata.data_count,
+			material_instance_ref = material_asset.material_instance_ref,
+		}
+	}
+
+	// Create the mesh resource
+	if renderer.create_mesh(mesh_resource_ref) == false {
+		return InvalidMeshAssetRef
+	}
+	// Safe to delete, as the data now has been uploaded to the staging buffer
+	delete(mesh_data, context.temp_allocator)
+
+	mesh_asset_ref := allocate_mesh_asset_ref(p_mesh_asset_name)
+	mesh_asset := mesh_asset_get(mesh_asset_ref)
+	mesh_asset.metadata = mesh_metadata
+	mesh_asset.ref_count = 1
+	mesh_asset.mesh_ref = mesh_resource_ref
+
+	return mesh_asset_ref
 }
+
+//---------------------------------------------------------------------------//
 
 mesh_asset_unload :: proc(p_mesh_asset_ref: MeshAssetRef) {
 	mesh_asset := mesh_asset_get(p_mesh_asset_ref)
@@ -431,8 +550,6 @@ assimp_load_node :: proc(
 	p_import_ctx: ^MeshImportContext,
 ) {
 
-	default_material_type_ref := renderer.find_material_type("Default")
-
 	for i in 0 ..< p_node.mNumMeshes {
 		assimp_mesh := p_scene.mMeshes[p_node.mMeshes[i]]
 		assimp_mesh_name := string(assimp_mesh.mName.data[:assimp_mesh.mName.length])
@@ -446,7 +563,7 @@ assimp_load_node :: proc(
 
 		material_asset_ref := allocate_material_asset_ref(common.create_name(assimp_mesh_name))
 		material_asset := material_asset_get(material_asset_ref)
-		material_asset.material_type_name = common.make_name("Default")
+		material_asset.material_type_name = common.create_name("Default")
 		material_asset_create(material_asset_ref)
 
 		// Set default scalar values
@@ -576,6 +693,8 @@ assimp_material_import_texture :: proc(
 		p_out_texture_name^ = common.get_string(import_result.name)
 	}
 }
+
+//---------------------------------------------------------------------------//
 
 @(private = "file")
 assimp_get_material_texture :: #force_inline proc(

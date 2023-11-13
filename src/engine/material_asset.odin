@@ -152,9 +152,6 @@ material_asset_create :: proc(p_material_asset_ref: MaterialAssetRef) -> bool {
 		return false
 	}
 
-	material_type_idx := renderer.get_material_type_idx(material_type_ref)
-	material_type := &renderer.g_resources.material_types[material_type_idx]
-
 	// Create a material instance for this material asset
 	material_asset.material_instance_ref = renderer.allocate_material_instance_ref(
 		material_asset.name,
@@ -246,10 +243,14 @@ material_asset_save :: proc(p_ref: MaterialAssetRef) -> bool {
 	if marshal_error != nil {
 		return false
 	}
-	material_asset_path := filepath.join(
-		{G_MATERIAL_ASSETS_DIR, common.get_string(material_asset.name), "json"},
-		temp_arena.allocator,
+
+	material_asset_path := asset_create_path(
+		G_MATERIAL_ASSETS_DIR,
+		material_asset.name,
+		"json",
+		context.temp_allocator,
 	)
+
 	if os.write_entire_file(material_asset_path, material_asset_data) == false {
 		return false
 	}
@@ -333,9 +334,12 @@ material_asset_load :: proc(p_name: common.Name) -> MaterialAssetRef {
 	renderer.create_material_instance(material_asset.material_instance_ref)
 
 	// Load the material properties
-	material_asset_path := filepath.join(
-		{G_MATERIAL_ASSETS_DIR, common.get_string(material_asset.name), "json"},
-		temp_arena.allocator,
+	// Save the data itself
+	material_asset_path := asset_create_path(
+		G_MATERIAL_ASSETS_DIR,
+		p_name,
+		"json",
+		context.temp_allocator,
 	)
 	material_data, success := os.read_entire_file(material_asset_path, temp_arena.allocator)
 
@@ -496,7 +500,7 @@ material_asset_save_new_default :: proc(
 	material_asset := material_asset_get(p_material_asset_ref)
 
 	material_asset_path := filepath.join(
-		{G_MATERIAL_ASSETS_DIR, common.get_string(material_asset.name), "json"},
+		{G_MATERIAL_ASSETS_DIR, common.get_string(material_asset.name), ".json"},
 		context.temp_allocator,
 	)
 

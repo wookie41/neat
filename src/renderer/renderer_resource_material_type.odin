@@ -12,7 +12,6 @@ import "core:math/linalg/glsl"
 import "core:mem"
 import "core:os"
 import "core:reflect"
-import "core:runtime"
 import "core:slice"
 import "core:strings"
 
@@ -465,7 +464,7 @@ find_material_type_by_name :: proc(p_name: common.Name) -> MaterialTypeRef {
 //--------------------------------------------------------------------------//
 
 find_material_type_by_str :: proc(p_str: string) -> MaterialTypeRef {
-	return find_material_type_by_name(common.make_name(p_str))
+	return find_material_type_by_name(common.create_name(p_str))
 }
 
 //--------------------------------------------------------------------------//

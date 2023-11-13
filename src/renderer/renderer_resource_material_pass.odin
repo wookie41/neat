@@ -192,7 +192,7 @@ find_material_pass_by_name_name :: proc(p_name: common.Name) -> MaterialPassRef 
 
 @(private)
 find_material_pass_by_name_str :: proc(p_name: string) -> MaterialPassRef {
-	ref := common.ref_find_by_name(&G_MATERIAL_PASS_REF_ARRAY, common.make_name(p_name))
+	ref := common.ref_find_by_name(&G_MATERIAL_PASS_REF_ARRAY, common.create_name(p_name))
 	if ref == InvalidMaterialPassRef {
 		return InvalidMaterialPassRef
 	}

@@ -247,7 +247,7 @@ find_shader_by_name_name :: proc(p_name: common.Name) -> ShaderRef {
 //--------------------------------------------------------------------------//
 
 find_shader_by_name_str :: proc(p_name: string) -> ShaderRef {
-	ref := common.ref_find_by_name(&G_SHADER_REF_ARRAY, common.make_name(p_name))
+	ref := common.ref_find_by_name(&G_SHADER_REF_ARRAY, common.create_name(p_name))
 	if ref == InvalidShaderRef {
 		return InvalidShaderRef
 	}

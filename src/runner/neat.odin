@@ -16,6 +16,10 @@ main :: proc() {
 		file_path = "app_data/renderer/assets/textures/viking_room.png",
 	})
 
-	engine.texture_asset_load_and_create_renderer_image("viking_room")
+	engine.mesh_asset_import(engine.MeshAssetImportOptions {
+		file_path = "app_data/renderer/assets/models/viking_room.obj",
+	})
+
+	engine.texture_asset_load("viking_room")
 	engine.run()
 }

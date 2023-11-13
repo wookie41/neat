@@ -44,12 +44,6 @@ init_names :: proc(p_string_allocator: mem.Allocator) {
 
 //---------------------------------------------------------------------------//
 
-make_name :: #force_inline proc(p_name: string) -> Name {
-	return Name(hash.crc32(transmute([]u8)p_name))
-}
-
-//---------------------------------------------------------------------------//
-
 create_name :: proc(p_name: string) -> Name {
 	assert(len(p_name) > 0)
 	name := Name(hash.crc32(transmute([]u8)p_name))
@@ -163,6 +157,12 @@ write_json_file :: proc(
 		return false
 	}
 	return true
+}
+
+//---------------------------------------------------------------------------//
+
+slice_cast :: proc($T: typeid, p_data_ptr: rawptr, p_offset_in_bytes: u32, p_len: u32) -> []T {
+	return slice.from_ptr(mem.ptr_offset((^T)(p_data_ptr), p_offset_in_bytes), int(p_len))
 }
 
 //---------------------------------------------------------------------------//

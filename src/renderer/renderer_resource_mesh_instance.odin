@@ -34,8 +34,6 @@ InvalidMeshInstanceRef := MeshInstanceRef {
 
 @(private = "file")
 G_MESH_INSTANCE_REF_ARRAY: common.RefArray(MeshInstanceResource)
-@(private = "file")
-G_MESH_INSTANCE_RESOURCE_ARRAY: []MeshInstanceResource
 
 //---------------------------------------------------------------------------//
 
@@ -45,8 +43,8 @@ init_mesh_instances :: proc() -> bool {
 		MAX_MESH_INSTANCES,
 		G_RENDERER_ALLOCATORS.main_allocator,
 	)
-	G_MESH_INSTANCE_RESOURCE_ARRAY = make(
-		[]MeshInstanceResource,
+	g_resources.mesh_instances = make_soa(
+		#soa[]MeshInstanceResource,
 		MAX_MESH_INSTANCES,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
@@ -70,13 +68,13 @@ allocate_mesh_instance_ref :: proc(p_name: common.Name) -> MeshInstanceRef {
 	ref := MeshInstanceRef(
 		common.ref_create(MeshInstanceResource, &G_MESH_INSTANCE_REF_ARRAY, p_name),
 	)
-	get_mesh_instance(ref).desc.name = p_name
+	g_resources.mesh_instances[get_mesh_instance_idx(ref)].desc.name = p_name
 	return ref
 }
 //---------------------------------------------------------------------------//
 
-get_mesh_instance :: proc(p_ref: MeshInstanceRef) -> ^MeshInstanceResource {
-	return &G_MESH_INSTANCE_RESOURCE_ARRAY[common.ref_get_idx(&G_MESH_INSTANCE_REF_ARRAY, p_ref)]
+get_mesh_instance_idx :: proc(p_ref: MeshInstanceRef) -> u32 {
+	return common.ref_get_idx(&G_MESH_INSTANCE_REF_ARRAY, p_ref)
 }
 
 //--------------------------------------------------------------------------//

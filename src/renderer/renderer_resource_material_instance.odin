@@ -4,9 +4,6 @@ package renderer
 
 import "../common"
 import "core:c"
-import "core:log"
-import "core:math/linalg/glsl"
-import "core:mem"
 
 //---------------------------------------------------------------------------//
 
@@ -107,7 +104,6 @@ destroy_material_instance :: proc(p_ref: MaterialInstanceRef) {
 
 material_instance_set_flags :: proc(p_material_instance_ref: MaterialInstanceRef, p_flags: u32) {
 	material_instance := &g_resources.material_instances[get_material_instance_idx(p_material_instance_ref)]
-	material_type := &g_resources.material_types[get_material_type_idx(material_instance.desc.material_type_ref)]
 	flags_bitfield := (^u32)(material_instance.material_properties_buffer_ptr)
 	flags_bitfield^ = p_flags
 }
@@ -116,7 +112,6 @@ material_instance_set_flags :: proc(p_material_instance_ref: MaterialInstanceRef
 
 material_instance_get_flags :: proc(p_material_instance_ref: MaterialInstanceRef) -> u32 {
 	material_instance := &g_resources.material_instances[get_material_instance_idx(p_material_instance_ref)]
-	material_type := &g_resources.material_types[get_material_type_idx(material_instance.desc.material_type_ref)]
 	return (^u32)(material_instance.material_properties_buffer_ptr)^
 }
 
@@ -134,7 +129,7 @@ material_instance_get_flag_str :: proc(
 	p_material_instance_ref: MaterialInstanceRef,
 	p_flag_name: string,
 ) -> bool {
-	return material_instance_get_flag_name(p_material_instance_ref, common.make_name(p_flag_name))
+	return material_instance_get_flag_name(p_material_instance_ref, common.create_name(p_flag_name))
 }
 
 //--------------------------------------------------------------------------//
@@ -172,7 +167,7 @@ material_instance_set_flag_str :: proc(
 ) {
 	material_instance_set_flag_name(
 		p_material_instance_ref,
-		common.make_name(p_flag_name),
+		common.create_name(p_flag_name),
 		p_value,
 	)
 }

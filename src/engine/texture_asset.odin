@@ -336,7 +336,7 @@ texture_asset_load :: proc {
 
 @(private = "file")
 texture_asset_load_str :: proc(p_name: string) -> TextureAssetRef {
-	return texture_asset_load_name(common.make_name(p_name))
+	return texture_asset_load_name(common.create_name(p_name))
 }
 
 @(private = "file")
@@ -357,10 +357,7 @@ texture_asset_load_name :: proc(p_name: common.Name) -> TextureAssetRef {
 	context.temp_allocator = temp_arena.allocator
 
 	// Open the texture file
-	asset_path := asset_loader_build_full_path(
-		AssetLoadRequest{asset_name = p_name, asset_type = .Texture},
-		temp_arena.allocator,
-	)
+	asset_path := asset_create_path(G_TEXTURE_ASSETS_DIR, p_name, "dds", context.temp_allocator)
 
 	asset_path_c := strings.clone_to_cstring(asset_path, temp_arena.allocator)
 	texture_asset_file := libc.fopen(asset_path_c, "rb")

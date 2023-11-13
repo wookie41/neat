@@ -351,7 +351,7 @@ find_render_pass_by_name_name :: proc(p_name: common.Name) -> RenderPassRef {
 //--------------------------------------------------------------------------//
 
 find_render_pass_by_name_str :: proc(p_name: string) -> RenderPassRef {
-	ref := common.ref_find_by_name(&G_RENDER_PASS_REF_ARRAY, common.make_name(p_name))
+	ref := common.ref_find_by_name(&G_RENDER_PASS_REF_ARRAY, common.create_name(p_name))
 	if ref == InvalidRenderPassRef {
 		return InvalidRenderPassRef
 	}

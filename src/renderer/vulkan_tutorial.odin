@@ -144,11 +144,7 @@ deinit_vt :: proc() {
 	destroy_buffer(ubo_ref)
 }
 
-vt_update :: proc(
-	p_frame_idx: u32,
-	p_image_idx: u32,
-	p_cmd_buff_ref: CommandBufferRef,
-) {
+vt_update :: proc(p_frame_idx: u32, p_image_idx: u32, p_cmd_buff_ref: CommandBufferRef) {
 	using G_VT
 
 	vt_update_uniform_buffer()
@@ -167,7 +163,7 @@ vt_update :: proc(
 
 		// Viking room draw 
 		{
-			viking_room_mesh := get_mesh(G_VT.viking_room_mesh_ref)
+			viking_room_mesh := &g_resources.meshes[get_mesh_idx(G_VT.viking_room_mesh_ref)]
 
 			draw_stream_add_draw(
 				&draw_stream,
@@ -277,9 +273,8 @@ vt_create_texture_image :: proc() {
 }
 
 vt_load_model :: proc() {
-
 	scene := assimp.import_file(
-		"D:/glTF-Sample-Models-master/glTF-Sample-Models-master/2.0/Sponza/glTF/Sponza.gltf",
+		"app_data/renderer/assets/models/viking_room.obj",
 		{.OptimizeMeshes, .Triangulate, .FlipUVs},
 	)
 	if scene == nil {
@@ -294,8 +289,8 @@ vt_load_model :: proc() {
 		num_indices += u32(scene.mMeshes[i].mNumFaces * 3)
 	}
 
-	mesh_ref := allocate_mesh_ref(common.create_name("VikingRoom"))
-	mesh := get_mesh(mesh_ref)
+	mesh_ref := allocate_mesh_ref(common.create_name("VikingRoom"), scene.mNumMeshes)
+	mesh := &g_resources.meshes[get_mesh_idx(mesh_ref)]
 
 	mesh.desc.indices = make([]u32, int(num_indices))
 	mesh.desc.position = make([]glsl.vec3, int(num_vertices))
@@ -326,7 +321,7 @@ ImportContext :: struct {
 	curr_vtx:         u32,
 	curr_idx:         u32,
 	current_sub_mesh: u32,
-	mesh:             ^MeshResource,
+	mesh:             #soa^#soa[]MeshResource,
 }
 
 vt_assimp_load_node :: proc(

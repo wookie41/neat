@@ -86,7 +86,7 @@ when USE_VULKAN_BACKEND {
 			has_mapped_ptr = true
 		}
 		if .Mapped in buffer.desc.flags {
-			alloc_flags += {.CREATE_MAPPED}
+			alloc_flags += {.CREATE_MAPPED, .HOST_ACCESS_SEQUENTIAL_WRITE}
 			has_mapped_ptr = true
 		}
 
