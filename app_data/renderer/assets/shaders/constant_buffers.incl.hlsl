@@ -5,5 +5,5 @@ struct PerView
     float4x4 proj;
 };
 
-[[vk::binding(0, 1)]]
+[[vk::binding(1, 1)]]
 ConstantBuffer<PerView> uPerView;

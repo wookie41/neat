@@ -8,6 +8,7 @@ import "core:log"
 import "core:math/linalg/glsl"
 import "core:os"
 import "core:path/filepath"
+import "core:strings"
 
 import "../common"
 import "../renderer"
@@ -65,7 +66,7 @@ DefaultMaterialPropertiesAssetJSON :: struct {
 	occlusion:            f32,
 	albedo_image_name:    string `json:"albedoImageName"`,
 	normal_image_name:    string `json:"normalImageName"`,
-	roughness_image_name: string `json:"normalImageName"`,
+	roughness_image_name: string `json:"roughnessImageName"`,
 	metalness_image_name: string `json:"metalnessImageName"`,
 	occlusion_image_name: string `json:"occlusionImageName"`,
 }
@@ -84,6 +85,7 @@ MaterialAsset :: struct {
 	material_instance_ref: renderer.MaterialInstanceRef,
 	flags:                 u32,
 	ref_count:             u32,
+	texture_asset_refs:    [dynamic]TextureAssetRef,
 }
 
 //---------------------------------------------------------------------------//
@@ -149,6 +151,7 @@ material_asset_create :: proc(p_material_asset_ref: MaterialAssetRef) -> bool {
 			common.get_string(material_asset.name),
 			common.get_string(material_asset.material_type_name),
 		)
+		common.ref_free(&G_MATERIAL_ASSET_REF_ARRAY, p_material_asset_ref)
 		return false
 	}
 
@@ -172,6 +175,10 @@ material_asset_create :: proc(p_material_asset_ref: MaterialAssetRef) -> bool {
 		version = G_METADATA_FILE_VERSION,
 	}
 
+	material_asset.texture_asset_refs = make(
+		[dynamic]TextureAssetRef,
+		G_ALLOCATORS.asset_allocator,
+	)
 	return true
 }
 
@@ -193,37 +200,6 @@ material_asset_save :: proc(p_ref: MaterialAssetRef) -> bool {
 
 	context.temp_allocator = temp_arena.allocator
 
-	// Write the metadata file
-	{
-		material_metadata := MaterialAssetMetadata {
-			name    = material_asset.name,
-			uuid    = material_asset.uuid,
-			version = G_METADATA_FILE_VERSION,
-			type    = .Material,
-		}
-		material_metadata_file_path := common.aprintf(
-			temp_arena.allocator,
-			"%s%s.metadata",
-			G_MATERIAL_ASSETS_DIR,
-			common.get_string(material_asset.name),
-		)
-
-		if common.write_json_file(
-			   material_metadata_file_path,
-			   MaterialAssetMetadata,
-			   material_metadata,
-			   temp_arena.allocator,
-		   ) ==
-		   false {
-			log.warnf(
-				"Failed to save material '%s' - couldn't save metadata\n",
-				common.get_string(material_asset.name),
-			)
-			return false
-
-		}
-	}
-
 	// Write material properties
 	material_asset_data: []byte
 	marshal_error: json.Marshal_Error
@@ -233,7 +209,7 @@ material_asset_save :: proc(p_ref: MaterialAssetRef) -> bool {
 		material_asset_data, marshal_error = material_asset_save_properties_default(
 			material_asset.material_instance_ref,
 			(^renderer.DefaultMaterialTypeProperties)(
-				material_instance.material_properties_buffer_ptr,
+				material_instance.material_properties_data_ptr,
 			),
 		)
 	case:
@@ -333,8 +309,12 @@ material_asset_load :: proc(p_name: common.Name) -> MaterialAssetRef {
 
 	renderer.create_material_instance(material_asset.material_instance_ref)
 
+	material_asset.texture_asset_refs = make(
+		[dynamic]TextureAssetRef,
+		G_ALLOCATORS.asset_allocator,
+	)
+
 	// Load the material properties
-	// Save the data itself
 	material_asset_path := asset_create_path(
 		G_MATERIAL_ASSETS_DIR,
 		p_name,
@@ -354,15 +334,19 @@ material_asset_load :: proc(p_name: common.Name) -> MaterialAssetRef {
 	switch material_type.desc.properties_struct_type {
 	case renderer.DefaultMaterialTypeProperties:
 		load_success = material_asset_load_properties_default(
+			material_asset_ref,
 			material_data,
 			material_asset.material_instance_ref,
-			(^renderer.DefaultMaterialTypeProperties)(
-				material_instance.material_properties_buffer_ptr,
+			renderer.material_instance_get_properties_struct(
+				material_asset.material_instance_ref,
+				renderer.DefaultMaterialTypeProperties,
 			),
 		)
 	case:
 		assert(false, "Unsupported material properties type")
 	}
+
+	renderer.material_instance_update_dirty_data(material_asset.material_instance_ref)
 
 	material_asset.ref_count = 1
 
@@ -431,12 +415,15 @@ material_asset_save_properties_default :: proc(
 
 @(private = "file")
 material_asset_load_properties_default :: proc(
+	p_material_asset_ref: MaterialAssetRef,
 	p_material_properties_data: []byte,
 	p_material_instance_ref: renderer.MaterialInstanceRef,
 	p_material_properties: ^renderer.DefaultMaterialTypeProperties,
 ) -> bool {
 
 	material_props: DefaultMaterialPropertiesAssetJSON
+
+	material_asset := material_asset_get(p_material_asset_ref)
 
 	error := json.unmarshal(
 		p_material_properties_data,
@@ -449,6 +436,8 @@ material_asset_load_properties_default :: proc(
 	}
 
 	renderer.material_instance_set_flags(p_material_instance_ref, material_props.flags)
+	flags := renderer.material_instance_get_flags(p_material_instance_ref)
+	log.info(flags)
 
 	p_material_properties.albedo = material_props.albedo
 	p_material_properties.normal = material_props.normal
@@ -456,34 +445,40 @@ material_asset_load_properties_default :: proc(
 	p_material_properties.metalness = material_props.metalness
 	p_material_properties.occlusion = material_props.occlusion
 
+
 	if renderer.material_instance_get_flag(p_material_instance_ref, "HasAlbedoImage") {
 		material_asset_set_image_by_name(
 			&p_material_properties.albedo_image_id,
 			material_props.albedo_image_name,
+			&material_asset.texture_asset_refs,
 		)
 	}
 	if renderer.material_instance_get_flag(p_material_instance_ref, "HasNormalImage") {
 		material_asset_set_image_by_name(
 			&p_material_properties.normal_image_id,
 			material_props.normal_image_name,
+			&material_asset.texture_asset_refs,
 		)
 	}
 	if renderer.material_instance_get_flag(p_material_instance_ref, "HasRoughnessImage") {
 		material_asset_set_image_by_name(
 			&p_material_properties.roughness_image_id,
 			material_props.roughness_image_name,
+			&material_asset.texture_asset_refs,
 		)
 	}
 	if renderer.material_instance_get_flag(p_material_instance_ref, "HasMetalnessImage") {
 		material_asset_set_image_by_name(
 			&p_material_properties.metalness_image_id,
 			material_props.metalness_image_name,
+			&material_asset.texture_asset_refs,
 		)
 	}
 	if renderer.material_instance_get_flag(p_material_instance_ref, "HasOcclusionImage") {
 		material_asset_set_image_by_name(
 			&p_material_properties.occlusion_image_id,
 			material_props.occlusion_image_name,
+			&material_asset.texture_asset_refs,
 		)
 	}
 
@@ -497,29 +492,79 @@ material_asset_save_new_default :: proc(
 	p_material_properties: DefaultMaterialPropertiesAssetJSON,
 ) -> bool {
 
-	material_asset := material_asset_get(p_material_asset_ref)
+	temp_arena: common.TempArena
+	common.temp_arena_init(&temp_arena)
+	defer common.temp_arena_delete(temp_arena)
 
-	material_asset_path := filepath.join(
-		{G_MATERIAL_ASSETS_DIR, common.get_string(material_asset.name), ".json"},
-		context.temp_allocator,
+	material_asset := material_asset_get(p_material_asset_ref)
+	material_file_name := strings.concatenate(
+		{common.get_string(material_asset.name), ".json"},
+		temp_arena.allocator,
 	)
+	material_asset_path := filepath.join(
+		{G_MATERIAL_ASSETS_DIR, material_file_name},
+		temp_arena.allocator,
+	)
+	defer delete(material_asset_path, temp_arena.allocator)
+
+	// Write the metadata file
+	material_metadata_file_path := common.aprintf(
+		context.temp_allocator,
+		"%s%s.metadata",
+		G_MATERIAL_ASSETS_DIR,
+		common.get_string(material_asset.name),
+	)
+
+	if common.write_json_file(
+		   material_metadata_file_path,
+		   MaterialAssetMetadata,
+		   material_asset.metadata,
+		   temp_arena.allocator,
+	   ) ==
+	   false {
+		log.warnf(
+			"Failed to save material '%s' - couldn't save metadata\n",
+			common.get_string(material_asset.name),
+		)
+		return false
+	}
+
+	// Add an entry to the database
+	db_entry := AssetDatabaseEntry {
+		uuid      = material_asset.uuid,
+		name      = common.get_string(material_asset.name),
+		file_name = material_file_name,
+	}
+	asset_database_add(&INTERNAL.material_database, db_entry, true)
 
 	return common.write_json_file(
 		material_asset_path,
 		DefaultMaterialPropertiesAssetJSON,
 		p_material_properties,
-		context.temp_allocator,
+		temp_arena.allocator,
 	)
 }
 
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-material_asset_set_image_by_name :: proc(p_image_id: ^u32, p_image_name: string) {
-	image_ref := renderer.find_image(p_image_name)
-	if image_ref != renderer.InvalidImageRef {
-		p_image_id^ = renderer.g_resources.images[renderer.get_image_idx(image_ref)].bindless_idx
+material_asset_set_image_by_name :: proc(
+	p_image_id: ^u32,
+	p_image_name: string,
+	p_out_texture_refs: ^[dynamic]TextureAssetRef,
+) {
+	texture_asset_ref := texture_asset_load(p_image_name)
+	if texture_asset_ref == InvalidTextureAssetRef {
+		return
 	}
+
+	image_ref := renderer.find_image(p_image_name)
+	if image_ref == renderer.InvalidImageRef {
+		return
+	}
+
+	p_image_id^ = renderer.g_resources.images[renderer.get_image_idx(image_ref)].bindless_idx
+	append(p_out_texture_refs, texture_asset_ref)
 }
 
 //---------------------------------------------------------------------------//
@@ -530,6 +575,11 @@ material_asset_unload :: proc(p_material_asset_ref: MaterialAssetRef) {
 	if material_asset.ref_count > 0 {
 		return
 	}
+
+	for texture_asset_ref in material_asset.texture_asset_refs {
+		texture_asset_unload(texture_asset_ref)
+	}
+	delete(material_asset.texture_asset_refs)
 
 	renderer.destroy_material_instance(material_asset.material_instance_ref)
 	common.ref_free(&G_MATERIAL_ASSET_REF_ARRAY, p_material_asset_ref)

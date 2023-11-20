@@ -125,6 +125,19 @@ draw_stream_dispatch :: proc(p_cmd_buff_ref: CommandBufferRef, p_draw_stream: Dr
 		draw_stream  = p_draw_stream,
 		cmd_buff_ref = p_cmd_buff_ref,
 	}
+	draw_stream_dispatch.draw_info = DrawInfo {
+		vertex_buffer_ref_0 = InvalidBufferRef,
+		vertex_buffer_ref_1 = InvalidBufferRef,
+		vertex_buffer_ref_2 = InvalidBufferRef,
+		index_buffer_ref    = InvalidBufferRef,
+		bind_group_0_ref    = InvalidBindGroup,
+		bind_group_1_ref    = InvalidBindGroup,
+		bind_group_2_ref    = InvalidBindGroup,
+	}
+
+	draw_stream_dispatch.draw_info.bind_group_0_ref = InvalidBindGroup
+	draw_stream_dispatch.draw_info.bind_group_1_ref = InvalidBindGroup
+	draw_stream_dispatch.draw_info.bind_group_2_ref = InvalidBindGroup
 
 	for draw_stream_dispatch.draw_stream_offset <
 	    u32(len(p_draw_stream.encoded_draw_stream_data)) {

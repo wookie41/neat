@@ -1,6 +1,6 @@
 [
     {
-        "name": "DefaultMaterial",
+        "name": "Default",
         "shadingModel": "DefaultLit",
         "propertiesStructType": "Default",
         "defines": [

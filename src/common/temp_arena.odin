@@ -7,7 +7,7 @@ import "core:mem"
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-G_TEMP_ARENA_SIZE :: 16 * KILOBYTE
+DEFAULT_TEMP_ARENA_SIZE :: 16 * KILOBYTE
 
 //---------------------------------------------------------------------------//
 
@@ -35,11 +35,8 @@ TempArena :: struct {
 
 //---------------------------------------------------------------------------//
 
-temp_arena_init :: proc(p_temp_arena: ^TempArena) {
-	mem.arena_init(
-		&p_temp_arena.arena,
-		make([]byte, G_TEMP_ARENA_SIZE, INTERNAL.temp_arenas_allocator),
-	)
+temp_arena_init :: proc(p_temp_arena: ^TempArena, p_arena_size: u32 = DEFAULT_TEMP_ARENA_SIZE) {
+	mem.arena_init(&p_temp_arena.arena, make([]byte, p_arena_size, INTERNAL.temp_arenas_allocator))
 	p_temp_arena.allocator = mem.arena_allocator(&p_temp_arena.arena)
 	return
 }

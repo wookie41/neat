@@ -157,21 +157,25 @@ run_buffer_upload_requests :: #force_inline proc() {
 
 @(private="file")
 request_buffer_upload_dicrete :: proc(p_request :BufferUploadRequest) -> BufferUploadResponse {
+
+	// @TODO Batch buffer uploads by the destination buffer, as right now when we have
+	// multiple upload requests, there will be duplicate barriers issued
+
 	staging_buffer := &g_resources.buffers[ get_buffer_idx(INTERNAL.staging_buffer_ref)]
 
 	// Check if this request will stil fit in the staging buffer 
 	// or do we have to delay it to the next frame
-
-	upload_ptr := mem.ptr_offset(
-		staging_buffer.mapped_ptr,
-		INTERNAL.staging_buffer_offset,
-	)
 
 	pending_request := PendingBufferUploadRequest {
 		request               = p_request,
 		staging_buffer_offset = INTERNAL.single_staging_region_size *
 			get_frame_idx() + INTERNAL.staging_buffer_offset,
 	}
+
+	upload_ptr := mem.ptr_offset(
+		staging_buffer.mapped_ptr,
+		pending_request.staging_buffer_offset,
+	)
 
 	append(&INTERNAL.pending_requests, pending_request)
 	INTERNAL.staging_buffer_offset += p_request.size

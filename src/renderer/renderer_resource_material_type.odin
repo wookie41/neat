@@ -33,6 +33,7 @@ MAX_MATERIAL_INSTANCES_PER_MATERIAL_TYPE :: 512
 
 @(private = "file")
 INTERNAL: struct {
+	material_properties_mem_data:   []byte,
 	material_properties_buffer_ref: BufferRef,
 }
 
@@ -95,7 +96,7 @@ MaterialTypeDesc :: struct {
 
 MaterialTypeResource :: struct {
 	desc:                               MaterialTypeDesc,
-	properties_size_in_bytes:           int,
+	properties_size_in_bytes:           u32,
 	free_material_buffer_entries_array: bit_array.Bit_Array,
 	properties_buffer_suballocation:    BufferSuballocation,
 }
@@ -146,6 +147,13 @@ init_material_types :: proc() -> bool {
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
 
+	// Allocate CPU memory for the materials data
+	INTERNAL.material_properties_mem_data = make(
+		[]byte,
+		MATERIAL_PARAMS_BUFFER_SIZE,
+		G_RENDERER_ALLOCATORS.main_allocator,
+	)
+
 	// Create a buffer for material properties
 	INTERNAL.material_properties_buffer_ref = allocate_buffer_ref(
 		common.create_name("MaterialPropertiesBuffer"),
@@ -153,9 +161,9 @@ init_material_types :: proc() -> bool {
 
 	material_params_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.material_properties_buffer_ref)]
 
-	material_params_buffer.desc.flags = {.Mapped}
+	material_params_buffer.desc.flags = {.Dedicated}
 	material_params_buffer.desc.size = MATERIAL_PARAMS_BUFFER_SIZE
-	material_params_buffer.desc.usage = {.StorageBuffer}
+	material_params_buffer.desc.usage = {.StorageBuffer, .TransferDst}
 
 	create_buffer(INTERNAL.material_properties_buffer_ref) or_return
 
@@ -186,8 +194,8 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 	material_type.properties_size_in_bytes = size_of(u32)
 
 	// Find out how big the properties struct is using reflection
-	material_type.properties_size_in_bytes += reflect.size_of_typeid(
-		material_type.desc.properties_struct_type,
+	material_type.properties_size_in_bytes += u32(
+		reflect.size_of_typeid(material_type.desc.properties_struct_type),
 	)
 
 	// Suballocate the params buffer for this material type to store material instance data
@@ -376,6 +384,16 @@ load_material_types_from_config_file :: proc() -> bool {
 			material_type.desc.flag_names[i] = common.create_name(flag)
 		}
 
+		// Defines
+		material_type.desc.defines = make(
+			[]common.Name,
+			len(material_type_json_entry.defines),
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
+		for define, i in material_type_json_entry.defines {
+			material_type.desc.defines[i] = common.create_name(define)
+		}
+
 		// Properties struct
 		assert(
 			material_type_json_entry.properties_struct_type in G_MATERIAL_TYPE_PROPERTIES_MAPPING,
@@ -415,7 +433,6 @@ material_type_allocate_properties_entry :: proc(
 ) {
 
 	material_type := &g_resources.material_types[get_material_type_idx(p_material_type_ref)]
-	material_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.material_properties_buffer_ref)]
 
 	// Check if we have some free entries in the free array 
 	it := bit_array.make_iterator(&material_type.free_material_buffer_entries_array)
@@ -427,7 +444,7 @@ material_type_allocate_properties_entry :: proc(
 	bit_array.unset(&material_type.free_material_buffer_entries_array, free_entry_idx)
 
 	entry_ptr := mem.ptr_offset(
-		material_buffer.mapped_ptr,
+		raw_data(INTERNAL.material_properties_mem_data),
 		material_type.properties_buffer_suballocation.offset +
 		u32(free_entry_idx) * u32(material_type.properties_size_in_bytes),
 	)
@@ -468,3 +485,8 @@ find_material_type_by_str :: proc(p_str: string) -> MaterialTypeRef {
 }
 
 //--------------------------------------------------------------------------//
+
+@(private)
+material_type_get_properties_buffer :: #force_inline proc() -> BufferRef {
+	return INTERNAL.material_properties_buffer_ref
+}

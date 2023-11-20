@@ -1,0 +1,23 @@
+{
+	"base": {
+		"flags": 31
+	},
+	"albedo": [
+		1.00000000,
+		1.00000000,
+		1.00000000
+	],
+	"normal": [
+		0.00000000,
+		1.00000000,
+		0.00000000
+	],
+	"roughness": 0.50000000,
+	"metalness": 0.00000000,
+	"occlusion": 1.00000000,
+	"albedoImageName": "FlightHelmet_Materials_LensesMat_BaseColor",
+	"normalImageName": "FlightHelmet_Materials_LensesMat_Normal",
+	"roughnessImageName": "FlightHelmet_Materials_LensesMat_OcclusionRoughMetal",
+	"metalnessImageName": "FlightHelmet_Materials_LensesMat_OcclusionRoughMetal",
+	"occlusionImageName": "FlightHelmet_Materials_LensesMat_OcclusionRoughMetal"
+}

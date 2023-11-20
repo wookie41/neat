@@ -1,1 +1,32 @@
-[]
+[
+	{
+		"uuid": 39315947826370763617048361324817921564,
+		"name": "Hose_low",
+		"fileName": "Hose_low.json"
+	},
+	{
+		"uuid": 201349937920903910856396106328333562116,
+		"name": "RubberWood_low",
+		"fileName": "RubberWood_low.json"
+	},
+	{
+		"uuid": 106956016515933019849861319683124740728,
+		"name": "GlassPlastic_low",
+		"fileName": "GlassPlastic_low.json"
+	},
+	{
+		"uuid": 254685865245647888899042234557116723764,
+		"name": "MetalParts_low",
+		"fileName": "MetalParts_low.json"
+	},
+	{
+		"uuid": 179224404142365969387382743959331982996,
+		"name": "LeatherParts_low",
+		"fileName": "LeatherParts_low.json"
+	},
+	{
+		"uuid": 112399894656637167844822701873129503036,
+		"name": "Lenses_low",
+		"fileName": "Lenses_low.json"
+	}
+]

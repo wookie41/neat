@@ -36,11 +36,11 @@ mem_init :: proc(p_options: MemoryInitOptions) {
 	// String allocator
 	mem.scratch_allocator_init(
 		&G_ALLOCATORS.string_scratch_allocator,
-		8 * common.MEGABYTE,
+		256 * common.MEGABYTE,
 		G_ALLOCATORS.main_allocator,
 	)
 	G_ALLOCATORS.string_allocator = mem.scratch_allocator(&G_ALLOCATORS.string_scratch_allocator)
-	common.temp_arenas_init_stack(common.MEGABYTE * 8, G_ALLOCATORS.main_allocator)
+	common.temp_arenas_init_stack(256 * common.MEGABYTE, G_ALLOCATORS.main_allocator)
 }
 
 //---------------------------------------------------------------------------//

@@ -1,0 +1,45 @@
+{
+	"base": {
+		"name": 1012405842,
+		"uuid": 159172592230995261581396800798398875788,
+		"type": 1,
+		"version": 1
+	},
+	"featureFlags": 15,
+	"subMeshes": [
+		{
+			"data_count": 10472,
+			"data_offset": 0,
+			"material_asset_name": 3227976488
+		},
+		{
+			"data_count": 13638,
+			"data_offset": 10472,
+			"material_asset_name": 3706017023
+		},
+		{
+			"data_count": 4676,
+			"data_offset": 24110,
+			"material_asset_name": 2961483762
+		},
+		{
+			"data_count": 13636,
+			"data_offset": 28786,
+			"material_asset_name": 2355874675
+		},
+		{
+			"data_count": 12534,
+			"data_offset": 42422,
+			"material_asset_name": 1193464757
+		},
+		{
+			"data_count": 436,
+			"data_offset": 54956,
+			"material_asset_name": 1911916861
+		}
+	],
+	"totalVertexSize": 2437248,
+	"totalIndexSize": 1136664,
+	"numVertices": 55392,
+	"numIndices": 284166
+}

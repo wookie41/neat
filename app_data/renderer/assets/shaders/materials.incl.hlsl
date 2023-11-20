@@ -11,7 +11,7 @@ struct MaterialParams
     uint albedoTex;
     uint normalTex;
     uint roughnessTex;
-    uint metalnessTex
+    uint metalnessTex;
     uint occlusionTex;
 };
 

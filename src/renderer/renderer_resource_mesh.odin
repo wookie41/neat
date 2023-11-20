@@ -188,18 +188,18 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 		return false
 	}
 
-	index_allocation_successful, index_allocation := buffer_allocate(
-		INTERNAL.index_buffer_ref,
-		u32(index_data_size),
-	)
-
-	if index_allocation_successful == false {
-		buffer_free(INTERNAL.vertex_buffer_ref, vertex_allocation.vma_allocation)
-		return false
-	}
-
 	// Upload index data to the staging buffer
 	if .Indexed in mesh.desc.flags {
+		index_allocation_successful, index_allocation := buffer_allocate(
+			INTERNAL.index_buffer_ref,
+			u32(index_data_size),
+		)
+
+		if index_allocation_successful == false {
+			buffer_free(INTERNAL.vertex_buffer_ref, vertex_allocation.vma_allocation)
+			return false
+		}
+
 		index_buffer_upload_request := BufferUploadRequest {
 			dst_buff          = INTERNAL.index_buffer_ref,
 			dst_buff_offset   = index_allocation.offset,
@@ -215,6 +215,8 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 			raw_data(mesh.desc.indices),
 			size_of(INDEX_DATA_TYPE) * index_count,
 		)
+
+		mesh.index_buffer_allocation = index_allocation
 	}
 
 	// Upload vertex data to the staging buffer
@@ -326,7 +328,6 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 		}
 	}
 
-	mesh.index_buffer_allocation = index_allocation
 	mesh.vertex_buffer_allocation = vertex_allocation
 
 	return true
@@ -384,6 +385,30 @@ mesh_get_global_vertex_buffer_ref :: proc() -> BufferRef {
 @(private)
 mesh_get_global_index_buffer_ref :: proc() -> BufferRef {
 	return INTERNAL.index_buffer_ref
+}
+
+//--------------------------------------------------------------------------//
+
+
+find_mesh :: proc {
+	find_mesh_by_name,
+	find_mesh_by_str,
+}
+
+//---------------------------------------------------------------------------//
+
+find_mesh_by_name :: proc(p_name: common.Name) -> MeshRef {
+	ref := common.ref_find_by_name(&G_MESH_REF_ARRAY, p_name)
+	if ref == InvalidMeshRef {
+		return InvalidMeshRef
+	}
+	return MeshRef(ref)
+}
+
+//--------------------------------------------------------------------------//
+
+find_mesh_by_str :: proc(p_str: string) -> MeshRef {
+	return find_mesh_by_name(common.create_name(p_str))
 }
 
 //--------------------------------------------------------------------------//

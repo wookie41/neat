@@ -130,7 +130,6 @@ init_vt :: proc() -> bool {
 
 		draw_stream = draw_stream_create(G_RENDERER_ALLOCATORS.main_allocator)
 
-		vt_load_model()
 		return true
 	}
 }
@@ -148,6 +147,7 @@ vt_update :: proc(p_frame_idx: u32, p_image_idx: u32, p_cmd_buff_ref: CommandBuf
 	using G_VT
 
 	vt_update_uniform_buffer()
+	G_VT.viking_room_mesh_ref = find_mesh("FlightHelmet")
 
 	render_target_bindings[0].target = &G_RENDERER.swap_image_render_targets[p_image_idx]
 
@@ -200,11 +200,18 @@ vt_create_uniform_buffer :: proc() {
 	create_buffer(ubo_ref)
 
 	// Write this uniform buffer to the global bind group
+	material_properties_buffer_ref := material_type_get_properties_buffer()
+	material_properties_buffer := &g_resources.buffers[get_buffer_idx(material_properties_buffer_ref)]
+
 	bind_group_update(
 		G_RENDERER.global_bind_group_ref,
 		BindGroupUpdate{
 			buffers = {
-				{buffer_ref = InvalidBufferRef},
+				{
+					buffer_ref = material_properties_buffer_ref,
+					size = material_properties_buffer.desc.size,
+				},
+				{buffer_ref = InvalidBufferRef, size = 0},
 				{buffer_ref = ubo_ref, size = size_of(UniformBufferObject)},
 			},
 		},

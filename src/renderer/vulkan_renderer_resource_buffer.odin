@@ -126,8 +126,9 @@ when USE_VULKAN_BACKEND {
 
 		vk_name := strings.clone_to_cstring(
 			common.get_string(buffer.desc.name),
-			G_RENDERER_ALLOCATORS.names_allocator,
+			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
+		defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		name_info := vk.DebugUtilsObjectNameInfoEXT {
 			sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,

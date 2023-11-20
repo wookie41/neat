@@ -83,7 +83,7 @@ TextureAssetFormat :: enum {
 	BC1_Unorm,
 	BC3_UNorm,
 	BC4_UNorm,
-	BC5_UNorm,
+	BC5_SNorm,
 	BC6H_UFloat16,
 }
 
@@ -172,15 +172,15 @@ texture_asset_import :: proc(p_options: TextureAssetImportOptions) -> AssetImpor
 	defer common.temp_arena_delete(temp_arena)
 
 	// Check if the texture already exits
-	texture_name := filepath.short_stem(p_options.file_path)
+	texture_name := filepath.short_stem(filepath.base(p_options.file_path))
 	texture_file_name := strings.concatenate({texture_name, ".dds"}, temp_arena.allocator)
-	texture_file_path := strings.concatenate(
+	texture_file_path := filepath.join(
 		{G_TEXTURE_ASSETS_DIR, texture_file_name},
 		temp_arena.allocator,
 	)
 
 	if os.exists(texture_file_path) {
-		return {status = .Duplicate}
+		return {status = .Duplicate, name = common.create_name(texture_name)}
 	}
 
 	texture_uuid := uuid_create()
@@ -429,8 +429,8 @@ texture_asset_load_name :: proc(p_name: common.Name) -> TextureAssetRef {
 		texture_asset.format = .BC3_UNorm
 	case .TddsBc4UnormBlock:
 		texture_asset.format = .BC4_UNorm
-	case .TddsBc5UnormBlock:
-		texture_asset.format = .BC5_UNorm
+	case .TddsBc5SnormBlock:
+		texture_asset.format = .BC5_SNorm
 	case .TddsBc6HUfloatBlock:
 		texture_asset.format = .BC6H_UFloat16
 	case:
@@ -465,8 +465,8 @@ texture_asset_load_name :: proc(p_name: common.Name) -> TextureAssetRef {
 		image.desc.format = .BC3_UNorm
 	case .BC4_UNorm:
 		image.desc.format = .BC4_UNorm
-	case .BC5_UNorm:
-		image.desc.format = .BC5_UNorm
+	case .BC5_SNorm:
+		image.desc.format = .BC5_SNorm
 	case .BC6H_UFloat16:
 		image.desc.format = .BC6H_UFloat
 	case:

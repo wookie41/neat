@@ -1,7 +1,7 @@
 package main
 
-import "core:os"
 import "../engine"
+import "core:os"
 
 main :: proc() {
 	engine_opts := engine.InitOptions {
@@ -12,14 +12,19 @@ main :: proc() {
 		os.exit(-1)
 	}
 
-	engine.texture_asset_import(engine.TextureAssetImportOptions {
-		file_path = "app_data/renderer/assets/textures/viking_room.png",
-	})
+	engine.texture_asset_import(
+		engine.TextureAssetImportOptions{
+			file_path = "app_data/renderer/assets/textures/viking_room.png",
+		},
+	)
 
-	engine.mesh_asset_import(engine.MeshAssetImportOptions {
-		file_path = "app_data/renderer/assets/models/viking_room.obj",
-	})
+	engine.mesh_asset_import(
+		engine.MeshAssetImportOptions{
+			file_path = "D:/glTF-Sample-Models-master/glTF-Sample-Models-master/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
+		},
+	)
 
 	engine.texture_asset_load("viking_room")
+	engine.mesh_asset_load("FlightHelmet")
 	engine.run()
 }

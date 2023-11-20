@@ -1,1 +1,12 @@
-[]
+[
+	{
+		"uuid": 193886214178977502490161394312544275768,
+		"name": "viking_room",
+		"fileName": "viking_room.bin"
+	},
+	{
+		"uuid": 159172592230995261581396800798398875788,
+		"name": "FlightHelmet",
+		"fileName": "FlightHelmet.bin"
+	}
+]

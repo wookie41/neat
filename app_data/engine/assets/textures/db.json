@@ -1,7 +1,77 @@
 [
 	{
-		"uuid": 268654759496590186262041398478668221976,
-		"name": "viking_room",
-		"fileName": "viking_room.dds"
+		"uuid": 189819177104729943575972010032711794740,
+		"name": "FlightHelmet_Materials_RubberWoodMat_BaseColor",
+		"fileName": "FlightHelmet_Materials_RubberWoodMat_BaseColor.dds"
+	},
+	{
+		"uuid": 152685440983194623845098226303679133956,
+		"name": "FlightHelmet_Materials_RubberWoodMat_Normal",
+		"fileName": "FlightHelmet_Materials_RubberWoodMat_Normal.dds"
+	},
+	{
+		"uuid": 1641347932662959710611096896750703444,
+		"name": "FlightHelmet_Materials_RubberWoodMat_OcclusionRoughMetal",
+		"fileName": "FlightHelmet_Materials_RubberWoodMat_OcclusionRoughMetal.dds"
+	},
+	{
+		"uuid": 291049654727390790986135889884405192,
+		"name": "FlightHelmet_Materials_GlassPlasticMat_BaseColor",
+		"fileName": "FlightHelmet_Materials_GlassPlasticMat_BaseColor.dds"
+	},
+	{
+		"uuid": 64377558926084673213702907513795210356,
+		"name": "FlightHelmet_Materials_GlassPlasticMat_Normal",
+		"fileName": "FlightHelmet_Materials_GlassPlasticMat_Normal.dds"
+	},
+	{
+		"uuid": 224109863883138820570059226368204900332,
+		"name": "FlightHelmet_Materials_GlassPlasticMat_OcclusionRoughMetal",
+		"fileName": "FlightHelmet_Materials_GlassPlasticMat_OcclusionRoughMetal.dds"
+	},
+	{
+		"uuid": 304895380001072369108586475466622293136,
+		"name": "FlightHelmet_Materials_MetalPartsMat_BaseColor",
+		"fileName": "FlightHelmet_Materials_MetalPartsMat_BaseColor.dds"
+	},
+	{
+		"uuid": 95967587788644975343483932172060136224,
+		"name": "FlightHelmet_Materials_MetalPartsMat_Normal",
+		"fileName": "FlightHelmet_Materials_MetalPartsMat_Normal.dds"
+	},
+	{
+		"uuid": 113215484572916096231786244526849884660,
+		"name": "FlightHelmet_Materials_MetalPartsMat_OcclusionRoughMetal",
+		"fileName": "FlightHelmet_Materials_MetalPartsMat_OcclusionRoughMetal.dds"
+	},
+	{
+		"uuid": 306867226483359726418343864447568695384,
+		"name": "FlightHelmet_Materials_LeatherPartsMat_BaseColor",
+		"fileName": "FlightHelmet_Materials_LeatherPartsMat_BaseColor.dds"
+	},
+	{
+		"uuid": 70272899149632851748710115204029183688,
+		"name": "FlightHelmet_Materials_LeatherPartsMat_Normal",
+		"fileName": "FlightHelmet_Materials_LeatherPartsMat_Normal.dds"
+	},
+	{
+		"uuid": 329983950607336057420725147878968256492,
+		"name": "FlightHelmet_Materials_LeatherPartsMat_OcclusionRoughMetal",
+		"fileName": "FlightHelmet_Materials_LeatherPartsMat_OcclusionRoughMetal.dds"
+	},
+	{
+		"uuid": 108279550275901237955816469338868309676,
+		"name": "FlightHelmet_Materials_LensesMat_BaseColor",
+		"fileName": "FlightHelmet_Materials_LensesMat_BaseColor.dds"
+	},
+	{
+		"uuid": 37421491632381994795134797244891734532,
+		"name": "FlightHelmet_Materials_LensesMat_Normal",
+		"fileName": "FlightHelmet_Materials_LensesMat_Normal.dds"
+	},
+	{
+		"uuid": 324766245932535965079431959259772323484,
+		"name": "FlightHelmet_Materials_LensesMat_OcclusionRoughMetal",
+		"fileName": "FlightHelmet_Materials_LensesMat_OcclusionRoughMetal.dds"
 	}
 ]

@@ -292,7 +292,6 @@ when USE_VULKAN_BACKEND {
 
 				vk.SetDebugUtilsObjectNameEXT(G_RENDERER.device, &name_info)
 
-
 				num_image_views_created += 1
 			}
 

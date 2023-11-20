@@ -169,6 +169,10 @@ asset_database_read :: proc(p_asset_database: ^AssetDatabase) -> bool {
 		return false
 	}
 
+	for entry in p_asset_database.db_entries {
+		common.create_name(entry.name)
+	}
+
 	return true
 }
 
@@ -197,7 +201,10 @@ asset_database_add :: proc(
 	p_new_entry: AssetDatabaseEntry,
 	p_save: bool = false,
 ) {
-	append(&p_asset_database.db_entries, p_new_entry)
+	new_entry := p_new_entry
+	new_entry.name = strings.clone(p_new_entry.name, G_ALLOCATORS.string_allocator)
+	new_entry.file_name = strings.clone(p_new_entry.file_name, G_ALLOCATORS.string_allocator)
+	append(&p_asset_database.db_entries, new_entry)
 	if (p_save) {
 		asset_database_save(p_asset_database)
 	}

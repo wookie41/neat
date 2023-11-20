@@ -161,8 +161,8 @@ write_json_file :: proc(
 
 //---------------------------------------------------------------------------//
 
-slice_cast :: proc($T: typeid, p_data_ptr: rawptr, p_offset_in_bytes: u32, p_len: u32) -> []T {
-	return slice.from_ptr(mem.ptr_offset((^T)(p_data_ptr), p_offset_in_bytes), int(p_len))
+slice_cast :: proc($T: typeid, p_data: []byte, p_offset_in_bytes: u32, p_len: u32) -> []T {
+	return slice.from_ptr((^T)(mem.ptr_offset(raw_data(p_data), int(p_offset_in_bytes))), int(p_len))
 }
 
 //---------------------------------------------------------------------------//

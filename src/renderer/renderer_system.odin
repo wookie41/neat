@@ -273,21 +273,28 @@ init :: proc(p_options: InitOptions) -> bool {
 		// Bind group layout creation
 		G_RENDERER.global_bind_group_layout_ref = allocate_bind_group_layout_ref(
 			common.create_name("GlobalUniforms"),
-			2, // per frame, per view
+			3, // material buffer, per frame, per view
 		)
 
 		bind_group_layout_idx := get_bind_group_layout_idx(G_RENDERER.global_bind_group_layout_ref)
 		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_idx]
 
-		// Per frame uniform buffer
+		// Global materials buffer
 		bind_group_layout.desc.bindings[0] = BindGroupLayoutBinding {
+			count = 1,
+			shader_stages = {.Vertex, .Fragment, .Compute},
+			type = .StorageBuffer,
+		}
+
+		// Per frame uniform buffer
+		bind_group_layout.desc.bindings[1] = BindGroupLayoutBinding {
 			count = 1,
 			shader_stages = {.Vertex, .Fragment, .Compute},
 			type = .UniformBufferDynamic,
 		}
 
 		// Per view uniform buffer
-		bind_group_layout.desc.bindings[1] = BindGroupLayoutBinding {
+		bind_group_layout.desc.bindings[2] = BindGroupLayoutBinding {
 			count = 1,
 			shader_stages = {.Vertex, .Fragment, .Compute},
 			type = .UniformBufferDynamic,
@@ -406,6 +413,8 @@ update :: proc(p_dt: f32) {
 	cmd_buff_ref := get_frame_cmd_buffer_ref()
 
 	backend_wait_for_frame_resources()
+
+	material_instance_update_dirty_materials()
 
 	begin_command_buffer(cmd_buff_ref)
 
