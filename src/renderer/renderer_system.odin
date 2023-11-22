@@ -189,11 +189,6 @@ init :: proc(p_options: InitOptions) -> bool {
 		&G_RENDERER_ALLOCATORS.names_scratch_allocator,
 	)
 
-	G_RENDERER.queued_textures_copies = make(
-		[dynamic]TextureCopy,
-		G_RENDERER_ALLOCATORS.frame_allocator,
-	)
-
 	INTERNAL.frame_idx = 0
 	INTERNAL.frame_id = 0
 
@@ -214,8 +209,8 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	{
 		buffer_upload_options := BufferUploadInitOptions {
-			staging_buffer_size = 64 * common.MEGABYTE,
-			num_staging_regions = 2,
+			staging_buffer_size = 16 * common.MEGABYTE,
+			num_staging_regions = G_RENDERER.num_frames_in_flight,
 		}
 		init_buffer_upload(buffer_upload_options) or_return
 	}
@@ -379,26 +374,6 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	init_vt()
 
-	setup_renderer_context()
-
-	// Iterate over RenderTasks and call pre_render() for all of them
-	// This is the initial frame, where everything inside the renderer 
-	// is guaranteed to be created and so things like transfers can be requested 
-	{
-		cmd_buff := get_frame_cmd_buffer_ref()
-		begin_command_buffer(cmd_buff)
-		vt_create_texture_image()
-		run_buffer_upload_requests()
-		execute_queued_texture_copies()
-		end_command_buffer(cmd_buff)
-		submit_pre_render(cmd_buff)
-
-		// Advance the frame index when using unified queues, as we don't want to wait for the 0th
-		// command buffer to finish before we start recording the frame
-		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
-			advance_frame_idx()
-		}
-	}
 
 	return true
 }
@@ -407,26 +382,29 @@ init :: proc(p_options: InitOptions) -> bool {
 update :: proc(p_dt: f32) {
 	setup_renderer_context()
 
-
 	// @TODO Render tasks - begin_frame()
 
 	cmd_buff_ref := get_frame_cmd_buffer_ref()
 
 	backend_wait_for_frame_resources()
 
-	material_instance_update_dirty_materials()
-
 	begin_command_buffer(cmd_buff_ref)
 
+	execute_queued_texture_copies()
+	run_buffer_upload_requests()
+	batch_update_bindless_array_entries()
+
+	free_all(G_RENDERER_ALLOCATORS.frame_allocator)
+
 	buffer_upload_begin_frame()
+	image_upload_begin_frame()
+	material_instance_update_dirty_materials()
 
 	// @TODO Render tasks - render()
 
 	backend_update(p_dt)
 
-	execute_queued_texture_copies()
-	run_buffer_upload_requests()
-	batch_update_bindless_array_entries()
+	buffer_upload_pre_frame_submit()
 
 	end_command_buffer(cmd_buff_ref)
 
@@ -454,7 +432,7 @@ get_frame_id :: #force_inline proc() -> u32 {
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-advance_frame_idx :: #force_inline proc() {
+advance_frame_idx :: proc() {
 	INTERNAL.frame_id += 1
 	INTERNAL.frame_idx = (INTERNAL.frame_idx + 1) % G_RENDERER.num_frames_in_flight
 }
@@ -526,7 +504,6 @@ execute_queued_texture_copies :: proc() {
 	cmd_buff_ref := get_frame_cmd_buffer_ref()
 	if len(G_RENDERER.queued_textures_copies) > 0 {
 		backend_execute_queued_texture_copies(cmd_buff_ref)
-		clear(&G_RENDERER.queued_textures_copies)
 	}
 }
 

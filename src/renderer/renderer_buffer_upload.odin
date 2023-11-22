@@ -31,6 +31,7 @@ BufferUploadRequest :: struct {
 	first_usage_stage: PipelineStageFlagBits,
 }
 
+
 //---------------------------------------------------------------------------//
 
 @(private)
@@ -53,7 +54,7 @@ INTERNAL: struct {
 	staging_buffer_offset:      u32,
 	staging_buffer_ref:         BufferRef,
 	single_staging_region_size: u32,
-	pending_requests:           [dynamic]PendingBufferUploadRequest,
+	pending_requests_per_buffer:           map[BufferRef][dynamic]PendingBufferUploadRequest,
 }
 
 //---------------------------------------------------------------------------//
@@ -96,12 +97,6 @@ init_buffer_upload :: proc(p_options: BufferUploadInitOptions) -> bool {
 		}
 	}
 
-	INTERNAL.pending_requests = make(
-		[dynamic]PendingBufferUploadRequest,
-		G_RENDERER_ALLOCATORS.frame_allocator,
-	)
-
-	INTERNAL.staging_buffer_offset = 0
 
 	return backend_init_buffer_upload(p_options)
 }
@@ -110,7 +105,12 @@ init_buffer_upload :: proc(p_options: BufferUploadInitOptions) -> bool {
 
 @(private)
 buffer_upload_begin_frame :: proc() {
-	backend_buffer_upload_begin_frame()
+	INTERNAL.staging_buffer_offset = 0
+	INTERNAL.pending_requests_per_buffer = make_map(
+		map[BufferRef][dynamic]PendingBufferUploadRequest,
+		1,
+		G_RENDERER_ALLOCATORS.frame_allocator,
+	)
 }
 
 //---------------------------------------------------------------------------//
@@ -144,13 +144,10 @@ request_buffer_upload :: proc(p_request: BufferUploadRequest) -> BufferUploadRes
 //---------------------------------------------------------------------------//
 
 @(private)
-run_buffer_upload_requests :: #force_inline proc() {
-	backend_run_buffer_upload_requests(
-		INTERNAL.staging_buffer_ref,
-		INTERNAL.pending_requests,
-	)
-	clear(&INTERNAL.pending_requests)
-	INTERNAL.staging_buffer_offset = 0
+run_buffer_upload_requests :: proc() {
+		backend_run_buffer_upload_requests(
+			INTERNAL.staging_buffer_ref,
+			&INTERNAL.pending_requests_per_buffer)	
 }
 
 //---------------------------------------------------------------------------//
@@ -158,14 +155,10 @@ run_buffer_upload_requests :: #force_inline proc() {
 @(private="file")
 request_buffer_upload_dicrete :: proc(p_request :BufferUploadRequest) -> BufferUploadResponse {
 
-	// @TODO Batch buffer uploads by the destination buffer, as right now when we have
-	// multiple upload requests, there will be duplicate barriers issued
-
 	staging_buffer := &g_resources.buffers[ get_buffer_idx(INTERNAL.staging_buffer_ref)]
 
 	// Check if this request will stil fit in the staging buffer 
 	// or do we have to delay it to the next frame
-
 	pending_request := PendingBufferUploadRequest {
 		request               = p_request,
 		staging_buffer_offset = INTERNAL.single_staging_region_size *
@@ -177,7 +170,12 @@ request_buffer_upload_dicrete :: proc(p_request :BufferUploadRequest) -> BufferU
 		pending_request.staging_buffer_offset,
 	)
 
-	append(&INTERNAL.pending_requests, pending_request)
+	// Create a new entry if there were no upload requests for this buffer yet
+	if (p_request.dst_buff in INTERNAL.pending_requests_per_buffer) == false {
+		INTERNAL.pending_requests_per_buffer[p_request.dst_buff] = make([dynamic]PendingBufferUploadRequest, G_RENDERER_ALLOCATORS.frame_allocator)
+	}
+
+	append(&INTERNAL.pending_requests_per_buffer[p_request.dst_buff], pending_request)
 	INTERNAL.staging_buffer_offset += p_request.size
 
 	return BufferUploadResponse{ptr = upload_ptr}
@@ -189,4 +187,11 @@ request_buffer_upload_dicrete :: proc(p_request :BufferUploadRequest) -> BufferU
 request_buffer_upload_integrated :: proc(p_request : BufferUploadRequest) -> BufferUploadResponse {
 	buffer := &g_resources.buffers[ get_buffer_idx(p_request.dst_buff)]
 	return BufferUploadResponse{ptr = mem.ptr_offset(buffer.mapped_ptr, p_request.dst_buff_offset)}
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
+buffer_upload_pre_frame_submit :: proc()  {
+	backend_buffer_upload_pre_frame_submit(INTERNAL.pending_requests_per_buffer)
 }

@@ -19,8 +19,8 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 
-	@(private="file")
-	INTERNAL : struct {
+	@(private = "file")
+	INTERNAL: struct {
 		graphics_command_pools: []vk.CommandPool,
 		transfer_command_pools: []vk.CommandPool,
 		compute_command_pools:  []vk.CommandPool,
@@ -135,9 +135,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_create_command_buffer :: proc(
-		p_ref: CommandBufferRef,
-	) -> bool {
+	backend_create_command_buffer :: proc(p_ref: CommandBufferRef) -> bool {
 		cmd_buffer_idx := get_cmd_buffer_idx(p_ref)
 		cmd_buffer := &g_resources.cmd_buffers[cmd_buffer_idx]
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[cmd_buffer_idx]
@@ -149,7 +147,11 @@ when USE_VULKAN_BACKEND {
 			commandBufferCount = 1,
 		}
 
-		if vk.AllocateCommandBuffers(G_RENDERER.device, &alloc_info, &backend_cmd_buffer.vk_cmd_buff) !=
+		if vk.AllocateCommandBuffers(
+			   G_RENDERER.device,
+			   &alloc_info,
+			   &backend_cmd_buffer.vk_cmd_buff,
+		   ) !=
 		   .SUCCESS {
 			return false
 		}
@@ -160,9 +162,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_begin_command_buffer :: proc(
-		p_ref: CommandBufferRef,
-	) {
+	backend_begin_command_buffer :: proc(p_ref: CommandBufferRef) {
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_ref)]
 
 		begin_info := vk.CommandBufferBeginInfo {
@@ -176,9 +176,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_end_command_buffer :: proc(
-		p_ref: CommandBufferRef,
-	) {
+	backend_end_command_buffer :: proc(p_ref: CommandBufferRef) {
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_ref)]
 		vk.EndCommandBuffer(backend_cmd_buffer.vk_cmd_buff)
 	}
@@ -205,6 +203,17 @@ when USE_VULKAN_BACKEND {
 	get_frame_transfer_cmd_buffer :: proc() -> vk.CommandBuffer {
 		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 			return INTERNAL.transfer_cmd_buffers[get_frame_idx()]
+		}
+		cmd_buff_ref := get_frame_cmd_buffer_ref()
+		return g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buff_ref)].vk_cmd_buff
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	get_frame_compute_cmd_buffer :: proc() -> vk.CommandBuffer {
+		if .DedicatedComputeQueue in G_RENDERER.gpu_device_flags {
+			return INTERNAL.compute_cmd_buffers[get_frame_idx()]
 		}
 		cmd_buff_ref := get_frame_cmd_buffer_ref()
 		return g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buff_ref)].vk_cmd_buff

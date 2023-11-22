@@ -2,6 +2,7 @@ package renderer
 
 //---------------------------------------------------------------------------//
 
+import "../common"
 import vk "vendor:vulkan"
 
 //---------------------------------------------------------------------------//
@@ -12,20 +13,13 @@ when USE_VULKAN_BACKEND {
 
 	@(private = "file")
 	INTERNAL: struct {
-		transfer_fences:         []vk.Fence,
-		had_requests_prev_frame: bool,
+		transfer_fences: []vk.Fence,
 	}
 
 	//---------------------------------------------------------------------------//
 
-
 	@(private)
-	backend_buffer_upload_begin_frame :: proc() {
-		if !INTERNAL.had_requests_prev_frame ||
-		   G_RENDERER.queue_family_transfer_index == G_RENDERER.queue_family_graphics_index {
-			return
-		}
-
+	backend_buffer_wait_for_transfers :: proc() {
 		// Make sure that the GPU is no longer reading the current staging buffer region
 		vk.WaitForFences(
 			G_RENDERER.device,
@@ -74,17 +68,73 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_run_buffer_upload_requests :: proc(
-		p_staging_buffer_ref: BufferRef,
-		p_upload_requests: [dynamic]PendingBufferUploadRequest,
+	backend_buffer_upload_pre_frame_submit :: proc(
+		p_requests: map[BufferRef][dynamic]PendingBufferUploadRequest,
 	) {
-
-		if len(p_upload_requests) == 0 {
-			INTERNAL.had_requests_prev_frame = false
+		// Release the buffers on the src queue when using a dedicated transfer queue
+		if (.DedicatedTransferQueue in G_RENDERER.gpu_device_flags) == false {
 			return
 		}
 
-		INTERNAL.had_requests_prev_frame = true
+		for buffer_ref, _ in p_requests {
+
+			buffer := &g_resources.buffers[get_buffer_idx(buffer_ref)]
+			backend_buffer := &g_resources.backend_buffers[get_buffer_idx(buffer_ref)]
+
+			src_cmd_buffer :=
+				g_resources.backend_cmd_buffers[get_cmd_buffer_idx(get_frame_cmd_buffer_ref())].vk_cmd_buff
+
+			src_queue := vk.QUEUE_FAMILY_IGNORED
+
+			is_not_first_usage := backend_buffer.owning_queue_family_idx != max(u32)
+			not_owning_buffer :=
+				backend_buffer.owning_queue_family_idx != G_RENDERER.queue_family_transfer_index
+
+			if is_not_first_usage && not_owning_buffer {
+				src_queue = backend_buffer.owning_queue_family_idx
+
+				if src_queue == G_RENDERER.queue_family_compute_index {
+					src_cmd_buffer = get_frame_compute_cmd_buffer()
+				}
+			}
+
+
+			buffer_barrier := vk.BufferMemoryBarrier {
+				sType = .BUFFER_MEMORY_BARRIER,
+				pNext = nil,
+				size = vk.DeviceSize(buffer.desc.size),
+				offset = 0,
+				buffer = backend_buffer.vk_buffer,
+				dstAccessMask = {.TRANSFER_WRITE},
+				srcQueueFamilyIndex = src_queue,
+				dstQueueFamilyIndex = G_RENDERER.queue_family_transfer_index,
+			}
+
+			// Release barrier
+			vk.CmdPipelineBarrier(
+				src_cmd_buffer,
+				{.BOTTOM_OF_PIPE},
+				{.TRANSFER},
+				nil,
+				0,
+				nil,
+				1,
+				&buffer_barrier,
+				0,
+				nil,
+			)
+
+		}
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_run_buffer_upload_requests :: proc(
+		p_staging_buffer_ref: BufferRef,
+		p_upload_requests: ^map[BufferRef][dynamic]PendingBufferUploadRequest,
+	) {
+
 		transfer_cmd_buff := get_frame_transfer_cmd_buffer()
 
 		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
@@ -95,11 +145,53 @@ when USE_VULKAN_BACKEND {
 			vk.BeginCommandBuffer(transfer_cmd_buff, &begin_info)
 		}
 
-		backend_staging_buff := &g_resources.backend_buffers[get_buffer_idx(p_staging_buffer_ref)]
+		for dst_buffer_ref, requests in p_upload_requests {
 
-		for request in p_upload_requests {
-			dst_buffer := &g_resources.buffers[get_buffer_idx(request.dst_buff)]
-			backend_dst_buffer := &g_resources.backend_buffers[get_buffer_idx(request.dst_buff)]
+			temp_arena := common.TempArena{}
+			common.temp_arena_init(&temp_arena)
+			defer common.temp_arena_delete(temp_arena)
+			
+			dst_buffer := &g_resources.buffers[get_buffer_idx(dst_buffer_ref)]
+			backend_dst_buffer := &g_resources.backend_buffers[get_buffer_idx(dst_buffer_ref)]
+
+			// Acquire barrier for the dst buffer if we're using a dedicated transfer queue
+			is_not_first_usage := backend_dst_buffer.owning_queue_family_idx != max(u32)
+			not_owning_buffer :=
+				backend_dst_buffer.owning_queue_family_idx !=
+				G_RENDERER.queue_family_transfer_index
+
+			src_queue := vk.QUEUE_FAMILY_IGNORED
+
+			if (is_not_first_usage && not_owning_buffer) &&
+			   .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+
+				src_queue = backend_dst_buffer.owning_queue_family_idx
+
+				buffer_barrier := vk.BufferMemoryBarrier {
+					sType = .BUFFER_MEMORY_BARRIER,
+					pNext = nil,
+					size = vk.DeviceSize(dst_buffer.desc.size),
+					offset = 0,
+					buffer = backend_dst_buffer.vk_buffer,
+					dstAccessMask = {.TRANSFER_WRITE},
+					srcQueueFamilyIndex = src_queue,
+					dstQueueFamilyIndex = G_RENDERER.queue_family_transfer_index,
+				}
+
+				// Acquire barrier
+				vk.CmdPipelineBarrier(
+					transfer_cmd_buff,
+					{.BOTTOM_OF_PIPE},
+					{.TRANSFER},
+					nil,
+					0,
+					nil,
+					1,
+					&buffer_barrier,
+					0,
+					nil,
+				)
+			}
 
 			access_mask := vk.AccessFlags{}
 			if .VertexBuffer in dst_buffer.desc.usage {
@@ -115,81 +207,55 @@ when USE_VULKAN_BACKEND {
 				assert(false)
 			}
 
+
+			// Gather all stages that the buffer will be used in after the requests and create vk buffer copies
 			dst_stages := vk.PipelineStageFlags{}
-			dst_stages += {backend_map_pipeline_stage(request.first_usage_stage)}
-
-			// Issue an acquire barrier for the dst buffer if we're using a dedicated transfer queue
-			is_not_first_usage := backend_dst_buffer.owning_queue_family_idx != max(u32)
-			not_owning_buffer :=
-				backend_dst_buffer.owning_queue_family_idx !=
-				G_RENDERER.queue_family_transfer_index
-			if (is_not_first_usage && not_owning_buffer) &&
-			   .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
-
-				acquire_barrier := vk.BufferMemoryBarrier {
-					sType = .BUFFER_MEMORY_BARRIER,
-					pNext = nil,
-					size = vk.DeviceSize(request.size),
-					offset = vk.DeviceSize(request.dst_buff_offset),
-					buffer = backend_dst_buffer.vk_buffer,
-					dstAccessMask = {.TRANSFER_WRITE},
-					srcQueueFamilyIndex = G_RENDERER.queue_family_graphics_index,
-					dstQueueFamilyIndex = G_RENDERER.queue_family_transfer_index,
+			buffer_copies := make([]vk.BufferCopy, len(requests), temp_arena.allocator)
+			for request, i in requests {
+				dst_stages += {backend_map_pipeline_stage(request.first_usage_stage)}
+				buffer_copies[i] = vk.BufferCopy {
+					srcOffset = vk.DeviceSize(request.staging_buffer_offset),
+					dstOffset = vk.DeviceSize(request.dst_buff_offset),
+					size      = vk.DeviceSize(request.size),
 				}
-
-				vk.CmdPipelineBarrier(
-					transfer_cmd_buff,
-					{.BOTTOM_OF_PIPE},
-					{.TRANSFER},
-					nil,
-					0,
-					nil,
-					1,
-					&acquire_barrier,
-					0,
-					nil,
-				)
 			}
 
-			// @TODO Group buffers by dst_buffer so we can issue one CmdCopyBuffer with multiple regions
+			backend_staging_buff := &g_resources.backend_buffers[get_buffer_idx(p_staging_buffer_ref)]
 
-			// Run the copy
-			region := vk.BufferCopy {
-				srcOffset = vk.DeviceSize(request.staging_buffer_offset),
-				dstOffset = vk.DeviceSize(request.dst_buff_offset),
-				size      = vk.DeviceSize(request.size),
-			}
+			// Run the copies
 			vk.CmdCopyBuffer(
 				transfer_cmd_buff,
 				backend_staging_buff.vk_buffer,
 				backend_dst_buffer.vk_buffer,
-				1,
-				&region,
+				u32(len(buffer_copies)),
+				raw_data(buffer_copies),
 			)
 
 			buffer_barrier := vk.BufferMemoryBarrier {
 				sType = .BUFFER_MEMORY_BARRIER,
 				pNext = nil,
-				size = vk.DeviceSize(request.size),
-				offset = vk.DeviceSize(request.dst_buff_offset),
+				size = vk.DeviceSize(dst_buffer.desc.size),
+				offset = 0,
 				buffer = backend_dst_buffer.vk_buffer,
 				srcAccessMask = {.TRANSFER_WRITE},
 				srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
 				dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
 			}
 
+			// If the buffer wasn't originally owned by any queue, then put in on the graphics queue
+			if src_queue == vk.QUEUE_FAMILY_IGNORED {
+				src_queue = G_RENDERER.queue_family_graphics_index
+			}
+
 			// Issue a release barrier for the dst buffer if we're using a dedicated transfer queue
 			if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 
-				// @TODO This should check to which queue this buffer belongs to hand back
-				// ownership to the appropriate queue
-				graphics_cmd_buff_ref := get_frame_cmd_buffer_ref()
-				backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(graphics_cmd_buff_ref)]
-				graphics_cmd_buff := backend_cmd_buffer.vk_cmd_buff
-
 				buffer_barrier.srcQueueFamilyIndex = G_RENDERER.queue_family_transfer_index
-				buffer_barrier.dstQueueFamilyIndex = G_RENDERER.queue_family_graphics_index
+				buffer_barrier.dstQueueFamilyIndex = src_queue
 
+				backend_dst_buffer.owning_queue_family_idx = src_queue
+
+				// Release from transfer...
 				vk.CmdPipelineBarrier(
 					transfer_cmd_buff,
 					{.TRANSFER},
@@ -202,6 +268,30 @@ when USE_VULKAN_BACKEND {
 					0,
 					nil,
 				)
+
+				src_cmd_buffer :=
+					g_resources.backend_cmd_buffers[get_cmd_buffer_idx(get_frame_cmd_buffer_ref())].vk_cmd_buff
+
+				if is_not_first_usage && not_owning_buffer {
+					if src_queue == G_RENDERER.queue_family_compute_index {
+						src_cmd_buffer = get_frame_compute_cmd_buffer()
+					}
+				}
+
+				// ... and acquire on the original queue
+				vk.CmdPipelineBarrier(
+					src_cmd_buffer,
+					{.TRANSFER},
+					{.TOP_OF_PIPE},
+					nil,
+					0,
+					nil,
+					1,
+					&buffer_barrier,
+					0,
+					nil,
+				)
+
 			} else {
 				// Otherwise issue a standard memory barrier
 				buffer_barrier.dstAccessMask = access_mask
@@ -220,7 +310,8 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
-		// Now we have to submit the transfer if we're using a dedicated transfer queue
+		// Submit the transfer if we're using a dedicated transfer queue
+		// Otherwise it'll be executed as part of the normal command buffer
 		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 
 			G_RENDERER.should_wait_on_transfer_semaphore = true

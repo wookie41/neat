@@ -111,8 +111,8 @@ init_render_tasks :: proc() -> bool {
 //---------------------------------------------------------------------------//
 
 deinit_render_tasks :: proc() {
-	for render_task_ref in G_RENDER_TASK_REF_ARRAY.alive_refs {
-		destroy_render_task(render_task_ref)
+	for i in 0 ..< G_RENDER_TASK_REF_ARRAY.alive_count {
+		destroy_render_task(G_RENDER_TASK_REF_ARRAY.alive_refs[i])
 	}
 	common.ref_array_clear(&G_RENDER_TASK_REF_ARRAY)
 }

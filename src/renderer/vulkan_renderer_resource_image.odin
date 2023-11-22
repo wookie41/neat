@@ -65,26 +65,35 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-
 	@(private = "file")
 	INTERNAL: struct {
 		// Buffer used to upload the initial contents of the images
-		staging_buffer:           BufferRef,
-		staging_buffer_offset:    u32,
-		bindless_descriptor_pool: vk.DescriptorPool,
-		bindless_array_updates:   [dynamic]ImageRef,
+		staging_buffer:                    BufferRef,
+		staging_buffer_offset:             u32,
+		single_staging_buffer_region_size: u32,
+		bindless_descriptor_pool:          vk.DescriptorPool,
+		bindless_array_updates:            [dynamic]ImageRef,
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
 	backend_init_images :: proc() {
+		INTERNAL.staging_buffer_offset = 0
+		INTERNAL.single_staging_buffer_region_size = common.MEGABYTE * 128
 		INTERNAL.staging_buffer = allocate_buffer_ref(common.create_name("ImageStagingBuffer"))
 		staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer)]
-		staging_buffer.desc.size = common.MEGABYTE * 128
+		staging_buffer.desc.size =
+			INTERNAL.single_staging_buffer_region_size * G_RENDERER.num_frames_in_flight
 		staging_buffer.desc.flags = {.HostWrite, .Mapped}
 		staging_buffer.desc.usage = {.TransferSrc}
 		create_buffer(INTERNAL.staging_buffer)
+	}
+
+	//---------------------------------------------------------------------------//
+
+	backend_image_upload_begin_frame :: proc() {
+		INTERNAL.staging_buffer_offset = 0
 	}
 
 	//---------------------------------------------------------------------------//
@@ -320,6 +329,7 @@ when USE_VULKAN_BACKEND {
 				G_RENDERER_ALLOCATORS.frame_allocator,
 			),
 		}
+		defer delete(texture_copy.mip_buffer_offsets, G_RENDERER_ALLOCATORS.frame_allocator)
 
 		staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer)]
 
@@ -327,16 +337,23 @@ when USE_VULKAN_BACKEND {
 		for mip_data, i in image.desc.data_per_mip {
 
 			// Make sure we have enough space in the staging buffer
-			assert(INTERNAL.staging_buffer_offset + u32(len(mip_data)) < staging_buffer.desc.size)
+			assert(
+				INTERNAL.staging_buffer_offset + u32(len(mip_data)) <
+				INTERNAL.single_staging_buffer_region_size,
+			)
+
+			staging_buffer_offset :=
+				INTERNAL.staging_buffer_offset +
+				INTERNAL.single_staging_buffer_region_size * get_frame_idx()
 
 			// Copy mip data into the staging buffer
 			mem.copy(
-				mem.ptr_offset(staging_buffer.mapped_ptr, INTERNAL.staging_buffer_offset),
+				mem.ptr_offset(staging_buffer.mapped_ptr, staging_buffer_offset),
 				raw_data(mip_data),
 				len(mip_data),
 			)
 
-			texture_copy.mip_buffer_offsets[i] = INTERNAL.staging_buffer_offset
+			texture_copy.mip_buffer_offsets[i] = staging_buffer_offset
 
 			INTERNAL.staging_buffer_offset += u32(len(mip_data))
 		}
@@ -445,7 +462,6 @@ when USE_VULKAN_BACKEND {
 		}
 
 		vk.SetDebugUtilsObjectNameEXT(G_RENDERER.device, &name_info)
-
 
 		view_create_info := vk.ImageViewCreateInfo {
 			sType = .IMAGE_VIEW_CREATE_INFO,
@@ -603,7 +619,7 @@ when USE_VULKAN_BACKEND {
 		}
 		defer {
 			for vk_copy in vk_copies {
-				defer delete(vk_copy.mip_copies, G_RENDERER_ALLOCATORS.temp_allocator)
+				delete(vk_copy.mip_copies, G_RENDERER_ALLOCATORS.temp_allocator)
 
 			}
 		}
@@ -660,7 +676,9 @@ when USE_VULKAN_BACKEND {
 			return
 		}
 
-		bindless_bind_group_idx := get_bind_group_idx(G_RENDERER.bindless_textures_array_bind_group_ref)
+		bindless_bind_group_idx := get_bind_group_idx(
+			G_RENDERER.bindless_textures_array_bind_group_ref,
+		)
 		bindless_bind_group := &g_resources.backend_bind_groups[bindless_bind_group_idx]
 
 		descriptor_writes := make(

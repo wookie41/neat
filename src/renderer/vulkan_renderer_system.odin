@@ -607,6 +607,10 @@ backend_wait_for_frame_resources :: proc() {
 		true,
 		max(u64),
 	)
+
+	if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+		backend_buffer_wait_for_transfers()
+	}
 }
 //---------------------------------------------------------------------------//
 
@@ -711,15 +715,22 @@ backend_submit_current_frame :: proc(p_cmd_buff_ref: CommandBufferRef) {
 
 	// Submit
 	{
-		wait_semaphores := []vk.Semaphore{G_RENDERER.image_available_semaphores[get_frame_idx()]}
+		num_wait_semaphores := 1
+		wait_semaphores := [2]vk.Semaphore{}
+		wait_semaphores[0] = G_RENDERER.image_available_semaphores[get_frame_idx()]
+
+		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+			num_wait_semaphores += 1
+			wait_semaphores[1] = G_RENDERER.transfer_finished_semaphores[get_frame_idx()]
+		}
 
 		submit_info := vk.SubmitInfo {
 			sType                = .SUBMIT_INFO,
 			pWaitDstStageMask    = &vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT},
 			commandBufferCount   = 1,
 			pCommandBuffers      = &backend_cmd_buff.vk_cmd_buff,
-			waitSemaphoreCount   = u32(len(wait_semaphores)),
-			pWaitSemaphores      = raw_data(wait_semaphores),
+			waitSemaphoreCount   = u32(num_wait_semaphores),
+			pWaitSemaphores      = &wait_semaphores[0],
 			signalSemaphoreCount = 1,
 			pSignalSemaphores    = &G_RENDERER.render_finished_semaphores[get_frame_idx()],
 		}

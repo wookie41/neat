@@ -48,7 +48,7 @@ G_COMMAND_BUFFER_REF_ARRAY: common.RefArray(CommandBufferResource)
 //---------------------------------------------------------------------------//
 
 @(private)
-init_command_buffers :: #force_inline proc(p_options: InitOptions) -> bool {
+init_command_buffers :: proc(p_options: InitOptions) -> bool {
 	G_COMMAND_BUFFER_REF_ARRAY = common.ref_array_create(
 		CommandBufferResource,
 		MAX_COMMAND_BUFFERS,

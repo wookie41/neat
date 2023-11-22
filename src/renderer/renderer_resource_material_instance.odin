@@ -73,7 +73,8 @@ deinit_material_instance :: proc() {
 //---------------------------------------------------------------------------//
 
 material_instance_update_dirty_materials :: proc() {
-	for material_instance_ref in G_MATERIAL_INSTANCE_REF_ARRAY.alive_refs {
+	for i in 0 ..< G_MATERIAL_INSTANCE_REF_ARRAY.alive_count {
+		material_instance_ref := G_MATERIAL_INSTANCE_REF_ARRAY.alive_refs[i]
 		material_instance := &g_resources.material_instances[get_material_instance_idx(material_instance_ref)]
 		if .Dirty in material_instance.flags {
 			continue
