@@ -1,0 +1,20 @@
+{
+	"base": {
+		"name": 2110982698,
+		"uuid": 277519946795490928601476937073700889104,
+		"type": 1,
+		"version": 1
+	},
+	"featureFlags": 15,
+	"subMeshes": [
+		{
+			"data_count": 70074,
+			"data_offset": 0,
+			"material_asset_name": 2110982698
+		}
+	],
+	"totalVertexSize": 3083256,
+	"totalIndexSize": 280296,
+	"numVertices": 70074,
+	"numIndices": 70074
+}

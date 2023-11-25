@@ -53,9 +53,9 @@ when USE_VULKAN_BACKEND {
 		shader := &g_resources.shaders[shader_idx]
 		backend_shader := &g_resources.backend_shaders[shader_idx]
 
-		temp_arena: common.TempArena
+		temp_arena: common.Arena
 		common.temp_arena_init(&temp_arena)
-		defer common.temp_arena_delete(temp_arena)
+		defer common.arena_delete(temp_arena)
 
 		// Determine compile target
 		compile_target: string

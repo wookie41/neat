@@ -128,9 +128,9 @@ mesh_asset_init :: proc() {
 	)
 	G_MESH_ASSET_ARRAY = make([]MeshAsset, MAX_MESH_ASSETS, G_ALLOCATORS.asset_allocator)
 
-	temp_arena: common.TempArena
+	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
-	defer common.temp_arena_delete(temp_arena)
+	defer common.arena_delete(temp_arena)
 
 	context.temp_allocator = temp_arena.allocator
 
@@ -162,6 +162,7 @@ MeshImportContext :: struct {
 	mesh_feature_flags: MeshFeatureFlags,
 	sub_meshes:         []SubMesh,
 	mesh_dir:           string,
+	arena:         ^common.Arena,
 }
 
 //---------------------------------------------------------------------------//
@@ -185,11 +186,9 @@ mesh_asset_get :: proc(p_ref: MeshAssetRef) -> ^MeshAsset {
 
 mesh_asset_import :: proc(p_import_options: MeshAssetImportOptions) -> AssetImportResult {
 
-	// @TODO lookup mesh file size and allocate based on that
-	temp_arena: common.TempArena
-	common.temp_arena_init(&temp_arena, 128 * common.MEGABYTE)
-	defer common.temp_arena_delete(temp_arena)
-
+	temp_arena: common.Arena
+	common.temp_arena_init(&temp_arena)
+	defer common.arena_delete(temp_arena)
 	context.temp_allocator = temp_arena.allocator
 
 	mesh_asset_name := filepath.short_stem(filepath.base(p_import_options.file_path))
@@ -215,6 +214,7 @@ mesh_asset_import :: proc(p_import_options: MeshAssetImportOptions) -> AssetImpo
 		curr_idx = 0,
 		curr_vtx = 0,
 		mesh_dir = filepath.dir(p_import_options.file_path, temp_arena.allocator),
+		arena    = &temp_arena,
 	}
 
 	// Calculate the number of vertices and indices
@@ -239,14 +239,21 @@ mesh_asset_import :: proc(p_import_options: MeshAssetImportOptions) -> AssetImpo
 
 	if num_indices > 0 {
 		mesh_import_ctx.mesh_feature_flags += {.IndexedDraw}
-		mesh_import_ctx.indices = make([]u32, int(num_indices))
+		mesh_import_ctx.indices = make([]u32, int(num_indices), G_ALLOCATORS.main_allocator)
 	}
 
-	mesh_import_ctx.positions = make([]glsl.vec3, int(num_vertices))
-	mesh_import_ctx.normals = make([]glsl.vec3, int(num_vertices))
-	mesh_import_ctx.tangents = make([]glsl.vec3, int(num_vertices))
-	mesh_import_ctx.uvs = make([]glsl.vec2, int(num_vertices))
-	mesh_import_ctx.sub_meshes = make([]SubMesh, scene.mNumMeshes)
+	mesh_import_ctx.positions = make([]glsl.vec3, int(num_vertices), G_ALLOCATORS.main_allocator)
+	mesh_import_ctx.normals = make([]glsl.vec3, int(num_vertices), G_ALLOCATORS.main_allocator)
+	mesh_import_ctx.tangents = make([]glsl.vec3, int(num_vertices), G_ALLOCATORS.main_allocator)
+	mesh_import_ctx.uvs = make([]glsl.vec2, int(num_vertices), G_ALLOCATORS.main_allocator)
+	mesh_import_ctx.sub_meshes = make([]SubMesh, scene.mNumMeshes, G_ALLOCATORS.main_allocator)
+
+	defer delete(mesh_import_ctx.positions, G_ALLOCATORS.main_allocator)
+	defer delete(mesh_import_ctx.normals, G_ALLOCATORS.main_allocator)
+	defer delete(mesh_import_ctx.tangents, G_ALLOCATORS.main_allocator)
+	defer delete(mesh_import_ctx.uvs, G_ALLOCATORS.main_allocator)
+	defer delete(mesh_import_ctx.sub_meshes, G_ALLOCATORS.main_allocator)
+	defer delete(mesh_import_ctx.indices, G_ALLOCATORS.main_allocator)
 
 	// Recursivly load the nodes
 	assimp_load_node(scene, scene.mRootNode, &mesh_import_ctx)
@@ -361,21 +368,21 @@ mesh_asset_import :: proc(p_import_options: MeshAssetImportOptions) -> AssetImpo
 //---------------------------------------------------------------------------//
 
 mesh_asset_load :: proc {
-	mesh_asset_load_name,
-	mesh_asset_load_str,
+	mesh_asset_load_by_name,
+	mesh_asset_load_by_str,
 }
 
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-mesh_asset_load_str :: proc(p_mesh_asset_name: string) -> MeshAssetRef {
-	return mesh_asset_load_name(common.create_name(p_mesh_asset_name))
+mesh_asset_load_by_str :: proc(p_mesh_asset_name: string) -> MeshAssetRef {
+	return mesh_asset_load_by_name(common.create_name(p_mesh_asset_name))
 }
 
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-mesh_asset_load_name :: proc(p_mesh_asset_name: common.Name) -> MeshAssetRef {
+mesh_asset_load_by_name :: proc(p_mesh_asset_name: common.Name) -> MeshAssetRef {
 
 	// Check if it's already loaded
 	{
@@ -386,11 +393,25 @@ mesh_asset_load_name :: proc(p_mesh_asset_name: common.Name) -> MeshAssetRef {
 		}
 	}
 
-	// @TODO allocate only as much as the mesh data takes
-	temp_arena: common.TempArena
-	common.temp_arena_init(&temp_arena, 128 * common.MEGABYTE)
-	defer common.temp_arena_delete(temp_arena)
+	temp_arena: common.Arena
+	common.temp_arena_init(&temp_arena)
+	defer common.arena_delete(temp_arena)
 	context.temp_allocator = temp_arena.allocator
+
+	mesh_asset_path := asset_create_path(
+		G_MESH_ASSETS_DIR,
+		p_mesh_asset_name,
+		"bin",
+		context.temp_allocator,
+	)
+
+	// Determine how much data we need to allocate for the mesh data
+	mesh_data_size := os.file_size_from_path(mesh_asset_path)
+
+	// Allocate arena for the mesh data
+	mesh_data_arena: common.Arena
+	common.arena_init(&mesh_data_arena, u32(mesh_data_size), G_ALLOCATORS.main_allocator)
+	defer common.arena_delete(mesh_data_arena)
 
 	// Load metadata
 	mesh_metadata: MeshAssetMetadata
@@ -419,13 +440,7 @@ mesh_asset_load_name :: proc(p_mesh_asset_name: common.Name) -> MeshAssetRef {
 	}
 
 	// Load mesh data
-	mesh_asset_path := asset_create_path(
-		G_MESH_ASSETS_DIR,
-		p_mesh_asset_name,
-		"bin",
-		context.temp_allocator,
-	)
-	mesh_data, success := os.read_entire_file(mesh_asset_path, context.temp_allocator)
+	mesh_data, success := os.read_entire_file(mesh_asset_path, mesh_data_arena.allocator)
 	if success == false {
 		log.warnf("Failed to load mesh '%s' - couldn't open file %s\n", mesh_name, mesh_asset_path)
 		return InvalidMeshAssetRef

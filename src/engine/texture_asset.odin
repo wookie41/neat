@@ -141,9 +141,9 @@ texture_asset_init :: proc() {
 	)
 	G_TEXTURE_ASSET_ARRAY = make([]TextureAsset, MAX_TEXTURE_ASSETS, G_ALLOCATORS.asset_allocator)
 
-	temp_arena: common.TempArena
+	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
-	defer common.temp_arena_delete(temp_arena)
+	defer common.arena_delete(temp_arena)
 
 	context.temp_allocator = temp_arena.allocator
 
@@ -167,9 +167,10 @@ texture_asset_init :: proc() {
 
 texture_asset_import :: proc(p_options: TextureAssetImportOptions) -> AssetImportResult {
 
-	temp_arena: common.TempArena
+	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
-	defer common.temp_arena_delete(temp_arena)
+	defer common.arena_delete(temp_arena)
+	context.temp_allocator = temp_arena.allocator
 
 	// Check if the texture already exits
 	texture_name := filepath.short_stem(filepath.base(p_options.file_path))
@@ -330,17 +331,17 @@ texture_asset_load_texture_data_tiny_dds :: proc(
 //---------------------------------------------------------------------------//
 
 texture_asset_load :: proc {
-	texture_asset_load_str,
-	texture_asset_load_name,
+	texture_asset_load_by_str,
+	texture_asset_load_by_name,
 }
 
 @(private = "file")
-texture_asset_load_str :: proc(p_name: string) -> TextureAssetRef {
-	return texture_asset_load_name(common.create_name(p_name))
+texture_asset_load_by_str :: proc(p_name: string) -> TextureAssetRef {
+	return texture_asset_load_by_name(common.create_name(p_name))
 }
 
 @(private = "file")
-texture_asset_load_name :: proc(p_name: common.Name) -> TextureAssetRef {
+texture_asset_load_by_name :: proc(p_name: common.Name) -> TextureAssetRef {
 	// Check if it's already loaded
 	loaded_texture_asset_ref := common.ref_find_by_name(&G_TEXTURE_ASSET_REF_ARRAY, p_name)
 	if loaded_texture_asset_ref != InvalidTextureAssetRef {
@@ -351,9 +352,9 @@ texture_asset_load_name :: proc(p_name: common.Name) -> TextureAssetRef {
 
 	log.info("Loading texture '%s'...\n", common.get_string(p_name))
 
-	temp_arena: common.TempArena
+	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
-	defer common.temp_arena_delete(temp_arena)
+	defer common.arena_delete(temp_arena)
 	context.temp_allocator = temp_arena.allocator
 
 	// Open the texture file
@@ -497,7 +498,7 @@ texture_asset_load_name :: proc(p_name: common.Name) -> TextureAssetRef {
 
 @(private = "file")
 TinyDDSUserData :: struct {
-	temp_arena:         ^common.TempArena,
+	temp_arena:         ^common.Arena,
 	texture_asset_file: ^libc.FILE,
 }
 

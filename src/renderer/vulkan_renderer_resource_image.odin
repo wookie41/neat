@@ -80,7 +80,7 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_init_images :: proc() {
 		INTERNAL.staging_buffer_offset = 0
-		INTERNAL.single_staging_buffer_region_size = common.MEGABYTE * 128
+		INTERNAL.single_staging_buffer_region_size = common.MEGABYTE * 128 // @TODO Make this smaller!
 		INTERNAL.staging_buffer = allocate_buffer_ref(common.create_name("ImageStagingBuffer"))
 		staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer)]
 		staging_buffer.desc.size =

@@ -147,9 +147,9 @@ when USE_VULKAN_BACKEND {
 
 		for dst_buffer_ref, requests in p_upload_requests {
 
-			temp_arena := common.TempArena{}
+			temp_arena := common.Arena{}
 			common.temp_arena_init(&temp_arena)
-			defer common.temp_arena_delete(temp_arena)
+			defer common.arena_delete(temp_arena)
 			
 			dst_buffer := &g_resources.buffers[get_buffer_idx(dst_buffer_ref)]
 			backend_dst_buffer := &g_resources.backend_buffers[get_buffer_idx(dst_buffer_ref)]

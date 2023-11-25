@@ -147,7 +147,7 @@ vt_update :: proc(p_frame_idx: u32, p_image_idx: u32, p_cmd_buff_ref: CommandBuf
 	using G_VT
 
 	vt_update_uniform_buffer()
-	G_VT.viking_room_mesh_ref = find_mesh("FlightHelmet")
+	G_VT.viking_room_mesh_ref = find_mesh("SciFiHelmet")
 
 	render_target_bindings[0].target = &G_RENDERER.swap_image_render_targets[p_image_idx]
 

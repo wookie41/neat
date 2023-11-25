@@ -1,0 +1,23 @@
+{
+	"base": {
+		"flags": 31
+	},
+	"albedo": [
+		1.00000000,
+		1.00000000,
+		1.00000000
+	],
+	"normal": [
+		0.00000000,
+		1.00000000,
+		0.00000000
+	],
+	"roughness": 0.50000000,
+	"metalness": 0.00000000,
+	"occlusion": 1.00000000,
+	"albedoImageName": "SciFiHelmet_BaseColor",
+	"normalImageName": "SciFiHelmet_Normal",
+	"roughnessImageName": "SciFiHelmet_MetallicRoughness",
+	"metalnessImageName": "SciFiHelmet_MetallicRoughness",
+	"occlusionImageName": "SciFiHelmet_AmbientOcclusion"
+}

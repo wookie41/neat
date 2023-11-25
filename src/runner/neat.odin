@@ -12,19 +12,13 @@ main :: proc() {
 		os.exit(-1)
 	}
 
-	engine.texture_asset_import(
-		engine.TextureAssetImportOptions{
-			file_path = "app_data/renderer/assets/textures/viking_room.png",
-		},
-	)
-
 	engine.mesh_asset_import(
 		engine.MeshAssetImportOptions{
-			file_path = "D:/glTF-Sample-Models-master/glTF-Sample-Models-master/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
+			file_path = "D:/glTF-Sample-Models-master/glTF-Sample-Models-master/2.0/SciFiHelmet/glTF/SciFiHelmet.gltf",
 		},
 	)
 
 	engine.texture_asset_load("viking_room")
-	engine.mesh_asset_load("FlightHelmet")
+	engine.mesh_asset_load("SciFiHelmet")
 	engine.run()
 }

@@ -113,9 +113,9 @@ material_asset_init :: proc() {
 		G_ALLOCATORS.asset_allocator,
 	)
 
-	temp_arena: common.TempArena
+	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
-	defer common.temp_arena_delete(temp_arena)
+	defer common.arena_delete(temp_arena)
 
 	context.temp_allocator = temp_arena.allocator
 
@@ -142,7 +142,20 @@ material_asset_get :: proc(p_ref: MaterialAssetRef) -> ^MaterialAsset {
 //---------------------------------------------------------------------------//
 
 material_asset_create :: proc(p_material_asset_ref: MaterialAssetRef) -> bool {
+
 	material_asset := material_asset_get(p_material_asset_ref)
+
+	material_asset_path := asset_create_path(
+		G_MATERIAL_ASSETS_DIR,
+		material_asset.name,
+		"json",
+		context.temp_allocator,
+	)
+
+	// Early out if material already exists
+	if os.exists(material_asset_path) {
+		return true
+	}
 
 	material_type_ref := renderer.find_material_type(material_asset.material_type_name)
 	if material_type_ref == renderer.InvalidMaterialTypeRef {
@@ -194,10 +207,9 @@ material_asset_save :: proc(p_ref: MaterialAssetRef) -> bool {
 	material_type_ref := material_instance.desc.material_type_ref
 	material_type := &renderer.g_resources.material_types[renderer.get_material_type_idx(material_type_ref)]
 
-	temp_arena: common.TempArena
+	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
-	defer common.temp_arena_delete(temp_arena)
-
+	defer common.arena_delete(temp_arena)
 	context.temp_allocator = temp_arena.allocator
 
 	// Write material properties
@@ -245,13 +257,13 @@ material_asset_load :: proc(p_name: common.Name) -> MaterialAssetRef {
 		return loaded_material_asset_ref
 	}
 
-	temp_arena: common.TempArena
+	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
-	defer common.temp_arena_delete(temp_arena)
+	defer common.arena_delete(temp_arena)
+	context.temp_allocator = temp_arena.allocator
 
 	material_name := common.get_string(p_name)
 
-	context.temp_allocator = temp_arena.allocator
 
 	// Load  metadata
 	material_metadata: MaterialAssetMetadata
@@ -492,9 +504,10 @@ material_asset_save_new_default :: proc(
 	p_material_properties: DefaultMaterialPropertiesAssetJSON,
 ) -> bool {
 
-	temp_arena: common.TempArena
+	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
-	defer common.temp_arena_delete(temp_arena)
+	defer common.arena_delete(temp_arena)
+	context.temp_allocator = temp_arena.allocator
 
 	material_asset := material_asset_get(p_material_asset_ref)
 	material_file_name := strings.concatenate(

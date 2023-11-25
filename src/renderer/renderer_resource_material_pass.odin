@@ -119,9 +119,9 @@ destroy_material_pass :: proc(p_ref: MaterialPassRef) {
 //--------------------------------------------------------------------------//
 
 load_material_passes_from_config_file :: proc() -> bool {
-	temp_arena : common.TempArena
+	temp_arena : common.Arena
 	common.temp_arena_init(&temp_arena)
-	defer common.temp_arena_delete(temp_arena)
+	defer common.arena_delete(temp_arena)
 
 	material_passes_config := "app_data/renderer/config/material_passes.json"
 	material_passes_json_data, file_read_ok := os.read_entire_file(

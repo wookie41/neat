@@ -181,9 +181,9 @@ deinit_material_types :: proc() {
 //---------------------------------------------------------------------------//
 
 create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) {
-	temp_arena: common.TempArena
+	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
-	defer common.temp_arena_delete(temp_arena)
+	defer common.arena_delete(temp_arena)
 	defer if result == false {
 		common.ref_free(&G_MATERIAL_TYPE_REF_ARRAY, p_material_ref)
 	}
@@ -334,9 +334,9 @@ destroy_material_type :: proc(p_ref: MaterialTypeRef) {
 
 @(private = "file")
 load_material_types_from_config_file :: proc() -> bool {
-	temp_arena: common.TempArena
+	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
-	defer common.temp_arena_delete(temp_arena)
+	defer common.arena_delete(temp_arena)
 
 	material_types_config := "app_data/renderer/config/material_types.json"
 	material_types_json_data, file_read_ok := os.read_entire_file(

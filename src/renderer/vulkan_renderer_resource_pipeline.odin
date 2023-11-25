@@ -243,9 +243,9 @@ when USE_VULKAN_BACKEND {
 		pipeline := &g_resources.pipelines[pipeline_idx]
 		backend_pipeline := &g_resources.backend_pipelines[pipeline_idx]
 
-		temp_arena: common.TempArena
+		temp_arena: common.Arena
 		common.temp_arena_init(&temp_arena)
-		defer common.temp_arena_delete(temp_arena)
+		defer common.arena_delete(temp_arena)
 
 		vertex_shader_idx := get_shader_idx(pipeline.desc.vert_shader_ref)
 		fragment_shader_idx := get_shader_idx(pipeline.desc.frag_shader_ref)
