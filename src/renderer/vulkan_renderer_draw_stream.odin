@@ -61,8 +61,6 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_draw_stream_submit_indexed_draw :: #force_inline proc(
 		p_cmd_buff_ref: CommandBufferRef,
-		p_vertex_offset: u32,
-		p_index_offset: u32,
 		p_index_count: u32,
 		p_instance_count: u32,
 	) {
@@ -72,8 +70,8 @@ when USE_VULKAN_BACKEND {
 			backend_cmd_buffer.vk_cmd_buff,
 			p_index_count,
 			p_instance_count,
-			p_index_offset,
-			i32(p_vertex_offset),
+			0,
+			0,
 			0,
 		)
 	}
@@ -88,7 +86,13 @@ when USE_VULKAN_BACKEND {
 		p_instance_count: u32,
 	) {
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
-		vk.CmdDraw(backend_cmd_buffer.vk_cmd_buff, p_vertex_count, p_instance_count, p_vertex_offset, 0)
+		vk.CmdDraw(
+			backend_cmd_buffer.vk_cmd_buff,
+			p_vertex_count,
+			p_instance_count,
+			p_vertex_offset,
+			0,
+		)
 	}
 
 

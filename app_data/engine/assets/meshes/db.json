@@ -1,16 +1,16 @@
 [
 	{
-		"uuid": 193886214178977502490161394312544275768,
-		"name": "viking_room",
-		"fileName": "viking_room.bin"
-	},
-	{
-		"uuid": 100353157260237168961937637267641775340,
+		"uuid": 279403081516174011781874777231557407352,
 		"name": "FlightHelmet",
 		"fileName": "FlightHelmet.bin"
 	},
 	{
-		"uuid": 277519946795490928601476937073700889104,
+		"uuid": 145968476569925745818217820648983765416,
+		"name": "FlightHelmet",
+		"fileName": "FlightHelmet.bin"
+	},
+	{
+		"uuid": 24860267724210124061421713879975060132,
 		"name": "SciFiHelmet",
 		"fileName": "SciFiHelmet.bin"
 	}

@@ -14,6 +14,12 @@ main :: proc() {
 
 	engine.mesh_asset_import(
 		engine.MeshAssetImportOptions{
+			file_path = "D:/glTF-Sample-Models-master/glTF-Sample-Models-master/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
+		},
+	)
+
+	engine.mesh_asset_import(
+		engine.MeshAssetImportOptions{
 			file_path = "D:/glTF-Sample-Models-master/glTF-Sample-Models-master/2.0/SciFiHelmet/glTF/SciFiHelmet.gltf",
 		},
 	)

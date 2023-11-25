@@ -1,40 +1,40 @@
 {
 	"base": {
 		"name": 1012405842,
-		"uuid": 100353157260237168961937637267641775340,
+		"uuid": 145968476569925745818217820648983765416,
 		"type": 1,
 		"version": 1
 	},
 	"featureFlags": 15,
 	"subMeshes": [
 		{
-			"data_count": 10472,
+			"data_count": 59040,
 			"data_offset": 0,
 			"material_asset_name": 3227976488
 		},
 		{
-			"data_count": 13638,
-			"data_offset": 10472,
+			"data_count": 72534,
+			"data_offset": 59040,
 			"material_asset_name": 3706017023
 		},
 		{
-			"data_count": 4676,
-			"data_offset": 24110,
+			"data_count": 24408,
+			"data_offset": 131574,
 			"material_asset_name": 2961483762
 		},
 		{
-			"data_count": 13636,
-			"data_offset": 28786,
+			"data_count": 60288,
+			"data_offset": 155982,
 			"material_asset_name": 2355874675
 		},
 		{
-			"data_count": 12534,
-			"data_offset": 42422,
+			"data_count": 65688,
+			"data_offset": 216270,
 			"material_asset_name": 1193464757
 		},
 		{
-			"data_count": 436,
-			"data_offset": 54956,
+			"data_count": 2208,
+			"data_offset": 281958,
 			"material_asset_name": 1911916861
 		}
 	],

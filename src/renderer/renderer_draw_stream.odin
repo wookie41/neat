@@ -21,7 +21,6 @@ g_draw_stream_ops := []proc(_: ^DrawStreamDispatch){
 	draw_stream_dispatch_bind_vertex_buffer_2,
 	draw_stream_dispatch_bind_index_buffer,
 	draw_stream_dispatch_set_vertex_offset,
-	draw_stream_dispatch_set_index_offset,
 	draw_stream_dispatch_set_draw_count,
 	draw_stream_dispatch_set_instance_count,
 	draw_stream_dispatch_change_bind_group_0,
@@ -43,7 +42,6 @@ DrawStreamOp :: enum u32 {
 	BindVertexBuffer2,
 	BindIndexBuffer,
 	SetVertexOffset,
-	SetIndexOffset,
 	SetDrawCount,
 	SetInstanceCount,
 	ChangeBindGroup0,
@@ -71,7 +69,6 @@ DrawInfo :: struct {
 	vertex_buffer_ref_1: BufferRef, // 12
 	vertex_buffer_ref_2: BufferRef, // 16
 	index_buffer_ref:    BufferRef, // 20
-	index_offset:        u32, // 24
 	vertex_offset:       u32, // 28
 	draw_count:          u32, // 32
 	instance_count:      u32, // 36
@@ -223,12 +220,16 @@ draw_stream_add_draw :: proc(
 	}
 
 	if p_index_buffer_ref != p_draw_stream.current_index_buffer {
-		draw_stream_set_index_buffer(p_draw_stream, p_index_buffer_ref, p_index_type)
+		draw_stream_set_index_buffer(
+			p_draw_stream,
+			p_index_buffer_ref,
+			p_index_type,
+			p_index_offset,
+		)
 	}
 
 
 	draw_stream_set_vertex_offset(p_draw_stream, p_vertex_offset)
-	draw_stream_set_index_offset(p_draw_stream, p_index_offset)
 	draw_stream_set_draw_count(p_draw_stream, p_draw_count)
 	draw_stream_set_instance_count(p_draw_stream, p_instance_count)
 	draw_stream_submit_draw(p_draw_stream)
@@ -290,12 +291,6 @@ draw_stream_set_index_buffer :: proc(
 		p_offset,
 		u32(p_index_type),
 	)
-}
-
-//---------------------------------------------------------------------------//
-
-draw_stream_set_index_offset :: proc(p_draw_stream: ^DrawStream, p_offset: u32) {
-	draw_stream_write(p_draw_stream, .SetIndexOffset, p_offset)
 }
 
 //---------------------------------------------------------------------------//
@@ -422,20 +417,12 @@ draw_stream_dispatch_set_vertex_offset :: proc(p_draw_stream_dispatch: ^DrawStre
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-draw_stream_dispatch_set_index_offset :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
-	p_draw_stream_dispatch.draw_info.index_offset = draw_stream_dispatch_read_next(
-		p_draw_stream_dispatch,
-	)
-}
-
-//---------------------------------------------------------------------------//
-
-@(private = "file")
 draw_stream_dispatch_set_draw_count :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
 	p_draw_stream_dispatch.draw_info.draw_count = draw_stream_dispatch_read_next(
 		p_draw_stream_dispatch,
 	)
 }
+
 
 //---------------------------------------------------------------------------//
 
@@ -580,8 +567,6 @@ draw_stream_dispatcher_submit_draw :: proc(p_draw_stream_dispatch: ^DrawStreamDi
 	} else {
 		backend_draw_stream_submit_indexed_draw(
 			p_draw_stream_dispatch.cmd_buff_ref,
-			p_draw_stream_dispatch.draw_info.vertex_offset,
-			p_draw_stream_dispatch.draw_info.index_offset,
 			p_draw_stream_dispatch.draw_info.draw_count,
 			p_draw_stream_dispatch.draw_info.instance_count,
 		)

@@ -144,6 +144,7 @@ mesh_asset_init :: proc() {
 SubMesh :: struct {
 	data_offset:         u32,
 	data_count:          u32,
+	vertex_offset:       u32,
 	material_asset_name: common.Name,
 }
 
@@ -162,7 +163,7 @@ MeshImportContext :: struct {
 	mesh_feature_flags: MeshFeatureFlags,
 	sub_meshes:         []SubMesh,
 	mesh_dir:           string,
-	arena:         ^common.Arena,
+	arena:              ^common.Arena,
 }
 
 //---------------------------------------------------------------------------//
@@ -530,8 +531,14 @@ mesh_asset_load_by_name :: proc(p_mesh_asset_name: common.Name) -> MeshAssetRef 
 	if renderer.create_mesh(mesh_resource_ref) == false {
 		return InvalidMeshAssetRef
 	}
-	// Safe to delete, as the data now has been uploaded to the staging buffer
-	delete(mesh_data, context.temp_allocator)
+
+	// Safe to do, as the data now has been uploaded to the staging buffer 
+	// and memory  will be freed at the end of the function call
+	mesh_resource.desc.position = nil
+	mesh_resource.desc.normal = nil
+	mesh_resource.desc.uv = nil
+	mesh_resource.desc.tangent = nil
+	mesh_resource.desc.indices = nil
 
 	mesh_asset_ref := allocate_mesh_asset_ref(p_mesh_asset_name)
 	mesh_asset := mesh_asset_get(mesh_asset_ref)
@@ -641,8 +648,17 @@ assimp_load_node :: proc(
 
 		// Load mesh data
 		sub_mesh := &p_import_ctx.sub_meshes[p_import_ctx.current_sub_mesh]
-		sub_mesh.data_count = assimp_mesh.mNumVertices
-		sub_mesh.data_offset = p_import_ctx.curr_vtx
+
+		if .IndexedDraw in p_import_ctx.mesh_feature_flags {
+			sub_mesh.data_count = assimp_mesh.mNumFaces * 3
+			sub_mesh.data_offset = p_import_ctx.curr_idx
+
+		} else {
+			sub_mesh.data_count = assimp_mesh.mNumVertices
+			sub_mesh.data_offset = p_import_ctx.curr_vtx
+		}
+
+		sub_mesh.vertex_offset = p_import_ctx.curr_vtx
 
 		for j in 0 ..< assimp_mesh.mNumVertices {
 
@@ -680,7 +696,7 @@ assimp_load_node :: proc(
 
 		for j in 0 ..< assimp_mesh.mNumFaces {
 			for k in 0 ..< assimp_mesh.mFaces[j].mNumIndices {
-				idx := sub_mesh.data_offset + assimp_mesh.mFaces[j].mIndices[k]
+				idx := sub_mesh.vertex_offset + assimp_mesh.mFaces[j].mIndices[k]
 				p_import_ctx.indices[p_import_ctx.curr_idx] = u32(idx)
 				p_import_ctx.curr_idx += 1
 			}
