@@ -448,8 +448,6 @@ material_asset_load_properties_default :: proc(
 	}
 
 	renderer.material_instance_set_flags(p_material_instance_ref, material_props.flags)
-	flags := renderer.material_instance_get_flags(p_material_instance_ref)
-	log.info(flags)
 
 	p_material_properties.albedo = material_props.albedo
 	p_material_properties.normal = material_props.normal

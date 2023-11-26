@@ -519,6 +519,35 @@ when USE_VULKAN_BACKEND {
 			setLayoutCount = u32(len(descriptor_set_layouts)),
 		}
 
+		push_constant_ranges := make(
+			[]vk.PushConstantRange,
+			len(pipeline.desc.push_constants),
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+		defer delete(push_constant_ranges, G_RENDERER_ALLOCATORS.temp_allocator)
+
+		for push_constant, i in pipeline.desc.push_constants {
+			push_constant_ranges[i] = vk.PushConstantRange {
+				offset = push_constant.offset_in_bytes,
+				size   = push_constant.size_in_bytes,
+			}
+
+			if .Vertex in push_constant.shader_stages {
+				push_constant_ranges[i].stageFlags += {.VERTEX}
+			}
+
+			if .Fragment in push_constant.shader_stages {
+				push_constant_ranges[i].stageFlags += {.FRAGMENT}
+			}
+
+			if .Compute in push_constant.shader_stages {
+				push_constant_ranges[i].stageFlags += {.COMPUTE}
+			}
+		}
+
+		create_info.pushConstantRangeCount = u32(len(pipeline.desc.push_constants))
+		create_info.pPushConstantRanges = &push_constant_ranges[0]
+
 		if vk.CreatePipelineLayout(
 			   G_RENDERER.device,
 			   &create_info,

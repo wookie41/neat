@@ -112,7 +112,11 @@ init_vt :: proc() -> bool {
 		{
 			vertex_shader_ref := find_shader_by_name(common.create_name("base.vert"))
 			fragment_shader_ref := find_shader_by_name(common.create_name("base.frag"))
-			pipeline_ref = allocate_pipeline_ref(common.create_name("Vulkan Tutorial Pipeline"), 2)
+			pipeline_ref = allocate_pipeline_ref(
+				common.create_name("Vulkan Tutorial Pipeline"),
+				2,
+				0,
+			)
 			pipeline := &g_resources.pipelines[get_pipeline_idx(pipeline_ref)]
 			pipeline.desc = {
 				name = common.create_name("Vulkan Tutorial Pipe"),
@@ -147,7 +151,7 @@ vt_update :: proc(p_frame_idx: u32, p_image_idx: u32, p_cmd_buff_ref: CommandBuf
 	using G_VT
 
 	vt_update_uniform_buffer()
-	G_VT.viking_room_mesh_ref = find_mesh("SciFiHelmet")
+	G_VT.viking_room_mesh_ref = find_mesh("FlightHelmet")
 
 	render_target_bindings[0].target = &G_RENDERER.swap_image_render_targets[p_image_idx]
 
@@ -166,6 +170,8 @@ vt_update :: proc(p_frame_idx: u32, p_image_idx: u32, p_cmd_buff_ref: CommandBuf
 			mesh := &g_resources.meshes[get_mesh_idx(G_VT.viking_room_mesh_ref)]
 
 			for submesh in mesh.desc.sub_meshes {
+				material_instance := &g_resources.material_instances[get_material_instance_idx(submesh.material_instance_ref)]
+
 				draw_stream_add_draw(
 					&draw_stream,
 					p_pipeline_ref = G_VT.pipeline_ref,
@@ -180,8 +186,8 @@ vt_update :: proc(p_frame_idx: u32, p_image_idx: u32, p_cmd_buff_ref: CommandBuf
 					size_of(u32) * submesh.data_offset,
 					p_vertex_offset = mesh.vertex_buffer_allocation.offset,
 					p_instance_count = 1,
+					p_push_constant = &material_instance.material_properties_buffer_entry_idx,
 				)
-
 			}
 		}
 
@@ -232,10 +238,9 @@ vt_update_uniform_buffer :: proc() {
 	current_time := time.now()
 	dt := f32(time.duration_seconds(time.diff(start_time, current_time)))
 
-
 	ubo := UniformBufferObject {
-		model = glsl.identity(glsl.mat4) * glsl.mat4Rotate({0, 0, 1}, glsl.radians_f32(90.0) * dt),
-		view  = glsl.mat4LookAt({0, 3.0, 1.5}, {0, 0, 0}, {0, 1, 0}),
+		model = glsl.identity(glsl.mat4) * glsl.mat4Rotate({0, 1, 0}, glsl.radians_f32(90.0) * dt),
+		view  = glsl.mat4LookAt({0, 1.0, 1.5}, {0, 0.3, 0}, {0, 1, 0}),
 		proj  = glsl.mat4Perspective(
 			glsl.radians_f32(45.0),
 			f32(swap_extent.width) / f32(swap_extent.height),

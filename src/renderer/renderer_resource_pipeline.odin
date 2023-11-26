@@ -53,7 +53,6 @@ ColorBlendType :: enum {
 	Default,
 }
 
-
 //---------------------------------------------------------------------------//
 
 @(private)
@@ -71,6 +70,14 @@ PipelineType :: enum u8 {
 
 //---------------------------------------------------------------------------//
 
+PushConstantDesc :: struct {
+	offset_in_bytes: u32,
+	size_in_bytes:   u32,
+	shader_stages:   ShaderStageFlags,
+}
+
+//---------------------------------------------------------------------------//
+
 PipelineDesc :: struct {
 	name:                   common.Name,
 	render_pass_ref:        RenderPassRef,
@@ -78,6 +85,7 @@ PipelineDesc :: struct {
 	bind_group_layout_refs: []BindGroupLayoutRef,
 	frag_shader_ref:        ShaderRef,
 	vertex_layout:          VertexLayout,
+	push_constants:         []PushConstantDesc,
 }
 
 //---------------------------------------------------------------------------//
@@ -156,6 +164,7 @@ deinit_pipelines :: proc() {
 allocate_pipeline_ref :: proc(
 	p_name: common.Name,
 	p_bind_group_layouts_count: u32,
+	p_push_constants_count: u32,
 ) -> PipelineRef {
 	ref := PipelineRef(common.ref_create(PipelineResource, &G_PIPELINE_REF_ARRAY, p_name))
 	pipeline := &g_resources.pipelines[get_pipeline_idx(ref)]
@@ -163,6 +172,11 @@ allocate_pipeline_ref :: proc(
 	pipeline.desc.bind_group_layout_refs = make(
 		[]BindGroupLayoutRef,
 		p_bind_group_layouts_count,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
+	pipeline.desc.push_constants = make(
+		[]PushConstantDesc,
+		p_push_constants_count,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
 
@@ -194,9 +208,12 @@ get_pipeline_idx :: #force_inline proc(p_ref: PipelineRef) -> u32 {
 
 destroy_pipeline :: proc(p_ref: PipelineRef) {
 	pipeline := &g_resources.pipelines[get_pipeline_idx(p_ref)]
-	if len(pipeline.desc.bind_group_layout_refs) > 0 {
-		delete(pipeline.desc.bind_group_layout_refs, G_RENDERER_ALLOCATORS.resource_allocator)
-	}
+
+	delete(pipeline.desc.bind_group_layout_refs, G_RENDERER_ALLOCATORS.resource_allocator)
+	pipeline.desc.bind_group_layout_refs = nil
+
+	delete(pipeline.desc.push_constants, G_RENDERER_ALLOCATORS.resource_allocator)
+	pipeline.desc.push_constants = nil
 
 	backend_destroy_pipeline(p_ref)
 	common.ref_free(&G_PIPELINE_REF_ARRAY, p_ref)

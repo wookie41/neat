@@ -25,6 +25,6 @@ main :: proc() {
 	)
 
 	engine.texture_asset_load("viking_room")
-	engine.mesh_asset_load("SciFiHelmet")
+	engine.mesh_asset_load("FlightHelmet")
 	engine.run()
 }

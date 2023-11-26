@@ -87,6 +87,7 @@ DrawStream :: struct {
 	// Encoded draw stream data: field id and it's values
 	encoded_draw_stream_data: [dynamic]u32,
 	current_index_buffer:     BufferRef,
+	push_constants:           [dynamic]rawptr,
 }
 
 //---------------------------------------------------------------------------//
@@ -97,6 +98,7 @@ DrawStreamDispatch :: struct {
 	draw_stream:        DrawStream,
 	draw_stream_offset: u32,
 	cmd_buff_ref:       CommandBufferRef,
+	current_draw: u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -109,6 +111,8 @@ draw_stream_create :: proc(p_draw_stream_allocator: mem.Allocator) -> DrawStream
 		(8 * common.KILOBYTE) / size_of(u32),
 		p_draw_stream_allocator,
 	)
+
+	draw_stream.push_constants = make([dynamic]rawptr, p_draw_stream_allocator)
 
 	draw_stream.current_index_buffer = InvalidBufferRef
 
@@ -136,6 +140,8 @@ draw_stream_dispatch :: proc(p_cmd_buff_ref: CommandBufferRef, p_draw_stream: Dr
 	draw_stream_dispatch.draw_info.bind_group_1_ref = InvalidBindGroup
 	draw_stream_dispatch.draw_info.bind_group_2_ref = InvalidBindGroup
 
+	draw_stream_dispatch.current_draw = 0
+
 	for draw_stream_dispatch.draw_stream_offset <
 	    u32(len(p_draw_stream.encoded_draw_stream_data)) {
 		op := p_draw_stream.encoded_draw_stream_data[draw_stream_dispatch.draw_stream_offset]
@@ -147,6 +153,7 @@ draw_stream_dispatch :: proc(p_cmd_buff_ref: CommandBufferRef, p_draw_stream: Dr
 
 draw_stream_reset :: proc(p_draw_stream: ^DrawStream) {
 	(^runtime.Raw_Dynamic_Array)(&p_draw_stream.encoded_draw_stream_data).len = 0
+	clear(&p_draw_stream.push_constants)
 }
 
 //---------------------------------------------------------------------------//
@@ -177,7 +184,9 @@ draw_stream_add_draw :: proc(
 	p_dynamic_offsets_0: []u32 = nil,
 	p_dynamic_offsets_1: []u32 = nil,
 	p_dynamic_offsets_2: []u32 = nil,
+	p_push_constant: rawptr,
 ) {
+	append(&p_draw_stream.push_constants, p_push_constant)
 
 	if p_pipeline_ref != InvalidPipelineRef {
 		draw_stream_bind_pipeline(p_draw_stream, p_pipeline_ref)
@@ -227,7 +236,6 @@ draw_stream_add_draw :: proc(
 			p_index_offset,
 		)
 	}
-
 
 	draw_stream_set_vertex_offset(p_draw_stream, p_vertex_offset)
 	draw_stream_set_draw_count(p_draw_stream, p_draw_count)
@@ -569,9 +577,13 @@ draw_stream_dispatcher_submit_draw :: proc(p_draw_stream_dispatch: ^DrawStreamDi
 			p_draw_stream_dispatch.cmd_buff_ref,
 			p_draw_stream_dispatch.draw_info.draw_count,
 			p_draw_stream_dispatch.draw_info.instance_count,
+			p_draw_stream_dispatch.draw_info.pipeline_ref,
+			p_draw_stream_dispatch.draw_stream.push_constants[p_draw_stream_dispatch.current_draw],
 		)
 
 	}
+
+	p_draw_stream_dispatch.current_draw += 1
 }
 
 //---------------------------------------------------------------------------//

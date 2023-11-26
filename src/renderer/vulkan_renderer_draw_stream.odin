@@ -63,17 +63,23 @@ when USE_VULKAN_BACKEND {
 		p_cmd_buff_ref: CommandBufferRef,
 		p_index_count: u32,
 		p_instance_count: u32,
+		p_pipeline_ref: PipelineRef,
+		p_push_constant: rawptr,
 	) {
-
+		backend_pipeline := &g_resources.backend_pipelines[get_pipeline_idx(p_pipeline_ref)]
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
-		vk.CmdDrawIndexed(
+
+		vk.CmdPushConstants(
 			backend_cmd_buffer.vk_cmd_buff,
-			p_index_count,
-			p_instance_count,
+			backend_pipeline.vk_pipeline_layout,
+			{.FRAGMENT},
 			0,
-			0,
-			0,
+			size_of(u32),
+			p_push_constant,
 		)
+
+
+		vk.CmdDrawIndexed(backend_cmd_buffer.vk_cmd_buff, p_index_count, p_instance_count, 0, 0, 0)
 	}
 
 	//---------------------------------------------------------------------------//
@@ -86,6 +92,7 @@ when USE_VULKAN_BACKEND {
 		p_instance_count: u32,
 	) {
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
+
 		vk.CmdDraw(
 			backend_cmd_buffer.vk_cmd_buff,
 			p_vertex_count,

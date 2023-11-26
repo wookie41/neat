@@ -14,8 +14,5 @@ struct VSOutput {
 
 float4 main(in VSInput pVertexInput, out VSOutput pVertexOutput) : SV_Position {
     pVertexOutput.uv = pVertexInput.uv;
-    return mul(uPerView.proj, 
-        mul(uPerView.view, 
-        mul(uPerView.model, 
-        float4(pVertexInput.position, 1.0))));
+    return mul(uPerView.proj, mul(uPerView.view, mul(uPerView.model, float4(pVertexInput.position, 1.0))));
 }

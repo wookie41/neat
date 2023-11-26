@@ -15,6 +15,11 @@ import "core:reflect"
 import "core:slice"
 import "core:strings"
 
+@(private)
+MaterialPassPushContants :: struct #packed {
+	material_idx: u32,
+}
+
 //---------------------------------------------------------------------------//
 
 @(private = "file")
@@ -118,17 +123,20 @@ G_MATERIAL_TYPE_REF_ARRAY: common.RefArray(MaterialTypeResource)
 
 //---------------------------------------------------------------------------//
 
+//16 byte alignment
 DefaultMaterialTypeProperties :: struct #packed {
-	albedo:             glsl.vec3,
-	normal:             glsl.vec3,
-	roughness:          f32,
-	metalness:          f32,
-	occlusion:          f32,
-	albedo_image_id:    u32,
-	normal_image_id:    u32,
-	roughness_image_id: u32,
-	metalness_image_id: u32,
-	occlusion_image_id: u32,
+	albedo:             glsl.vec3, // 12 = 12
+	albedo_image_id:    u32, // 4 = 16
+	normal:             glsl.vec3, // 12 = 28
+	roughness:          f32, // 4 = 32
+	metalness:          f32, // 4 = 36
+	occlusion:          f32, // 4 = 40
+	normal_image_id:    u32, // 4 = 44
+	roughness_image_id: u32, // 4 = 48
+	metalness_image_id: u32, // 4 = 52
+	occlusion_image_id: u32, // 4 = 56 
+	flags:              u32, // 4 = 60
+	_padding:           [4]byte,
 }
 
 //---------------------------------------------------------------------------//
@@ -190,11 +198,8 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 
 	material_type := &g_resources.material_types[get_material_type_idx(p_material_ref)]
 
-	// single u32 for storing all of the dynamic flag values
-	material_type.properties_size_in_bytes = size_of(u32)
-
 	// Find out how big the properties struct is using reflection
-	material_type.properties_size_in_bytes += u32(
+	material_type.properties_size_in_bytes = u32(
 		reflect.size_of_typeid(material_type.desc.properties_struct_type),
 	)
 
@@ -258,7 +263,7 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 		assert(success)
 
 		// Create the PSO
-		material_pass.pipeline_ref = allocate_pipeline_ref(material_pass.desc.name, 3)
+		material_pass.pipeline_ref = allocate_pipeline_ref(material_pass.desc.name, 3, 1)
 		pipeline := &g_resources.pipelines[get_pipeline_idx(material_pass.pipeline_ref)]
 		pipeline.desc.bind_group_layout_refs = {
 			InvalidBindGroupLayout, // @TODO material bind group
@@ -270,6 +275,12 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 		pipeline.desc.vert_shader_ref = material_pass.vertex_shader_ref
 		pipeline.desc.frag_shader_ref = material_pass.fragment_shader_ref
 		pipeline.desc.vertex_layout = .Mesh
+
+		pipeline.desc.push_constants[0] = PushConstantDesc {
+			offset_in_bytes = 0,
+			size_in_bytes = size_of(MaterialPassPushContants),
+			shader_stages = {.Fragment},
+		}
 
 		success = create_graphics_pipeline(material_pass.pipeline_ref)
 		assert(success)

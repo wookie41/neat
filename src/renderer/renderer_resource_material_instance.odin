@@ -5,7 +5,6 @@ package renderer
 import "../common"
 import "core:c"
 import "core:mem"
-import "core:reflect"
 
 //---------------------------------------------------------------------------//
 
@@ -89,16 +88,25 @@ material_instance_update_dirty_data :: proc(p_material_instance_ref: MaterialIns
 	material_instance := &g_resources.material_instances[get_material_instance_idx(p_material_instance_ref)]
 	material_type := &g_resources.material_types[get_material_type_idx(material_instance.desc.material_type_ref)]
 
+	material_instance_data_offset :=
+		material_type.properties_buffer_suballocation.offset +
+		material_type.properties_size_in_bytes *
+			material_instance.material_properties_buffer_entry_idx
+
 	// If material instance data is dirty, we need to issue a copy to the GPU
 	upload_request := request_buffer_upload(
 		BufferUploadRequest{
 			dst_buff = material_type_get_properties_buffer(),
-			dst_buff_offset = material_type.properties_size_in_bytes *
-			material_instance.material_properties_buffer_entry_idx,
+			dst_buff_offset = material_instance_data_offset,
 			dst_queue_usage = .Graphics,
 			size = material_type.properties_size_in_bytes,
 		},
 	)
+
+	material_props := (^DefaultMaterialTypeProperties)(
+		material_instance.material_properties_data_ptr,
+	)
+
 
 	if upload_request.ptr == nil {
 		material_instance.flags += {.Dirty}
@@ -107,11 +115,7 @@ material_instance_update_dirty_data :: proc(p_material_instance_ref: MaterialIns
 
 	material_instance.flags -= {.Dirty}
 
-	mem.copy(
-		upload_request.ptr,
-		material_instance.material_properties_data_ptr,
-		reflect.size_of_typeid(material_type.desc.properties_struct_type),
-	)
+	mem.copy(upload_request.ptr, material_props, int(material_type.properties_size_in_bytes))
 }
 
 //---------------------------------------------------------------------------//
@@ -162,7 +166,12 @@ destroy_material_instance :: proc(p_ref: MaterialInstanceRef) {
 
 material_instance_set_flags :: proc(p_material_instance_ref: MaterialInstanceRef, p_flags: u32) {
 	material_instance := &g_resources.material_instances[get_material_instance_idx(p_material_instance_ref)]
-	flags_bitfield := (^u32)(material_instance.material_properties_data_ptr)
+	material_type := &g_resources.material_types[get_material_type_idx(material_instance.desc.material_type_ref)]
+
+	flags_offset := material_type.properties_size_in_bytes - size_of(u32)
+	flags_bitfield := (^u32)(
+		mem.ptr_offset(material_instance.material_properties_data_ptr, flags_offset),
+	)
 	flags_bitfield^ = p_flags
 }
 
@@ -170,7 +179,14 @@ material_instance_set_flags :: proc(p_material_instance_ref: MaterialInstanceRef
 
 material_instance_get_flags :: proc(p_material_instance_ref: MaterialInstanceRef) -> u32 {
 	material_instance := &g_resources.material_instances[get_material_instance_idx(p_material_instance_ref)]
-	return (^u32)(material_instance.material_properties_data_ptr)^
+	material_type := &g_resources.material_types[get_material_type_idx(material_instance.desc.material_type_ref)]
+
+	flags_offset := material_type.properties_size_in_bytes - size_of(u32)
+	flags_bitfield := (^u32)(
+		mem.ptr_offset(material_instance.material_properties_data_ptr, flags_offset),
+	)
+
+	return (^u32)(flags_bitfield)^
 }
 
 //--------------------------------------------------------------------------//
@@ -244,10 +260,13 @@ material_instance_set_flag_name :: proc(
 	material_instance := &g_resources.material_instances[get_material_instance_idx(p_material_instance_ref)]
 	material_type := &g_resources.material_types[get_material_type_idx(material_instance.desc.material_type_ref)]
 
+	flags_offset := material_type.properties_size_in_bytes - size_of(u32)
+	flags_bitfield := (^u32)(
+		mem.ptr_offset(material_instance.material_properties_data_ptr, flags_offset),
+	)
 	// Find flag index and set it
 	for flag_name, flag_idx in material_type.desc.flag_names {
 		if common.name_equal(p_flag_name, flag_name) {
-			flags_bitfield := (^u32)(material_instance.material_properties_data_ptr)
 			if (p_value) {
 				flags_bitfield^ |= (1 << u32(flag_idx))
 			} else {
@@ -265,7 +284,7 @@ material_instance_get_properties_struct :: proc(
 	$T: typeid,
 ) -> ^T {
 	material_instance := &g_resources.material_instances[get_material_instance_idx(p_material_instance_ref)]
-	ptr := (^T)(mem.ptr_offset(material_instance.material_properties_data_ptr, size_of(u32)))
+	ptr := (^T)(material_instance.material_properties_data_ptr)
 	return ptr
 }
 

@@ -258,9 +258,9 @@ when USE_VULKAN_BACKEND {
 
 		viewport := vk.Viewport {
 			x        = 0.0,
-			y        = 0.0,
+			y        = cast(f32)render_area.height,
 			width    = cast(f32)render_area.width,
-			height   = cast(f32)render_area.height,
+			height   = -cast(f32)render_area.height,
 			minDepth = 0.0,
 			maxDepth = 1.0,
 		}
