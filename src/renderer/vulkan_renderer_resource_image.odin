@@ -205,7 +205,6 @@ when USE_VULKAN_BACKEND {
 
 		vk.SetDebugUtilsObjectNameEXT(G_RENDERER.device, &name_info)
 
-
 		// Create image view containing all of the mips
 		{
 			view_create_info := vk.ImageViewCreateInfo {
@@ -512,8 +511,6 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_execute_queued_texture_copies :: proc(p_cmd_buff_ref: CommandBufferRef) {
 
-		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
-
 		VkCopyEntry :: struct {
 			buffer:     vk.Buffer,
 			image:      vk.Image,
@@ -541,6 +538,21 @@ when USE_VULKAN_BACKEND {
 		)
 		defer delete(to_sample_barriers, G_RENDERER_ALLOCATORS.temp_allocator)
 
+		pre_transfer_src_queue := vk.QUEUE_FAMILY_IGNORED
+		pre_transfer_dst_queue := vk.QUEUE_FAMILY_IGNORED
+
+		post_transfer_src_queue := vk.QUEUE_FAMILY_IGNORED
+		post_transfer_dst_queue := vk.QUEUE_FAMILY_IGNORED
+
+		dst_access_mask := vk.AccessFlags{.SHADER_READ}
+
+		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+			post_transfer_src_queue = G_RENDERER.queue_family_transfer_index
+			post_transfer_dst_queue = G_RENDERER.queue_family_graphics_index
+
+			dst_access_mask = {}
+		}
+
 		for _, i in G_RENDERER.queued_textures_copies {
 
 			texture_copy := G_RENDERER.queued_textures_copies[i]
@@ -559,8 +571,8 @@ when USE_VULKAN_BACKEND {
 				image_barrier.sType = .IMAGE_MEMORY_BARRIER
 				image_barrier.oldLayout = .UNDEFINED
 				image_barrier.newLayout = .TRANSFER_DST_OPTIMAL
-				image_barrier.srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED
-				image_barrier.dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED
+				image_barrier.srcQueueFamilyIndex = pre_transfer_src_queue
+				image_barrier.dstQueueFamilyIndex = pre_transfer_dst_queue
 				image_barrier.image = backend_image.vk_image
 				image_barrier.subresourceRange.aspectMask = {.COLOR}
 				image_barrier.subresourceRange.baseArrayLayer = 0
@@ -578,7 +590,9 @@ when USE_VULKAN_BACKEND {
 				image_barrier.oldLayout = .TRANSFER_DST_OPTIMAL
 				image_barrier.newLayout = .SHADER_READ_ONLY_OPTIMAL
 				image_barrier.srcAccessMask = {.TRANSFER_WRITE}
-				image_barrier.dstAccessMask = {.SHADER_READ}
+				image_barrier.dstAccessMask = dst_access_mask
+				image_barrier.srcQueueFamilyIndex = post_transfer_src_queue
+				image_barrier.dstQueueFamilyIndex = post_transfer_dst_queue
 			}
 
 			vk_copy_entry := VkCopyEntry {
@@ -624,9 +638,22 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
+		cmd_buff := g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)].vk_cmd_buff
+		after_transfer_stages_dst := vk.PipelineStageFlags{
+			.VERTEX_SHADER,
+			.FRAGMENT_SHADER,
+			.COMPUTE_SHADER,
+		}
+		transfer_cmd_buff := cmd_buff
+		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+			transfer_cmd_buff = get_frame_transfer_cmd_buffer()
+			after_transfer_stages_dst = {.TOP_OF_PIPE}
+		}
+
+
 		// Transition the images to transfer
 		vk.CmdPipelineBarrier(
-			backend_cmd_buffer.vk_cmd_buff,
+			transfer_cmd_buff,
 			{.TOP_OF_PIPE},
 			{.TRANSFER},
 			nil,
@@ -638,11 +665,11 @@ when USE_VULKAN_BACKEND {
 			&to_transfer_barriers[0],
 		)
 
-		// Copy the data image
+		// Copy the image data
 		for copy, i in vk_copies {
 
 			vk.CmdCopyBufferToImage(
-				backend_cmd_buffer.vk_cmd_buff,
+				transfer_cmd_buff,
 				copy.buffer,
 				copy.image,
 				.TRANSFER_DST_OPTIMAL,
@@ -650,11 +677,28 @@ when USE_VULKAN_BACKEND {
 				raw_data(copy.mip_copies),
 			)
 
-			// Transition the image to sample
+
+			if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+				// Release
+				vk.CmdPipelineBarrier(
+					transfer_cmd_buff,
+					{.TRANSFER},
+					{.TOP_OF_PIPE},
+					nil,
+					0,
+					nil,
+					0,
+					nil,
+					1,
+					&to_sample_barriers[i],
+				)
+			}
+
+			// Acquire
 			vk.CmdPipelineBarrier(
-				backend_cmd_buffer.vk_cmd_buff,
+				cmd_buff,
 				{.TRANSFER},
-				{.VERTEX_SHADER, .FRAGMENT_SHADER, .COMPUTE_SHADER},
+				after_transfer_stages_dst,
 				nil,
 				0,
 				nil,

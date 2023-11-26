@@ -130,6 +130,19 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
+	backend_buffer_upload_start_async_cmd_buffer :: proc() {
+		transfer_cmd_buff := get_frame_transfer_cmd_buffer()
+		begin_info := vk.CommandBufferBeginInfo {
+			sType = .COMMAND_BUFFER_BEGIN_INFO,
+			flags = {.ONE_TIME_SUBMIT},
+		}
+		vk.BeginCommandBuffer(transfer_cmd_buff, &begin_info)
+
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
 	backend_run_buffer_upload_requests :: proc(
 		p_staging_buffer_ref: BufferRef,
 		p_upload_requests: ^map[BufferRef][dynamic]PendingBufferUploadRequest,
@@ -137,20 +150,12 @@ when USE_VULKAN_BACKEND {
 
 		transfer_cmd_buff := get_frame_transfer_cmd_buffer()
 
-		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
-			begin_info := vk.CommandBufferBeginInfo {
-				sType = .COMMAND_BUFFER_BEGIN_INFO,
-				flags = {.ONE_TIME_SUBMIT},
-			}
-			vk.BeginCommandBuffer(transfer_cmd_buff, &begin_info)
-		}
-
 		for dst_buffer_ref, requests in p_upload_requests {
 
 			temp_arena := common.Arena{}
 			common.temp_arena_init(&temp_arena)
 			defer common.arena_delete(temp_arena)
-			
+
 			dst_buffer := &g_resources.buffers[get_buffer_idx(dst_buffer_ref)]
 			backend_dst_buffer := &g_resources.backend_buffers[get_buffer_idx(dst_buffer_ref)]
 
@@ -309,32 +314,36 @@ when USE_VULKAN_BACKEND {
 				)
 			}
 		}
-
-		// Submit the transfer if we're using a dedicated transfer queue
-		// Otherwise it'll be executed as part of the normal command buffer
-		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
-
-			G_RENDERER.should_wait_on_transfer_semaphore = true
-
-			vk.ResetFences(G_RENDERER.device, 1, &INTERNAL.transfer_fences[get_frame_idx()])
-
-			vk.EndCommandBuffer(transfer_cmd_buff)
-
-			submit_info := vk.SubmitInfo {
-				sType                = .SUBMIT_INFO,
-				commandBufferCount   = 1,
-				pCommandBuffers      = &transfer_cmd_buff,
-				signalSemaphoreCount = 1,
-				pSignalSemaphores    = &G_RENDERER.transfer_finished_semaphores[get_frame_idx()],
-			}
-
-			vk.QueueSubmit(
-				G_RENDERER.transfer_queue,
-				1,
-				&submit_info,
-				INTERNAL.transfer_fences[get_frame_idx()],
-			)
-		}
 	}
 	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_buffer_upload_submit_async_transfers :: proc() {
+		transfer_cmd_buff := get_frame_transfer_cmd_buffer()
+
+		G_RENDERER.should_wait_on_transfer_semaphore = true
+
+		vk.ResetFences(G_RENDERER.device, 1, &INTERNAL.transfer_fences[get_frame_idx()])
+
+		vk.EndCommandBuffer(transfer_cmd_buff)
+
+		submit_info := vk.SubmitInfo {
+			sType                = .SUBMIT_INFO,
+			commandBufferCount   = 1,
+			pCommandBuffers      = &transfer_cmd_buff,
+			signalSemaphoreCount = 1,
+			pSignalSemaphores    = &G_RENDERER.transfer_finished_semaphores[get_frame_idx()],
+		}
+
+		vk.QueueSubmit(
+			G_RENDERER.transfer_queue,
+			1,
+			&submit_info,
+			INTERNAL.transfer_fences[get_frame_idx()],
+		)
+
+	}
+
+	//---------------------------------------------------------------------------//
+
 }

@@ -390,8 +390,11 @@ update :: proc(p_dt: f32) {
 
 	begin_command_buffer(cmd_buff_ref)
 
+	buffer_upload_start_async_cmd_buffer()
 	execute_queued_texture_copies()
 	run_buffer_upload_requests()
+	backend_buffer_upload_submit_async_transfers()
+
 	batch_update_bindless_array_entries()
 
 	free_all(G_RENDERER_ALLOCATORS.frame_allocator)

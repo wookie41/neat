@@ -195,3 +195,23 @@ request_buffer_upload_integrated :: proc(p_request : BufferUploadRequest) -> Buf
 buffer_upload_pre_frame_submit :: proc()  {
 	backend_buffer_upload_pre_frame_submit(INTERNAL.pending_requests_per_buffer)
 }
+
+//---------------------------------------------------------------------------//
+
+@(private)
+buffer_upload_start_async_cmd_buffer :: proc() {
+	if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+		backend_buffer_upload_start_async_cmd_buffer()
+	}
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
+buffer_upload_submit_async_transfers :: proc() {
+	if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+		backend_buffer_upload_submit_async_transfers()
+	}
+}
+
+//---------------------------------------------------------------------------//
