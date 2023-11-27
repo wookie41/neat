@@ -76,6 +76,15 @@ BufferSuballocation :: struct {
 
 //---------------------------------------------------------------------------//
 
+OffsetBuffer :: struct {
+	buffer_ref: BufferRef,
+	offset:     u32,
+}
+
+InvalidOffsetBuffer :: OffsetBuffer {buffer_ref = {ref = c.UINT32_MAX}}
+
+//---------------------------------------------------------------------------//
+
 @(private)
 init_buffers :: proc() {
 	G_BUFFER_REF_ARRAY = common.ref_array_create(

@@ -502,7 +502,7 @@ when USE_VULKAN_BACKEND {
 
 		for bind_group_layout_ref, i in pipeline.desc.bind_group_layout_refs {
 
-			if bind_group_layout_ref == InvalidBindGroupLayout {
+			if bind_group_layout_ref == InvalidBindGroupRefLayout {
 				descriptor_set_layouts[i] = INTERNAL.vk_empty_descriptor_set_layout
 				continue
 			}

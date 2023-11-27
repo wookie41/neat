@@ -4,8 +4,6 @@ package renderer
 
 import "../common"
 import "core:mem"
-import "core:runtime"
-import "core:slice"
 
 //---------------------------------------------------------------------------//
 
@@ -16,19 +14,11 @@ import "core:slice"
 @(private = "file")
 g_draw_stream_ops := []proc(_: ^DrawStreamDispatch){
 	draw_stream_dispatch_bind_pipeline,
-	draw_stream_dispatch_bind_vertex_buffer_0,
-	draw_stream_dispatch_bind_vertex_buffer_1,
-	draw_stream_dispatch_bind_vertex_buffer_2,
+	draw_stream_dispatch_bind_vertex_buffer,
 	draw_stream_dispatch_bind_index_buffer,
-	draw_stream_dispatch_set_vertex_offset,
-	draw_stream_dispatch_set_draw_count,
+	draw_stream_dispatch_change_bind_group,
 	draw_stream_dispatch_set_instance_count,
-	draw_stream_dispatch_change_bind_group_0,
-	draw_stream_dispatch_change_bind_group_1,
-	draw_stream_dispatch_change_bind_group_2,
-	draw_stream_dispatch_set_dynamic_offsets_0,
-	draw_stream_dispatch_set_dynamic_offsets_1,
-	draw_stream_dispatch_set_dynamic_offsets_2,
+	draw_stream_dispatch_set_draw_count,
 	draw_stream_dispatcher_submit_draw,
 }
 
@@ -37,19 +27,11 @@ g_draw_stream_ops := []proc(_: ^DrawStreamDispatch){
 @(private = "file")
 DrawStreamOp :: enum u32 {
 	BindPipeline,
-	BindVertexBuffer0,
-	BindVertexBuffer1,
-	BindVertexBuffer2,
+	BindVertexBuffer,
 	BindIndexBuffer,
-	SetVertexOffset,
-	SetDrawCount,
+	ChangeBindGroup,
 	SetInstanceCount,
-	ChangeBindGroup0,
-	ChangeBindGroup1,
-	ChangeBindGroup2,
-	SetDynamicOffsets0,
-	SetDynamicOffsets1,
-	SetDynamicOffsets2,
+	SetDrawCount,
 	SubmitDraw,
 }
 
@@ -62,85 +44,76 @@ IndexType :: enum u8 {
 
 //---------------------------------------------------------------------------//
 
-@(private = "file")
-DrawInfo :: struct {
-	pipeline_ref:        PipelineRef, // 4
-	vertex_buffer_ref_0: BufferRef, // 8
-	vertex_buffer_ref_1: BufferRef, // 12
-	vertex_buffer_ref_2: BufferRef, // 16
-	index_buffer_ref:    BufferRef, // 20
-	vertex_offset:       u32, // 28
-	draw_count:          u32, // 32
-	instance_count:      u32, // 36
-	bind_group_0_ref:    BindGroupRef, // 40
-	bind_group_1_ref:    BindGroupRef, // 44
-	bind_group_2_ref:    BindGroupRef, // 48
-	dynamic_offsets_0:   []u32, // 52
-	dynamic_offsets_1:   []u32, // 56
-	dynamic_offsets_2:   []u32, // 60
-	index_type:          IndexType, //pad to 64 byte cacheline
-}
-
-//---------------------------------------------------------------------------//
-
 DrawStream :: struct {
 	// Encoded draw stream data: field id and it's values
-	encoded_draw_stream_data: [dynamic]u32,
-	current_index_buffer:     BufferRef,
-	push_constants:           [dynamic]rawptr,
+	encoded_draw_stream_data:    [dynamic]u32,
+	push_constants:              [dynamic]rawptr,
+	current_index_buffer_ref:    BufferRef,
+	current_index_buffer_offset: u32,
+	current_pipeline_ref:        PipelineRef,
+	allocator:                   mem.Allocator,
 }
 
 //---------------------------------------------------------------------------//
 
 @(private = "file")
 DrawStreamDispatch :: struct {
-	draw_info:          DrawInfo,
-	draw_stream:        DrawStream,
-	draw_stream_offset: u32,
-	cmd_buff_ref:       CommandBufferRef,
-	current_draw: u32,
+	draw_stream:           ^DrawStream,
+	draw_stream_offset:    u32,
+	cmd_buff_ref:          CommandBufferRef,
+	current_draw:          u32,
+	current_push_constant: u32,
+	pipeline_ref:          PipelineRef,
+	draw_count:            u32,
+	instance_count:        u32,
+	index_buffer_ref:      BufferRef,
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
+BindGroupsWithOffsets :: struct {
+	bind_group_ref:  BindGroupRef,
+	dynamic_offsets: []u32,
 }
 
 //---------------------------------------------------------------------------//
 
 draw_stream_create :: proc(p_draw_stream_allocator: mem.Allocator) -> DrawStream {
-	draw_stream := DrawStream{}
+	draw_stream := DrawStream {
+		allocator = p_draw_stream_allocator,
+	}
 
 	draw_stream.encoded_draw_stream_data = make(
 		[dynamic]u32,
 		(8 * common.KILOBYTE) / size_of(u32),
 		p_draw_stream_allocator,
 	)
+	clear(&draw_stream.encoded_draw_stream_data)
 
-	draw_stream.push_constants = make([dynamic]rawptr, p_draw_stream_allocator)
+	draw_stream.push_constants = make(
+		[dynamic]rawptr,
+		(8 * common.KILOBYTE) / size_of(rawptr),
+		p_draw_stream_allocator,
+	)
+	clear(&draw_stream.push_constants)
 
-	draw_stream.current_index_buffer = InvalidBufferRef
+	draw_stream.current_index_buffer_ref = InvalidBufferRef
+	draw_stream.current_pipeline_ref = InvalidPipelineRef
 
 	return draw_stream
 }
 
 //---------------------------------------------------------------------------//
 
-draw_stream_dispatch :: proc(p_cmd_buff_ref: CommandBufferRef, p_draw_stream: DrawStream) {
+draw_stream_dispatch :: proc(p_cmd_buff_ref: CommandBufferRef, p_draw_stream: ^DrawStream) {
 	draw_stream_dispatch := DrawStreamDispatch {
 		draw_stream  = p_draw_stream,
 		cmd_buff_ref = p_cmd_buff_ref,
 	}
-	draw_stream_dispatch.draw_info = DrawInfo {
-		vertex_buffer_ref_0 = InvalidBufferRef,
-		vertex_buffer_ref_1 = InvalidBufferRef,
-		vertex_buffer_ref_2 = InvalidBufferRef,
-		index_buffer_ref    = InvalidBufferRef,
-		bind_group_0_ref    = InvalidBindGroup,
-		bind_group_1_ref    = InvalidBindGroup,
-		bind_group_2_ref    = InvalidBindGroup,
-	}
-
-	draw_stream_dispatch.draw_info.bind_group_0_ref = InvalidBindGroup
-	draw_stream_dispatch.draw_info.bind_group_1_ref = InvalidBindGroup
-	draw_stream_dispatch.draw_info.bind_group_2_ref = InvalidBindGroup
 
 	draw_stream_dispatch.current_draw = 0
+	draw_stream_dispatch.current_push_constant = 0
 
 	for draw_stream_dispatch.draw_stream_offset <
 	    u32(len(p_draw_stream.encoded_draw_stream_data)) {
@@ -152,7 +125,21 @@ draw_stream_dispatch :: proc(p_cmd_buff_ref: CommandBufferRef, p_draw_stream: Dr
 //---------------------------------------------------------------------------//
 
 draw_stream_reset :: proc(p_draw_stream: ^DrawStream) {
-	(^runtime.Raw_Dynamic_Array)(&p_draw_stream.encoded_draw_stream_data).len = 0
+	delete(p_draw_stream.encoded_draw_stream_data)
+	delete(p_draw_stream.push_constants)
+
+	p_draw_stream.encoded_draw_stream_data = make(
+		[dynamic]u32,
+		(8 * common.KILOBYTE) / size_of(u32),
+		p_draw_stream.allocator,
+	)
+	clear(&p_draw_stream.encoded_draw_stream_data)
+
+	p_draw_stream.push_constants = make(
+		[dynamic]rawptr,
+		(8 * common.KILOBYTE) / size_of(rawptr),
+		p_draw_stream.allocator,
+	)
 	clear(&p_draw_stream.push_constants)
 }
 
@@ -164,80 +151,59 @@ draw_stream_destroy :: proc(p_draw_stream: DrawStream) {
 
 //---------------------------------------------------------------------------//
 
-
 // Helper method to issue the draw stream call in the right order
 draw_stream_add_draw :: proc(
 	p_draw_stream: ^DrawStream,
+	p_draw_count: u32,
+	p_instance_count: u32,
 	p_pipeline_ref: PipelineRef = InvalidPipelineRef,
-	p_vertex_buffer_ref_0: BufferRef = InvalidBufferRef,
-	p_vertex_buffer_ref_1: BufferRef = InvalidBufferRef,
-	p_vertex_buffer_ref_2: BufferRef = InvalidBufferRef,
-	p_index_buffer_ref: BufferRef = InvalidBufferRef,
-	p_index_offset: u32 = 0,
-	p_vertex_offset: u32 = 0,
-	p_draw_count: u32 = 0,
-	p_instance_count: u32 = 0,
-	p_index_type: IndexType = .UInt16,
-	p_bind_group_0_ref: BindGroupRef = InvalidBindGroup,
-	p_bind_group_1_ref: BindGroupRef = InvalidBindGroup,
-	p_bind_group_2_ref: BindGroupRef = InvalidBindGroup,
-	p_dynamic_offsets_0: []u32 = nil,
-	p_dynamic_offsets_1: []u32 = nil,
-	p_dynamic_offsets_2: []u32 = nil,
-	p_push_constant: rawptr,
+	p_vertex_buffers: []OffsetBuffer = {},
+	p_index_buffer: OffsetBuffer = InvalidOffsetBuffer,
+	p_index_type: IndexType = .UInt32,
+	p_bind_groups: []BindGroupsWithOffsets = {},
+	p_push_constants: []rawptr = {},
 ) {
-	append(&p_draw_stream.push_constants, p_push_constant)
 
-	if p_pipeline_ref != InvalidPipelineRef {
-		draw_stream_bind_pipeline(p_draw_stream, p_pipeline_ref)
+	if p_pipeline_ref != p_draw_stream.current_pipeline_ref {
+		draw_stream_set_pipeline(p_draw_stream, p_pipeline_ref)
 	}
 
-	if p_dynamic_offsets_0 != nil {
-		draw_stream_set_dynamic_offsets_0(p_draw_stream, p_dynamic_offsets_0)
-	}
-
-	if p_dynamic_offsets_1 != nil {
-		draw_stream_set_dynamic_offsets_1(p_draw_stream, p_dynamic_offsets_1)
-	}
-
-	if p_dynamic_offsets_2 != nil {
-		draw_stream_set_dynamic_offsets_2(p_draw_stream, p_dynamic_offsets_2)
-	}
-
-	if p_bind_group_0_ref != InvalidBindGroup {
-		draw_stream_set_bind_group_0(p_draw_stream, p_bind_group_0_ref)
-	}
-
-	if p_bind_group_1_ref != InvalidBindGroup {
-		draw_stream_set_bind_group_1(p_draw_stream, p_bind_group_1_ref)
-	}
-
-	if p_bind_group_2_ref != InvalidBindGroup {
-		draw_stream_set_bind_group_2(p_draw_stream, p_bind_group_2_ref)
-	}
-
-	if p_vertex_buffer_ref_0 != InvalidBufferRef {
-		draw_stream_set_vertex_buffer_0(p_draw_stream, p_vertex_buffer_ref_0)
-	}
-
-	if p_vertex_buffer_ref_1 != InvalidBufferRef {
-		draw_stream_set_vertex_buffer_1(p_draw_stream, p_vertex_buffer_ref_1)
-	}
-
-	if p_vertex_buffer_ref_2 != InvalidBufferRef {
-		draw_stream_set_vertex_buffer_2(p_draw_stream, p_vertex_buffer_ref_2)
-	}
-
-	if p_index_buffer_ref != p_draw_stream.current_index_buffer {
-		draw_stream_set_index_buffer(
+	for vertex_buffers, i in p_vertex_buffers {
+		draw_stream_set_vertex_buffer(
 			p_draw_stream,
-			p_index_buffer_ref,
-			p_index_type,
-			p_index_offset,
+			vertex_buffers.buffer_ref,
+			u32(i),
+			vertex_buffers.offset,
 		)
 	}
 
-	draw_stream_set_vertex_offset(p_draw_stream, p_vertex_offset)
+	if p_index_buffer.buffer_ref != p_draw_stream.current_index_buffer_ref ||
+	   p_index_buffer.offset != p_draw_stream.current_index_buffer_offset ||
+	   p_draw_stream.current_index_buffer_ref == InvalidBufferRef {
+		draw_stream_set_index_buffer(
+			p_draw_stream,
+			p_index_buffer.buffer_ref,
+			p_index_type,
+			p_index_buffer.offset,
+		)
+	}
+
+	for bind_group, i in p_bind_groups {
+		if bind_group.bind_group_ref == InvalidBindGroupRef {
+			continue
+		}
+		draw_stream_set_bind_group(
+			p_draw_stream,
+			bind_group.bind_group_ref,
+			u32(i),
+			bind_group.dynamic_offsets,
+		)
+	}
+
+	for push_constant in p_push_constants {
+		append(&p_draw_stream.push_constants, push_constant)
+	}
+
 	draw_stream_set_draw_count(p_draw_stream, p_draw_count)
 	draw_stream_set_instance_count(p_draw_stream, p_instance_count)
 	draw_stream_submit_draw(p_draw_stream)
@@ -245,53 +211,36 @@ draw_stream_add_draw :: proc(
 
 //---------------------------------------------------------------------------//
 
-draw_stream_submit_draw :: proc(p_draw_stream: ^DrawStream) {
-	append(&p_draw_stream.encoded_draw_stream_data, u32(DrawStreamOp.SubmitDraw))
-}
-
-//---------------------------------------------------------------------------//
-
-draw_stream_bind_pipeline :: proc(p_draw_stream: ^DrawStream, p_pipeline_ref: PipelineRef) {
+@(private = "file")
+draw_stream_set_pipeline :: proc(p_draw_stream: ^DrawStream, p_pipeline_ref: PipelineRef) {
 	draw_stream_write(p_draw_stream, .BindPipeline, p_pipeline_ref.ref)
 }
 
 //---------------------------------------------------------------------------//
 
-draw_stream_set_vertex_buffer_0 :: proc(
+@(private = "file")
+draw_stream_set_vertex_buffer :: proc(
 	p_draw_stream: ^DrawStream,
 	p_buffer_ref: BufferRef,
+	p_binding: u32,
 	p_offset: u32 = 0,
 ) {
-	draw_stream_write(p_draw_stream, .BindVertexBuffer0, p_buffer_ref.ref, p_offset)
-}
-//---------------------------------------------------------------------------//
-
-draw_stream_set_vertex_buffer_1 :: proc(
-	p_draw_stream: ^DrawStream,
-	p_buffer_ref: BufferRef,
-	p_offset: u32 = 0,
-) {
-	draw_stream_write(p_draw_stream, .BindVertexBuffer1, p_buffer_ref.ref, p_offset)
+	draw_stream_write(p_draw_stream, .BindVertexBuffer, p_buffer_ref.ref, p_binding, p_offset)
 }
 
 //---------------------------------------------------------------------------//
 
-draw_stream_set_vertex_buffer_2 :: proc(
-	p_draw_stream: ^DrawStream,
-	p_buffer_ref: BufferRef,
-	p_offset: u32 = 0,
-) {
-	draw_stream_write(p_draw_stream, .BindVertexBuffer2, p_buffer_ref.ref, p_offset)
-}
-
-//---------------------------------------------------------------------------//
-
+@(private = "file")
 draw_stream_set_index_buffer :: proc(
 	p_draw_stream: ^DrawStream,
 	p_buffer_ref: BufferRef,
 	p_index_type: IndexType,
 	p_offset: u32 = 0,
 ) {
+
+	p_draw_stream.current_index_buffer_ref = p_buffer_ref
+	p_draw_stream.current_index_buffer_offset = p_offset
+
 	draw_stream_write(
 		p_draw_stream,
 		.BindIndexBuffer,
@@ -303,53 +252,37 @@ draw_stream_set_index_buffer :: proc(
 
 //---------------------------------------------------------------------------//
 
-draw_stream_set_vertex_offset :: proc(p_draw_stream: ^DrawStream, p_offset: u32) {
-	draw_stream_write(p_draw_stream, .SetVertexOffset, p_offset)
+@(private = "file")
+draw_stream_set_bind_group :: proc(
+	p_draw_stream: ^DrawStream,
+	p_bind_group_ref: BindGroupRef,
+	p_binding: u32,
+	p_dynamic_offsets: []u32,
+) {
+	draw_stream_write(p_draw_stream, .ChangeBindGroup, p_bind_group_ref.ref, p_binding)
+	draw_stream_write_without_op(p_draw_stream, p_dynamic_offsets)
 }
 
 //---------------------------------------------------------------------------//
 
+@(private = "file")
 draw_stream_set_draw_count :: proc(p_draw_stream: ^DrawStream, p_draw_count: u32) {
 	draw_stream_write(p_draw_stream, .SetDrawCount, p_draw_count)
 }
 
 //---------------------------------------------------------------------------//
 
+@(private = "file")
 draw_stream_set_instance_count :: proc(p_draw_stream: ^DrawStream, p_instance_count: u32) {
 	draw_stream_write(p_draw_stream, .SetInstanceCount, p_instance_count)
 
 }
-//---------------------------------------------------------------------------//
-
-draw_stream_set_bind_group_0 :: proc(p_draw_stream: ^DrawStream, p_bind_group_ref: BindGroupRef) {
-	draw_stream_write(p_draw_stream, .ChangeBindGroup0, p_bind_group_ref.ref)
-}
 
 //---------------------------------------------------------------------------//
 
-draw_stream_set_bind_group_1 :: proc(p_draw_stream: ^DrawStream, p_bind_group_ref: BindGroupRef) {
-	draw_stream_write(p_draw_stream, .ChangeBindGroup1, p_bind_group_ref.ref)
-}
-//---------------------------------------------------------------------------//
-
-
-draw_stream_set_bind_group_2 :: proc(p_draw_stream: ^DrawStream, p_bind_group_ref: BindGroupRef) {
-	draw_stream_write(p_draw_stream, .ChangeBindGroup2, p_bind_group_ref.ref)
-}
-
-//---------------------------------------------------------------------------//
-draw_stream_set_dynamic_offsets_0 :: proc(p_draw_stream: ^DrawStream, p_dynamic_offsets: []u32) {
-	draw_stream_write_slice(p_draw_stream, .SetDynamicOffsets0, p_dynamic_offsets)
-}
-
-//---------------------------------------------------------------------------//
-draw_stream_set_dynamic_offsets_1 :: proc(p_draw_stream: ^DrawStream, p_dynamic_offsets: []u32) {
-	draw_stream_write_slice(p_draw_stream, .SetDynamicOffsets1, p_dynamic_offsets)
-}
-//---------------------------------------------------------------------------//
-
-draw_stream_set_dynamic_offsets_2 :: proc(p_draw_stream: ^DrawStream, p_dynamic_offsets: []u32) {
-	draw_stream_write_slice(p_draw_stream, .SetDynamicOffsets2, p_dynamic_offsets)
+@(private = "file")
+draw_stream_submit_draw :: proc(p_draw_stream: ^DrawStream) {
+	append(&p_draw_stream.encoded_draw_stream_data, u32(DrawStreamOp.SubmitDraw))
 }
 
 //---------------------------------------------------------------------------//
@@ -360,36 +293,24 @@ draw_stream_dispatch_bind_pipeline :: proc(p_draw_stream_dispatch: ^DrawStreamDi
 		ref = draw_stream_dispatch_read_next(p_draw_stream_dispatch),
 	}
 	bind_pipeline(pipeline_ref, p_draw_stream_dispatch.cmd_buff_ref)
-	p_draw_stream_dispatch.draw_info.pipeline_ref = pipeline_ref
+	p_draw_stream_dispatch.pipeline_ref = pipeline_ref
 }
 
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-draw_stream_dispatch_bind_vertex_buffer_0 :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
-	p_draw_stream_dispatch.draw_info.vertex_buffer_ref_0 = draw_stream_dispatch_bind_vertex_buffer(
-		p_draw_stream_dispatch,
-		0,
-	)
-}
+draw_stream_dispatch_bind_vertex_buffer :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
+	vertex_buffer_ref := BufferRef {
+		ref = draw_stream_dispatch_read_next(p_draw_stream_dispatch),
+	}
+	binding := draw_stream_dispatch_read_next(p_draw_stream_dispatch)
+	buffer_offset := draw_stream_dispatch_read_next(p_draw_stream_dispatch)
 
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-draw_stream_dispatch_bind_vertex_buffer_1 :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
-	p_draw_stream_dispatch.draw_info.vertex_buffer_ref_1 = draw_stream_dispatch_bind_vertex_buffer(
-		p_draw_stream_dispatch,
-		1,
-	)
-}
-
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-draw_stream_dispatch_bind_vertex_buffer_2 :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
-	p_draw_stream_dispatch.draw_info.vertex_buffer_ref_2 = draw_stream_dispatch_bind_vertex_buffer(
-		p_draw_stream_dispatch,
-		2,
+	backend_draw_stream_dispatch_bind_vertex_buffer(
+		p_draw_stream_dispatch.cmd_buff_ref,
+		vertex_buffer_ref,
+		binding,
+		buffer_offset,
 	)
 }
 
@@ -402,9 +323,7 @@ draw_stream_dispatch_bind_index_buffer :: proc(p_draw_stream_dispatch: ^DrawStre
 	}
 	buffer_offset := draw_stream_dispatch_read_next(p_draw_stream_dispatch)
 	index_type := IndexType(draw_stream_dispatch_read_next(p_draw_stream_dispatch))
-
-	p_draw_stream_dispatch.draw_info.index_buffer_ref = index_buffer_ref
-
+	p_draw_stream_dispatch.index_buffer_ref = index_buffer_ref
 	backend_draw_stream_dispatch_bind_index_buffer(
 		p_draw_stream_dispatch.cmd_buff_ref,
 		index_buffer_ref,
@@ -416,171 +335,64 @@ draw_stream_dispatch_bind_index_buffer :: proc(p_draw_stream_dispatch: ^DrawStre
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-draw_stream_dispatch_set_vertex_offset :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
-	p_draw_stream_dispatch.draw_info.vertex_offset = draw_stream_dispatch_read_next(
-		p_draw_stream_dispatch,
-	)
-}
-
-//---------------------------------------------------------------------------//
-
-@(private = "file")
 draw_stream_dispatch_set_draw_count :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
-	p_draw_stream_dispatch.draw_info.draw_count = draw_stream_dispatch_read_next(
-		p_draw_stream_dispatch,
-	)
+	p_draw_stream_dispatch.draw_count = draw_stream_dispatch_read_next(p_draw_stream_dispatch)
 }
-
 
 //---------------------------------------------------------------------------//
 
 @(private = "file")
 draw_stream_dispatch_set_instance_count :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
-	p_draw_stream_dispatch.draw_info.instance_count = draw_stream_dispatch_read_next(
-		p_draw_stream_dispatch,
-	)
+	p_draw_stream_dispatch.instance_count = draw_stream_dispatch_read_next(p_draw_stream_dispatch)
 }
 
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-draw_stream_dispatch_change_bind_group_0 :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
-	p_draw_stream_dispatch.draw_info.bind_group_0_ref = draw_stream_dispatch_change_bind_group(
-		p_draw_stream_dispatch,
-		0,
-		p_draw_stream_dispatch.draw_info.dynamic_offsets_0,
-	)
-}
-
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-draw_stream_dispatch_change_bind_group_1 :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
-	p_draw_stream_dispatch.draw_info.bind_group_1_ref = draw_stream_dispatch_change_bind_group(
-		p_draw_stream_dispatch,
-		1,
-		p_draw_stream_dispatch.draw_info.dynamic_offsets_1,
-	)
-}
-
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-draw_stream_dispatch_change_bind_group_2 :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
-	p_draw_stream_dispatch.draw_info.bind_group_2_ref = draw_stream_dispatch_change_bind_group(
-		p_draw_stream_dispatch,
-		2,
-		p_draw_stream_dispatch.draw_info.dynamic_offsets_2,
-	)
-}
-
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-draw_stream_dispatch_set_dynamic_offsets_0 :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
-	p_draw_stream_dispatch.draw_info.dynamic_offsets_0 = draw_stream_dispatch_set_dynamic_offsets(
-		p_draw_stream_dispatch,
-	)
-}
-
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-draw_stream_dispatch_set_dynamic_offsets_1 :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
-	p_draw_stream_dispatch.draw_info.dynamic_offsets_1 = draw_stream_dispatch_set_dynamic_offsets(
-		p_draw_stream_dispatch,
-	)
-}
-
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-draw_stream_dispatch_set_dynamic_offsets_2 :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
-	p_draw_stream_dispatch.draw_info.dynamic_offsets_2 = draw_stream_dispatch_set_dynamic_offsets(
-		p_draw_stream_dispatch,
-	)
-}
-
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-draw_stream_dispatch_set_dynamic_offsets :: proc(
-	p_draw_stream_dispatch: ^DrawStreamDispatch,
-) -> []u32 {
-	dynamic_offsets_count := draw_stream_dispatch_read_next(p_draw_stream_dispatch)
-	dynamic_offsets_ptr := &p_draw_stream_dispatch.draw_stream.encoded_draw_stream_data[p_draw_stream_dispatch.draw_stream_offset]
-	p_draw_stream_dispatch.draw_stream_offset += dynamic_offsets_count
-	return slice.from_ptr(dynamic_offsets_ptr, int(dynamic_offsets_count))
-}
-
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-draw_stream_dispatch_change_bind_group :: proc(
-	p_draw_stream_dispatch: ^DrawStreamDispatch,
-	p_target: u32,
-	p_dynamic_offsets: []u32,
-) -> BindGroupRef {
+draw_stream_dispatch_change_bind_group :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
 	bind_group_ref := BindGroupRef{draw_stream_dispatch_read_next(p_draw_stream_dispatch)}
+	binding := draw_stream_dispatch_read_next(p_draw_stream_dispatch)
+	dynamic_offsets := draw_stream_dispatch_read_slice(p_draw_stream_dispatch)
 	bind_bind_group(
 		p_draw_stream_dispatch.cmd_buff_ref,
-		p_draw_stream_dispatch.draw_info.pipeline_ref,
+		p_draw_stream_dispatch.pipeline_ref,
 		bind_group_ref,
-		p_target,
-		p_dynamic_offsets,
+		binding,
+		dynamic_offsets,
 	)
-	return bind_group_ref
-}
-
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-draw_stream_dispatch_bind_vertex_buffer :: #force_inline proc(
-	p_draw_stream_dispatch: ^DrawStreamDispatch,
-	p_bind_point: u32,
-) -> BufferRef {
-	vertex_buffer_ref := BufferRef {
-		ref = draw_stream_dispatch_read_next(p_draw_stream_dispatch),
-	}
-	buffer_offset := draw_stream_dispatch_read_next(p_draw_stream_dispatch)
-
-	backend_draw_stream_dispatch_bind_vertex_buffer(
-		p_draw_stream_dispatch.cmd_buff_ref,
-		vertex_buffer_ref,
-		p_bind_point,
-		buffer_offset,
-	)
-
-	return vertex_buffer_ref
 }
 
 //---------------------------------------------------------------------------//
 
 @(private = "file")
 draw_stream_dispatcher_submit_draw :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
-	assert(p_draw_stream_dispatch.draw_info.pipeline_ref != InvalidPipelineRef)
-	assert(
-		p_draw_stream_dispatch.draw_info.vertex_buffer_ref_0 != InvalidBufferRef ||
-		p_draw_stream_dispatch.draw_info.vertex_buffer_ref_0 != InvalidBufferRef ||
-		p_draw_stream_dispatch.draw_info.vertex_buffer_ref_0 != InvalidBufferRef,
-	)
+	assert(p_draw_stream_dispatch.pipeline_ref != InvalidPipelineRef)
 
-	if p_draw_stream_dispatch.draw_info.index_buffer_ref == InvalidBufferRef {
+	// Collect push constants for the current pipeline
+	pipeline := &g_resources.pipelines[get_pipeline_idx(p_draw_stream_dispatch.pipeline_ref)]
+
+	push_constants_start := p_draw_stream_dispatch.current_push_constant
+	push_constants_count := u32(len(pipeline.desc.push_constants))
+
+	push_constants := p_draw_stream_dispatch.draw_stream.push_constants[push_constants_start:push_constants_start +
+	push_constants_count]
+
+	p_draw_stream_dispatch.current_push_constant += push_constants_count
+
+	if p_draw_stream_dispatch.index_buffer_ref == InvalidBufferRef {
 		backend_draw_stream_submit_draw(
 			p_draw_stream_dispatch.cmd_buff_ref,
-			p_draw_stream_dispatch.draw_info.vertex_offset,
-			p_draw_stream_dispatch.draw_info.draw_count,
-			p_draw_stream_dispatch.draw_info.instance_count,
+			p_draw_stream_dispatch.draw_count,
+			p_draw_stream_dispatch.instance_count,
 		)
 	} else {
 		backend_draw_stream_submit_indexed_draw(
 			p_draw_stream_dispatch.cmd_buff_ref,
-			p_draw_stream_dispatch.draw_info.draw_count,
-			p_draw_stream_dispatch.draw_info.instance_count,
-			p_draw_stream_dispatch.draw_info.pipeline_ref,
-			p_draw_stream_dispatch.draw_stream.push_constants[p_draw_stream_dispatch.current_draw],
+			p_draw_stream_dispatch.draw_count,
+			p_draw_stream_dispatch.instance_count,
+			p_draw_stream_dispatch.pipeline_ref,
+			push_constants,
 		)
-
 	}
 
 	p_draw_stream_dispatch.current_draw += 1
@@ -588,6 +400,7 @@ draw_stream_dispatcher_submit_draw :: proc(p_draw_stream_dispatch: ^DrawStreamDi
 
 //---------------------------------------------------------------------------//
 
+@(private = "file")
 draw_stream_write :: proc {
 	draw_stream_write_value,
 	draw_stream_write_values,
@@ -623,14 +436,30 @@ draw_stream_write_values :: #force_inline proc(
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-draw_stream_write_slice :: #force_inline proc(
+draw_stream_write_without_op :: proc {
+	draw_stream_write_value_without_op,
+	draw_stream_write_values_without_op,
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+draw_stream_write_value_without_op :: #force_inline proc(
 	p_draw_stream: ^DrawStream,
-	p_op: DrawStreamOp,
-	p_slice: []u32,
+	p_value: u32,
 ) {
-	append(&p_draw_stream.encoded_draw_stream_data, u32(p_op))
-	append(&p_draw_stream.encoded_draw_stream_data, u32(len(p_slice)))
-	for value in p_slice {
+	append(&p_draw_stream.encoded_draw_stream_data, p_value)
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+draw_stream_write_values_without_op :: #force_inline proc(
+	p_draw_stream: ^DrawStream,
+	p_values: []u32,
+) {
+	append(&p_draw_stream.encoded_draw_stream_data, u32(len(p_values)))
+	for value in p_values {
 		append(&p_draw_stream.encoded_draw_stream_data, value)
 	}
 }
@@ -646,5 +475,19 @@ draw_stream_dispatch_read_next :: #force_inline proc(
 	p_draw_stream_dispatch.draw_stream_offset += 1
 	return value
 }
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+draw_stream_dispatch_read_slice :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) -> []u32 {
+	slice_len := draw_stream_dispatch_read_next(p_draw_stream_dispatch)
+	slice_start := p_draw_stream_dispatch.draw_stream_offset
+	p_draw_stream_dispatch.draw_stream_offset += slice_len
+	return(
+		p_draw_stream_dispatch.draw_stream.encoded_draw_stream_data[slice_start:slice_start +
+		slice_len] \
+	)
+}
+
 
 //---------------------------------------------------------------------------//

@@ -64,20 +64,38 @@ when USE_VULKAN_BACKEND {
 		p_index_count: u32,
 		p_instance_count: u32,
 		p_pipeline_ref: PipelineRef,
-		p_push_constant: rawptr,
+		p_push_constant: []rawptr,
 	) {
-		backend_pipeline := &g_resources.backend_pipelines[get_pipeline_idx(p_pipeline_ref)]
+		pipeline_idx := get_pipeline_idx(p_pipeline_ref)
+		pipeline := &g_resources.pipelines[pipeline_idx]
+		backend_pipeline := &g_resources.backend_pipelines[pipeline_idx]
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
 
-		vk.CmdPushConstants(
-			backend_cmd_buffer.vk_cmd_buff,
-			backend_pipeline.vk_pipeline_layout,
-			{.FRAGMENT},
-			0,
-			size_of(u32),
-			p_push_constant,
-		)
+		for push_constant, i in pipeline.desc.push_constants {
 
+			stage_flags := vk.ShaderStageFlags{}
+
+			if .Vertex in push_constant.shader_stages {
+				stage_flags += {.VERTEX}
+			}
+
+			if .Fragment in push_constant.shader_stages {
+				stage_flags += {.FRAGMENT}
+			}
+
+			if .Compute in push_constant.shader_stages {
+				stage_flags += {.COMPUTE}
+			}
+
+			vk.CmdPushConstants(
+				backend_cmd_buffer.vk_cmd_buff,
+				backend_pipeline.vk_pipeline_layout,
+				stage_flags,
+				push_constant.offset_in_bytes,
+				push_constant.size_in_bytes,
+				p_push_constant[i],
+			)
+		}
 
 		vk.CmdDrawIndexed(backend_cmd_buffer.vk_cmd_buff, p_index_count, p_instance_count, 0, 0, 0)
 	}
@@ -87,19 +105,12 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_draw_stream_submit_draw :: #force_inline proc(
 		p_cmd_buff_ref: CommandBufferRef,
-		p_vertex_offset: u32,
 		p_vertex_count: u32,
 		p_instance_count: u32,
 	) {
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
 
-		vk.CmdDraw(
-			backend_cmd_buffer.vk_cmd_buff,
-			p_vertex_count,
-			p_instance_count,
-			p_vertex_offset,
-			0,
-		)
+		vk.CmdDraw(backend_cmd_buffer.vk_cmd_buff, p_vertex_count, p_instance_count, 0, 0)
 	}
 
 
