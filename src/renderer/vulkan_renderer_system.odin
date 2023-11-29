@@ -616,9 +616,7 @@ backend_wait_for_frame_resources :: proc() {
 //---------------------------------------------------------------------------//
 
 @(private)
-backend_update :: proc(p_dt: f32) {
-
-	context.logger = G_RENDERER_LOG
+backend_post_render :: proc(p_dt: f32) {
 
 	// Wait until frame resources will not be used anymore
 	frame_idx := get_frame_idx()

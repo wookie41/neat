@@ -1,0 +1,7 @@
+<RendererConfig>
+    <RenderTasks>
+        <Mesh name="Mesh" renderPass="TestRenderPass">
+            <MaterialPass name="TestMaterialPass" />
+        </Mesh>
+    </RenderTasks>
+</RendererConfig>

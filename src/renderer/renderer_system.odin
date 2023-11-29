@@ -2,6 +2,7 @@ package renderer
 
 //---------------------------------------------------------------------------//
 
+import "core:encoding/xml"
 import "core:log"
 import "core:mem"
 
@@ -49,6 +50,7 @@ MAX_MESH_INSTANCES :: #config(MAX_MESHES, 4096)
 INTERNAL: struct {
 	frame_id:  u32,
 	frame_idx: u32, // frame_id % num_frames_in_flight 
+	logger:    log.Logger,
 }
 
 //---------------------------------------------------------------------------//
@@ -75,6 +77,12 @@ g_resources: struct {
 	material_instances:         #soa[]MaterialInstanceResource,
 	meshes:                     #soa[]MeshResource,
 	mesh_instances:             #soa[]MeshInstanceResource,
+	material_passes:            #soa[]MaterialPassResource,
+}
+//---------------------------------------------------------------------------//
+
+g_resource_refs: struct {
+	mesh_instances: common.RefArray(MeshInstanceResource),
 }
 
 //---------------------------------------------------------------------------//
@@ -127,9 +135,6 @@ G_RENDERER_ALLOCATORS: struct {
 	temp_arenas_allocator:      mem.Allocator,
 }
 
-@(private)
-G_RENDERER_LOG: log.Logger
-
 //---------------------------------------------------------------------------//
 
 InitOptions :: struct {
@@ -146,8 +151,24 @@ DeviceQueueType :: enum {
 
 //---------------------------------------------------------------------------//
 
+@(private = "file")
+RenderTaskEntry :: struct {
+	type:            string,
+	name:            string,
+	config:          map[string]string,
+	material_passes: []string,
+}
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+RendererConfig :: struct {
+	render_tasks: []RenderTaskEntry `json:"renderTasks"`,
+}
+
+//---------------------------------------------------------------------------//
+
 init :: proc(p_options: InitOptions) -> bool {
-	G_RENDERER_LOG = log.create_console_logger()
+	INTERNAL.logger = log.create_console_logger()
 
 	// Just take the current context allocator for now
 	G_RENDERER_ALLOCATORS.main_allocator = context.allocator
@@ -192,7 +213,11 @@ init :: proc(p_options: InitOptions) -> bool {
 	INTERNAL.frame_idx = 0
 	INTERNAL.frame_id = 0
 
-	setup_renderer_context()
+	// Setup renderer context
+	context.allocator = G_RENDERER_ALLOCATORS.main_allocator
+	context.temp_allocator = G_RENDERER_ALLOCATORS.temp_allocator
+	context.logger = INTERNAL.logger
+
 	backend_init(p_options) or_return
 
 	init_shaders() or_return
@@ -372,17 +397,19 @@ init :: proc(p_options: InitOptions) -> bool {
 	init_material_types() or_return
 	init_material_instances() or_return
 
-	init_vt()
+	load_renderer_config()
 
+	init_vt()
 
 	return true
 }
 //---------------------------------------------------------------------------//
 
 update :: proc(p_dt: f32) {
-	setup_renderer_context()
-
-	// @TODO Render tasks - begin_frame()
+	// Setup renderer context
+	context.allocator = G_RENDERER_ALLOCATORS.main_allocator
+	context.temp_allocator = G_RENDERER_ALLOCATORS.temp_allocator
+	context.logger = INTERNAL.logger
 
 	cmd_buff_ref := get_frame_cmd_buffer_ref()
 
@@ -403,17 +430,15 @@ update :: proc(p_dt: f32) {
 	image_upload_begin_frame()
 	material_instance_update_dirty_materials()
 
-	// @TODO Render tasks - render()
+	render_tasks_update(p_dt)
 
-	backend_update(p_dt)
+	backend_post_render(p_dt)
 
 	buffer_upload_pre_frame_submit()
 
 	end_command_buffer(cmd_buff_ref)
 
 	submit_current_frame(cmd_buff_ref)
-
-	// @TODO Render tasks - end_frame()
 
 	advance_frame_idx()
 
@@ -458,7 +483,11 @@ submit_current_frame :: proc(p_cmd_buff_ref: CommandBufferRef) {
 
 
 deinit :: proc() {
-	setup_renderer_context()
+	// Setup renderer context
+	context.allocator = G_RENDERER_ALLOCATORS.main_allocator
+	context.temp_allocator = G_RENDERER_ALLOCATORS.temp_allocator
+	context.logger = INTERNAL.logger
+
 	deinit_pipelines()
 	deinit_shaders()
 	deinit_render_tasks()
@@ -480,17 +509,12 @@ WindowResizedEvent :: struct {
 }
 
 handler_on_window_resized :: proc(p_event: WindowResizedEvent) {
-	setup_renderer_context()
-	backend_handler_on_window_resized(p_event)
-}
-
-//---------------------------------------------------------------------------//
-
-@(private)
-setup_renderer_context :: proc() {
+	// Setup renderer context
 	context.allocator = G_RENDERER_ALLOCATORS.main_allocator
 	context.temp_allocator = G_RENDERER_ALLOCATORS.temp_allocator
-	context.logger = G_RENDERER_LOG
+	context.logger = INTERNAL.logger
+
+	backend_handler_on_window_resized(p_event)
 }
 
 //---------------------------------------------------------------------------//
@@ -508,6 +532,74 @@ execute_queued_texture_copies :: proc() {
 	if len(G_RENDERER.queued_textures_copies) > 0 {
 		backend_execute_queued_texture_copies(cmd_buff_ref)
 	}
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+load_renderer_config :: proc() -> bool {
+	temp_arena: common.Arena
+	common.temp_arena_init(&temp_arena, common.MEGABYTE) // The parser is quite memory hungry
+	defer common.arena_delete(temp_arena)
+
+	doc, err := xml.load_from_file(
+		"app_data/renderer/config/renderer.xml",
+		allocator = temp_arena.allocator,
+	)
+	if err != nil {
+		log.fatal("Failed to load renderer config: %s\n", err)
+		return false
+	}
+
+	render_tasks_id, render_tasks_found := xml.find_child_by_ident(doc, 0, "RenderTasks")
+	if render_tasks_found == false {
+		log.fatal("No render tasks defined in the renderer config\n")
+		return false
+	}
+
+	render_tasks := doc.elements[render_tasks_id]
+
+	for render_task_id in render_tasks.value {
+		switch element_id in render_task_id {
+		case string:
+			continue
+		case xml.Element_ID:
+			child := doc.elements[element_id]
+
+			if child.kind != .Element {continue} 	// Skip comments
+
+			render_task_type, found := render_task_map_name_to_type(child.ident)
+			if found == false {
+				log.infof("Unsupported render task: %s\n", child.ident)
+				continue
+			}
+
+			render_task_name, name_found := xml.find_attribute_val_by_key(doc, element_id, "name")
+			if name_found == false {
+				log.errorf("Render task '%s' has no name specified\n", child.ident)
+				continue
+			}
+
+			render_task_ref := allocate_render_task_ref(common.create_name(render_task_name))
+			g_resources.render_tasks[get_render_task_idx(render_task_ref)].desc.type =
+				render_task_type
+
+
+			render_task_config := RenderTaskConfig {
+				doc                    = doc,
+				render_task_element_id = element_id,
+			}
+			if create_render_task(render_task_ref, &render_task_config) == false {
+				log.errorf("Failed to create render task '%s:%s'\n", child.ident, render_task_name)
+				destroy_render_task(render_task_ref)
+				continue
+			}
+
+			log.infof("Render task '%s:%s' created\n", child.ident, render_task_name)
+		}
+	}
+
+	return true
 }
 
 //---------------------------------------------------------------------------//

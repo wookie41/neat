@@ -43,8 +43,6 @@ InvalidMaterialPassRef := MaterialPassRef {
 
 @(private = "file")
 G_MATERIAL_PASS_REF_ARRAY: common.RefArray(MaterialPassResource)
-@(private = "file")
-G_MATERIAL_PASS_RESOURCE_ARRAY: []MaterialPassResource
 
 //---------------------------------------------------------------------------//
 
@@ -65,8 +63,8 @@ init_material_passs :: proc() -> bool {
 		MAX_MATERIAL_PASSES,
 		G_RENDERER_ALLOCATORS.main_allocator,
 	)
-	G_MATERIAL_PASS_RESOURCE_ARRAY = make(
-		[]MaterialPassResource,
+	g_resources.material_passes = make_soa(
+		#soa[]MaterialPassResource,
 		MAX_MATERIAL_PASSES,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
@@ -92,19 +90,19 @@ allocate_material_pass_ref :: proc(p_name: common.Name) -> MaterialPassRef {
 	ref := MaterialPassRef(
 		common.ref_create(MaterialPassResource, &G_MATERIAL_PASS_REF_ARRAY, p_name),
 	)
-	get_material_pass(ref).desc.name = p_name
+	g_resources.material_passes[get_material_pass_idx(ref)].desc.name = p_name
 	return ref
 }
 //---------------------------------------------------------------------------//
 
-get_material_pass :: proc(p_ref: MaterialPassRef) -> ^MaterialPassResource {
-	return &G_MATERIAL_PASS_RESOURCE_ARRAY[common.ref_get_idx(&G_MATERIAL_PASS_REF_ARRAY, p_ref)]
+get_material_pass_idx :: proc(p_ref: MaterialPassRef) -> u32 {
+	return common.ref_get_idx(&G_MATERIAL_PASS_REF_ARRAY, p_ref)
 }
 
 //--------------------------------------------------------------------------//
 
 destroy_material_pass :: proc(p_ref: MaterialPassRef) {
-	material_pass := get_material_pass(p_ref)
+	material_pass := &g_resources.material_passes[get_material_pass_idx(p_ref)]
 	if len(material_pass.desc.additional_feature_names) > 0 {
 		delete(
 			material_pass.desc.additional_feature_names,
@@ -119,7 +117,7 @@ destroy_material_pass :: proc(p_ref: MaterialPassRef) {
 //--------------------------------------------------------------------------//
 
 load_material_passes_from_config_file :: proc() -> bool {
-	temp_arena : common.Arena
+	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
 
@@ -148,7 +146,7 @@ load_material_passes_from_config_file :: proc() -> bool {
 
 	for entry in material_passes_json_entries {
 		material_pass_ref := allocate_material_pass_ref(common.create_name(entry.name))
-		material_pass := get_material_pass(material_pass_ref)
+		material_pass := &g_resources.material_passes[get_material_pass_idx(material_pass_ref)]
 
 		material_pass.desc.vertex_shader_path = common.create_name(entry.vertex_shader_path)
 		material_pass.desc.fragment_shader_path = common.create_name(entry.fragment_shader_path)

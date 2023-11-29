@@ -19,7 +19,6 @@ MaterialInstanceFlagBits :: enum u8 {
 	Dirty,
 }
 
-
 MaterialInstanceFlags :: distinct bit_set[MaterialInstanceFlagBits;u8]
 
 //---------------------------------------------------------------------------//
@@ -106,7 +105,6 @@ material_instance_update_dirty_data :: proc(p_material_instance_ref: MaterialIns
 	material_props := (^DefaultMaterialTypeProperties)(
 		material_instance.material_properties_data_ptr,
 	)
-
 
 	if upload_request.ptr == nil {
 		material_instance.flags += {.Dirty}

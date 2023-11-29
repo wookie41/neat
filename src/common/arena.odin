@@ -52,7 +52,7 @@ arena_delete :: proc(p_arena: Arena) {
 //---------------------------------------------------------------------------//
 
 temp_arena_init :: proc(p_arena: ^Arena, p_arena_size: u32 = DEFAULT_TEMP_ARENA_SIZE) {
-	arena_init(p_arena, DEFAULT_TEMP_ARENA_SIZE, INTERNAL.temp_arenas_allocator)
+	arena_init(p_arena, p_arena_size, INTERNAL.temp_arenas_allocator)
 }
 
 //---------------------------------------------------------------------------//

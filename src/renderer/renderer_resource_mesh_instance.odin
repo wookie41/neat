@@ -17,7 +17,7 @@ MeshInstanceDesc :: struct {
 //---------------------------------------------------------------------------//
 
 MeshInstanceResource :: struct {
-	desc: MeshInstanceDesc,
+	desc:                 MeshInstanceDesc,
 }
 
 //---------------------------------------------------------------------------//
@@ -32,21 +32,16 @@ InvalidMeshInstanceRef := MeshInstanceRef {
 
 //---------------------------------------------------------------------------//
 
-@(private = "file")
-G_MESH_INSTANCE_REF_ARRAY: common.RefArray(MeshInstanceResource)
-
-//---------------------------------------------------------------------------//
-
 init_mesh_instances :: proc() -> bool {
-	G_MESH_INSTANCE_REF_ARRAY = common.ref_array_create(
-		MeshInstanceResource,
-		MAX_MESH_INSTANCES,
-		G_RENDERER_ALLOCATORS.main_allocator,
-	)
 	g_resources.mesh_instances = make_soa(
 		#soa[]MeshInstanceResource,
 		MAX_MESH_INSTANCES,
 		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
+	g_resource_refs.mesh_instances = common.ref_array_create(
+		MeshInstanceResource,
+		MAX_MESH_INSTANCES,
+		G_RENDERER_ALLOCATORS.main_allocator,
 	)
 	return true
 }
@@ -66,7 +61,7 @@ create_mesh_instance :: proc(p_mesh_instance_ref: MeshInstanceRef) -> bool {
 
 allocate_mesh_instance_ref :: proc(p_name: common.Name) -> MeshInstanceRef {
 	ref := MeshInstanceRef(
-		common.ref_create(MeshInstanceResource, &G_MESH_INSTANCE_REF_ARRAY, p_name),
+		common.ref_create(MeshInstanceResource, &g_resource_refs.mesh_instances, p_name),
 	)
 	g_resources.mesh_instances[get_mesh_instance_idx(ref)].desc.name = p_name
 	return ref
@@ -74,12 +69,12 @@ allocate_mesh_instance_ref :: proc(p_name: common.Name) -> MeshInstanceRef {
 //---------------------------------------------------------------------------//
 
 get_mesh_instance_idx :: proc(p_ref: MeshInstanceRef) -> u32 {
-	return common.ref_get_idx(&G_MESH_INSTANCE_REF_ARRAY, p_ref)
+	return common.ref_get_idx(&g_resource_refs.mesh_instances, p_ref)
 }
 
 //--------------------------------------------------------------------------//
 
 destroy_mesh_instance :: proc(p_ref: MeshInstanceRef) {
 	// mesh_instance := get_mesh_instance(p_ref)
-	common.ref_free(&G_MESH_INSTANCE_REF_ARRAY, p_ref)
+	common.ref_free(&g_resource_refs.mesh_instances, p_ref)
 }

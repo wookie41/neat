@@ -4,7 +4,9 @@ package renderer
 //---------------------------------------------------------------------------//
 
 import "../common"
+
 import "core:c"
+import "core:encoding/xml"
 
 //---------------------------------------------------------------------------//
 
@@ -20,7 +22,7 @@ RenderTaskRef :: common.Ref(RenderTaskResource)
 //---------------------------------------------------------------------------//
 
 RenderTaskType :: enum {
-	GenericMesh,
+	Mesh,
 }
 
 //---------------------------------------------------------------------------//
@@ -34,7 +36,7 @@ INTERNAL: struct {
 
 @(private = "file")
 G_RENDER_TASK_TYPE_MAPPING := map[string]RenderTaskType {
-	"GenericMesh" = .GenericMesh,
+	"Mesh" = .Mesh,
 }
 
 //---------------------------------------------------------------------------//
@@ -77,7 +79,10 @@ G_RENDER_TASK_REF_ARRAY: common.RefArray(RenderTaskResource)
 
 //---------------------------------------------------------------------------//
 
-RenderTaskConfig :: map[string]string
+RenderTaskConfig :: struct {
+	doc:                    ^xml.Document,
+	render_task_element_id: xml.Element_ID,
+}
 
 //---------------------------------------------------------------------------//
 
@@ -100,12 +105,12 @@ init_render_tasks :: proc() -> bool {
 
 	// Init mesh render task
 	{
-		render_task_fn : RenderTaskFunctions
+		render_task_fn: RenderTaskFunctions
 		mesh_render_task_init(&render_task_fn)
-		INTERNAL.render_task_functions[.GenericMesh] = render_task_fn
+		INTERNAL.render_task_functions[.Mesh] = render_task_fn
 	}
 
-	return true,
+	return true
 }
 
 //---------------------------------------------------------------------------//
@@ -132,8 +137,10 @@ create_render_task :: proc(
 	p_render_task_config: ^RenderTaskConfig,
 ) -> bool {
 	render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
-	INTERNAL.render_task_functions[render_task.desc.type].create_instance(p_render_task_ref, p_render_task_config)
-	return true
+	return INTERNAL.render_task_functions[render_task.desc.type].create_instance(
+		p_render_task_ref,
+		p_render_task_config,
+	)
 }
 
 //---------------------------------------------------------------------------//
@@ -149,3 +156,36 @@ destroy_render_task :: proc(p_ref: RenderTaskRef) {
 	INTERNAL.render_task_functions[render_task.desc.type].destroy_instance(p_ref)
 	common.ref_free(&G_RENDER_TASK_REF_ARRAY, p_ref)
 }
+
+
+//--------------------------------------------------------------------------//
+
+@(private)
+render_task_map_name_to_type :: proc(p_type_name: string) -> (RenderTaskType, bool) {
+	if p_type_name in G_RENDER_TASK_TYPE_MAPPING {
+		return G_RENDER_TASK_TYPE_MAPPING[p_type_name], true
+	}
+	return nil, false
+}
+
+//--------------------------------------------------------------------------//
+
+@(private)
+render_tasks_update :: proc(p_dt: f32) {
+	for render_task_ref in G_RENDER_TASK_REF_ARRAY.alive_refs {
+		render_task := &g_resources.render_tasks[get_render_task_idx(render_task_ref)]
+		INTERNAL.render_task_functions[render_task.desc.type].begin_frame(render_task_ref)
+	}
+
+	for render_task_ref in G_RENDER_TASK_REF_ARRAY.alive_refs {
+		render_task := &g_resources.render_tasks[get_render_task_idx(render_task_ref)]
+		INTERNAL.render_task_functions[render_task.desc.type].render(render_task_ref, p_dt)
+	}
+
+	for render_task_ref in G_RENDER_TASK_REF_ARRAY.alive_refs {
+		render_task := &g_resources.render_tasks[get_render_task_idx(render_task_ref)]
+		INTERNAL.render_task_functions[render_task.desc.type].end_frame(render_task_ref)
+	}
+
+}
+//--------------------------------------------------------------------------//
