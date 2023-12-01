@@ -225,7 +225,7 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 
 	// Compile the shaders for each material passes that use this material
 	for material_pass_ref in material_type.desc.material_passes_refs {
-		material_pass := get_material_pass(material_pass_ref)
+		material_pass := &g_resources.material_passes[get_material_pass_idx(material_pass_ref)]
 
 		// Combine defines from the material with defines for the material pass
 		shader_defines, _ := slice.concatenate(

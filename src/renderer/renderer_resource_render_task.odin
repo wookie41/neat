@@ -172,17 +172,20 @@ render_task_map_name_to_type :: proc(p_type_name: string) -> (RenderTaskType, bo
 
 @(private)
 render_tasks_update :: proc(p_dt: f32) {
-	for render_task_ref in G_RENDER_TASK_REF_ARRAY.alive_refs {
+	for i in 0 ..< G_RENDER_TASK_REF_ARRAY.alive_count {
+		render_task_ref := G_RENDER_TASK_REF_ARRAY.alive_refs[i]
 		render_task := &g_resources.render_tasks[get_render_task_idx(render_task_ref)]
 		INTERNAL.render_task_functions[render_task.desc.type].begin_frame(render_task_ref)
 	}
 
-	for render_task_ref in G_RENDER_TASK_REF_ARRAY.alive_refs {
+	for i in 0 ..< G_RENDER_TASK_REF_ARRAY.alive_count {
+		render_task_ref := G_RENDER_TASK_REF_ARRAY.alive_refs[i]
 		render_task := &g_resources.render_tasks[get_render_task_idx(render_task_ref)]
 		INTERNAL.render_task_functions[render_task.desc.type].render(render_task_ref, p_dt)
 	}
 
-	for render_task_ref in G_RENDER_TASK_REF_ARRAY.alive_refs {
+	for i in 0 ..< G_RENDER_TASK_REF_ARRAY.alive_count {
+		render_task_ref := G_RENDER_TASK_REF_ARRAY.alive_refs[i]
 		render_task := &g_resources.render_tasks[get_render_task_idx(render_task_ref)]
 		INTERNAL.render_task_functions[render_task.desc.type].end_frame(render_task_ref)
 	}

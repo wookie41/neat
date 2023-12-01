@@ -6,6 +6,7 @@ import "../common"
 
 import "core:encoding/xml"
 import "core:log"
+import "core:math/linalg/glsl"
 
 //---------------------------------------------------------------------------//
 
@@ -53,7 +54,6 @@ create_instance :: proc(
 	defer delete(material_pass_refs)
 
 	current_material_pass_element := 0
-	material_pass_count := 0
 
 	for {
 		material_pass_element_id, found := xml.find_child_by_ident(
@@ -147,7 +147,16 @@ end_frame :: proc(p_render_task_ref: RenderTaskRef) {
 //---------------------------------------------------------------------------//
 
 @(private = "file")
+UniformBufferObject :: struct {
+	model: glsl.mat4x4,
+	view:  glsl.mat4x4,
+	proj:  glsl.mat4x4,
+}
+
+@(private = "file")
 render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
+
+	ubo_offset := []u32{0, size_of(UniformBufferObject) * get_frame_idx()}
 
 	mesh_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
 	mesh_render_task_data := (^MeshRenderTaskData)(mesh_render_task.data_ptr)
@@ -158,68 +167,104 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 		len(mesh_render_task_data.material_pass_refs),
 		G_RENDERER_ALLOCATORS.temp_allocator,
 	)
-	defer delete(draw_stream_per_material_pass)
-
-	for material_pass_ref in mesh_render_task_data.material_pass_refs {
-		draw_stream_per_material_pass[material_pass_ref] = draw_stream_create(
-			G_RENDERER_ALLOCATORS.temp_allocator,
-		)
-	}
-
 	defer {
 		for _, draw_stream in draw_stream_per_material_pass {
 			draw_stream_destroy(draw_stream)
 		}
+		defer delete(draw_stream_per_material_pass)
 	}
 
-	// Build the draw streams
+
+	// Create the draw stream for each material pass
+	for material_pass_ref in mesh_render_task_data.material_pass_refs {
+		draw_stream_per_material_pass[material_pass_ref] = draw_stream_create(
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+
+		material_pass := &g_resources.material_passes[get_material_pass_idx(material_pass_ref)]
+		draw_stream := &draw_stream_per_material_pass[material_pass_ref]
+
+		draw_stream_set_pipeline(draw_stream, material_pass.pipeline_ref)
+		draw_stream_set_bind_group(draw_stream, G_RENDERER.global_bind_group_ref, 1, ubo_offset)
+		draw_stream_set_bind_group(
+			draw_stream,
+			G_RENDERER.bindless_textures_array_bind_group_ref,
+			2,
+			{},
+		)
+	}
+
+	// Add meshes to the draw stream...
 	for i in 0 ..< g_resource_refs.mesh_instances.alive_count {
 
 		mesh_instance_ref := g_resource_refs.mesh_instances.alive_refs[i]
 
 		mesh_instance := &g_resources.mesh_instances[get_mesh_instance_idx(mesh_instance_ref)]
 		mesh := &g_resources.meshes[get_mesh_idx(mesh_instance.desc.mesh_ref)]
-		material_instance := &g_resources.material_instances[get_material_instance_idx(mesh_instance.desc.material_instance_ref)]
-		material_type := &g_resources.material_types[get_material_type_idx(material_instance.desc.material_type_ref)]
 
-		for material_pass_ref in material_type.desc.material_passes_refs {
+		// .. each submesh ..
+		for submesh, submesh_idx in mesh.desc.sub_meshes {
 
-			material_pass := &g_resources.material_passes[get_material_pass_idx(material_pass_ref)]
+			material_instance := &g_resources.material_instances[get_material_instance_idx(submesh.material_instance_ref)]
+			material_type := &g_resources.material_types[get_material_type_idx(material_instance.desc.material_type_ref)]
 
-			for submesh in mesh.desc.sub_meshes {
-				draw_stream_add_draw(
-					&draw_stream_per_material_pass[material_pass_ref],
-					p_pipeline_ref = material_pass.pipeline_ref,
-					p_vertex_buffers = {
-						OffsetBuffer{
-							buffer_ref = mesh_get_global_vertex_buffer_ref(),
-							offset = mesh.vertex_buffer_allocation.offset,
-						},
-					},
-					p_index_buffer = {
-						buffer_ref = mesh_get_global_index_buffer_ref(),
-						offset = mesh.index_buffer_allocation.offset +
-						size_of(u32) * submesh.data_offset,
-					},
-					p_bind_groups = {
-						{bind_group_ref = InvalidBindGroupRef},
-						{bind_group_ref = G_RENDERER.global_bind_group_ref},
-						{bind_group_ref = G_RENDERER.bindless_textures_array_bind_group_ref},
-					},
-					p_push_constants = []rawptr{
-						&material_instance.material_properties_buffer_entry_idx,
-					},
-					p_draw_count = submesh.data_count,
-					p_instance_count = 1,
+			//... once for each material pass this submesh should be drawn in
+			for material_pass_ref in material_type.desc.material_passes_refs {
+
+				material_pass := &g_resources.material_passes[get_material_pass_idx(material_pass_ref)]
+				draw_stream := &draw_stream_per_material_pass[material_pass_ref]
+
+				if submesh_idx == 0 {
+					draw_stream_set_vertex_buffer(
+						draw_stream,
+						mesh_get_global_vertex_buffer_ref(),
+						0,
+						mesh.vertex_buffer_allocation.offset,
+					)
+				}
+
+				index_buffer_offset :=
+					mesh.index_buffer_allocation.offset + size_of(u32) * submesh.data_offset
+
+				draw_stream_set_index_buffer(
+					draw_stream,
+					mesh_get_global_index_buffer_ref(),
+					.UInt32,
+					index_buffer_offset,
 				)
+				append(
+					&draw_stream.push_constants,
+					&material_instance.material_properties_buffer_entry_idx,
+				)
+				
+				draw_stream_set_draw_count(draw_stream, submesh.data_count)
+				draw_stream_set_instance_count(draw_stream, 1)
+				draw_stream_submit_draw(draw_stream)
 			}
+
 		}
 	}
 
-	// Dispatch the draw streams
-	for _, draw_stream in &draw_stream_per_material_pass {
-		draw_stream_dispatch(get_frame_cmd_buffer_ref(), &draw_stream)
+	// Begin render pass
+	render_target_bindings: []RenderTargetBinding = {
+		{target = &G_RENDERER.swap_image_render_targets[G_RENDERER.swap_img_idx]},
 	}
+
+	begin_info := RenderPassBeginInfo {
+		depth_attachment        = &G_VT.depth_buffer_attachment,
+		render_targets_bindings = render_target_bindings,
+	}
+
+	cmd_buff_ref := get_frame_cmd_buffer_ref()
+
+	begin_render_pass(mesh_render_task_data.render_pass_ref, cmd_buff_ref, &begin_info)
+
+	// Dispatch the draw streams
+	for material_pass_ref in draw_stream_per_material_pass {
+		draw_stream_dispatch(cmd_buff_ref, &draw_stream_per_material_pass[material_pass_ref])
+	}
+
+	end_render_pass(mesh_render_task_data.render_pass_ref, cmd_buff_ref)
 }
 
 //---------------------------------------------------------------------------//

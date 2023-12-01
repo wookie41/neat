@@ -18,6 +18,7 @@ G_VT: struct {
 	viking_room_mesh_ref:    MeshRef,
 }
 
+@(private = "file")
 UniformBufferObject :: struct {
 	model: glsl.mat4x4,
 	view:  glsl.mat4x4,
@@ -25,6 +26,14 @@ UniformBufferObject :: struct {
 }
 
 init_vt :: proc() -> bool {
+
+	material_instance_ref := allocate_material_instance_ref(common.create_name("FlightHelmetMat"))
+	material_instance := &g_resources.material_instances[get_material_instance_idx(material_instance_ref)]
+	material_instance.desc.material_type_ref = find_material_type("Default")
+	create_material_instance(material_instance_ref)
+
+	mesh_instance_ref := allocate_mesh_instance_ref(common.create_name("FlightHelmet"))
+	create_mesh_instance(mesh_instance_ref)
 
 	{
 		using G_RENDERER
@@ -110,62 +119,66 @@ vt_update :: proc(p_frame_idx: u32, p_image_idx: u32, p_cmd_buff_ref: CommandBuf
 	using G_VT
 
 	vt_update_uniform_buffer()
-	G_VT.viking_room_mesh_ref = find_mesh("FlightHelmet")
 
-	render_target_bindings[0].target = &G_RENDERER.swap_image_render_targets[p_image_idx]
+	return
+	// G_VT.viking_room_mesh_ref = find_mesh("FlightHelmet")
 
-	begin_info := RenderPassBeginInfo {
-		depth_attachment        = &depth_buffer_attachment,
-		render_targets_bindings = render_target_bindings,
-	}
+	// render_target_bindings[0].target = &G_RENDERER.swap_image_render_targets[p_image_idx]
 
-	begin_render_pass(render_pass_ref, p_cmd_buff_ref, &begin_info)
-	{
-		// Setup the draw stream
-		draw_stream_reset(&draw_stream)
+	// begin_info := RenderPassBeginInfo {
+	// 	depth_attachment        = &depth_buffer_attachment,
+	// 	render_targets_bindings = render_target_bindings,
+	// }
 
-		// Draw mesh
-		{
-			mesh := &g_resources.meshes[get_mesh_idx(G_VT.viking_room_mesh_ref)]
+	// begin_render_pass(render_pass_ref, p_cmd_buff_ref, &begin_info)
+	// {
+	// 	// Setup the draw stream
+	// 	draw_stream_reset(&draw_stream)
 
-			for submesh in mesh.desc.sub_meshes {
-				material_instance := &g_resources.material_instances[get_material_instance_idx(submesh.material_instance_ref)]
-				ubo_offset := []u32{0, size_of(UniformBufferObject) * get_frame_idx()}
+	// 	// Draw mesh
+	// 	{
+	// 		mesh := &g_resources.meshes[get_mesh_idx(G_VT.viking_room_mesh_ref)]
 
-				draw_stream_add_draw(
-					&draw_stream,
-					p_pipeline_ref = G_VT.pipeline_ref,
-					p_vertex_buffers = {
-						OffsetBuffer{
-							buffer_ref = mesh_get_global_vertex_buffer_ref(),
-							offset = mesh.vertex_buffer_allocation.offset,
-						},
-					},
-					p_index_buffer = {
-						buffer_ref = mesh_get_global_index_buffer_ref(),
-						offset = mesh.index_buffer_allocation.offset +
-						size_of(u32) * submesh.data_offset,
-					},
-					p_bind_groups = {
-						{bind_group_ref = InvalidBindGroupRef},
-						{
-							bind_group_ref = G_RENDERER.global_bind_group_ref,
-							dynamic_offsets = ubo_offset,
-						},
-						{bind_group_ref = G_RENDERER.bindless_textures_array_bind_group_ref},
-					},
-					p_push_constants = []rawptr{&material_instance.material_properties_buffer_entry_idx},
-					p_draw_count = submesh.data_count,
-					p_instance_count = 1,
-				)
-			}
-		}
+	// 		for submesh in mesh.desc.sub_meshes {
+	// 			material_instance := &g_resources.material_instances[get_material_instance_idx(submesh.material_instance_ref)]
+	// 			ubo_offset := []u32{0, size_of(UniformBufferObject) * get_frame_idx()}
 
-		// Dispatch the stream
-		draw_stream_dispatch(p_cmd_buff_ref, &G_VT.draw_stream)
+	// 			draw_stream_add_draw(
+	// 				&draw_stream,
+	// 				p_pipeline_ref = G_VT.pipeline_ref,
+	// 				p_vertex_buffers = {
+	// 					OffsetBuffer{
+	// 						buffer_ref = mesh_get_global_vertex_buffer_ref(),
+	// 						offset = mesh.vertex_buffer_allocation.offset,
+	// 					},
+	// 				},
+	// 				p_index_buffer = {
+	// 					buffer_ref = mesh_get_global_index_buffer_ref(),
+	// 					offset = mesh.index_buffer_allocation.offset +
+	// 					size_of(u32) * submesh.data_offset,
+	// 				},
+	// 				p_bind_groups = {
+	// 					{bind_group_ref = InvalidBindGroupRef},
+	// 					{
+	// 						bind_group_ref = G_RENDERER.global_bind_group_ref,
+	// 						dynamic_offsets = ubo_offset,
+	// 					},
+	// 					{bind_group_ref = G_RENDERER.bindless_textures_array_bind_group_ref},
+	// 				},
+	// 				p_push_constants = []rawptr{
+	// 					&material_instance.material_properties_buffer_entry_idx,
+	// 				},
+	// 				p_draw_count = submesh.data_count,
+	// 				p_instance_count = 1,
+	// 			)
+	// 		}
+	// 	}
 
-	}
-	end_render_pass(render_pass_ref, p_cmd_buff_ref)
+	// 	// Dispatch the stream
+	// 	//draw_stream_dispatch(p_cmd_buff_ref, &G_VT.draw_stream)
+
+	// }
+	// end_render_pass(render_pass_ref, p_cmd_buff_ref)
 }
 
 vt_create_uniform_buffer :: proc() {

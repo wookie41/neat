@@ -211,14 +211,12 @@ draw_stream_add_draw :: proc(
 
 //---------------------------------------------------------------------------//
 
-@(private = "file")
 draw_stream_set_pipeline :: proc(p_draw_stream: ^DrawStream, p_pipeline_ref: PipelineRef) {
 	draw_stream_write(p_draw_stream, .BindPipeline, p_pipeline_ref.ref)
 }
 
 //---------------------------------------------------------------------------//
 
-@(private = "file")
 draw_stream_set_vertex_buffer :: proc(
 	p_draw_stream: ^DrawStream,
 	p_buffer_ref: BufferRef,
@@ -230,7 +228,6 @@ draw_stream_set_vertex_buffer :: proc(
 
 //---------------------------------------------------------------------------//
 
-@(private = "file")
 draw_stream_set_index_buffer :: proc(
 	p_draw_stream: ^DrawStream,
 	p_buffer_ref: BufferRef,
@@ -252,7 +249,6 @@ draw_stream_set_index_buffer :: proc(
 
 //---------------------------------------------------------------------------//
 
-@(private = "file")
 draw_stream_set_bind_group :: proc(
 	p_draw_stream: ^DrawStream,
 	p_bind_group_ref: BindGroupRef,
@@ -265,14 +261,12 @@ draw_stream_set_bind_group :: proc(
 
 //---------------------------------------------------------------------------//
 
-@(private = "file")
 draw_stream_set_draw_count :: proc(p_draw_stream: ^DrawStream, p_draw_count: u32) {
 	draw_stream_write(p_draw_stream, .SetDrawCount, p_draw_count)
 }
 
 //---------------------------------------------------------------------------//
 
-@(private = "file")
 draw_stream_set_instance_count :: proc(p_draw_stream: ^DrawStream, p_instance_count: u32) {
 	draw_stream_write(p_draw_stream, .SetInstanceCount, p_instance_count)
 
@@ -280,14 +274,12 @@ draw_stream_set_instance_count :: proc(p_draw_stream: ^DrawStream, p_instance_co
 
 //---------------------------------------------------------------------------//
 
-@(private = "file")
 draw_stream_submit_draw :: proc(p_draw_stream: ^DrawStream) {
 	append(&p_draw_stream.encoded_draw_stream_data, u32(DrawStreamOp.SubmitDraw))
 }
 
 //---------------------------------------------------------------------------//
 
-@(private = "file")
 draw_stream_dispatch_bind_pipeline :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
 	pipeline_ref := PipelineRef {
 		ref = draw_stream_dispatch_read_next(p_draw_stream_dispatch),
@@ -298,7 +290,6 @@ draw_stream_dispatch_bind_pipeline :: proc(p_draw_stream_dispatch: ^DrawStreamDi
 
 //---------------------------------------------------------------------------//
 
-@(private = "file")
 draw_stream_dispatch_bind_vertex_buffer :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
 	vertex_buffer_ref := BufferRef {
 		ref = draw_stream_dispatch_read_next(p_draw_stream_dispatch),

@@ -15,13 +15,6 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	@(private = "file")
-	INTERNAL: struct {
-		swap_img_idx: u32,
-	}
-
-	//---------------------------------------------------------------------------//
-
 	@(private)
 	BackendInitOptions :: struct {
 		window: ^sdl.Window,
@@ -70,6 +63,7 @@ when USE_VULKAN_BACKEND {
 		vma_allocator:                     vma.Allocator,
 		misc_flags:                        BackendMiscFlags,
 		should_wait_on_transfer_semaphore: bool,
+		swap_img_idx:                      u32,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -601,13 +595,16 @@ when USE_VULKAN_BACKEND {
 
 @(private)
 backend_wait_for_frame_resources :: proc() {
+	frame_idx := get_frame_idx()
+
 	vk.WaitForFences(
 		G_RENDERER.device,
 		1,
-		&G_RENDERER.frame_fences[get_frame_idx()],
+		&G_RENDERER.frame_fences[frame_idx],
 		true,
 		max(u64),
 	)
+	vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx])
 
 	if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 		backend_buffer_wait_for_transfers()
@@ -616,12 +613,11 @@ backend_wait_for_frame_resources :: proc() {
 //---------------------------------------------------------------------------//
 
 @(private)
-backend_post_render :: proc(p_dt: f32) {
+backend_update :: proc(p_dt: f32) {
 
-	// Wait until frame resources will not be used anymore
 	frame_idx := get_frame_idx()
 
-	// Acquire the index of the image we'll present to
+	// Wait until frame resources will not be used anymore
 	// @TODO Move this after recording the command buffer to save some performance
 	acquire_result := vk.AcquireNextImageKHR(
 		G_RENDERER.device,
@@ -629,7 +625,7 @@ backend_post_render :: proc(p_dt: f32) {
 		c.UINT64_MAX,
 		G_RENDERER.image_available_semaphores[frame_idx],
 		0,
-		&INTERNAL.swap_img_idx,
+		&G_RENDERER.swap_img_idx,
 	)
 	// Check if we need to recreate the swapchain
 	should_recreate_swapchain := .WINDOW_RESIZED in G_RENDERER.misc_flags
@@ -646,15 +642,16 @@ backend_post_render :: proc(p_dt: f32) {
 		return
 	}
 
-	vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx])
-
-	// Reset the swap chain render target that we'll use this frame
-	G_RENDERER.swap_image_render_targets[INTERNAL.swap_img_idx].current_usage = .Undefined
-
 	// Render Vulkan tutorial
 	frame_cmd_buffer_ref := get_frame_cmd_buffer_ref()
-	backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(frame_cmd_buffer_ref)]
-	vt_update(frame_idx, INTERNAL.swap_img_idx, frame_cmd_buffer_ref)
+	vt_update(frame_idx, G_RENDERER.swap_img_idx, frame_cmd_buffer_ref)
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
+backend_post_render :: proc() {
+	backend_cmd_buff := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(get_frame_cmd_buffer_ref())]
 
 	// Transition the swapchain to present 
 	to_present_barrier := vk.ImageMemoryBarrier {
@@ -662,7 +659,7 @@ backend_post_render :: proc(p_dt: f32) {
 		srcAccessMask = {.COLOR_ATTACHMENT_WRITE},
 		oldLayout = .ATTACHMENT_OPTIMAL,
 		newLayout = .PRESENT_SRC_KHR,
-		image = G_RENDERER.swapchain_images[INTERNAL.swap_img_idx],
+		image = G_RENDERER.swapchain_images[G_RENDERER.swap_img_idx],
 		subresourceRange = {
 			aspectMask = {.COLOR},
 			baseArrayLayer = 0,
@@ -673,7 +670,7 @@ backend_post_render :: proc(p_dt: f32) {
 	}
 
 	vk.CmdPipelineBarrier(
-		backend_cmd_buffer.vk_cmd_buff,
+		backend_cmd_buff.vk_cmd_buff,
 		{.COLOR_ATTACHMENT_OUTPUT},
 		{.BOTTOM_OF_PIPE},
 		{},
@@ -686,31 +683,12 @@ backend_post_render :: proc(p_dt: f32) {
 	)
 }
 
-@(private)
-backend_submit_pre_render :: proc(p_cmd_buff_ref: CommandBufferRef) {
-	backend_cmd_buff := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
-	submit_info := vk.SubmitInfo {
-		sType              = .SUBMIT_INFO,
-		commandBufferCount = 1,
-		pCommandBuffers    = &backend_cmd_buff.vk_cmd_buff,
-	}
-	vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[get_frame_idx()])
-
-	// @TODO We could submit both transfer and graphcis queue here, 
-	// but everything in pre_render happends on graphcis queue right now
-	vk.QueueSubmit(
-		G_RENDERER.graphics_queue,
-		1,
-		&submit_info,
-		G_RENDERER.frame_fences[get_frame_idx()],
-	)
-}
-
+//---------------------------------------------------------------------------//
 
 @(private)
-backend_submit_current_frame :: proc(p_cmd_buff_ref: CommandBufferRef) {
+backend_submit_current_frame :: proc() {
 
-	backend_cmd_buff := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
+	backend_cmd_buff := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(get_frame_cmd_buffer_ref())]
 
 	// Submit
 	{
@@ -750,7 +728,7 @@ backend_submit_current_frame :: proc(p_cmd_buff_ref: CommandBufferRef) {
 			pWaitSemaphores    = &G_RENDERER.render_finished_semaphores[get_frame_idx()],
 			swapchainCount     = 1,
 			pSwapchains        = &G_RENDERER.swapchain,
-			pImageIndices      = &INTERNAL.swap_img_idx,
+			pImageIndices      = &G_RENDERER.swap_img_idx,
 		}
 
 		vk.QueuePresentKHR(G_RENDERER.present_queue, &present_info)

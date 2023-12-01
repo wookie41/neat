@@ -396,6 +396,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	init_material_passs() or_return
 	init_material_types() or_return
 	init_material_instances() or_return
+	init_mesh_instances() or_return
 
 	load_renderer_config()
 
@@ -417,6 +418,9 @@ update :: proc(p_dt: f32) {
 
 	begin_command_buffer(cmd_buff_ref)
 
+	// Reset the swap chain render target that we'll use this frame
+	G_RENDERER.swap_image_render_targets[G_RENDERER.swap_img_idx].current_usage = .Undefined
+
 	buffer_upload_start_async_cmd_buffer()
 	execute_queued_texture_copies()
 	run_buffer_upload_requests()
@@ -430,15 +434,17 @@ update :: proc(p_dt: f32) {
 	image_upload_begin_frame()
 	material_instance_update_dirty_materials()
 
+	backend_update(p_dt)
+
 	render_tasks_update(p_dt)
 
-	backend_post_render(p_dt)
+	backend_post_render()
 
 	buffer_upload_pre_frame_submit()
 
 	end_command_buffer(cmd_buff_ref)
 
-	submit_current_frame(cmd_buff_ref)
+	submit_current_frame()
 
 	advance_frame_idx()
 
@@ -468,19 +474,11 @@ advance_frame_idx :: proc() {
 //---------------------------------------------------------------------------//
 
 @(private)
-submit_pre_render :: proc(p_cmd_buff_ref: CommandBufferRef) {
-	backend_submit_pre_render(p_cmd_buff_ref)
+submit_current_frame :: proc() {
+	backend_submit_current_frame()
 }
 
 //---------------------------------------------------------------------------//
-
-@(private)
-submit_current_frame :: proc(p_cmd_buff_ref: CommandBufferRef) {
-	backend_submit_current_frame(p_cmd_buff_ref)
-}
-
-//---------------------------------------------------------------------------//
-
 
 deinit :: proc() {
 	// Setup renderer context

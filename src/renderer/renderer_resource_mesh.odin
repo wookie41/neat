@@ -63,19 +63,19 @@ SubMesh :: struct {
 //---------------------------------------------------------------------------//
 
 MeshDesc :: struct {
-	name:       common.Name,
+	name:                  common.Name,
 	// Misc flags, telling is if mesh is using indexed draw or not etc.
-	flags:      MeshFlags,
+	flags:                 MeshFlags,
 	// Flags specyfing which features the mesh has (position, normals, UVs etc.)
-	features:   MeshFeatureFlags,
+	features:              MeshFeatureFlags,
 	// List of submeshes that actually define the ranges in vertex/index data
-	sub_meshes: []SubMesh,
+	sub_meshes:            []SubMesh,
 	// Mesh data
-	indices:    []INDEX_DATA_TYPE,
-	position:   []glsl.vec3,
-	uv:         []glsl.vec2,
-	normal:     []glsl.vec3,
-	tangent:    []glsl.vec3,
+	indices:               []INDEX_DATA_TYPE,
+	position:              []glsl.vec3,
+	uv:                    []glsl.vec2,
+	normal:                []glsl.vec3,
+	tangent:               []glsl.vec3,
 }
 
 //---------------------------------------------------------------------------//

@@ -233,7 +233,7 @@ destroy_render_pass :: proc(p_ref: RenderPassRef) {
 }
 
 @(private)
-begin_render_pass :: #force_inline proc(
+begin_render_pass :: proc(
 	p_render_pass_ref: RenderPassRef,
 	p_cmd_buff_ref: CommandBufferRef,
 	p_begin_info: ^RenderPassBeginInfo,
