@@ -9,7 +9,7 @@ import "../common"
 G_VT: struct {
 	ubo_ref:                 BufferRef,
 	start_time:              time.Time,
-	depth_buffer_ref:        ImageRef,
+
 	render_pass_ref:         RenderPassRef,
 	pipeline_ref:            PipelineRef,
 	depth_buffer_attachment: DepthAttachment,
@@ -41,65 +41,11 @@ init_vt :: proc() -> bool {
 
 		start_time = time.now()
 
-		// Create depth buffer
-		{
-			depth_buffer_desc := ImageDesc {
-				type = .OneDimensional,
-				format = .Depth32SFloat,
-				mip_count = 1,
-				data_per_mip = nil,
-				sample_count_flags = {._1},
-				dimensions = {swap_extent.width, swap_extent.height, 1},
-			}
-
-
-			depth_buffer_ref = create_depth_buffer(
-				common.create_name("DepthBuffer"),
-				depth_buffer_desc,
-			)
-
-			depth_buffer_attachment = DepthAttachment {
-				image = depth_buffer_ref,
-			}
-		}
-
 		render_target_bindings = make(
 			[]RenderTargetBinding,
 			1,
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
-
-		// Create render pass
-		{
-			swap_image_format :=
-				g_resources.images[get_image_idx(G_RENDERER.swap_image_refs[0])].desc.format
-			depth_image := &g_resources.images[get_image_idx(depth_buffer_ref)]
-
-			render_pass_ref = allocate_render_pass_ref(
-				common.create_name("Vulkan tutorial Render Pass"),
-			)
-			render_pass := &g_resources.render_passes[get_render_pass_idx(render_pass_ref)]
-			render_pass.desc = RenderPassDesc {
-				resolution = .Full,
-				layout = {
-					render_target_blend_types = {.Default},
-					depth_format = depth_image.desc.format,
-				},
-				primitive_type = .TriangleList,
-				resterizer_type = .Fill,
-				multisampling_type = ._1,
-				depth_stencil_type = .DepthTestWrite,
-			}
-
-			render_pass.desc.layout.render_target_formats = make(
-				[]ImageFormat,
-				1,
-				G_RENDERER_ALLOCATORS.resource_allocator,
-			)
-
-			render_pass.desc.layout.render_target_formats[0] = swap_image_format
-			create_render_pass(render_pass_ref)
-		}
 
 		vt_create_uniform_buffer()
 

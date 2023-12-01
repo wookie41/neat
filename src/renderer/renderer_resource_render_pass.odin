@@ -11,22 +11,6 @@ import "core:os"
 
 //---------------------------------------------------------------------------//
 
-RenderPassResolution :: enum u8 {
-	Full,
-	Half,
-	Quarter,
-}
-
-//---------------------------------------------------------------------------//
-
-G_RESOLUTION_NAME_MAPPING := map[string]RenderPassResolution {
-	"Full"    = .Full,
-	"Half"    = .Half,
-	"Quarter" = .Quarter,
-}
-
-//---------------------------------------------------------------------------//
-
 G_RASTERIZER_NAME_MAPPING := map[string]RasterizerType {
 	"Fill" = .Fill,
 }
@@ -57,7 +41,7 @@ RenderPassDesc :: struct {
 	primitive_type:     PrimitiveType,
 	resterizer_type:    RasterizerType,
 	multisampling_type: MultisamplingType,
-	resolution:         RenderPassResolution,
+	resolution:         Resolution,
 }
 
 //---------------------------------------------------------------------------//

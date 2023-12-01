@@ -1,4 +1,7 @@
-<RendererConfig>
+<RendererConfig renderWidth="1920" renderHeight="1080">
+    <Images>
+        <DepthBuffer format="Depth32SFloat" resolution="full" sampled=""/>
+    </Images>
     <RenderTasks>
         <Mesh name="Mesh" renderPass="TestRenderPass">
             <MaterialPass name="TestMaterialPass" />

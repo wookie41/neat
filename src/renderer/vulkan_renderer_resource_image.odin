@@ -193,8 +193,9 @@ when USE_VULKAN_BACKEND {
 
 		vk_name := strings.clone_to_cstring(
 			common.get_string(image.desc.name),
-			G_RENDERER_ALLOCATORS.names_allocator,
+			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
+		defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		name_info := vk.DebugUtilsObjectNameInfoEXT {
 			sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
@@ -237,8 +238,10 @@ when USE_VULKAN_BACKEND {
 
 			vk_name := strings.clone_to_cstring(
 				common.get_string(image.desc.name),
-				G_RENDERER_ALLOCATORS.names_allocator,
+				G_RENDERER_ALLOCATORS.temp_allocator,
 			)
+			defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
+
 
 			name_info := vk.DebugUtilsObjectNameInfoEXT {
 				sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
@@ -399,34 +402,54 @@ when USE_VULKAN_BACKEND {
 
 
 	@(private)
-	backend_create_depth_buffer :: proc(
-		p_name: common.Name,
-		p_depth_buffer_desc: ImageDesc,
-		p_image_ref: ImageRef,
-	) -> bool {
+	backend_create_image :: proc(p_image_ref: ImageRef) -> bool {
 
 		image_idx := get_image_idx(p_image_ref)
-		depth_image_backend := &g_resources.backend_images[image_idx]
+		image := &g_resources.images[image_idx]
+		image_backend := &g_resources.backend_images[image_idx]
 
-		assert(
-			p_depth_buffer_desc.format > .DepthFormatsStart &&
-			p_depth_buffer_desc.format < .DepthFormatsEnd,
-		)
+		image_type := vk.ImageType.D1
+		#partial switch image.desc.type {
+		case .TwoDimensional:
+			image_type = .D2
+		case .ThreeDimensional:
+			image_type = .D3
+		}
 
-		depth_image_create_info := vk.ImageCreateInfo {
+		usage := vk.ImageUsageFlags{}
+		aspect_mask := vk.ImageAspectFlags{}
+
+		if image.desc.format > .DepthFormatsStart && image.desc.format < .DepthFormatsEnd {
+			usage += {.DEPTH_STENCIL_ATTACHMENT}
+			aspect_mask += {.DEPTH}
+
+			if image.desc.format > .DepthStencilFormatsStart &&
+			   image.desc.format < .DepthStencilFormatsEnd {
+				aspect_mask += {.STENCIL}
+			}
+
+		} else {
+			aspect_mask += {.COLOR}
+			usage += {.COLOR_ATTACHMENT}
+		}
+
+		if .Sampled in image.desc.flags {
+			usage += {.SAMPLED}
+		}
+		if .Storage in image.desc.flags {
+			usage += {.STORAGE}
+		}
+
+		image_create_info := vk.ImageCreateInfo {
 			sType = .IMAGE_CREATE_INFO,
-			imageType = .D2,
-			extent = {
-				p_depth_buffer_desc.dimensions.x,
-				p_depth_buffer_desc.dimensions.y,
-				p_depth_buffer_desc.dimensions.z,
-			},
+			imageType = image_type,
+			extent = {image.desc.dimensions.x, image.desc.dimensions.y, image.desc.dimensions.z},
 			mipLevels = 1,
 			arrayLayers = 1,
-			format = G_IMAGE_FORMAT_MAPPING[p_depth_buffer_desc.format],
+			format = G_IMAGE_FORMAT_MAPPING[image.desc.format],
 			tiling = .OPTIMAL,
 			initialLayout = .UNDEFINED,
-			usage = {.DEPTH_STENCIL_ATTACHMENT},
+			usage = usage,
 			sharingMode = .EXCLUSIVE,
 			samples = {._1},
 		}
@@ -435,46 +458,56 @@ when USE_VULKAN_BACKEND {
 			usage = .AUTO,
 		}
 
-		if vma.create_image(
-			   G_RENDERER.vma_allocator,
-			   &depth_image_create_info,
-			   &alloc_create_info,
-			   &depth_image_backend.vk_image,
-			   &depth_image_backend.allocation,
-			   nil,
-		   ) !=
-		   .SUCCESS {
-			log.warn("Failed to create depth buffer")
+		create_result := vma.create_image(
+			G_RENDERER.vma_allocator,
+			&image_create_info,
+			&alloc_create_info,
+			&image_backend.vk_image,
+			&image_backend.allocation,
+			nil,
+		)
+		if create_result != .SUCCESS {
 			return false
 		}
 
 		vk_name := strings.clone_to_cstring(
-			common.get_string(p_name),
-			G_RENDERER_ALLOCATORS.names_allocator,
+			common.get_string(image.desc.name),
+			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
+		defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		name_info := vk.DebugUtilsObjectNameInfoEXT {
 			sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-			objectHandle = u64(depth_image_backend.vk_image),
+			objectHandle = u64(image_backend.vk_image),
 			objectType   = .IMAGE,
 			pObjectName  = vk_name,
 		}
 
 		vk.SetDebugUtilsObjectNameEXT(G_RENDERER.device, &name_info)
 
+		view_type := vk.ImageViewType{}
+		#partial switch image_type {
+		case .D1:
+			view_type = .D1
+		case .D2:
+			view_type = .D2
+		case .D3:
+			view_type = .D3
+		}
+
 		view_create_info := vk.ImageViewCreateInfo {
 			sType = .IMAGE_VIEW_CREATE_INFO,
-			image = depth_image_backend.vk_image,
-			viewType = .D2,
-			format = G_IMAGE_FORMAT_MAPPING[p_depth_buffer_desc.format],
-			subresourceRange = {aspectMask = {.DEPTH}, levelCount = 1, layerCount = 1},
+			image = image_backend.vk_image,
+			viewType = view_type,
+			format = G_IMAGE_FORMAT_MAPPING[image.desc.format],
+			subresourceRange = {aspectMask = aspect_mask, levelCount = 1, layerCount = 1},
 		}
 
 		if vk.CreateImageView(
 			   G_RENDERER.device,
 			   &view_create_info,
 			   nil,
-			   &depth_image_backend.all_mips_vk_view,
+			   &image_backend.all_mips_vk_view,
 		   ) !=
 		   .SUCCESS {
 			log.warn("Failed to create image view")
@@ -483,12 +516,14 @@ when USE_VULKAN_BACKEND {
 
 		name_info = vk.DebugUtilsObjectNameInfoEXT {
 			sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-			objectHandle = u64(depth_image_backend.all_mips_vk_view),
+			objectHandle = u64(image_backend.all_mips_vk_view),
 			objectType   = .IMAGE_VIEW,
 			pObjectName  = vk_name,
 		}
 
 		vk.SetDebugUtilsObjectNameEXT(G_RENDERER.device, &name_info)
+
+		append(&INTERNAL.bindless_array_updates, p_image_ref)
 
 		return true
 	}

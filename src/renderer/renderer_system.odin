@@ -4,7 +4,9 @@ package renderer
 
 import "core:encoding/xml"
 import "core:log"
+import "core:math/linalg/glsl"
 import "core:mem"
+import "core:strconv"
 
 import "../common"
 
@@ -99,8 +101,17 @@ GPUDeviceFlags :: distinct bit_set[GPUDeviceFlagsBits;u8]
 //---------------------------------------------------------------------------//
 
 @(private)
+RendererConfig :: struct {
+	render_size: glsl.uvec2,
+}
+
+//---------------------------------------------------------------------------//
+
+
+@(private)
 G_RENDERER: struct {
 	using backend_state:                           BackendRendererState,
+	config:                                        RendererConfig,
 	num_frames_in_flight:                          u32,
 	primary_cmd_buffer_ref:                        []CommandBufferRef,
 	queued_textures_copies:                        [dynamic]TextureCopy,
@@ -157,12 +168,6 @@ RenderTaskEntry :: struct {
 	name:            string,
 	config:          map[string]string,
 	material_passes: []string,
-}
-//---------------------------------------------------------------------------//
-
-@(private = "file")
-RendererConfig :: struct {
-	render_tasks: []RenderTaskEntry `json:"renderTasks"`,
 }
 
 //---------------------------------------------------------------------------//
@@ -549,20 +554,170 @@ load_renderer_config :: proc() -> bool {
 		return false
 	}
 
-	render_tasks_id, render_tasks_found := xml.find_child_by_ident(doc, 0, "RenderTasks")
+	render_width, render_width_found := xml.find_attribute_val_by_key(doc, 0, "renderWidth")
+	render_height, render_height_found := xml.find_attribute_val_by_key(doc, 0, "renderHeight")
+
+	if render_width_found == false || render_height_found == false {
+		log.error("Render width or height not found\n")
+		return false
+	}
+
+	x, _ := strconv.parse_uint(render_width, 10)
+	y, _ := strconv.parse_uint(render_height, 10)
+
+	G_RENDERER.config.render_size.x = u32(x)
+	G_RENDERER.config.render_size.y = u32(y)
+
+	renderer_config_create_images(doc)
+	renderer_config_load_render_tasks(doc)
+
+	return true
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+renderer_config_create_images :: proc(p_doc: ^xml.Document) -> bool {
+	images_id, images_found := xml.find_child_by_ident(p_doc, 0, "Images")
+	if images_found == false {
+		return true
+	}
+
+	images_element_ids := p_doc.elements[images_id]
+	for image_element_id in images_element_ids.value {
+		switch element_id in image_element_id {
+		case string:
+			continue
+		case xml.Element_ID:
+			child := p_doc.elements[element_id]
+
+			if child.kind != .Element {continue} 	// Skip comments
+
+			image_name := common.create_name(child.ident)
+
+			image_format_name, format_found := xml.find_attribute_val_by_key(
+				p_doc,
+				element_id,
+				"format",
+			)
+			if format_found == false {
+				log.errorf("Failed to create image '%s' - no format specified\n", child.ident)
+				continue
+			}
+
+			if (image_format_name in G_IMAGE_FORMAT_NAME_MAPPING) == false {
+				log.errorf(
+					"Failed to create image '%s' - unsupported format %s\n",
+					child.ident,
+					image_format_name,
+				)
+				continue
+			}
+
+			image_resolution_name, resolution_found := xml.find_attribute_val_by_key(
+				p_doc,
+				element_id,
+				"resolution",
+			)
+
+			image_dimensions := glsl.uvec3{0, 0, 1}
+			image_type := ImageType.OneDimensional
+
+			if resolution_found {
+				switch G_RESOLUTION_NAME_MAPPING[image_resolution_name] {
+				case .Full:
+					image_dimensions.x = G_RENDERER.config.render_size.x
+					image_dimensions.y = G_RENDERER.config.render_size.y
+				case .Half:
+					image_dimensions.x = G_RENDERER.config.render_size.x / 2
+					image_dimensions.y = G_RENDERER.config.render_size.y / 2
+				case .Quarter:
+					image_dimensions.x = G_RENDERER.config.render_size.x / 4
+					image_dimensions.y = G_RENDERER.config.render_size.y / 4
+				}
+			} else {
+
+				width, width_found := xml.find_attribute_val_by_key(p_doc, element_id, "width")
+				height, height_found := xml.find_attribute_val_by_key(p_doc, element_id, "height")
+				depth, depth_found := xml.find_attribute_val_by_key(p_doc, element_id, "depth")
+
+				if width_found == false && height_found == false {
+					log.errorf(
+						"Failed to create image '%s' - couldn't determine dimensions",
+						child.ident,
+						image_format_name,
+					)
+					continue
+				}
+
+
+				if width_found {
+					x, _ := strconv.parse_uint(width, 10)
+					image_dimensions.x = u32(x)
+				}
+
+				if height_found {
+					y, _ := strconv.parse_uint(height, 10)
+					image_dimensions.y = u32(y)
+					image_type = .TwoDimensional
+				}
+
+				if depth_found {
+					z, _ := strconv.parse_uint(depth, 10)
+					image_dimensions.z = u32(z)
+					image_type = .ThreeDimensional
+				}
+			}
+
+			_, is_storage_image := xml.find_attribute_val_by_key(p_doc, element_id, "storage")
+			_, is_sampled_image := xml.find_attribute_val_by_key(p_doc, element_id, "sampled")
+
+			image_flags := ImageDescFlags{}
+			if is_storage_image {
+				image_flags += {.Storage}
+			}
+			if is_sampled_image {
+				image_flags += {.Sampled}
+			}
+
+			image_ref := allocate_image_ref(image_name)
+			image_idx := get_image_idx(image_ref)
+			image := &g_resources.images[image_idx]
+
+			image.desc.dimensions = image_dimensions
+			image.desc.flags = image_flags
+			image.desc.type = image_type
+			image.desc.format = G_IMAGE_FORMAT_NAME_MAPPING[image_format_name]
+
+			if create_image(image_ref) == false {
+				log.errorf("Failed to create image '%s'\n", child.ident)
+				continue
+			}
+
+			log.infof("Image '%s' created\n", child.ident)
+		}
+	}
+
+	return true
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+renderer_config_load_render_tasks :: proc(p_doc: ^xml.Document) -> bool {
+	render_tasks_id, render_tasks_found := xml.find_child_by_ident(p_doc, 0, "RenderTasks")
 	if render_tasks_found == false {
 		log.fatal("No render tasks defined in the renderer config\n")
 		return false
 	}
 
-	render_tasks := doc.elements[render_tasks_id]
-
+	render_tasks := p_doc.elements[render_tasks_id]
 	for render_task_id in render_tasks.value {
 		switch element_id in render_task_id {
 		case string:
 			continue
 		case xml.Element_ID:
-			child := doc.elements[element_id]
+			child := p_doc.elements[element_id]
 
 			if child.kind != .Element {continue} 	// Skip comments
 
@@ -572,7 +727,11 @@ load_renderer_config :: proc() -> bool {
 				continue
 			}
 
-			render_task_name, name_found := xml.find_attribute_val_by_key(doc, element_id, "name")
+			render_task_name, name_found := xml.find_attribute_val_by_key(
+				p_doc,
+				element_id,
+				"name",
+			)
 			if name_found == false {
 				log.errorf("Render task '%s' has no name specified\n", child.ident)
 				continue
@@ -584,7 +743,7 @@ load_renderer_config :: proc() -> bool {
 
 
 			render_task_config := RenderTaskConfig {
-				doc                    = doc,
+				doc                    = p_doc,
 				render_task_element_id = element_id,
 			}
 			if create_render_task(render_task_ref, &render_task_config) == false {

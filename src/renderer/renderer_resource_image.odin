@@ -52,6 +52,23 @@ ImageType :: enum u8 {
 //---------------------------------------------------------------------------//
 
 @(private)
+G_RESOLUTION_NAME_MAPPING := map[string]Resolution {
+	"Full"    = .Full,
+	"Half"    = .Half,
+	"Quarter" = .Quarter,
+}
+
+//---------------------------------------------------------------------------//
+
+Resolution :: enum u8 {
+	Full,
+	Half,
+	Quarter,
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
 G_IMAGE_FORMAT_NAME_MAPPING := map[string]ImageFormat {
 	"Depth32SFloat" = .Depth32SFloat,
 	"R32UInt"       = .R32UInt,
@@ -137,6 +154,7 @@ ImageFormat :: enum u16 {
 
 ImageDescFlagBits :: enum u8 {
 	Storage,
+	Sampled,
 	SwapImage,
 }
 ImageDescFlags :: distinct bit_set[ImageDescFlagBits;u8]
@@ -247,7 +265,7 @@ allocate_image_ref :: proc(p_name: common.Name) -> ImageRef {
 	return ref
 }
 
-/** Creates an image that can later be used as a sampled image inside a shader */
+/** Helper method to create image that can later be used as a sampled image inside a shader */
 create_texture_image :: proc(p_ref: ImageRef) -> bool {
 
 	image := &g_resources.images[get_image_idx(p_ref)]
@@ -265,6 +283,7 @@ create_texture_image :: proc(p_ref: ImageRef) -> bool {
 	)
 
 	if backend_create_texture_image(p_ref) == false {
+		append(&INTERNAL.free_bindless_indices, image.bindless_idx)
 		common.ref_free(&G_IMAGE_REF_ARRAY, p_ref)
 		return false
 	}
@@ -272,17 +291,25 @@ create_texture_image :: proc(p_ref: ImageRef) -> bool {
 	return true
 }
 
-create_depth_buffer :: proc(p_name: common.Name, p_depth_buffer_desc: ImageDesc) -> ImageRef {
-	ref := allocate_image_ref(p_name)
-	image := &g_resources.images[get_image_idx(ref)]
-	image.desc = p_depth_buffer_desc
+create_image :: proc(p_image_ref: ImageRef) -> bool {
 
-	if backend_create_depth_buffer(p_name, p_depth_buffer_desc, ref) == false {
-		common.ref_free(&G_IMAGE_REF_ARRAY, ref)
-		return InvalidImageRef
+	image := &g_resources.images[get_image_idx(p_image_ref)]
+
+	if len(INTERNAL.free_bindless_indices) > 0 {
+		image.bindless_idx = pop(&INTERNAL.free_bindless_indices)
+	} else {
+		image.bindless_idx = INTERNAL.next_bindless_idx
+		INTERNAL.next_bindless_idx += 1
 	}
 
-	return ref
+	if backend_create_image(p_image_ref) == false {
+		append(&INTERNAL.free_bindless_indices, image.bindless_idx)
+
+		common.ref_free(&G_IMAGE_REF_ARRAY, p_image_ref)
+		return false
+	}
+
+	return true
 }
 
 //---------------------------------------------------------------------------//

@@ -236,7 +236,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 					&draw_stream.push_constants,
 					&material_instance.material_properties_buffer_entry_idx,
 				)
-				
+
 				draw_stream_set_draw_count(draw_stream, submesh.data_count)
 				draw_stream_set_instance_count(draw_stream, 1)
 				draw_stream_submit_draw(draw_stream)
@@ -250,8 +250,13 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 		{target = &G_RENDERER.swap_image_render_targets[G_RENDERER.swap_img_idx]},
 	}
 
+	depth_buffer_attachment := DepthAttachment {
+		image = find_image("DepthBuffer"),
+		usage = .Attachment,
+	}
+
 	begin_info := RenderPassBeginInfo {
-		depth_attachment        = &G_VT.depth_buffer_attachment,
+		depth_attachment        = &depth_buffer_attachment,
 		render_targets_bindings = render_target_bindings,
 	}
 
