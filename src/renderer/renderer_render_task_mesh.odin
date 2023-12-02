@@ -12,8 +12,9 @@ import "core:math/linalg/glsl"
 
 @(private = "file")
 MeshRenderTaskData :: struct {
-	render_pass_ref:    RenderPassRef,
-	material_pass_refs: []MaterialPassRef,
+	render_pass_ref:       RenderPassRef,
+	material_pass_refs:    []MaterialPassRef,
+	render_pass_interface: RenderPassInterface,
 }
 
 //---------------------------------------------------------------------------//
@@ -33,7 +34,16 @@ mesh_render_task_init :: proc(p_render_task_functions: ^RenderTaskFunctions) {
 create_instance :: proc(
 	p_render_task_ref: RenderTaskRef,
 	p_render_task_config: ^RenderTaskConfig,
-) -> bool {
+) -> (
+	res: bool,
+) {
+	render_pass_interface: RenderPassInterface
+	render_task_setup_render_pass_interface(p_render_task_config, &render_pass_interface)
+
+	defer if res == false {
+		delete(render_pass_interface.image_inputs, G_RENDERER_ALLOCATORS.resource_allocator)
+		delete(render_pass_interface.image_outputs, G_RENDERER_ALLOCATORS.resource_allocator)
+	}
 
 	mesh_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
 
@@ -116,6 +126,7 @@ create_instance :: proc(
 	}
 
 	mesh_render_task.data_ptr = rawptr(mesh_render_task_data)
+	mesh_render_task_data.render_pass_interface = render_pass_interface
 
 	return true
 }
@@ -128,6 +139,18 @@ destroy_instance :: proc(p_render_task_ref: RenderTaskRef) {
 	mesh_render_task_data := (^MeshRenderTaskData)(mesh_render_task.data_ptr)
 	if mesh_render_task_data != nil {
 		delete(mesh_render_task_data.material_pass_refs, G_RENDERER_ALLOCATORS.resource_allocator)
+	}
+	if mesh_render_task_data.render_pass_interface.image_inputs != nil {
+		delete(
+			mesh_render_task_data.render_pass_interface.image_inputs,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
+	}
+	if mesh_render_task_data.render_pass_interface.image_outputs != nil {
+		delete(
+			mesh_render_task_data.render_pass_interface.image_outputs,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
 	}
 }
 
@@ -246,23 +269,12 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 	}
 
 	// Begin render pass
-	render_target_bindings: []RenderTargetBinding = {
-		{target = &G_RENDERER.swap_image_render_targets[G_RENDERER.swap_img_idx]},
-	}
-
-	depth_buffer_attachment := DepthAttachment {
-		image = find_image("DepthBuffer"),
-		usage = .Attachment,
-	}
-
-	begin_info := RenderPassBeginInfo {
-		depth_attachment        = &depth_buffer_attachment,
-		render_targets_bindings = render_target_bindings,
-	}
-
+	render_task_begin_render_pass(
+		mesh_render_task_data.render_pass_ref,
+		&mesh_render_task_data.render_pass_interface,
+	)
 	cmd_buff_ref := get_frame_cmd_buffer_ref()
 
-	begin_render_pass(mesh_render_task_data.render_pass_ref, cmd_buff_ref, &begin_info)
 
 	// Dispatch the draw streams
 	for material_pass_ref in draw_stream_per_material_pass {

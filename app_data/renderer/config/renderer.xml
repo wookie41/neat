@@ -1,9 +1,11 @@
 <RendererConfig renderWidth="1920" renderHeight="1080">
     <Images>
-        <DepthBuffer format="Depth32SFloat" resolution="full" sampled=""/>
+        <DepthBuffer format="Depth32SFloat" resolution="full" sampled="" />
     </Images>
     <RenderTasks>
         <Mesh name="Mesh" renderPass="TestRenderPass">
+            <OutputImage name="SwapImage" clear="0, 0, 0, 0"/>
+            <OutputImage name="DepthBuffer" clear="1"/>
             <MaterialPass name="TestMaterialPass" />
         </Mesh>
     </RenderTasks>

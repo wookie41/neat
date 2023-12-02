@@ -76,56 +76,49 @@ G_RENDER_PASS_REF_ARRAY: common.RefArray(RenderPassResource)
 
 //---------------------------------------------------------------------------//
 
-ColorAttachmentInfoFlagBits :: enum u8 {
+RenderPassImageInputFlagBits :: enum u8 {
+	AddressSubresource,
+	Storage,
+}
+
+RenderPassImageInputFlags :: distinct bit_set[RenderPassImageInputFlagBits;u8]
+
+//---------------------------------------------------------------------------//
+
+RenderPassImageInput :: struct {
+	image_ref: ImageRef,
+	flags:     RenderPassImageInputFlags,
+	mip:       u32,
+}
+
+//---------------------------------------------------------------------------//
+
+RenderPassImageOutputFlagBits :: enum u8 {
 	Clear,
 }
 
-ColorAttachmentFlags :: distinct bit_set[ColorAttachmentInfoFlagBits;u8]
+RenderPassImageOutputFlags :: distinct bit_set[RenderPassImageOutputFlagBits;u8]
 
 //---------------------------------------------------------------------------//
 
-RenderTargetUsage :: enum u8 {
-	Undefined,
-	SampledImage,
-	Attachment,
+RenderPassImageOutput :: struct {
+	image_ref:   ImageRef,
+	flags:       RenderPassImageOutputFlags,
+	mip:         u32,
+	clear_color: glsl.vec4,
 }
 
 //---------------------------------------------------------------------------//
 
-RenderTargetFlagBits :: enum u8 {
-	Clear,
-}
-
-RenderTargetFlags :: distinct bit_set[RenderTargetFlagBits;u8]
-
-//---------------------------------------------------------------------------//
-
-RenderTarget :: struct {
-	clear_value:   glsl.vec4,
-	image_ref:     ImageRef,
-	image_mip:     i16,
-	current_usage: RenderTargetUsage,
-	flags:         RenderTargetFlags,
-}
-
-//---------------------------------------------------------------------------//
-
-DepthAttachment :: struct {
-	image: ImageRef,
-	usage: RenderTargetUsage,
-}
-
-//---------------------------------------------------------------------------//
-
-RenderTargetBinding :: struct {
-	target: ^RenderTarget,
+RenderPassInterface :: struct {
+	image_inputs:  []RenderPassImageInput,
+	image_outputs: []RenderPassImageOutput,
 }
 
 //---------------------------------------------------------------------------//
 
 RenderPassBeginInfo :: struct {
-	render_targets_bindings: []RenderTargetBinding,
-	depth_attachment:        ^DepthAttachment,
+	interface: ^RenderPassInterface,
 }
 
 //---------------------------------------------------------------------------//

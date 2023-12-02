@@ -174,6 +174,15 @@ ImageSampleCountFlags :: distinct bit_set[ImageSampleFlagBits;u8]
 
 //---------------------------------------------------------------------------//
 
+ImageUsage :: enum u8 {
+	Undefined,
+	SampledImage,
+	General,
+	RenderTarget,
+}
+
+//---------------------------------------------------------------------------//
+
 ImageDesc :: struct {
 	name:               common.Name,
 	type:               ImageType,

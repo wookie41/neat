@@ -23,9 +23,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_create_render_pass :: proc(
-		p_ref: RenderPassRef,
-	) -> bool {
+	backend_create_render_pass :: proc(p_ref: RenderPassRef) -> bool {
 		return true
 	}
 
@@ -51,175 +49,259 @@ when USE_VULKAN_BACKEND {
 
 		render_pass.flags += {.IsActive}
 
+		image_input_barriers := make(
+			[]vk.ImageMemoryBarrier,
+			len(p_begin_info.interface.image_inputs),
+			G_RENDERER_ALLOCATORS.temp_allocator,
+		)
+		defer delete(image_input_barriers, G_RENDERER_ALLOCATORS.temp_allocator)
+
+		image_input_barriers_count := 0
+
+		// Prepare barriers for image inputs
+		for input in p_begin_info.interface.image_inputs {
+
+			image_idx := get_image_idx(input.image_ref)
+			image := &g_resources.images[image_idx]
+
+			input_usage := ImageUsage.SampledImage
+			new_layout := vk.ImageLayout.ATTACHMENT_OPTIMAL
+			dst_access_mask := vk.AccessFlags{.SHADER_READ}
+
+			if .Storage in input.flags {
+				dst_access_mask += {.SHADER_WRITE}
+				new_layout = vk.ImageLayout.GENERAL
+				input_usage = ImageUsage.General
+			} else if image.desc.format > .DepthFormatsStart &&
+			   image.desc.format < .DepthFormatsEnd {
+
+				if image.desc.format > .DepthStencilFormatsStart &&
+				   image.desc.format < .DepthStencilFormatsEnd {
+					new_layout = vk.ImageLayout.DEPTH_STENCIL_READ_ONLY_OPTIMAL
+				}
+				new_layout = vk.ImageLayout.DEPTH_READ_ONLY_OPTIMAL
+			}
+
+			image_backend := &g_resources.backend_images[image_idx]
+
+			old_layout := image_backend.vk_layout_per_mip[0]
+			mip_count := image.desc.mip_count
+			mip: u32 = 0
+
+			if .AddressSubresource in input.flags {
+				mip = input.mip
+				old_layout = image_backend.vk_layout_per_mip[mip]
+				mip_count = 1
+			}
+
+			// Check if this image needs to be transitioned
+			if old_layout == new_layout {
+				continue
+			}
+
+
+			image_input_barriers[image_input_barriers_count] = vk.ImageMemoryBarrier {
+				sType = .IMAGE_MEMORY_BARRIER,
+				dstAccessMask = dst_access_mask,
+				oldLayout = old_layout,
+				newLayout = new_layout,
+				image = image_backend.vk_image,
+				subresourceRange = {
+					aspectMask = {.COLOR},
+					baseArrayLayer = 0,
+					layerCount = 1,
+					baseMipLevel = mip,
+					levelCount = u32(mip_count),
+				},
+			}
+
+			image_backend.vk_layout_per_mip[mip] = new_layout
+
+			image_input_barriers_count += 1
+		}
+
+
+		color_attachments_count := 0
 		color_attachments := make(
 			[]vk.RenderingAttachmentInfo,
-			len(render_pass.desc.layout.render_target_formats),
+			len(p_begin_info.interface.image_outputs),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
 		defer delete(color_attachments, G_RENDERER_ALLOCATORS.temp_allocator)
+		depth_attachment := vk.RenderingAttachmentInfo{}
 
-		num_render_target_barriers := 0
-		render_target_barriers := make(
+		image_output_barriers_count := 0
+		image_output_barriers := make(
 			[]vk.ImageMemoryBarrier,
-			len(render_pass.desc.layout.render_target_formats),
+			len(p_begin_info.interface.image_outputs),
 			G_RENDERER_ALLOCATORS.temp_allocator,
 		)
-		defer delete(render_target_barriers, G_RENDERER_ALLOCATORS.temp_allocator)
+		defer delete(image_output_barriers, G_RENDERER_ALLOCATORS.temp_allocator)
+		depth_attachment_barrier := vk.ImageMemoryBarrier{}
 
-		// Check compability of render targets, build the Vulkan color attachments and prepare barrier
-		{
-			render_target_index := 0
-			for render_target_format, i in render_pass.desc.layout.render_target_formats {
+		has_depth_attachment := false
+		depth_barrier_needed := false
 
-				render_target_binding := &p_begin_info.render_targets_bindings[i]
+		// Prepare barriers and rendering attachments for outputs
+		for output in p_begin_info.interface.image_outputs {
 
-				attachment_image_idx := get_image_idx(render_target_binding.target.image_ref)
-				attachment_image := &g_resources.images[attachment_image_idx]
-				backend_attachment_image := &g_resources.backend_images[attachment_image_idx]
+			image_idx := get_image_idx(output.image_ref)
+			image := &g_resources.images[image_idx]
 
-				assert(attachment_image.desc.format == render_target_format)
+			// Grab the proper swap image for this frame
+			if .SwapImage in image.desc.flags {
+				swap_image_ref :=
+					G_RENDERER.swap_image_refs[G_RENDERER.swap_img_idx]
+				image_idx = get_image_idx(swap_image_ref)
+				image = &g_resources.images[image_idx]
+			}
 
-				// Transition image to the .ATTACHMENT_OPTIMAL format if it's not already in one
-				if render_target_binding.target.current_usage != .Attachment {
+			image_backend := &g_resources.backend_images[image_idx]
 
-					old_layout := vk.ImageLayout.UNDEFINED
+			// Prepare the rendering attachment
+			image_view := image_backend.per_mip_vk_view[output.mip]
 
-					if (.SwapImage in attachment_image.desc.flags) == false {
-						#partial switch render_target_binding.target.current_usage {
-						case .SampledImage:
-							old_layout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL
-						}
-					}
+			load_op := vk.AttachmentLoadOp.DONT_CARE
+			if .Clear in output.flags {
+				load_op = .CLEAR
+			}
 
-					render_target_barriers[num_render_target_barriers] = vk.ImageMemoryBarrier {
-						sType = .IMAGE_MEMORY_BARRIER,
-						dstAccessMask = {.COLOR_ATTACHMENT_WRITE},
-						oldLayout = old_layout,
-						newLayout = .ATTACHMENT_OPTIMAL,
-						image = backend_attachment_image.vk_image,
-						subresourceRange = {
-							aspectMask = {.COLOR},
-							baseArrayLayer = 0,
-							layerCount = 1,
-							baseMipLevel = u32(max(render_target_binding.target.image_mip, 0)),
-							levelCount = 1,
-						},
-					}
+			dst_pipeline_flags := vk.PipelineStageFlags{}
+			dst_access_mask := vk.AccessFlags{}
+			new_layout := vk.ImageLayout{}
+			aspect_mask := vk.ImageAspectFlags{}
 
-					render_target_binding.target.current_usage = .Attachment
-					num_render_target_barriers += 1
+			if image.desc.format > .DepthFormatsStart && image.desc.format < .DepthFormatsEnd {
+
+				assert(has_depth_attachment == false) // only 1 depth attachment allowed
+				has_depth_attachment = true
+
+				has_stencil_component :=
+					image.desc.format > .DepthStencilFormatsStart &&
+					image.desc.format < .DepthStencilFormatsEnd
+
+				new_layout := vk.ImageLayout.DEPTH_ATTACHMENT_OPTIMAL
+				if has_stencil_component {
+					new_layout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL
 				}
 
-				// Create the Vulkan attachment
-				image_view := backend_attachment_image.all_mips_vk_view
-				if render_target_binding.target.image_mip > -1 {
-					image_view =
-						backend_attachment_image.per_mip_vk_view[render_target_binding.target.image_mip]
-				}
-				color_attachments[render_target_index] = {
+				depth_attachment = {
 					sType = .RENDERING_ATTACHMENT_INFO,
 					pNext = nil,
 					clearValue = {
-						color = {float32 = cast([4]f32)render_target_binding.target.clear_value},
+						depthStencil = {
+							depth = output.clear_color.x,
+							stencil = u32(output.clear_color.y),
+						},
 					},
-					imageLayout = .ATTACHMENT_OPTIMAL,
+					imageLayout = new_layout,
 					imageView = image_view,
-					loadOp = .CLEAR if .Clear in render_target_binding.target.flags else .DONT_CARE,
+					loadOp = load_op,
 					storeOp = .STORE,
 				}
 
-				render_target_index += 1
-			}
-		}
+				// Check if this image needs to be transitioned
+				if image_backend.vk_layout_per_mip[output.mip] == new_layout {
+					continue
+				}
 
-		cmd_buffer_idx := get_cmd_buffer_idx(p_cmd_buff_ref)
-		backend_cmd_buffer := &g_resources.backend_cmd_buffers[cmd_buffer_idx]
+				depth_barrier_needed = true
 
-		// Prepare the depth attachment
-		depth_attachment: vk.RenderingAttachmentInfo
-		if p_begin_info.depth_attachment.image != InvalidImageRef {
-
-			depth_image_idx := get_image_idx(p_begin_info.depth_attachment.image)
-			depth_image := &g_resources.images[depth_image_idx]
-			backend_depth_image := &g_resources.backend_images[depth_image_idx]
-
-			assert(
-				depth_image.desc.format > .DepthFormatsStart &&
-				depth_image.desc.format < .DepthFormatsEnd,
-			)
-
-			// Depth attachment 
-			depth_attachment = vk.RenderingAttachmentInfo {
-				sType = .RENDERING_ATTACHMENT_INFO,
-				pNext = nil,
-				clearValue = {depthStencil = {depth = 1, stencil = 0}},
-				imageLayout = .DEPTH_ATTACHMENT_OPTIMAL,
-				imageView = backend_depth_image.all_mips_vk_view,
-				loadOp = .CLEAR,
-				storeOp = .DONT_CARE,
-			}
-
-			// Check if the depth image requires any barriers
-			if p_begin_info.depth_attachment.usage == .Undefined ||
-			   p_begin_info.depth_attachment.usage == .SampledImage {
-
-				depth_attachment_barrier := vk.ImageMemoryBarrier {
+				depth_attachment_barrier = {
 					sType = .IMAGE_MEMORY_BARRIER,
 					dstAccessMask = {
 						.DEPTH_STENCIL_ATTACHMENT_READ,
 						.DEPTH_STENCIL_ATTACHMENT_WRITE,
 					},
-					oldLayout = .UNDEFINED,
-					newLayout = .DEPTH_ATTACHMENT_OPTIMAL,
-					image = backend_depth_image.vk_image,
+					oldLayout = image_backend.vk_layout_per_mip[output.mip],
+					newLayout = new_layout,
+					image = image_backend.vk_image,
 					subresourceRange = {
 						aspectMask = {.DEPTH},
 						baseArrayLayer = 0,
 						layerCount = 1,
-						baseMipLevel = 0,
+						baseMipLevel = output.mip,
 						levelCount = 1,
 					},
 				}
+			} else {
 
-				has_stencil_component :=
-					depth_image.desc.format > .DepthStencilFormatsStart &&
-					depth_image.desc.format < .DepthStencilFormatsEnd
+				new_layout = .ATTACHMENT_OPTIMAL
 
-				if p_begin_info.depth_attachment.usage == .SampledImage {
-
-					depth_attachment_barrier.srcAccessMask += {.SHADER_READ}
-					depth_attachment_barrier.oldLayout = .DEPTH_READ_ONLY_OPTIMAL
-
-					if has_stencil_component {
-						depth_attachment_barrier.oldLayout = .DEPTH_STENCIL_READ_ONLY_OPTIMAL
-						depth_attachment_barrier.newLayout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-					}
+				color_attachments[color_attachments_count] = {
+					sType = .RENDERING_ATTACHMENT_INFO,
+					pNext = nil,
+					clearValue = {color = {float32 = cast([4]f32)output.clear_color}},
+					imageLayout = new_layout,
+					imageView = image_view,
+					loadOp = load_op,
+					storeOp = .STORE,
 				}
 
-				if has_stencil_component {
-					depth_attachment_barrier.subresourceRange.aspectMask += {.STENCIL}
+				color_attachments_count += 1
+
+				// Check if this image needs to be transitioned
+				if image_backend.vk_layout_per_mip[output.mip] == new_layout {
+					continue
 				}
 
-				vk.CmdPipelineBarrier(
-					backend_cmd_buffer.vk_cmd_buff,
-					{.TOP_OF_PIPE},
-					{.EARLY_FRAGMENT_TESTS},
-					{},
-					0,
-					nil,
-					0,
-					nil,
-					1,
-					&depth_attachment_barrier,
-				)
+				image_output_barriers[image_output_barriers_count] = {
+					sType = .IMAGE_MEMORY_BARRIER,
+					dstAccessMask = {.COLOR_ATTACHMENT_WRITE},
+					oldLayout = image_backend.vk_layout_per_mip[output.mip],
+					newLayout = new_layout,
+					image = image_backend.vk_image,
+					subresourceRange = {
+						aspectMask = {.COLOR},
+						baseArrayLayer = 0,
+						layerCount = 1,
+						baseMipLevel = output.mip,
+						levelCount = 1,
+					},
+				}
+				image_output_barriers_count += 1
 
-				p_begin_info.depth_attachment.usage = .Attachment
 			}
+			image_backend.vk_layout_per_mip[output.mip] = new_layout
 		}
 
+		cmd_buffer_idx := get_cmd_buffer_idx(p_cmd_buff_ref)
+		backend_cmd_buffer := &g_resources.backend_cmd_buffers[cmd_buffer_idx]
 
-		// Insert the attachment barriers
-		if len(render_target_barriers) > 0 {
+		// Insert input barriers
+		if image_input_barriers_count > 0 {
+			vk.CmdPipelineBarrier(
+				backend_cmd_buffer.vk_cmd_buff,
+				{.BOTTOM_OF_PIPE},
+				{.VERTEX_SHADER, .FRAGMENT_SHADER, .COMPUTE_SHADER},
+				{},
+				0,
+				nil,
+				0,
+				nil,
+				u32(image_input_barriers_count),
+				&image_input_barriers[0],
+			)
+		}
+
+		// Insert depth attachment barrier
+		if depth_barrier_needed {
+			vk.CmdPipelineBarrier(
+				backend_cmd_buffer.vk_cmd_buff,
+				{.TOP_OF_PIPE},
+				{.EARLY_FRAGMENT_TESTS},
+				{},
+				0,
+				nil,
+				0,
+				nil,
+				1,
+				&depth_attachment_barrier,
+			)
+		}
+
+		// Insert output barriers
+		if image_output_barriers_count > 0 {
 			vk.CmdPipelineBarrier(
 				backend_cmd_buffer.vk_cmd_buff,
 				{.TOP_OF_PIPE},
@@ -229,10 +311,11 @@ when USE_VULKAN_BACKEND {
 				nil,
 				0,
 				nil,
-				u32(len(render_target_barriers)),
-				&render_target_barriers[0],
+				u32(image_output_barriers_count),
+				&image_output_barriers[0],
 			)
 		}
+
 
 		// Prepare the rendering info
 		render_area := G_RENDERER.swap_extent
@@ -248,11 +331,11 @@ when USE_VULKAN_BACKEND {
 
 		rendering_info := vk.RenderingInfo {
 			sType = .RENDERING_INFO,
-			colorAttachmentCount = u32(len(color_attachments)),
+			colorAttachmentCount = u32(color_attachments_count),
 			layerCount = 1,
 			viewMask = 0,
 			pColorAttachments = &color_attachments[0],
-			pDepthAttachment = &depth_attachment if p_begin_info.depth_attachment.image != InvalidImageRef else nil,
+			pDepthAttachment = &depth_attachment if has_depth_attachment else nil,
 			renderArea = {extent = render_area},
 		}
 
@@ -290,4 +373,3 @@ when USE_VULKAN_BACKEND {
 		vk.CmdEndRendering(backend_cmd_buffer.vk_cmd_buff)
 	}
 }
-

@@ -6,7 +6,6 @@ import "core:encoding/xml"
 import "core:log"
 import "core:math/linalg/glsl"
 import "core:mem"
-import "core:strconv"
 
 import "../common"
 
@@ -115,9 +114,7 @@ G_RENDERER: struct {
 	num_frames_in_flight:                          u32,
 	primary_cmd_buffer_ref:                        []CommandBufferRef,
 	queued_textures_copies:                        [dynamic]TextureCopy,
-	current_frame_swap_image_idx:                  u32,
 	swap_image_refs:                               []ImageRef,
-	swap_image_render_targets:                     []RenderTarget,
 	gpu_device_flags:                              GPUDeviceFlags,
 	global_bind_group_layout_ref:                  BindGroupLayoutRef,
 	bindless_textures_array_bind_group_layout_ref: BindGroupLayoutRef,
@@ -152,6 +149,7 @@ InitOptions :: struct {
 	using backend_options: BackendInitOptions,
 }
 
+//---------------------------------------------------------------------------//
 
 @(private)
 DeviceQueueType :: enum {
@@ -243,27 +241,6 @@ init :: proc(p_options: InitOptions) -> bool {
 			num_staging_regions = G_RENDERER.num_frames_in_flight,
 		}
 		init_buffer_upload(buffer_upload_options) or_return
-	}
-
-
-	// Create RenderTargets for each swap image
-	{
-		G_RENDERER.swap_image_render_targets = make(
-			[]RenderTarget,
-			u32(len(G_RENDERER.swap_image_refs)),
-			G_RENDERER_ALLOCATORS.resource_allocator,
-		)
-
-		for swap_image_ref, i in G_RENDERER.swap_image_refs {
-			G_RENDERER.swap_image_render_targets[i] = RenderTarget {
-				clear_value = {0, 0, 0, 1},
-				current_usage = .Undefined,
-				flags = {.Clear},
-				image_mip = -1,
-				image_ref = swap_image_ref,
-			}
-		}
-
 	}
 
 	// Allocate primary command buffer for each frame
@@ -423,9 +400,6 @@ update :: proc(p_dt: f32) {
 
 	begin_command_buffer(cmd_buff_ref)
 
-	// Reset the swap chain render target that we'll use this frame
-	G_RENDERER.swap_image_render_targets[G_RENDERER.swap_img_idx].current_usage = .Undefined
-
 	buffer_upload_start_async_cmd_buffer()
 	execute_queued_texture_copies()
 	run_buffer_upload_requests()
@@ -439,7 +413,7 @@ update :: proc(p_dt: f32) {
 	image_upload_begin_frame()
 	material_instance_update_dirty_materials()
 
-	backend_update(p_dt)
+	backend_update(p_dt)	
 
 	render_tasks_update(p_dt)
 
@@ -554,19 +528,16 @@ load_renderer_config :: proc() -> bool {
 		return false
 	}
 
-	render_width, render_width_found := xml.find_attribute_val_by_key(doc, 0, "renderWidth")
-	render_height, render_height_found := xml.find_attribute_val_by_key(doc, 0, "renderHeight")
+	render_width, render_width_found := common.xml_get_u32_attribute(doc, 0, "renderWidth")
+	render_height, render_height_found := common.xml_get_u32_attribute(doc, 0, "renderHeight")
 
 	if render_width_found == false || render_height_found == false {
 		log.error("Render width or height not found\n")
 		return false
 	}
 
-	x, _ := strconv.parse_uint(render_width, 10)
-	y, _ := strconv.parse_uint(render_height, 10)
-
-	G_RENDERER.config.render_size.x = u32(x)
-	G_RENDERER.config.render_size.y = u32(y)
+	G_RENDERER.config.render_size.x = render_width
+	G_RENDERER.config.render_size.y = render_height
 
 	renderer_config_create_images(doc)
 	renderer_config_load_render_tasks(doc)
@@ -635,11 +606,12 @@ renderer_config_create_images :: proc(p_doc: ^xml.Document) -> bool {
 					image_dimensions.x = G_RENDERER.config.render_size.x / 4
 					image_dimensions.y = G_RENDERER.config.render_size.y / 4
 				}
+				image_type = .TwoDimensional
 			} else {
 
-				width, width_found := xml.find_attribute_val_by_key(p_doc, element_id, "width")
-				height, height_found := xml.find_attribute_val_by_key(p_doc, element_id, "height")
-				depth, depth_found := xml.find_attribute_val_by_key(p_doc, element_id, "depth")
+				width, width_found := common.xml_get_u32_attribute(p_doc, element_id, "width")
+				height, height_found := common.xml_get_u32_attribute(p_doc, element_id, "height")
+				depth, depth_found := common.xml_get_u32_attribute(p_doc, element_id, "depth")
 
 				if width_found == false && height_found == false {
 					log.errorf(
@@ -652,19 +624,16 @@ renderer_config_create_images :: proc(p_doc: ^xml.Document) -> bool {
 
 
 				if width_found {
-					x, _ := strconv.parse_uint(width, 10)
-					image_dimensions.x = u32(x)
+					image_dimensions.x = width
 				}
 
 				if height_found {
-					y, _ := strconv.parse_uint(height, 10)
-					image_dimensions.y = u32(y)
+					image_dimensions.y = height
 					image_type = .TwoDimensional
 				}
 
 				if depth_found {
-					z, _ := strconv.parse_uint(depth, 10)
-					image_dimensions.z = u32(z)
+					image_dimensions.z = depth
 					image_type = .ThreeDimensional
 				}
 			}

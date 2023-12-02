@@ -7,6 +7,9 @@ import "../common"
 
 import "core:c"
 import "core:encoding/xml"
+import "core:log"
+import "core:strconv"
+import "core:strings"
 
 //---------------------------------------------------------------------------//
 
@@ -191,4 +194,167 @@ render_tasks_update :: proc(p_dt: f32) {
 	}
 
 }
+
 //--------------------------------------------------------------------------//
+
+@(private)
+render_task_setup_render_pass_interface :: proc(
+	p_render_task_config: ^RenderTaskConfig,
+	p_out_interface: ^RenderPassInterface,
+) -> bool {
+
+	input_images := make([dynamic]RenderPassImageInput, G_RENDERER_ALLOCATORS.temp_allocator)
+	output_images := make([dynamic]RenderPassImageOutput, G_RENDERER_ALLOCATORS.temp_allocator)
+
+	defer delete(input_images)
+	defer delete(output_images)
+
+	// Load inputs 
+	for {
+		input_image_element_id, found := xml.find_child_by_ident(
+			p_render_task_config.doc,
+			p_render_task_config.render_task_element_id,
+			"InputImage",
+			len(input_images),
+		)
+
+		if found == false {
+			break
+		}
+
+		image_name, name_found := xml.find_attribute_val_by_key(
+			p_render_task_config.doc,
+			input_image_element_id,
+			"name",
+		)
+		if name_found == false {
+			continue
+		}
+
+		image_ref := find_image(image_name)
+		if image_ref == InvalidImageRef {
+			log.errorf("Error when render task targets - unknown image '%s'\n", image_name)
+			continue
+		}
+
+
+		mip, mip_found := common.xml_get_u32_attribute(
+			p_render_task_config.doc,
+			input_image_element_id,
+			"mip",
+		)
+		_, storage_found := xml.find_attribute_val_by_key(
+			p_render_task_config.doc,
+			input_image_element_id,
+			"storage",
+		)
+
+
+		input_flags := RenderPassImageInputFlags{}
+
+		if mip_found {
+			input_flags += {.AddressSubresource}
+		}
+		if storage_found {
+			input_flags += {.Storage}
+		}
+
+		append(
+			&input_images,
+			RenderPassImageInput{
+				flags = input_flags,
+				image_ref = image_ref,
+				mip = mip if mip_found else 0,
+			},
+		)
+	}
+
+	// Load outputs
+	for {
+		output_image_element_id, found := xml.find_child_by_ident(
+			p_render_task_config.doc,
+			p_render_task_config.render_task_element_id,
+			"OutputImage",
+			len(output_images),
+		)
+
+		if found == false {
+			break
+		}
+		image_name, name_found := xml.find_attribute_val_by_key(
+			p_render_task_config.doc,
+			output_image_element_id,
+			"name",
+		)
+		if name_found == false {
+			continue
+		}
+		
+
+		image_ref := find_image(image_name)
+		if image_ref == InvalidImageRef {
+			log.errorf("Error when render task targets - unknown image '%s'\n", image_name)
+			continue
+		}
+
+		render_pass_output_image := RenderPassImageOutput {
+			image_ref = image_ref,
+		}
+
+		mip, mip_found := common.xml_get_u32_attribute(
+			p_render_task_config.doc,
+			output_image_element_id,
+			"mip",
+		)
+		render_pass_output_image.mip = mip if mip_found else 0
+
+		clear_values_str, clear_found := xml.find_attribute_val_by_key(
+			p_render_task_config.doc,
+			output_image_element_id,
+			"clear",
+		)
+		if clear_found {
+			render_pass_output_image.flags += {.Clear}
+			clear_arr := strings.split(clear_values_str, ",", G_RENDERER_ALLOCATORS.temp_allocator)
+			defer delete(clear_arr, G_RENDERER_ALLOCATORS.temp_allocator)
+
+			for str, i in clear_arr {
+				val, ok := strconv.parse_f32(strings.trim_space(str))
+				if ok {
+					render_pass_output_image.clear_color[i] = val
+				} else {
+					render_pass_output_image.clear_color[i] = 0
+				}
+			}
+		}
+
+		append(&output_images, render_pass_output_image)
+	}
+
+	p_out_interface.image_inputs = common.to_static_slice(
+		input_images,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
+	p_out_interface.image_outputs = common.to_static_slice(
+		output_images,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
+
+	return true
+}
+
+//--------------------------------------------------------------------------//
+
+render_task_begin_render_pass :: proc(
+	p_render_pass_ref: RenderPassRef,
+	p_render_pass_interface: ^RenderPassInterface,
+) {
+
+	render_pass_begin_info := RenderPassBeginInfo {
+		interface = p_render_pass_interface,
+	}
+
+	begin_render_pass(p_render_pass_ref, get_frame_cmd_buffer_ref(), &render_pass_begin_info)
+}
+
+//---------------------------------------------------------------------------//

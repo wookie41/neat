@@ -597,13 +597,7 @@ when USE_VULKAN_BACKEND {
 backend_wait_for_frame_resources :: proc() {
 	frame_idx := get_frame_idx()
 
-	vk.WaitForFences(
-		G_RENDERER.device,
-		1,
-		&G_RENDERER.frame_fences[frame_idx],
-		true,
-		max(u64),
-	)
+	vk.WaitForFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx], true, max(u64))
 	vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx])
 
 	if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
@@ -640,6 +634,13 @@ backend_update :: proc(p_dt: f32) {
 	if should_recreate_swapchain {
 		recreate_swapchain()
 		return
+	}
+
+	// We have to put the current swap image in the undefined state, so proper barriers are issued
+	{
+		swap_image_ref := G_RENDERER.swap_image_refs[G_RENDERER.swap_img_idx]
+		image_backend := &g_resources.backend_images[get_image_idx(swap_image_ref)]
+		image_backend.vk_layout_per_mip[0] = .UNDEFINED
 	}
 
 	// Render Vulkan tutorial

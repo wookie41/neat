@@ -4,11 +4,13 @@ package common
 
 import "core:container/bit_array"
 import "core:encoding/json"
+import "core:encoding/xml"
 import "core:fmt"
 import "core:hash"
 import "core:mem"
 import "core:os"
 import "core:slice"
+import "core:strconv"
 import "core:strings"
 
 //---------------------------------------------------------------------------//
@@ -162,7 +164,42 @@ write_json_file :: proc(
 //---------------------------------------------------------------------------//
 
 slice_cast :: proc($T: typeid, p_data: []byte, p_offset_in_bytes: u32, p_len: u32) -> []T {
-	return slice.from_ptr((^T)(mem.ptr_offset(raw_data(p_data), int(p_offset_in_bytes))), int(p_len))
+	return slice.from_ptr(
+		(^T)(mem.ptr_offset(raw_data(p_data), int(p_offset_in_bytes))),
+		int(p_len),
+	)
 }
 
 //---------------------------------------------------------------------------//
+
+to_static_slice :: proc(p_src: [dynamic]$T, p_allocator: mem.Allocator) -> []T {
+	static := make([]T, len(p_src), p_allocator)
+	for v, i in p_src {
+		static[i] = v
+	}
+
+	return static
+}
+
+//---------------------------------------------------------------------------//
+
+xml_get_u32_attribute :: proc(
+	p_doc: ^xml.Document,
+	p_element_id: u32,
+	p_attr_name: string,
+) -> (
+	u32,
+	bool,
+) {
+	str, found := xml.find_attribute_val_by_key(p_doc, p_element_id, p_attr_name)
+	if found == false {
+		return 0, false
+	}
+
+	val, success := strconv.parse_uint(str, 10)
+	if success == false {
+		return 0, false
+	}
+
+	return u32(val), true
+}

@@ -291,8 +291,9 @@ when USE_VULKAN_BACKEND {
 
 				vk_name := strings.clone_to_cstring(
 					common.get_string(image.desc.name),
-					G_RENDERER_ALLOCATORS.names_allocator,
+					G_RENDERER_ALLOCATORS.temp_allocator,
 				)
+				defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
 
 				name_info := vk.DebugUtilsObjectNameInfoEXT {
 					sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
@@ -396,13 +397,26 @@ when USE_VULKAN_BACKEND {
 			backend_swap_image.vk_image = vk_swap_image
 			backend_swap_image.all_mips_vk_view = G_RENDERER.swapchain_image_views[i]
 
+			backend_swap_image.per_mip_vk_view = make(
+				[]vk.ImageView,
+				1,
+				G_RENDERER_ALLOCATORS.resource_allocator,
+			)
+			backend_swap_image.per_mip_vk_view[0] = G_RENDERER.swapchain_image_views[i]
+			backend_swap_image.vk_layout_per_mip = make(
+				[]vk.ImageLayout,
+				1,
+				G_RENDERER_ALLOCATORS.resource_allocator,
+			)
+			backend_swap_image.vk_layout_per_mip[0] = .UNDEFINED
+
 			G_RENDERER.swap_image_refs[i] = ref
 		}
 	}
 
 
 	@(private)
-	backend_create_image :: proc(p_image_ref: ImageRef) -> bool {
+	backend_create_image :: proc(p_image_ref: ImageRef) -> (res: bool) {
 
 		image_idx := get_image_idx(p_image_ref)
 		image := &g_resources.images[image_idx]
@@ -469,6 +483,13 @@ when USE_VULKAN_BACKEND {
 		if create_result != .SUCCESS {
 			return false
 		}
+		defer if res == false {
+			vma.destroy_image(
+				G_RENDERER.vma_allocator,
+				image_backend.vk_image,
+				image_backend.allocation,
+			)
+		}
 
 		vk_name := strings.clone_to_cstring(
 			common.get_string(image.desc.name),
@@ -513,6 +534,9 @@ when USE_VULKAN_BACKEND {
 			log.warn("Failed to create image view")
 			return false
 		}
+		defer if res == false {
+			vk.DestroyImageView(G_RENDERER.device, image_backend.all_mips_vk_view, nil)
+		}
 
 		name_info = vk.DebugUtilsObjectNameInfoEXT {
 			sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
@@ -524,6 +548,46 @@ when USE_VULKAN_BACKEND {
 		vk.SetDebugUtilsObjectNameEXT(G_RENDERER.device, &name_info)
 
 		append(&INTERNAL.bindless_array_updates, p_image_ref)
+
+		image_backend.per_mip_vk_view = make(
+			[]vk.ImageView,
+			1,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
+		image_backend.vk_layout_per_mip = make(
+			[]vk.ImageLayout,
+			1,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
+
+		image_backend.vk_layout_per_mip[0] = .UNDEFINED
+
+		view_create_info = vk.ImageViewCreateInfo {
+			sType = .IMAGE_VIEW_CREATE_INFO,
+			image = image_backend.vk_image,
+			viewType = G_IMAGE_VIEW_TYPE_MAPPING[image.desc.type],
+			format = G_IMAGE_FORMAT_MAPPING[image.desc.format],
+			subresourceRange = {aspectMask = aspect_mask, levelCount = 1, layerCount = 1},
+		}
+
+		if vk.CreateImageView(
+			   G_RENDERER.device,
+			   &view_create_info,
+			   nil,
+			   &image_backend.per_mip_vk_view[0],
+		   ) !=
+		   .SUCCESS {
+			return false
+		}
+
+		name_info = vk.DebugUtilsObjectNameInfoEXT {
+			sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			objectHandle = u64(image_backend.per_mip_vk_view[0]),
+			objectType   = .IMAGE_VIEW,
+			pObjectName  = vk_name,
+		}
+
+		vk.SetDebugUtilsObjectNameEXT(G_RENDERER.device, &name_info)
 
 		return true
 	}

@@ -12,8 +12,6 @@ G_VT: struct {
 
 	render_pass_ref:         RenderPassRef,
 	pipeline_ref:            PipelineRef,
-	depth_buffer_attachment: DepthAttachment,
-	render_target_bindings:  []RenderTargetBinding,
 	draw_stream:             DrawStream,
 	viking_room_mesh_ref:    MeshRef,
 }
@@ -40,12 +38,6 @@ init_vt :: proc() -> bool {
 		using G_VT
 
 		start_time = time.now()
-
-		render_target_bindings = make(
-			[]RenderTargetBinding,
-			1,
-			G_RENDERER_ALLOCATORS.resource_allocator,
-		)
 
 		vt_create_uniform_buffer()
 
