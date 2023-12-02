@@ -170,6 +170,17 @@ RenderTaskEntry :: struct {
 
 //---------------------------------------------------------------------------//
 
+g_render_camera: struct {
+	position:    glsl.vec3,
+	forward:     glsl.vec3,
+	up:          glsl.vec3,
+	fov_degrees: f32,
+	near_plane:  f32,
+	far_plane:   f32,
+}
+
+//---------------------------------------------------------------------------//
+
 init :: proc(p_options: InitOptions) -> bool {
 	INTERNAL.logger = log.create_console_logger()
 
@@ -402,6 +413,14 @@ init :: proc(p_options: InitOptions) -> bool {
 			},
 		},
 	)
+
+	g_render_camera.position = {0, 0, 0}
+	g_render_camera.forward = {0, 0, -1}
+	g_render_camera.up = {0, 1, 0}
+	g_render_camera.near_plane = 0.1
+	g_render_camera.far_plane = 10000
+	g_render_camera.fov_degrees = 45.0
+
 
 	return true
 }

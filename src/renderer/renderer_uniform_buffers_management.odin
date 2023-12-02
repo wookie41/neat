@@ -49,12 +49,16 @@ uniform_buffer_management_update :: proc(p_dt: f32) {
 @(private = "file")
 update_per_view_uniform_buffer :: proc(p_dt: f32) {
 
-	g_per_view_uniform_buffer_data.view = glsl.mat4LookAt({0, 1.0, 1.5}, {0, 0.3, 0}, {0, 1, 0})
+	g_per_view_uniform_buffer_data.view = glsl.mat4LookAt(
+		g_render_camera.position,
+		g_render_camera.position + g_render_camera.forward,
+		g_render_camera.up,
+	)
 	g_per_view_uniform_buffer_data.proj = glsl.mat4Perspective(
-		glsl.radians_f32(45.0),
+		glsl.radians_f32(g_render_camera.fov_degrees),
 		f32(G_RENDERER.config.render_size.x) / f32(G_RENDERER.config.render_size.y),
-		0.1,
-		10.0,
+		g_render_camera.near_plane,
+		g_render_camera.far_plane,
 	)
 
 	uniform_buffer := &g_resources.buffers[get_buffer_idx(g_uniform_buffers.per_view_buffer_ref)]

@@ -1,7 +1,7 @@
 package main
 
-import "../engine"
 import "../common"
+import "../engine"
 import "../renderer"
 import "core:os"
 
@@ -26,7 +26,6 @@ main :: proc() {
 		},
 	)
 
-	engine.texture_asset_load("viking_room")
 	engine.mesh_asset_load("FlightHelmet")
 
 	material_instance_ref := renderer.allocate_material_instance_ref(
@@ -38,7 +37,6 @@ main :: proc() {
 
 	mesh_instance_ref := renderer.allocate_mesh_instance_ref(common.create_name("FlightHelmet"))
 	renderer.create_mesh_instance(mesh_instance_ref)
-
 
 	engine.run()
 }
