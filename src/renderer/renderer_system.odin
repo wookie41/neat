@@ -381,8 +381,27 @@ init :: proc(p_options: InitOptions) -> bool {
 	init_mesh_instances() or_return
 
 	load_renderer_config()
+	uniform_buffer_management_init()
 
-	init_vt()
+	// All of the global resources (sampler array and uniform buffers) have been created
+	// So now we can update the global bind group
+
+	bind_group_update(
+		G_RENDERER.global_bind_group_ref,
+		BindGroupUpdate{
+			buffers = {
+				{
+					buffer_ref = g_material_properties_buffer_ref,
+					size = MATERIAL_PARAMS_BUFFER_SIZE,
+				},
+				{buffer_ref = InvalidBufferRef, size = 0},
+				{
+					buffer_ref = g_uniform_buffers.per_view_buffer_ref,
+					size = size_of(g_per_view_uniform_buffer_data),
+				},
+			},
+		},
+	)
 
 	return true
 }
@@ -413,7 +432,9 @@ update :: proc(p_dt: f32) {
 	image_upload_begin_frame()
 	material_instance_update_dirty_materials()
 
-	backend_update(p_dt)	
+	uniform_buffer_management_update(p_dt)
+
+	backend_update(p_dt)
 
 	render_tasks_update(p_dt)
 

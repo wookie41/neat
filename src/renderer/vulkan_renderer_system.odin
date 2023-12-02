@@ -642,10 +642,6 @@ backend_update :: proc(p_dt: f32) {
 		image_backend := &g_resources.backend_images[get_image_idx(swap_image_ref)]
 		image_backend.vk_layout_per_mip[0] = .UNDEFINED
 	}
-
-	// Render Vulkan tutorial
-	frame_cmd_buffer_ref := get_frame_cmd_buffer_ref()
-	vt_update(frame_idx, G_RENDERER.swap_img_idx, frame_cmd_buffer_ref)
 }
 
 //---------------------------------------------------------------------------//

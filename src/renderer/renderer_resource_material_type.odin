@@ -22,7 +22,7 @@ MaterialPassPushContants :: struct #packed {
 
 //---------------------------------------------------------------------------//
 
-@(private = "file")
+@(private)
 MATERIAL_PARAMS_BUFFER_SIZE :: 8 * common.MEGABYTE
 
 // @TODO 
@@ -36,10 +36,14 @@ MAX_MATERIAL_INSTANCES_PER_MATERIAL_TYPE :: 512
 
 //---------------------------------------------------------------------------//
 
+@(private) 
+g_material_properties_buffer_ref: BufferRef
+
+//---------------------------------------------------------------------------//
+
 @(private = "file")
 INTERNAL: struct {
 	material_properties_mem_data:   []byte,
-	material_properties_buffer_ref: BufferRef,
 }
 
 //---------------------------------------------------------------------------//
@@ -163,17 +167,17 @@ init_material_types :: proc() -> bool {
 	)
 
 	// Create a buffer for material properties
-	INTERNAL.material_properties_buffer_ref = allocate_buffer_ref(
+	g_material_properties_buffer_ref = allocate_buffer_ref(
 		common.create_name("MaterialPropertiesBuffer"),
 	)
 
-	material_params_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.material_properties_buffer_ref)]
+	material_params_buffer := &g_resources.buffers[get_buffer_idx(g_material_properties_buffer_ref)]
 
 	material_params_buffer.desc.flags = {.Dedicated}
 	material_params_buffer.desc.size = MATERIAL_PARAMS_BUFFER_SIZE
 	material_params_buffer.desc.usage = {.StorageBuffer, .TransferDst}
 
-	create_buffer(INTERNAL.material_properties_buffer_ref) or_return
+	create_buffer(g_material_properties_buffer_ref) or_return
 
 	load_material_types_from_config_file() or_return
 
@@ -183,7 +187,7 @@ init_material_types :: proc() -> bool {
 //---------------------------------------------------------------------------//
 
 deinit_material_types :: proc() {
-	destroy_buffer(INTERNAL.material_properties_buffer_ref)
+	destroy_buffer(g_material_properties_buffer_ref)
 }
 
 //---------------------------------------------------------------------------//
@@ -206,7 +210,7 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 	// Suballocate the params buffer for this material type to store material instance data
 	{
 		success, suballocation := buffer_allocate(
-			INTERNAL.material_properties_buffer_ref,
+			g_material_properties_buffer_ref,
 			u32(material_type.properties_size_in_bytes * MAX_MATERIAL_INSTANCES_PER_MATERIAL_TYPE),
 		)
 
@@ -334,7 +338,7 @@ destroy_material_type :: proc(p_ref: MaterialTypeRef) {
 
 	delete(material_type.desc.material_passes_refs, G_RENDERER_ALLOCATORS.resource_allocator)
 	buffer_free(
-		INTERNAL.material_properties_buffer_ref,
+		g_material_properties_buffer_ref,
 		material_type.properties_buffer_suballocation.vma_allocation,
 	)
 
@@ -496,8 +500,3 @@ find_material_type_by_str :: proc(p_str: string) -> MaterialTypeRef {
 }
 
 //--------------------------------------------------------------------------//
-
-@(private)
-material_type_get_properties_buffer :: #force_inline proc() -> BufferRef {
-	return INTERNAL.material_properties_buffer_ref
-}

@@ -95,7 +95,7 @@ material_instance_update_dirty_data :: proc(p_material_instance_ref: MaterialIns
 	// If material instance data is dirty, we need to issue a copy to the GPU
 	upload_request := request_buffer_upload(
 		BufferUploadRequest{
-			dst_buff = material_type_get_properties_buffer(),
+			dst_buff = g_material_properties_buffer_ref,
 			dst_buff_offset = material_instance_data_offset,
 			dst_queue_usage = .Graphics,
 			size = material_type.properties_size_in_bytes,
