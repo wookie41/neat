@@ -6,6 +6,7 @@ package engine
 import sdl "vendor:sdl2"
 
 import "core:log"
+import "core:math/linalg/glsl"
 import "core:time"
 
 import "../common"
@@ -32,6 +33,13 @@ G_ENGINE: struct {
 
 @(private)
 G_ENGINE_LOG: log.Logger
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+INTERNAL: struct {
+	last_frame_mouse_pos: glsl.ivec2,
+}
 
 //---------------------------------------------------------------------------//
 
@@ -68,6 +76,8 @@ init :: proc(p_options: InitOptions) -> bool {
 		return false
 	}
 
+	sdl.GetMouseState(&INTERNAL.last_frame_mouse_pos.x, &INTERNAL.last_frame_mouse_pos.x)
+
 	//Init renderer
 	{
 		renderer_init_options := renderer.InitOptions{}
@@ -84,6 +94,8 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	camera_init()
 
+	INTERNAL.last_frame_mouse_pos = {0, 0}
+
 	return true
 }
 
@@ -98,13 +110,11 @@ run :: proc() {
 
 	for running {
 
-		sdl.PollEvent(&sdl_event)
-
 		current_time := time.now()
 		dt := f32(time.duration_seconds(time.diff(last_frame_time, current_time)))
 		render_dt := dt
 
-		for dt > target_dt {
+		for sdl.PollEvent(&sdl_event) {
 			#partial switch sdl_event.type {
 			case .QUIT:
 				running = false
@@ -118,17 +128,35 @@ run :: proc() {
 			case .KEYDOWN:
 				if sdl_event.key.keysym.scancode == .ESCAPE {
 					running = false
-				} else if sdl_event.key.keysym.scancode == .W {
-					camera_add_forward_velocity(1)
-				} else if sdl_event.key.keysym.scancode == .S {
-					camera_add_forward_velocity(-1)
-				} else if sdl_event.key.keysym.scancode == .D {
-					camera_add_right_velocity(1)
-				} else if sdl_event.key.keysym.scancode == .A {
-					camera_add_right_velocity(-1)
 				}
 			}
+		}
 
+		mouse_pos: glsl.ivec2
+		pressed_mouse_buttons := sdl.GetMouseState(&mouse_pos.x, &mouse_pos.y)
+
+		active_keys := sdl.GetKeyboardState(nil)
+		if active_keys[sdl.SCANCODE_W] > 0 {
+			camera_add_forward_velocity(1)
+		}
+		if active_keys[sdl.SCANCODE_S] > 0 {
+			camera_add_forward_velocity(-1)
+		}
+		if active_keys[sdl.SCANCODE_D] > 0 {
+			camera_add_right_velocity(1)
+		}
+		if active_keys[sdl.SCANCODE_A] > 0 {
+			camera_add_right_velocity(-1)
+		}
+
+		if (pressed_mouse_buttons & u32(sdl.BUTTON(3))) > 0 {
+			x_delta := mouse_pos.x - INTERNAL.last_frame_mouse_pos.x
+			y_delta := mouse_pos.y - INTERNAL.last_frame_mouse_pos.y
+			camera_add_rotation(f32(x_delta), -f32(y_delta))
+		}
+
+		for dt > target_dt {
+			camera_update(target_dt)
 			dt -= target_dt
 		}
 
@@ -141,5 +169,7 @@ run :: proc() {
 		renderer.g_render_camera.far_plane = Camera.far_plane
 
 		renderer.update(render_dt)
+
+		INTERNAL.last_frame_mouse_pos = mouse_pos
 	}
 }

@@ -26,14 +26,17 @@ Camera: struct {
 
 camera_init :: proc() {
 	using Camera
-	speed = 0.01
+	position = {0, 0, 3}
+	speed = 0.5
 	near_plane = 0.1
 	far_plane = 100000.0
 	fov = 45.0
-	rotation_sensitivity = 0.5
+	rotation_sensitivity = 0.25
 	up = {0, 1, 0}
 	right = {1, 0, 0}
 	forward = {0, 0, -1}
+	yaw = -90
+	pitch = 0
 }
 
 //---------------------------------------------------------------------------//
@@ -42,8 +45,6 @@ camera_update :: proc(p_dt: f32) {
 	using Camera
 	position += (velocity * p_dt)
 	velocity *= 0.85
-
-	camera_update_vectors()
 }
 
 //---------------------------------------------------------------------------//

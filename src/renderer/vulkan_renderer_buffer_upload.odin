@@ -319,6 +319,10 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_buffer_upload_submit_async_transfers :: proc() {
+		if (.DedicatedTransferQueue in G_RENDERER.gpu_device_flags) == false {
+			return
+		}
+
 		transfer_cmd_buff := get_frame_transfer_cmd_buffer()
 
 		G_RENDERER.should_wait_on_transfer_semaphore = true
