@@ -9,6 +9,8 @@ import "core:mem"
 
 import "../common"
 
+import sdl "vendor:sdl2"
+
 //---------------------------------------------------------------------------//
 
 BINDLESS_2D_IMAGES_COUNT :: 2048
@@ -421,6 +423,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	g_render_camera.far_plane = 10000
 	g_render_camera.fov_degrees = 45.0
 
+	ui_init() or_return
 
 	return true
 }
@@ -437,6 +440,8 @@ update :: proc(p_dt: f32) {
 	backend_wait_for_frame_resources()
 
 	begin_command_buffer(cmd_buff_ref)
+
+	ui_begin_frame()
 
 	buffer_upload_start_async_cmd_buffer()
 	execute_queued_texture_copies()
@@ -460,6 +465,8 @@ update :: proc(p_dt: f32) {
 	backend_post_render()
 
 	buffer_upload_pre_frame_submit()
+
+	ui_submit()
 
 	end_command_buffer(cmd_buff_ref)
 
@@ -504,6 +511,8 @@ deinit :: proc() {
 	context.allocator = G_RENDERER_ALLOCATORS.main_allocator
 	context.temp_allocator = G_RENDERER_ALLOCATORS.temp_allocator
 	context.logger = INTERNAL.logger
+
+	ui_shutdown()
 
 	deinit_pipelines()
 	deinit_shaders()
@@ -766,6 +775,12 @@ renderer_config_load_render_tasks :: proc(p_doc: ^xml.Document) -> bool {
 	}
 
 	return true
+}
+
+//---------------------------------------------------------------------------//
+
+process_sdl_event :: proc(p_sdl_event: ^sdl.Event) {
+	ui_process_event(p_sdl_event)
 }
 
 //---------------------------------------------------------------------------//

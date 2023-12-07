@@ -130,6 +130,8 @@ run :: proc() {
 					running = false
 				}
 			}
+
+			renderer.process_sdl_event(&sdl_event)
 		}
 
 		mouse_pos: glsl.ivec2

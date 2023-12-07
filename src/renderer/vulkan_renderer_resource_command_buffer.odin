@@ -21,11 +21,14 @@ when USE_VULKAN_BACKEND {
 
 	@(private = "file")
 	INTERNAL: struct {
-		graphics_command_pools: []vk.CommandPool,
-		transfer_command_pools: []vk.CommandPool,
-		compute_command_pools:  []vk.CommandPool,
-		transfer_cmd_buffers:   []vk.CommandBuffer,
-		compute_cmd_buffers:    []vk.CommandBuffer,
+		graphics_command_pools:        []vk.CommandPool,
+		transfer_command_pools:        []vk.CommandPool,
+		compute_command_pools:         []vk.CommandPool,
+		transfer_cmd_buffers:          []vk.CommandBuffer,
+		compute_cmd_buffers:           []vk.CommandBuffer,
+		immediate_submit_command_pool: vk.CommandPool,
+		immediate_submit_cmd_buffer:   vk.CommandBuffer,
+		immediate_submit_fence:        vk.Fence,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -85,6 +88,50 @@ when USE_VULKAN_BACKEND {
 				INTERNAL.compute_command_pools,
 				INTERNAL.compute_cmd_buffers,
 			) or_return
+		}
+
+
+		// Create the command pool for immediate submit
+		{
+			cmd_pool_create_info := vk.CommandPoolCreateInfo {
+				sType = .COMMAND_POOL_CREATE_INFO,
+				flags = {.RESET_COMMAND_BUFFER},
+				queueFamilyIndex = G_RENDERER.queue_family_graphics_index,
+			}
+			if vk.CreateCommandPool(
+				   G_RENDERER.device,
+				   &cmd_pool_create_info,
+				   nil,
+				   &INTERNAL.immediate_submit_command_pool,
+			   ) !=
+			   .SUCCESS {
+				return false
+			}
+
+			alloc_info := vk.CommandBufferAllocateInfo {
+				sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
+				commandBufferCount = 1,
+				commandPool        = INTERNAL.immediate_submit_command_pool,
+				level              = .PRIMARY,
+			}
+			if vk.AllocateCommandBuffers(
+				   G_RENDERER.device,
+				   &alloc_info,
+				   &INTERNAL.immediate_submit_cmd_buffer,
+			   ) !=
+			   .SUCCESS {
+				return false
+			}
+
+			fence_create_info := vk.FenceCreateInfo {
+				sType = .FENCE_CREATE_INFO,
+			}
+			vk.CreateFence(
+				G_RENDERER.device,
+				&fence_create_info,
+				nil,
+				&INTERNAL.immediate_submit_fence,
+			)
 		}
 
 		return true
@@ -221,4 +268,26 @@ when USE_VULKAN_BACKEND {
 
 
 	//---------------------------------------------------------------------------//
+}
+
+@(private)
+command_buffer_one_time_submit :: proc(p_function: proc(p_cmd_buff: vk.CommandBuffer)) {
+	begin_info := vk.CommandBufferBeginInfo {
+		sType = .COMMAND_BUFFER_BEGIN_INFO,
+		flags = {.ONE_TIME_SUBMIT},
+	}
+	vk.BeginCommandBuffer(INTERNAL.immediate_submit_cmd_buffer, &begin_info)
+	p_function(INTERNAL.immediate_submit_cmd_buffer)
+	vk.EndCommandBuffer(INTERNAL.immediate_submit_cmd_buffer)
+
+	submit_info := vk.SubmitInfo {
+		sType              = .SUBMIT_INFO,
+		commandBufferCount = 1,
+		pCommandBuffers    = &INTERNAL.immediate_submit_cmd_buffer,
+	}
+
+	vk.QueueSubmit(G_RENDERER.graphics_queue, 1, &submit_info, INTERNAL.immediate_submit_fence)
+	vk.WaitForFences(G_RENDERER.device, 1, &INTERNAL.immediate_submit_fence, true, 9999999999)
+	vk.ResetFences(G_RENDERER.device, 1, &INTERNAL.immediate_submit_fence)
+	vk.ResetCommandPool(G_RENDERER.device, INTERNAL.immediate_submit_command_pool, nil)
 }

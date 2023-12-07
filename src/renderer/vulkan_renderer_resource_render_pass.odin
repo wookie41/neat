@@ -316,7 +316,6 @@ when USE_VULKAN_BACKEND {
 			)
 		}
 
-
 		// Prepare the rendering info
 		render_area := G_RENDERER.swap_extent
 
