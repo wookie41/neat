@@ -114,6 +114,11 @@ run :: proc() {
 		dt := f32(time.duration_seconds(time.diff(last_frame_time, current_time)))
 		render_dt := dt
 
+		mouse_pos: glsl.ivec2
+		pressed_mouse_buttons := sdl.GetMouseState(&mouse_pos.x, &mouse_pos.y)
+
+		active_keys := sdl.GetKeyboardState(nil)
+
 		for sdl.PollEvent(&sdl_event) {
 			#partial switch sdl_event.type {
 			case .QUIT:
@@ -125,19 +130,22 @@ run :: proc() {
 					}
 					renderer.handler_on_window_resized(renderer_event)
 				}
-			case .KEYDOWN:
-				if sdl_event.key.keysym.scancode == .ESCAPE {
-					running = false
+			case .MOUSEWHEEL:
+				if sdl_event.wheel.y > 0 {
+					camera_add_speed(1)
+				} else if sdl_event.wheel.y < 0 {
+					camera_add_speed(-1)
 				}
 			}
 
 			renderer.process_sdl_event(&sdl_event)
 		}
 
-		mouse_pos: glsl.ivec2
-		pressed_mouse_buttons := sdl.GetMouseState(&mouse_pos.x, &mouse_pos.y)
+		if active_keys[sdl.SCANCODE_ESCAPE] > 0 {
+			running = false
+			continue
+		}
 
-		active_keys := sdl.GetKeyboardState(nil)
 		if active_keys[sdl.SCANCODE_W] > 0 {
 			camera_add_forward_velocity(1)
 		}

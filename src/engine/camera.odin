@@ -98,3 +98,12 @@ camera_add_rotation :: proc(p_yaw_offset: f32, p_pitch_offset: f32) {
 }
 
 //---------------------------------------------------------------------------//
+
+camera_add_speed :: proc(p_speed_delta: f32) {
+	using Camera
+	speed += p_speed_delta
+	speed = max(1, speed)
+	speed = min(speed, 50)
+}
+
+//---------------------------------------------------------------------------//
