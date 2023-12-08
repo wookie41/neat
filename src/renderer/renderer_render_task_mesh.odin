@@ -6,7 +6,14 @@ import "../common"
 
 import "core:encoding/xml"
 import "core:log"
-import "core:math/linalg/glsl"
+
+//---------------------------------------------------------------------------//
+
+@(private)
+MeshPushConstants :: struct #packed {
+	mesh_instance_idx:     u32,
+	material_instance_idx: u32,
+}
 
 //---------------------------------------------------------------------------//
 
@@ -170,16 +177,15 @@ end_frame :: proc(p_render_task_ref: RenderTaskRef) {
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-UniformBufferObject :: struct {
-	model: glsl.mat4x4,
-	view:  glsl.mat4x4,
-	proj:  glsl.mat4x4,
-}
-
-@(private = "file")
 render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
+	temp_arena := common.Arena{}
+	common.temp_arena_init(&temp_arena, common.MEGABYTE)
+	defer common.arena_delete(temp_arena)
 
-	ubo_offset := []u32{0, size_of(UniformBufferObject) * get_frame_idx()}
+	uniform_offsets := []u32{
+		uniform_buffer_management_get_per_frame_offset(),
+		uniform_buffer_management_get_per_view_offset(),
+	}
 
 	mesh_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
 	mesh_render_task_data := (^MeshRenderTaskData)(mesh_render_task.data_ptr)
@@ -197,18 +203,20 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 		defer delete(draw_stream_per_material_pass)
 	}
 
-
 	// Create the draw stream for each material pass
 	for material_pass_ref in mesh_render_task_data.material_pass_refs {
-		draw_stream_per_material_pass[material_pass_ref] = draw_stream_create(
-			G_RENDERER_ALLOCATORS.temp_allocator,
-		)
+		draw_stream_per_material_pass[material_pass_ref] = draw_stream_create(temp_arena.allocator)
 
 		material_pass := &g_resources.material_passes[get_material_pass_idx(material_pass_ref)]
 		draw_stream := &draw_stream_per_material_pass[material_pass_ref]
 
 		draw_stream_set_pipeline(draw_stream, material_pass.pipeline_ref)
-		draw_stream_set_bind_group(draw_stream, G_RENDERER.global_bind_group_ref, 1, ubo_offset)
+		draw_stream_set_bind_group(
+			draw_stream,
+			G_RENDERER.global_bind_group_ref,
+			1,
+			uniform_offsets,
+		)
 		draw_stream_set_bind_group(
 			draw_stream,
 			G_RENDERER.bindless_textures_array_bind_group_ref,
@@ -222,13 +230,15 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 
 		mesh_instance_ref := g_resource_refs.mesh_instances.alive_refs[i]
 
-		mesh_instance := &g_resources.mesh_instances[get_mesh_instance_idx(mesh_instance_ref)]
+		mesh_instance_idx := get_mesh_instance_idx(mesh_instance_ref)
+		mesh_instance := &g_resources.mesh_instances[mesh_instance_idx]
 		mesh := &g_resources.meshes[get_mesh_idx(mesh_instance.desc.mesh_ref)]
 
 		// .. each submesh ..
 		for submesh, submesh_idx in mesh.desc.sub_meshes {
 
-			material_instance := &g_resources.material_instances[get_material_instance_idx(submesh.material_instance_ref)]
+			material_instance_idx := get_material_instance_idx(submesh.material_instance_ref)
+			material_instance := &g_resources.material_instances[material_instance_idx]
 			material_type := &g_resources.material_types[get_material_type_idx(material_instance.desc.material_type_ref)]
 
 			//... once for each material pass this submesh should be drawn in
@@ -255,10 +265,13 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 					.UInt32,
 					index_buffer_offset,
 				)
-				append(
-					&draw_stream.push_constants,
-					&material_instance.material_properties_buffer_entry_idx,
-				)
+
+				mesh_push_constants := MeshPushConstants {
+					mesh_instance_idx     = mesh_instance_idx,
+					material_instance_idx = material_instance_idx,
+				}
+
+				draw_stream_add_push_constants(draw_stream, &mesh_push_constants)
 
 				draw_stream_set_draw_count(draw_stream, submesh.data_count)
 				draw_stream_set_instance_count(draw_stream, 1)

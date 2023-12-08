@@ -17,5 +17,5 @@ struct MaterialParams
 
 #endif // FEAT_MAT_DEFAULT
 
-[[vk::binding(0, 1)]]
+[[vk::binding(3, 1)]]
 StructuredBuffer<MaterialParams> gMaterialBuffer;

@@ -245,6 +245,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	init_meshes()
 	init_images()
 	init_command_buffers(p_options) or_return
+	buffer_management_init() or_return
 
 	create_swap_images()
 
@@ -283,36 +284,43 @@ init :: proc(p_options: InitOptions) -> bool {
 		}
 	}
 
-	// Create the bind group for per frame/view data
+	// Create the global bind group
 	{
 		// Bind group layout creation
 		G_RENDERER.global_bind_group_layout_ref = allocate_bind_group_layout_ref(
-			common.create_name("GlobalUniforms"),
-			3, // material buffer, per frame, per view
+			common.create_name("GlobalBuffer"),
+			4, // per frame, per view, mesh instance buffer, material buffer
 		)
 
 		bind_group_layout_idx := get_bind_group_layout_idx(G_RENDERER.global_bind_group_layout_ref)
 		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_idx]
 
-		// Global materials buffer
-		bind_group_layout.desc.bindings[0] = BindGroupLayoutBinding {
-			count = 1,
-			shader_stages = {.Vertex, .Fragment, .Compute},
-			type = .StorageBuffer,
-		}
-
 		// Per frame uniform buffer
-		bind_group_layout.desc.bindings[1] = BindGroupLayoutBinding {
+		bind_group_layout.desc.bindings[0] = {
 			count = 1,
 			shader_stages = {.Vertex, .Fragment, .Compute},
 			type = .UniformBufferDynamic,
 		}
 
 		// Per view uniform buffer
-		bind_group_layout.desc.bindings[2] = BindGroupLayoutBinding {
+		bind_group_layout.desc.bindings[1] =  {
 			count = 1,
 			shader_stages = {.Vertex, .Fragment, .Compute},
 			type = .UniformBufferDynamic,
+		}
+
+		// Mesh instance info buffer
+		bind_group_layout.desc.bindings[2] =  {
+			count = 1,
+			shader_stages = {.Vertex, .Fragment, .Compute},
+			type = .StorageBuffer,
+		}
+
+		// Global materials buffer
+		bind_group_layout.desc.bindings[3] = {
+			count = 1,
+			shader_stages = {.Vertex, .Fragment, .Compute},
+			type = .StorageBuffer,
 		}
 
 		if create_bind_group_layout(G_RENDERER.global_bind_group_layout_ref) == false {
@@ -398,23 +406,34 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	// All of the global resources (sampler array and uniform buffers) have been created
 	// So now we can update the global bind group
+	{
+		using g_renderer_buffers
 
-	bind_group_update(
-		G_RENDERER.global_bind_group_ref,
-		BindGroupUpdate{
-			buffers = {
-				{
-					buffer_ref = g_material_properties_buffer_ref,
-					size = MATERIAL_PARAMS_BUFFER_SIZE,
-				},
-				{buffer_ref = InvalidBufferRef, size = 0},
-				{
-					buffer_ref = g_uniform_buffers.per_view_buffer_ref,
-					size = size_of(g_per_view_uniform_buffer_data),
+		mesh_instance_info_buffer := &g_resources.buffers[get_buffer_idx(mesh_instance_info_buffer_ref)]
+
+		bind_group_update(
+			G_RENDERER.global_bind_group_ref,
+			BindGroupUpdate{
+				buffers = {
+					{buffer_ref = InvalidBufferRef, size = 0},
+					{
+						buffer_ref = g_uniform_buffers.per_view_buffer_ref,
+						size = size_of(g_per_view_uniform_buffer_data),
+					},
+					{
+						buffer_ref = mesh_instance_info_buffer_ref,
+						size = mesh_instance_info_buffer.desc.size,
+					},
+					{
+						buffer_ref = material_instances_buffer_ref,
+						size = MATERIAL_INSTANCES_BUFFER_SIZE,
+					},
 				},
 			},
-		},
-	)
+		)
+
+	}
+
 
 	g_render_camera.position = {0, 0, 0}
 	g_render_camera.forward = {0, 0, -1}
@@ -455,6 +474,7 @@ update :: proc(p_dt: f32) {
 	buffer_upload_begin_frame()
 	image_upload_begin_frame()
 	material_instance_update_dirty_materials()
+	mesh_instance_send_transform_data()
 
 	uniform_buffer_management_update(p_dt)
 

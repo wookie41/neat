@@ -171,7 +171,7 @@ when USE_VULKAN_BACKEND {
 		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_idx]
 
 		num_descriptor_writes: u32 = 0
-		for binding in bind_group_layout.desc.bindings {
+		for binding, binding_idx in bind_group_layout.desc.bindings {
 
 			if binding.type == .UniformBuffer ||
 			   binding.type == .UniformBufferDynamic ||
@@ -197,7 +197,7 @@ when USE_VULKAN_BACKEND {
 				descriptor_writes[num_descriptor_writes] = vk.WriteDescriptorSet {
 					sType           = .WRITE_DESCRIPTOR_SET,
 					descriptorCount = 1,
-					dstBinding      = u32(num_descriptor_writes),
+					dstBinding      = u32(binding_idx),
 					dstSet          = backend_bind_group.vk_descriptor_set,
 					pBufferInfo     = &buffer_writes[buffer_write_idx],
 				}
@@ -247,7 +247,7 @@ when USE_VULKAN_BACKEND {
 				descriptor_writes[num_descriptor_writes] = vk.WriteDescriptorSet {
 					sType           = .WRITE_DESCRIPTOR_SET,
 					descriptorCount = 1,
-					dstBinding      = u32(num_descriptor_writes),
+					dstBinding      = u32(binding_idx),
 					dstSet          = backend_bind_group.vk_descriptor_set,
 					pImageInfo      = &image_writes[image_write_idx],
 				}

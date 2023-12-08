@@ -15,15 +15,10 @@ import "core:reflect"
 import "core:slice"
 import "core:strings"
 
-@(private)
-MaterialPassPushContants :: struct #packed {
-	material_idx: u32,
-}
-
 //---------------------------------------------------------------------------//
 
 @(private)
-MATERIAL_PARAMS_BUFFER_SIZE :: 8 * common.MEGABYTE
+MATERIAL_INSTANCES_BUFFER_SIZE :: 8 * common.MEGABYTE
 
 // @TODO 
 // Right now we just allocate a constant number, but some material types 
@@ -36,14 +31,9 @@ MAX_MATERIAL_INSTANCES_PER_MATERIAL_TYPE :: 512
 
 //---------------------------------------------------------------------------//
 
-@(private) 
-g_material_properties_buffer_ref: BufferRef
-
-//---------------------------------------------------------------------------//
-
 @(private = "file")
 INTERNAL: struct {
-	material_properties_mem_data:   []byte,
+	material_properties_mem_data: []byte,
 }
 
 //---------------------------------------------------------------------------//
@@ -162,22 +152,9 @@ init_material_types :: proc() -> bool {
 	// Allocate CPU memory for the materials data
 	INTERNAL.material_properties_mem_data = make(
 		[]byte,
-		MATERIAL_PARAMS_BUFFER_SIZE,
+		MATERIAL_INSTANCES_BUFFER_SIZE,
 		G_RENDERER_ALLOCATORS.main_allocator,
 	)
-
-	// Create a buffer for material properties
-	g_material_properties_buffer_ref = allocate_buffer_ref(
-		common.create_name("MaterialPropertiesBuffer"),
-	)
-
-	material_params_buffer := &g_resources.buffers[get_buffer_idx(g_material_properties_buffer_ref)]
-
-	material_params_buffer.desc.flags = {.Dedicated}
-	material_params_buffer.desc.size = MATERIAL_PARAMS_BUFFER_SIZE
-	material_params_buffer.desc.usage = {.StorageBuffer, .TransferDst}
-
-	create_buffer(g_material_properties_buffer_ref) or_return
 
 	load_material_types_from_config_file() or_return
 
@@ -187,7 +164,7 @@ init_material_types :: proc() -> bool {
 //---------------------------------------------------------------------------//
 
 deinit_material_types :: proc() {
-	destroy_buffer(g_material_properties_buffer_ref)
+	destroy_buffer(g_renderer_buffers.material_instances_buffer_ref)
 }
 
 //---------------------------------------------------------------------------//
@@ -210,7 +187,7 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 	// Suballocate the params buffer for this material type to store material instance data
 	{
 		success, suballocation := buffer_allocate(
-			g_material_properties_buffer_ref,
+			g_renderer_buffers.material_instances_buffer_ref,
 			u32(material_type.properties_size_in_bytes * MAX_MATERIAL_INSTANCES_PER_MATERIAL_TYPE),
 		)
 
@@ -282,8 +259,8 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 
 		pipeline.desc.push_constants[0] = PushConstantDesc {
 			offset_in_bytes = 0,
-			size_in_bytes = size_of(MaterialPassPushContants),
-			shader_stages = {.Fragment},
+			size_in_bytes = size_of(MeshPushConstants),
+			shader_stages = {.Vertex, .Fragment},
 		}
 
 		success = create_graphics_pipeline(material_pass.pipeline_ref)
@@ -338,7 +315,7 @@ destroy_material_type :: proc(p_ref: MaterialTypeRef) {
 
 	delete(material_type.desc.material_passes_refs, G_RENDERER_ALLOCATORS.resource_allocator)
 	buffer_free(
-		g_material_properties_buffer_ref,
+		g_renderer_buffers.material_instances_buffer_ref,
 		material_type.properties_buffer_suballocation.vma_allocation,
 	)
 

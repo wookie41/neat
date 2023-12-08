@@ -73,3 +73,17 @@ update_per_view_uniform_buffer :: proc(p_dt: f32) {
 }
 
 //---------------------------------------------------------------------------//
+
+@(private)
+uniform_buffer_management_get_per_frame_offset :: proc() -> u32 {
+	return 0
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
+uniform_buffer_management_get_per_view_offset :: proc() -> u32 {
+	return size_of(g_per_view_uniform_buffer_data) * get_frame_idx()
+}
+
+//---------------------------------------------------------------------------//

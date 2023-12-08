@@ -5,18 +5,32 @@ package renderer
 
 import "../common"
 import "core:c"
+import "core:math/linalg/glsl"
+import "core:mem"
 
 //---------------------------------------------------------------------------//
 
 MeshInstanceDesc :: struct {
-	name:                  common.Name,
-	mesh_ref:              MeshRef,
+	name:     common.Name,
+	mesh_ref: MeshRef,
 }
 
 //---------------------------------------------------------------------------//
 
+MeshInstanceFlagBits :: enum u8 {
+	MeshInstanceDataDirty,
+}
+
+//---------------------------------------------------------------------------//
+
+MeshInstanceFlags :: distinct bit_set[MeshInstanceFlagBits;u8]
+
+//---------------------------------------------------------------------------//
+
 MeshInstanceResource :: struct {
-	desc:                 MeshInstanceDesc,
+	desc:         MeshInstanceDesc,
+	model_matrix: glsl.mat4,
+	flags:        MeshInstanceFlags,
 }
 
 //---------------------------------------------------------------------------//
@@ -27,6 +41,13 @@ MeshInstanceRef :: common.Ref(MeshInstanceResource)
 
 InvalidMeshInstanceRef := MeshInstanceRef {
 	ref = c.UINT32_MAX,
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
+MeshInstanceInfoData :: struct #packed {
+	model_matrix: glsl.mat4,
 }
 
 //---------------------------------------------------------------------------//
@@ -53,6 +74,9 @@ deinit_mesh_instances :: proc() {
 //---------------------------------------------------------------------------//
 
 create_mesh_instance :: proc(p_mesh_instance_ref: MeshInstanceRef) -> bool {
+	mesh_instance := &g_resources.mesh_instances[get_mesh_instance_idx(p_mesh_instance_ref)]
+	mesh_instance.model_matrix = glsl.identity(glsl.mat4)
+	mesh_instance.flags += {.MeshInstanceDataDirty}
 	return true
 }
 
@@ -77,3 +101,42 @@ destroy_mesh_instance :: proc(p_ref: MeshInstanceRef) {
 	// mesh_instance := get_mesh_instance(p_ref)
 	common.ref_free(&g_resource_refs.mesh_instances, p_ref)
 }
+
+
+//--------------------------------------------------------------------------//
+
+@(private)
+mesh_instance_send_transform_data :: proc() {
+
+	for i in 0 ..< g_resource_refs.mesh_instances.alive_count {
+
+		mesh_instance_ref := g_resource_refs.mesh_instances.alive_refs[i]
+		mesh_instance_idx := get_mesh_instance_idx(mesh_instance_ref)
+		mesh_instance := &g_resources.mesh_instances[mesh_instance_idx]
+
+		if .MeshInstanceDataDirty in mesh_instance.flags {
+
+			buffer_upload_request := BufferUploadRequest {
+				dst_buff        = g_renderer_buffers.mesh_instance_info_buffer_ref,
+				dst_buff_offset = size_of(MeshInstanceInfoData) * mesh_instance_idx,
+				dst_queue_usage = .Graphics,
+				size            = size_of(MeshInstanceInfoData),
+			}
+
+			buffer_upload_response := request_buffer_upload(buffer_upload_request)
+			if buffer_upload_response.ptr == nil {
+				continue
+			}
+
+			mem.copy(
+				buffer_upload_response.ptr,
+				&mesh_instance.model_matrix,
+				size_of(MeshInstanceInfoData),
+			)
+
+			mesh_instance.flags -= {.MeshInstanceDataDirty}
+		}
+	}
+}
+
+//--------------------------------------------------------------------------//

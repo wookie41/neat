@@ -125,8 +125,7 @@ draw_stream_dispatch :: proc(p_cmd_buff_ref: CommandBufferRef, p_draw_stream: ^D
 //---------------------------------------------------------------------------//
 
 draw_stream_reset :: proc(p_draw_stream: ^DrawStream) {
-	delete(p_draw_stream.encoded_draw_stream_data)
-	delete(p_draw_stream.push_constants)
+	free_all(p_draw_stream.allocator)
 
 	p_draw_stream.encoded_draw_stream_data = make(
 		[dynamic]u32,
@@ -269,7 +268,13 @@ draw_stream_set_draw_count :: proc(p_draw_stream: ^DrawStream, p_draw_count: u32
 
 draw_stream_set_instance_count :: proc(p_draw_stream: ^DrawStream, p_instance_count: u32) {
 	draw_stream_write(p_draw_stream, .SetInstanceCount, p_instance_count)
+}
 
+//---------------------------------------------------------------------------//
+
+draw_stream_add_push_constants :: proc(p_draw_stream: ^DrawStream, p_push_constants: ^$T) {
+	push_constants := new_clone(p_push_constants^, p_draw_stream.allocator)
+	append(&p_draw_stream.push_constants, push_constants)
 }
 
 //---------------------------------------------------------------------------//

@@ -1,6 +1,23 @@
 #include "./bindless.incl.hlsl"
 #include "./constant_buffers.incl.hlsl"
 
+struct MeshPushConstants
+{
+    uint meshInstanceIdx;
+    uint materialInstanceIdx;
+};
+
+[[vk::push_constant]]
+MeshPushConstants meshPushConstants;
+
+struct MeshInstanceInfo
+{
+    float4x4 modelMatrix;
+};
+
+[[vk::binding(2, 1)]]
+StructuredBuffer<MeshInstanceInfo> gMeshInstanceInfoBuffer;
+
 struct VSInput {
     [[vk::location(0)]] float3 position  : POSITION; 
     [[vk::location(1)]] float2 uv        : TEXCOORD0;
@@ -14,5 +31,8 @@ struct VSOutput {
 
 float4 main(in VSInput pVertexInput, out VSOutput pVertexOutput) : SV_Position {
     pVertexOutput.uv = pVertexInput.uv;
-    return mul(uPerView.proj, mul(uPerView.view, float4(pVertexInput.position, 1.0)));
+    return mul(uPerView.proj, 
+        mul(uPerView.view, 
+        mul(gMeshInstanceInfoBuffer[meshPushConstants.meshInstanceIdx].modelMatrix, 
+        float4(pVertexInput.position, 1.0))));
 }

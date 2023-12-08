@@ -2,13 +2,14 @@
 #include "./constant_buffers.incl.hlsl"
 #include "./materials.incl.hlsl"
 
-struct MaterialPassPushConstants
+struct MeshPushConstants
 {
-    uint materialIdx;
+    uint meshInstanceIdx;
+    uint materialInstanceIdx;
 };
 
 [[vk::push_constant]]
-MaterialPassPushConstants materialPassPushConstans;
+MeshPushConstants meshPushConstants;
 
 struct FSInput {
     [[vk::location(0)]] float2 uv        : TEXCOORD0;
@@ -22,6 +23,6 @@ void main(in FSInput pFragmentInput, out FSOutput pFragmentOutput) {
     pFragmentOutput.color = pow(sampleBindless(
         uLinearRepeatSampler, 
         pFragmentInput.uv, 
-        gMaterialBuffer[materialPassPushConstans.materialIdx].albedoTex), 
+        gMaterialBuffer[meshPushConstants.materialInstanceIdx].albedoTex), 
         2.2);
 }
