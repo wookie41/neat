@@ -140,3 +140,14 @@ mesh_instance_send_transform_data :: proc() {
 }
 
 //--------------------------------------------------------------------------//
+
+mesh_instance_set_model_matrix :: proc(
+	p_mesh_instance_ref: MeshInstanceRef,
+	p_model_matrix: glsl.mat4x4,
+) {
+	mesh_instance := &g_resources.mesh_instances[get_mesh_instance_idx(p_mesh_instance_ref)]
+	mesh_instance.model_matrix = p_model_matrix
+	mesh_instance.flags += {.MeshInstanceDataDirty}
+}
+
+//--------------------------------------------------------------------------//
