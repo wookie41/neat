@@ -633,6 +633,19 @@ backend_update :: proc(p_dt: f32) {
 
 	if should_recreate_swapchain {
 		recreate_swapchain()
+		create_swap_images()
+
+		vk.AcquireNextImageKHR(
+			G_RENDERER.device,
+			G_RENDERER.swapchain,
+			c.UINT64_MAX,
+			G_RENDERER.image_available_semaphores[frame_idx],
+			0,
+			&G_RENDERER.swap_img_idx,
+		)
+
+		vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx])
+
 		return
 	}
 
@@ -872,7 +885,7 @@ create_swapchain :: proc(p_is_recreating: bool = false) -> bool {
 				   &G_RENDERER.swapchain_image_views[i],
 			   ) !=
 			   .SUCCESS {
-				log.error("Error creating image view")
+				log.error("Error creating image view\n")
 				return false
 			}
 		}

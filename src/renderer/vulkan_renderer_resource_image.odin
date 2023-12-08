@@ -370,15 +370,24 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_create_swap_images :: proc() {
-		G_RENDERER.swap_image_refs = make(
-			[]ImageRef,
-			u32(len(G_RENDERER.swapchain_images)),
-			G_RENDERER_ALLOCATORS.resource_allocator,
-		)
+
+		// If those images are already created, this means that the swapchain is getting recreated
+		is_recreating_swapchain := len(G_RENDERER.swap_image_refs) > 0
+
+		if is_recreating_swapchain == false {
+			G_RENDERER.swap_image_refs = make(
+				[]ImageRef,
+				u32(len(G_RENDERER.swapchain_images)),
+				G_RENDERER_ALLOCATORS.resource_allocator,
+			)
+			for _, i in G_RENDERER.swap_image_refs {
+				G_RENDERER.swap_image_refs[i] = allocate_image_ref(common.create_name("SwapImage"))
+			}
+		}
+
 
 		for vk_swap_image, i in G_RENDERER.swapchain_images {
-			ref := allocate_image_ref(common.create_name("SwapImage"))
-
+			ref := G_RENDERER.swap_image_refs[i]
 			image_idx := get_image_idx(ref)
 
 			swap_image := &g_resources.images[image_idx]
@@ -595,12 +604,17 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	backend_destroy_image :: proc(p_image_ref: ImageRef) {
-		backend_image := &g_resources.backend_images[get_image_idx(p_image_ref)]
-		vk.DestroyImageView(G_RENDERER.device, backend_image.all_mips_vk_view, nil)
-		for image_view in backend_image.per_mip_vk_view {
-			vk.DestroyImageView(G_RENDERER.device, image_view, nil)
+		img_idx := get_image_idx(p_image_ref)
+		image := &g_resources.images[img_idx]
+		backend_image := &g_resources.backend_images[img_idx]
+		if (.SwapImage in image.desc.flags) == false {
+			// For swap chain, these are destroyed in recreate_swapchain
+			vma.destroy_image(G_RENDERER.vma_allocator, backend_image.vk_image, nil)
+			vk.DestroyImageView(G_RENDERER.device, backend_image.all_mips_vk_view, nil)
+			for image_view in backend_image.per_mip_vk_view {
+				vk.DestroyImageView(G_RENDERER.device, image_view, nil)
+			}
 		}
-		vma.destroy_image(G_RENDERER.vma_allocator, backend_image.vk_image, nil)
 		delete(backend_image.per_mip_vk_view, G_RENDERER_ALLOCATORS.resource_allocator)
 		delete(backend_image.vk_layout_per_mip, G_RENDERER_ALLOCATORS.resource_allocator)
 	}

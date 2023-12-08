@@ -274,6 +274,14 @@ allocate_image_ref :: proc(p_name: common.Name) -> ImageRef {
 	return ref
 }
 
+//---------------------------------------------------------------------------//
+
+free_image_ref :: proc(p_ref: ImageRef) {
+	common.ref_free(&G_IMAGE_REF_ARRAY, p_ref)
+}
+
+//---------------------------------------------------------------------------//
+
 /** Helper method to create image that can later be used as a sampled image inside a shader */
 create_texture_image :: proc(p_ref: ImageRef) -> bool {
 
@@ -329,7 +337,7 @@ get_image_idx :: #force_inline proc(p_ref: ImageRef) -> u32 {
 
 //---------------------------------------------------------------------------//
 
-create_swap_images :: #force_inline proc() {
+create_swap_images :: proc() {
 	backend_create_swap_images()
 }
 
