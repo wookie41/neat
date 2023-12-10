@@ -2,17 +2,9 @@
 #include "./constant_buffers.incl.hlsl"
 #include "./materials.incl.hlsl"
 
-struct MeshPushConstants
-{
-    uint meshInstanceIdx;
-    uint materialInstanceIdx;
-};
-
-[[vk::push_constant]]
-MeshPushConstants meshPushConstants;
-
 struct FSInput {
-    [[vk::location(0)]] float2 uv        : TEXCOORD0;
+    [[vk::location(0)]] float2 uv                   : TEXCOORD0;
+    [[vk::location(1)]] uint materialInstanceIdx    : MATERIAL_INSTANCE_IDX;
 };
 
 struct FSOutput {
@@ -23,6 +15,6 @@ void main(in FSInput pFragmentInput, out FSOutput pFragmentOutput) {
     pFragmentOutput.color = pow(sampleBindless(
         uLinearRepeatSampler, 
         pFragmentInput.uv, 
-        gMaterialBuffer[meshPushConstants.materialInstanceIdx].albedoTex), 
+        gMaterialBuffer[pFragmentInput.materialInstanceIdx].albedoTex), 
         2.2);
 }
