@@ -17,9 +17,6 @@ import "core:strings"
 
 //---------------------------------------------------------------------------//
 
-@(private)
-MATERIAL_INSTANCES_BUFFER_SIZE :: 8 * common.MEGABYTE
-
 // @TODO 
 // Right now we just allocate a constant number, but some material types 
 // will be more frequently used than others, so we should handle it more smartly
@@ -244,7 +241,7 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 		assert(success)
 
 		// Create the PSO
-		material_pass.pipeline_ref = allocate_pipeline_ref(material_pass.desc.name, 3, 1)
+		material_pass.pipeline_ref = allocate_pipeline_ref(material_pass.desc.name, 3, 0)
 		pipeline := &g_resources.pipelines[get_pipeline_idx(material_pass.pipeline_ref)]
 		pipeline.desc.bind_group_layout_refs = {
 			InvalidBindGroupRefLayout, // Slot 0 not used
@@ -256,12 +253,6 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 		pipeline.desc.vert_shader_ref = material_pass.vertex_shader_ref
 		pipeline.desc.frag_shader_ref = material_pass.fragment_shader_ref
 		pipeline.desc.vertex_layout = .Mesh
-
-		pipeline.desc.push_constants[0] = PushConstantDesc {
-			offset_in_bytes = 0,
-			size_in_bytes = size_of(MeshPushConstants),
-			shader_stages = {.Vertex, .Fragment},
-		}
 
 		success = create_graphics_pipeline(material_pass.pipeline_ref)
 		assert(success)

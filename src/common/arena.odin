@@ -29,16 +29,16 @@ temp_arenas_init_stack :: proc(p_arenas_size: u32, p_allocator: mem.Allocator) {
 //---------------------------------------------------------------------------//
 
 Arena :: struct {
-	arena:         mem.Arena,
-	allocator:     mem.Allocator,
-	src_allocator: mem.Allocator,
+	scratch_allocator: mem.Scratch_Allocator,
+	allocator:         mem.Allocator,
+	src_allocator:     mem.Allocator,
 }
 
 //---------------------------------------------------------------------------//
 
 arena_init :: proc(p_arena: ^Arena, p_arena_size: u32, p_allocator: mem.Allocator) {
-	mem.arena_init(&p_arena.arena, make([]byte, p_arena_size, p_allocator))
-	p_arena.allocator = mem.arena_allocator(&p_arena.arena)
+	mem.scratch_allocator_init(&p_arena.scratch_allocator, int(p_arena_size), p_allocator)
+	p_arena.allocator = mem.scratch_allocator(&p_arena.scratch_allocator)
 	p_arena.src_allocator = p_allocator
 	return
 }
@@ -46,7 +46,7 @@ arena_init :: proc(p_arena: ^Arena, p_arena_size: u32, p_allocator: mem.Allocato
 //---------------------------------------------------------------------------//
 
 arena_delete :: proc(p_arena: Arena) {
-	delete(p_arena.arena.data, p_arena.src_allocator)
+	delete(p_arena.scratch_allocator.data, p_arena.src_allocator)
 }
 
 //---------------------------------------------------------------------------//

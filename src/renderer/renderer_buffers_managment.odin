@@ -8,17 +8,26 @@ import "../common"
 
 @(private)
 g_renderer_buffers: struct {
-	mesh_instance_info_buffer_ref: BufferRef,
-	material_instances_buffer_ref: BufferRef,
+	mesh_instance_info_buffer_ref:       BufferRef,
+	material_instances_buffer_ref:       BufferRef,
+	mesh_instanced_draw_info_buffer_ref: BufferRef,
 }
 
 //---------------------------------------------------------------------------//
 
 @(private)
+MATERIAL_INSTANCES_BUFFER_SIZE :: 8 * common.MEGABYTE
+
+@(private)
+MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE :: 2 * common.MEGABYTE
+
+//---------------------------------------------------------------------------//
+
+
+@(private)
 buffer_management_init :: proc() -> bool {
 
 	using g_renderer_buffers
-
 
 	// Determine storage buffer flags and usage based on GPU type
 	storage_buffer_flags := BufferDescFlags{.Dedicated}
@@ -53,12 +62,35 @@ buffer_management_init :: proc() -> bool {
 
 		material_instances_buffer.desc.flags = storage_buffer_flags
 		material_instances_buffer.desc.usage = storage_buffer_usage
-        material_instances_buffer.desc.size = MATERIAL_INSTANCES_BUFFER_SIZE
+		material_instances_buffer.desc.size = MATERIAL_INSTANCES_BUFFER_SIZE
 
 		create_buffer(material_instances_buffer_ref) or_return
 	}
-    
+
+	// Create buffer for instanced mesh draws
+	{
+		mesh_instanced_draw_info_buffer_ref = allocate_buffer_ref(
+			common.create_name("MeshInstancedDrawInfo"),
+		)
+
+		mesh_instanced_draw_info_buffer := &g_resources.buffers[get_buffer_idx(material_instances_buffer_ref)]
+
+		mesh_instanced_draw_info_buffer.desc.flags = storage_buffer_flags
+		mesh_instanced_draw_info_buffer.desc.usage = {.DynamicStorageBuffer, .TransferDst}
+		mesh_instanced_draw_info_buffer.desc.size =
+			MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE * G_RENDERER.num_frames_in_flight
+
+		create_buffer(material_instances_buffer_ref) or_return
+	}
+
 	return true
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
+buffer_management_get_mesh_instanced_info_buffer_offset :: #force_inline proc() -> u32 {
+	return MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE * get_frame_idx()
 }
 
 //---------------------------------------------------------------------------//

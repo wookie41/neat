@@ -545,8 +545,10 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
-		create_info.pushConstantRangeCount = u32(len(pipeline.desc.push_constants))
-		create_info.pPushConstantRanges = &push_constant_ranges[0]
+		if len(pipeline.desc.push_constants) > 0 {
+			create_info.pushConstantRangeCount = u32(len(pipeline.desc.push_constants))
+			create_info.pPushConstantRanges = &push_constant_ranges[0]	
+		}
 
 		if vk.CreatePipelineLayout(
 			   G_RENDERER.device,

@@ -289,7 +289,7 @@ init :: proc(p_options: InitOptions) -> bool {
 		// Bind group layout creation
 		G_RENDERER.global_bind_group_layout_ref = allocate_bind_group_layout_ref(
 			common.create_name("GlobalBuffer"),
-			4, // per frame, per view, mesh instance buffer, material buffer
+			5, // per frame, per view, mesh instance buffer, material buffer, instanced draw infos
 		)
 
 		bind_group_layout_idx := get_bind_group_layout_idx(G_RENDERER.global_bind_group_layout_ref)
@@ -303,24 +303,31 @@ init :: proc(p_options: InitOptions) -> bool {
 		}
 
 		// Per view uniform buffer
-		bind_group_layout.desc.bindings[1] =  {
+		bind_group_layout.desc.bindings[1] = {
 			count = 1,
 			shader_stages = {.Vertex, .Fragment, .Compute},
 			type = .UniformBufferDynamic,
 		}
 
 		// Mesh instance info buffer
-		bind_group_layout.desc.bindings[2] =  {
+		bind_group_layout.desc.bindings[2] = {
 			count = 1,
 			shader_stages = {.Vertex, .Fragment, .Compute},
 			type = .StorageBuffer,
 		}
 
-		// Global materials buffer
+		// Material instances buffer
 		bind_group_layout.desc.bindings[3] = {
 			count = 1,
 			shader_stages = {.Vertex, .Fragment, .Compute},
 			type = .StorageBuffer,
+		}
+
+		// Mesh instanced draw infos
+		bind_group_layout.desc.bindings[4] = {
+			count = 1,
+			shader_stages = {.Vertex, .Fragment, .Compute},
+			type = .StorageBufferDynamic,
 		}
 
 		if create_bind_group_layout(G_RENDERER.global_bind_group_layout_ref) == false {
@@ -427,6 +434,10 @@ init :: proc(p_options: InitOptions) -> bool {
 					{
 						buffer_ref = material_instances_buffer_ref,
 						size = MATERIAL_INSTANCES_BUFFER_SIZE,
+					},
+					{
+						buffer_ref = mesh_instanced_draw_info_buffer_ref,
+						size = MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE,
 					},
 				},
 			},

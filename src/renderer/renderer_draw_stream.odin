@@ -18,6 +18,7 @@ g_draw_stream_ops := []proc(_: ^DrawStreamDispatch){
 	draw_stream_dispatch_bind_index_buffer,
 	draw_stream_dispatch_change_bind_group,
 	draw_stream_dispatch_set_instance_count,
+	draw_stream_dispatch_set_first_instance,
 	draw_stream_dispatch_set_draw_count,
 	draw_stream_dispatcher_submit_draw,
 }
@@ -31,6 +32,7 @@ DrawStreamOp :: enum u32 {
 	BindIndexBuffer,
 	ChangeBindGroup,
 	SetInstanceCount,
+	SetFirstInstances,
 	SetDrawCount,
 	SubmitDraw,
 }
@@ -66,6 +68,7 @@ DrawStreamDispatch :: struct {
 	pipeline_ref:          PipelineRef,
 	draw_count:            u32,
 	instance_count:        u32,
+	first_instance:        u32,
 	index_buffer_ref:      BufferRef,
 }
 
@@ -272,6 +275,12 @@ draw_stream_set_instance_count :: proc(p_draw_stream: ^DrawStream, p_instance_co
 
 //---------------------------------------------------------------------------//
 
+draw_stream_set_first_instance :: proc(p_draw_stream: ^DrawStream, p_first_instance: u32) {
+	draw_stream_write(p_draw_stream, .SetInstanceCount, p_first_instance)
+}
+
+//---------------------------------------------------------------------------//
+
 draw_stream_add_push_constants :: proc(p_draw_stream: ^DrawStream, p_push_constants: ^$T) {
 	push_constants := new_clone(p_push_constants^, p_draw_stream.allocator)
 	append(&p_draw_stream.push_constants, push_constants)
@@ -345,6 +354,13 @@ draw_stream_dispatch_set_instance_count :: proc(p_draw_stream_dispatch: ^DrawStr
 //---------------------------------------------------------------------------//
 
 @(private = "file")
+draw_stream_dispatch_set_first_instance :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
+	p_draw_stream_dispatch.first_instance = draw_stream_dispatch_read_next(p_draw_stream_dispatch)
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
 draw_stream_dispatch_change_bind_group :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
 	bind_group_ref := BindGroupRef{draw_stream_dispatch_read_next(p_draw_stream_dispatch)}
 	binding := draw_stream_dispatch_read_next(p_draw_stream_dispatch)
@@ -386,6 +402,7 @@ draw_stream_dispatcher_submit_draw :: proc(p_draw_stream_dispatch: ^DrawStreamDi
 			p_draw_stream_dispatch.cmd_buff_ref,
 			p_draw_stream_dispatch.draw_count,
 			p_draw_stream_dispatch.instance_count,
+			p_draw_stream_dispatch.first_instance,
 			p_draw_stream_dispatch.pipeline_ref,
 			push_constants,
 		)

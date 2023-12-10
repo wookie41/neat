@@ -63,6 +63,7 @@ when USE_VULKAN_BACKEND {
 		p_cmd_buff_ref: CommandBufferRef,
 		p_index_count: u32,
 		p_instance_count: u32,
+		p_first_instance: u32,
 		p_pipeline_ref: PipelineRef,
 		p_push_constant: []rawptr,
 	) {
@@ -97,7 +98,14 @@ when USE_VULKAN_BACKEND {
 			)
 		}
 
-		vk.CmdDrawIndexed(backend_cmd_buffer.vk_cmd_buff, p_index_count, p_instance_count, 0, 0, 0)
+		vk.CmdDrawIndexed(
+			backend_cmd_buffer.vk_cmd_buff,
+			p_index_count,
+			p_instance_count,
+			0,
+			0,
+			p_first_instance,
+		)
 	}
 
 	//---------------------------------------------------------------------------//
