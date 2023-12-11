@@ -1,0 +1,140 @@
+{
+	"base": {
+		"name": 207878904,
+		"uuid": 91833986478076135780998385764286228588,
+		"type": 1,
+		"version": 1
+	},
+	"featureFlags": 15,
+	"subMeshes": [
+		{
+			"data_count": 94308,
+			"data_offset": 0,
+			"material_asset_name": 3677232924
+		},
+		{
+			"data_count": 10416,
+			"data_offset": 94308,
+			"material_asset_name": 2888380298
+		},
+		{
+			"data_count": 53064,
+			"data_offset": 104724,
+			"material_asset_name": 891321904
+		},
+		{
+			"data_count": 12258,
+			"data_offset": 157788,
+			"material_asset_name": 1109872294
+		},
+		{
+			"data_count": 2388,
+			"data_offset": 170046,
+			"material_asset_name": 3695434501
+		},
+		{
+			"data_count": 30504,
+			"data_offset": 172434,
+			"material_asset_name": 2873420691
+		},
+		{
+			"data_count": 17628,
+			"data_offset": 202938,
+			"material_asset_name": 843954729
+		},
+		{
+			"data_count": 8448,
+			"data_offset": 220566,
+			"material_asset_name": 1162513087
+		},
+		{
+			"data_count": 59484,
+			"data_offset": 229014,
+			"material_asset_name": 3589642030
+		},
+		{
+			"data_count": 63,
+			"data_offset": 288498,
+			"material_asset_name": 2733811640
+		},
+		{
+			"data_count": 33024,
+			"data_offset": 288561,
+			"material_asset_name": 4179270704
+		},
+		{
+			"data_count": 96,
+			"data_offset": 321585,
+			"material_asset_name": 2384309414
+		},
+		{
+			"data_count": 21264,
+			"data_offset": 321681,
+			"material_asset_name": 387251484
+		},
+		{
+			"data_count": 9126,
+			"data_offset": 342945,
+			"material_asset_name": 1611910538
+		},
+		{
+			"data_count": 49536,
+			"data_offset": 352071,
+			"material_asset_name": 4269234217
+		},
+		{
+			"data_count": 69624,
+			"data_offset": 401607,
+			"material_asset_name": 2305845439
+		},
+		{
+			"data_count": 43008,
+			"data_offset": 471231,
+			"material_asset_name": 276379909
+		},
+		{
+			"data_count": 49536,
+			"data_offset": 514239,
+			"material_asset_name": 1736313235
+		},
+		{
+			"data_count": 56832,
+			"data_offset": 563775,
+			"material_asset_name": 4156625922
+		},
+		{
+			"data_count": 2640,
+			"data_offset": 620607,
+			"material_asset_name": 2160469140
+		},
+		{
+			"data_count": 43008,
+			"data_offset": 623247,
+			"material_asset_name": 3526873075
+		},
+		{
+			"data_count": 49488,
+			"data_offset": 666255,
+			"material_asset_name": 2771451749
+		},
+		{
+			"data_count": 43452,
+			"data_offset": 715743,
+			"material_asset_name": 1010413279
+		},
+		{
+			"data_count": 27552,
+			"data_offset": 759195,
+			"material_asset_name": 1262394953
+		},
+		{
+			"data_count": 54,
+			"data_offset": 786747,
+			"material_asset_name": 3579448298
+		}
+	],
+	"totalVertexSize": 8469648,
+	"totalIndexSize": 3147204,
+	"numVertices": 192492,
+	"numIndices": 786801
+}

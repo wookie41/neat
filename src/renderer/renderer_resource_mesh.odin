@@ -4,6 +4,7 @@ package renderer
 
 import "../common"
 import "core:c"
+import "core:log"
 import "core:math/linalg/glsl"
 import "core:mem"
 
@@ -63,19 +64,19 @@ SubMesh :: struct {
 //---------------------------------------------------------------------------//
 
 MeshDesc :: struct {
-	name:                  common.Name,
+	name:       common.Name,
 	// Misc flags, telling is if mesh is using indexed draw or not etc.
-	flags:                 MeshFlags,
+	flags:      MeshFlags,
 	// Flags specyfing which features the mesh has (position, normals, UVs etc.)
-	features:              MeshFeatureFlags,
+	features:   MeshFeatureFlags,
 	// List of submeshes that actually define the ranges in vertex/index data
-	sub_meshes:            []SubMesh,
+	sub_meshes: []SubMesh,
 	// Mesh data
-	indices:               []INDEX_DATA_TYPE,
-	position:              []glsl.vec3,
-	uv:                    []glsl.vec2,
-	normal:                []glsl.vec3,
-	tangent:               []glsl.vec3,
+	indices:    []INDEX_DATA_TYPE,
+	position:   []glsl.vec3,
+	uv:         []glsl.vec2,
+	normal:     []glsl.vec3,
+	tangent:    []glsl.vec3,
 }
 
 //---------------------------------------------------------------------------//
@@ -175,6 +176,7 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 		   u32(vertex_data_size + index_data_size),
 	   ) ==
 	   false {
+		log.warnf("Failed to load mesh - no space to upload vertex data")
 		return false
 	}
 
@@ -185,6 +187,7 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 	)
 
 	if vertex_allocation_successful == false {
+		log.warnf("Failed to load mesh - failed to suballocate vertex buffer")
 		return false
 	}
 
@@ -197,15 +200,17 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 
 		if index_allocation_successful == false {
 			buffer_free(INTERNAL.vertex_buffer_ref, vertex_allocation.vma_allocation)
+			log.warnf("Failed to load mesh - failed to suballocate index buffer")
 			return false
 		}
 
 		index_buffer_upload_request := BufferUploadRequest {
-			dst_buff          = INTERNAL.index_buffer_ref,
-			dst_buff_offset   = index_allocation.offset,
-			dst_queue_usage   = .Graphics,
+			dst_buff = INTERNAL.index_buffer_ref,
+			dst_buff_offset = index_allocation.offset,
+			dst_queue_usage = .Graphics,
 			first_usage_stage = .VertexInput,
-			size              = u32(index_data_size),
+			size = u32(index_data_size),
+			flags = {.RunOnNextFrame},
 		}
 
 		upload_response := request_buffer_upload(index_buffer_upload_request)
@@ -213,7 +218,7 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 		mem.copy(
 			upload_response.ptr,
 			raw_data(mesh.desc.indices),
-			size_of(INDEX_DATA_TYPE) * index_count,
+			index_data_size,
 		)
 
 		mesh.index_buffer_allocation = index_allocation
@@ -222,11 +227,12 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 	// Upload vertex data to the staging buffer
 	{
 		vertex_buffer_upload_request := BufferUploadRequest {
-			dst_buff          = INTERNAL.vertex_buffer_ref,
-			dst_buff_offset   = vertex_allocation.offset,
-			dst_queue_usage   = .Graphics,
+			dst_buff = INTERNAL.vertex_buffer_ref,
+			dst_buff_offset = vertex_allocation.offset,
+			dst_queue_usage = .Graphics,
 			first_usage_stage = .VertexInput,
-			size              = u32(vertex_data_size),
+			size = u32(vertex_data_size),
+			flags = {.RunOnNextFrame},
 		}
 
 		upload_response := request_buffer_upload(vertex_buffer_upload_request)

@@ -2,6 +2,7 @@ package renderer
 
 //---------------------------------------------------------------------------//
 
+import "../common"
 import vk "vendor:vulkan"
 
 //---------------------------------------------------------------------------//
@@ -70,8 +71,6 @@ when USE_VULKAN_BACKEND {
 			descriptorSetCount = 1,
 			descriptorPool     = INTERNAL.descriptor_pool,
 		}
-		descriptor_sets := make([]vk.DescriptorSet, 1, G_RENDERER_ALLOCATORS.temp_allocator)
-		defer delete(descriptor_sets, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		return(
 			vk.AllocateDescriptorSets(
@@ -143,26 +142,18 @@ when USE_VULKAN_BACKEND {
 		buffer_infos_count := len(p_bind_group_update.buffers)
 		total_writes_count := buffer_infos_count + images_infos_count
 
+		temp_arena: common.Arena
+		common.temp_arena_init(&temp_arena)
+		defer common.arena_delete(temp_arena)
+
 		descriptor_writes := make(
 			[]vk.WriteDescriptorSet,
 			total_writes_count,
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			temp_arena.allocator,
 		)
-		defer delete(descriptor_writes, G_RENDERER_ALLOCATORS.temp_allocator)
 
-		image_writes := make(
-			[]vk.DescriptorImageInfo,
-			images_infos_count,
-			G_RENDERER_ALLOCATORS.temp_allocator,
-		)
-		defer delete(image_writes, G_RENDERER_ALLOCATORS.temp_allocator)
-
-		buffer_writes := make(
-			[]vk.DescriptorBufferInfo,
-			buffer_infos_count,
-			G_RENDERER_ALLOCATORS.temp_allocator,
-		)
-		defer delete(buffer_writes, G_RENDERER_ALLOCATORS.temp_allocator)
+		image_writes := make([]vk.DescriptorImageInfo, images_infos_count, temp_arena.allocator)
+		buffer_writes := make([]vk.DescriptorBufferInfo, buffer_infos_count, temp_arena.allocator)
 
 		image_write_idx := 0
 		buffer_write_idx := 0

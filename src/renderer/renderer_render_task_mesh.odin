@@ -38,7 +38,7 @@ MeshBatchKey :: distinct u32
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-MeshInstancedDrawInfo :: struct {
+MeshInstancedDrawInfo :: struct #packed {
 	mesh_instance_idx:     u32,
 	material_instance_idx: u32,
 }
@@ -75,6 +75,11 @@ create_instance :: proc(
 ) -> (
 	res: bool,
 ) {
+
+	temp_arena: common.Arena
+	common.temp_arena_init(&temp_arena)
+	defer common.arena_delete(temp_arena)
+
 	render_pass_interface: RenderPassInterface
 	render_task_setup_render_pass_interface(p_render_task_config, &render_pass_interface)
 
@@ -98,8 +103,7 @@ create_instance :: proc(
 	}
 
 	// Gather material passes
-	material_pass_refs := make([dynamic]MaterialPassRef, G_RENDERER_ALLOCATORS.temp_allocator)
-	defer delete(material_pass_refs)
+	material_pass_refs := make([dynamic]MaterialPassRef, temp_arena.allocator)
 
 	current_material_pass_element := 0
 
@@ -208,15 +212,16 @@ end_frame :: proc(p_render_task_ref: RenderTaskRef) {
 
 @(private = "file")
 render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
+
 	temp_arena := common.Arena{}
-	common.temp_arena_init(&temp_arena, common.MEGABYTE)
+	common.temp_arena_init(&temp_arena, common.MEGABYTE * 16)
 	defer common.arena_delete(temp_arena)
 
 	mesh_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
 	mesh_render_task_data := (^MeshRenderTaskData)(mesh_render_task.data_ptr)
 
 	// Batch meshes that share the same material
-	mesh_batches := make(map[MeshBatchKey]MeshBatch, 128, temp_arena.allocator)
+	mesh_batches := make(map[MeshBatchKey]MeshBatch, 512, temp_arena.allocator)
 
 	for i in 0 ..< g_resource_refs.mesh_instances.alive_count {
 
@@ -258,7 +263,10 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 				instance_count       = 1,
 				vertex_buffer_offset = mesh.vertex_buffer_allocation.offset,
 				material_type_ref    = material_instance.desc.material_type_ref,
-				instanced_draw_infos = make([dynamic]MeshInstancedDrawInfo, temp_arena.allocator),
+				instanced_draw_infos = make(
+					[dynamic]MeshInstancedDrawInfo,
+					temp_arena.allocator,
+				),
 			}
 
 			append(&mesh_batch.instanced_draw_infos, instanced_draw_info)
@@ -267,6 +275,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 		}
 	}
 
+
 	// Gather all of the batches for each material type
 	mesh_batches_per_material_type := make(
 		map[MaterialTypeRef][dynamic]MeshBatch,
@@ -274,7 +283,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 		temp_arena.allocator,
 	)
 
-	for _, mesh_batch in mesh_batches {
+	for _, mesh_batch in &mesh_batches {
 		if mesh_batch.material_type_ref in mesh_batches_per_material_type {
 			batches := &mesh_batches_per_material_type[mesh_batch.material_type_ref]
 			append(batches, mesh_batch)
@@ -287,10 +296,6 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 		mesh_batches_per_material_type[mesh_batch.material_type_ref] = batches
 	}
 
-	// Render all of the mesh batches in each material pass 
-	// of every material pass, using the draw stream
-	draw_stream := draw_stream_create(temp_arena.allocator)
-
 	uniform_offsets := []u32{
 		uniform_buffer_management_get_per_frame_offset(),
 		uniform_buffer_management_get_per_view_offset(),
@@ -298,11 +303,15 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 	}
 
 	// This will store aggregated instanced draw infos so we can issue a single copy
-	mesh_instanced_draws_infos := make([dynamic]MeshInstancedDrawInfo, temp_arena.allocator)
-
+	mesh_instanced_draws_infos := make(
+		[dynamic]MeshInstancedDrawInfo,
+		temp_arena.allocator,
+	)
 	num_instances_dispatched: u32 = 0
 
-	for material_type_ref, mesh_batches in mesh_batches_per_material_type {
+	draw_stream := draw_stream_create(temp_arena.allocator)
+
+	for material_type_ref, material_mesh_batches in mesh_batches_per_material_type {
 		material_type := &g_resources.material_types[get_material_type_idx(material_type_ref)]
 		for material_pass_ref in material_type.desc.material_passes_refs {
 
@@ -332,10 +341,10 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 				{},
 			)
 
-			for mesh_batch in mesh_batches {
+			for mesh_batch in material_mesh_batches {
 
-				for mesh_instanced_draw_info in mesh_batch.instanced_draw_infos {
-					append(&mesh_instanced_draws_infos, mesh_instanced_draw_info)
+				for _, i in mesh_batch.instanced_draw_infos {
+					append(&mesh_instanced_draws_infos, mesh_batch.instanced_draw_infos[i])
 				}
 
 				draw_stream_set_vertex_buffer(
@@ -386,6 +395,8 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 		raw_data(mesh_instanced_draws_infos),
 		int(instanced_draw_infos_size_in_bytes),
 	)
+
+	run_pending_buffer_upload_request(upload_response.pending_upload_request)
 
 	// Dispatch the draw stream
 	render_task_begin_render_pass(

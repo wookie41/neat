@@ -1,16 +1,16 @@
 [
 	{
-		"uuid": 279403081516174011781874777231557407352,
+		"uuid": 91833986478076135780998385764286228588,
+		"name": "Sponza",
+		"fileName": "Sponza.bin"
+	},
+	{
+		"uuid": 128237475065000846897246615123838822352,
 		"name": "FlightHelmet",
 		"fileName": "FlightHelmet.bin"
 	},
 	{
-		"uuid": 145968476569925745818217820648983765416,
-		"name": "FlightHelmet",
-		"fileName": "FlightHelmet.bin"
-	},
-	{
-		"uuid": 24860267724210124061421713879975060132,
+		"uuid": 109189855122932494707467471133325974624,
 		"name": "SciFiHelmet",
 		"fileName": "SciFiHelmet.bin"
 	}

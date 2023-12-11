@@ -40,7 +40,7 @@ mem_init :: proc(p_options: MemoryInitOptions) {
 		G_ALLOCATORS.main_allocator,
 	)
 	G_ALLOCATORS.string_allocator = mem.scratch_allocator(&G_ALLOCATORS.string_scratch_allocator)
-	common.temp_arenas_init_stack(32 * common.MEGABYTE, G_ALLOCATORS.main_allocator)
+	common.temp_arenas_init_stack(64 * common.MEGABYTE, G_ALLOCATORS.main_allocator)
 }
 
 //---------------------------------------------------------------------------//

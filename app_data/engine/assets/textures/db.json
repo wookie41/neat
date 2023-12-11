@@ -1,96 +1,96 @@
 [
 	{
-		"uuid": 202688335142244601861228043129276146680,
+		"uuid": 103983793473677811982674310135409160448,
 		"name": "FlightHelmet_Materials_RubberWoodMat_BaseColor",
 		"fileName": "FlightHelmet_Materials_RubberWoodMat_BaseColor.dds"
 	},
 	{
-		"uuid": 13373544628402978881103098175907058884,
+		"uuid": 256572758614313251358915770228863273592,
 		"name": "FlightHelmet_Materials_RubberWoodMat_Normal",
 		"fileName": "FlightHelmet_Materials_RubberWoodMat_Normal.dds"
 	},
 	{
-		"uuid": 166232690087141397865089623316013329508,
+		"uuid": 193975015734963717540729347289469539256,
 		"name": "FlightHelmet_Materials_RubberWoodMat_OcclusionRoughMetal",
 		"fileName": "FlightHelmet_Materials_RubberWoodMat_OcclusionRoughMetal.dds"
 	},
 	{
-		"uuid": 298383280228253224554500695031693965276,
+		"uuid": 53325376576241873246153359780981948580,
 		"name": "FlightHelmet_Materials_GlassPlasticMat_BaseColor",
 		"fileName": "FlightHelmet_Materials_GlassPlasticMat_BaseColor.dds"
 	},
 	{
-		"uuid": 308992339477085796987775931790688790532,
+		"uuid": 274314076619979117370267574013719570320,
 		"name": "FlightHelmet_Materials_GlassPlasticMat_Normal",
 		"fileName": "FlightHelmet_Materials_GlassPlasticMat_Normal.dds"
 	},
 	{
-		"uuid": 127005527192203709910056497646471762972,
+		"uuid": 227815784429018883174825297222360821296,
 		"name": "FlightHelmet_Materials_GlassPlasticMat_OcclusionRoughMetal",
 		"fileName": "FlightHelmet_Materials_GlassPlasticMat_OcclusionRoughMetal.dds"
 	},
 	{
-		"uuid": 37400415109908201001856260023646721448,
+		"uuid": 286405748571653594530268330457228142752,
 		"name": "FlightHelmet_Materials_MetalPartsMat_BaseColor",
 		"fileName": "FlightHelmet_Materials_MetalPartsMat_BaseColor.dds"
 	},
 	{
-		"uuid": 312315894382369467558045847142946948960,
+		"uuid": 181326922253880677043370626885554131628,
 		"name": "FlightHelmet_Materials_MetalPartsMat_Normal",
 		"fileName": "FlightHelmet_Materials_MetalPartsMat_Normal.dds"
 	},
 	{
-		"uuid": 328631304864375395995968169516280230368,
+		"uuid": 267880843353609817628941818071051136956,
 		"name": "FlightHelmet_Materials_MetalPartsMat_OcclusionRoughMetal",
 		"fileName": "FlightHelmet_Materials_MetalPartsMat_OcclusionRoughMetal.dds"
 	},
 	{
-		"uuid": 1650638093539359430677297751952532144,
+		"uuid": 15792213141479246857305344308867113360,
 		"name": "FlightHelmet_Materials_LeatherPartsMat_BaseColor",
 		"fileName": "FlightHelmet_Materials_LeatherPartsMat_BaseColor.dds"
 	},
 	{
-		"uuid": 183883134929467370233136426494402806476,
+		"uuid": 179122703284898411724671784600539397132,
 		"name": "FlightHelmet_Materials_LeatherPartsMat_Normal",
 		"fileName": "FlightHelmet_Materials_LeatherPartsMat_Normal.dds"
 	},
 	{
-		"uuid": 109024943286948883814578847141429754404,
+		"uuid": 244389374842011793093486567244967503556,
 		"name": "FlightHelmet_Materials_LeatherPartsMat_OcclusionRoughMetal",
 		"fileName": "FlightHelmet_Materials_LeatherPartsMat_OcclusionRoughMetal.dds"
 	},
 	{
-		"uuid": 102804215566492213772505684741010187032,
+		"uuid": 133210735726038826220687423384484623980,
 		"name": "FlightHelmet_Materials_LensesMat_BaseColor",
 		"fileName": "FlightHelmet_Materials_LensesMat_BaseColor.dds"
 	},
 	{
-		"uuid": 199885229787677988252089990829192201132,
+		"uuid": 305506856542821576910216249637998602584,
 		"name": "FlightHelmet_Materials_LensesMat_Normal",
 		"fileName": "FlightHelmet_Materials_LensesMat_Normal.dds"
 	},
 	{
-		"uuid": 54331374613093352499863327686786536420,
+		"uuid": 273478843385203759532776899233722232032,
 		"name": "FlightHelmet_Materials_LensesMat_OcclusionRoughMetal",
 		"fileName": "FlightHelmet_Materials_LensesMat_OcclusionRoughMetal.dds"
 	},
 	{
-		"uuid": 170809348329177939277285213653542038064,
+		"uuid": 11646564435861901590985972500434509684,
 		"name": "SciFiHelmet_BaseColor",
 		"fileName": "SciFiHelmet_BaseColor.dds"
 	},
 	{
-		"uuid": 317335021237398213146124661239948294424,
+		"uuid": 83946113236152396789238580206305257120,
 		"name": "SciFiHelmet_Normal",
 		"fileName": "SciFiHelmet_Normal.dds"
 	},
 	{
-		"uuid": 183864101992759555455109441432150110984,
+		"uuid": 194137731534002620401925390942366869732,
 		"name": "SciFiHelmet_MetallicRoughness",
 		"fileName": "SciFiHelmet_MetallicRoughness.dds"
 	},
 	{
-		"uuid": 94451778791900848413746390974691634240,
+		"uuid": 123769379023693961166566670247443718100,
 		"name": "SciFiHelmet_AmbientOcclusion",
 		"fileName": "SciFiHelmet_AmbientOcclusion.dds"
 	}

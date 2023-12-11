@@ -80,7 +80,7 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_init_images :: proc() {
 		INTERNAL.staging_buffer_offset = 0
-		INTERNAL.single_staging_buffer_region_size = common.MEGABYTE * 128 // @TODO Make this smaller!
+		INTERNAL.single_staging_buffer_region_size = common.MEGABYTE * 256 // @TODO Make this smaller!
 		INTERNAL.staging_buffer = allocate_buffer_ref(common.create_name("ImageStagingBuffer"))
 		staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer)]
 		staging_buffer.desc.size =
@@ -100,6 +100,10 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_create_texture_image :: proc(p_image_ref: ImageRef) -> bool {
+
+		temp_arena: common.Arena
+		common.temp_arena_init(&temp_arena)
+		defer common.arena_delete(temp_arena)
 
 		image_idx := get_image_idx(p_image_ref)
 
@@ -193,9 +197,8 @@ when USE_VULKAN_BACKEND {
 
 		vk_name := strings.clone_to_cstring(
 			common.get_string(image.desc.name),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			temp_arena.allocator,
 		)
-		defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		name_info := vk.DebugUtilsObjectNameInfoEXT {
 			sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
@@ -238,10 +241,8 @@ when USE_VULKAN_BACKEND {
 
 			vk_name := strings.clone_to_cstring(
 				common.get_string(image.desc.name),
-				G_RENDERER_ALLOCATORS.temp_allocator,
+				temp_arena.allocator,
 			)
-			defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
-
 
 			name_info := vk.DebugUtilsObjectNameInfoEXT {
 				sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
@@ -276,6 +277,10 @@ when USE_VULKAN_BACKEND {
 				subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
 			}
 
+			temp_arena: common.Arena
+			common.temp_arena_init(&temp_arena)
+			defer common.arena_delete(temp_arena)
+	
 			for i in 0 ..< image.desc.mip_count {
 				backend_image.vk_layout_per_mip[i] = .UNDEFINED
 				view_create_info.subresourceRange.baseMipLevel = u32(i)
@@ -291,9 +296,8 @@ when USE_VULKAN_BACKEND {
 
 				vk_name := strings.clone_to_cstring(
 					common.get_string(image.desc.name),
-					G_RENDERER_ALLOCATORS.temp_allocator,
+					temp_arena.allocator,
 				)
-				defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
 
 				name_info := vk.DebugUtilsObjectNameInfoEXT {
 					sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
@@ -355,6 +359,7 @@ when USE_VULKAN_BACKEND {
 				raw_data(mip_data),
 				len(mip_data),
 			)
+			delete(mip_data, G_RENDERER_ALLOCATORS.main_allocator)
 
 			texture_copy.mip_buffer_offsets[i] = staging_buffer_offset
 
@@ -426,6 +431,10 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_create_image :: proc(p_image_ref: ImageRef) -> (res: bool) {
+
+		temp_arena: common.Arena
+		common.temp_arena_init(&temp_arena)
+		defer common.arena_delete(temp_arena)
 
 		image_idx := get_image_idx(p_image_ref)
 		image := &g_resources.images[image_idx]
@@ -502,9 +511,8 @@ when USE_VULKAN_BACKEND {
 
 		vk_name := strings.clone_to_cstring(
 			common.get_string(image.desc.name),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			temp_arena.allocator,
 		)
-		defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		name_info := vk.DebugUtilsObjectNameInfoEXT {
 			sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
@@ -623,6 +631,9 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_execute_queued_texture_copies :: proc(p_cmd_buff_ref: CommandBufferRef) {
+		temp_arena: common.Arena
+		common.temp_arena_init(&temp_arena, common.MEGABYTE) // The parser is quite memory hungry
+		defer common.arena_delete(temp_arena)
 
 		VkCopyEntry :: struct {
 			buffer:     vk.Buffer,
@@ -633,23 +644,20 @@ when USE_VULKAN_BACKEND {
 		to_transfer_barriers := make(
 			[]vk.ImageMemoryBarrier,
 			len(G_RENDERER.queued_textures_copies),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			temp_arena.allocator,
 		)
-		defer delete(to_transfer_barriers, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		vk_copies := make(
 			[]VkCopyEntry,
 			len(G_RENDERER.queued_textures_copies),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			temp_arena.allocator,
 		)
-		defer delete(vk_copies, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		to_sample_barriers := make(
 			[]vk.ImageMemoryBarrier,
 			len(G_RENDERER.queued_textures_copies),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			temp_arena.allocator,
 		)
-		defer delete(to_sample_barriers, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		pre_transfer_src_queue := vk.QUEUE_FAMILY_IGNORED
 		pre_transfer_dst_queue := vk.QUEUE_FAMILY_IGNORED
@@ -714,7 +722,7 @@ when USE_VULKAN_BACKEND {
 				mip_copies = make(
 					[]vk.BufferImageCopy,
 					u32(len(texture_copy.mip_buffer_offsets)),
-					G_RENDERER_ALLOCATORS.temp_allocator,
+					temp_arena.allocator,
 				),
 			}
 
@@ -743,12 +751,6 @@ when USE_VULKAN_BACKEND {
 			vk_copies[i] = vk_copy_entry
 
 			append(&INTERNAL.bindless_array_updates, texture_copy.image_ref)
-		}
-		defer {
-			for vk_copy in vk_copies {
-				delete(vk_copy.mip_copies, G_RENDERER_ALLOCATORS.temp_allocator)
-
-			}
 		}
 
 		cmd_buff := g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)].vk_cmd_buff
@@ -827,6 +829,9 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_batch_update_bindless_array_entries :: proc() {
+		temp_arena: common.Arena
+		common.temp_arena_init(&temp_arena)
+		defer common.arena_delete(temp_arena)
 
 		num_writes := len(INTERNAL.bindless_array_updates)
 		if num_writes == 0 {
@@ -841,16 +846,14 @@ when USE_VULKAN_BACKEND {
 		descriptor_writes := make(
 			[]vk.WriteDescriptorSet,
 			u32(num_writes),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			temp_arena.allocator,
 		)
-		defer delete(descriptor_writes, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		image_infos := make(
 			[]vk.DescriptorImageInfo,
 			u32(num_writes),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			temp_arena.allocator,
 		)
-		defer delete(image_infos, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		for image_ref, i in INTERNAL.bindless_array_updates {
 

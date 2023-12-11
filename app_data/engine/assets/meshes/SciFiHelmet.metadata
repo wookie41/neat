@@ -1,7 +1,7 @@
 {
 	"base": {
 		"name": 2110982698,
-		"uuid": 24860267724210124061421713879975060132,
+		"uuid": 109189855122932494707467471133325974624,
 		"type": 1,
 		"version": 1
 	},
@@ -10,11 +10,11 @@
 		{
 			"data_count": 70074,
 			"data_offset": 0,
-			"material_asset_name": 2110982698
+			"material_asset_name": 2249048833
 		}
 	],
-	"totalVertexSize": 3083256,
+	"totalVertexSize": 3079912,
 	"totalIndexSize": 280296,
-	"numVertices": 70074,
+	"numVertices": 69998,
 	"numIndices": 70074
 }

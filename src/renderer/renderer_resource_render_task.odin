@@ -203,8 +203,12 @@ render_task_setup_render_pass_interface :: proc(
 	p_out_interface: ^RenderPassInterface,
 ) -> bool {
 
-	input_images := make([dynamic]RenderPassImageInput, G_RENDERER_ALLOCATORS.temp_allocator)
-	output_images := make([dynamic]RenderPassImageOutput, G_RENDERER_ALLOCATORS.temp_allocator)
+	temp_arena: common.Arena
+	common.temp_arena_init(&temp_arena)
+	defer common.arena_delete(temp_arena)
+
+	input_images := make([dynamic]RenderPassImageInput, temp_arena.allocator)
+	output_images := make([dynamic]RenderPassImageOutput, temp_arena.allocator)
 
 	defer delete(input_images)
 	defer delete(output_images)
@@ -315,8 +319,7 @@ render_task_setup_render_pass_interface :: proc(
 		)
 		if clear_found {
 			render_pass_output_image.flags += {.Clear}
-			clear_arr := strings.split(clear_values_str, ",", G_RENDERER_ALLOCATORS.temp_allocator)
-			defer delete(clear_arr, G_RENDERER_ALLOCATORS.temp_allocator)
+			clear_arr := strings.split(clear_values_str, ",", temp_arena.allocator)
 
 			for str, i in clear_arr {
 				val, ok := strconv.parse_f32(strings.trim_space(str))

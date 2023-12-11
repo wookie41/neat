@@ -141,12 +141,6 @@ texture_asset_init :: proc() {
 	)
 	G_TEXTURE_ASSET_ARRAY = make([]TextureAsset, MAX_TEXTURE_ASSETS, G_ALLOCATORS.asset_allocator)
 
-	temp_arena: common.Arena
-	common.temp_arena_init(&temp_arena)
-	defer common.arena_delete(temp_arena)
-
-	context.temp_allocator = temp_arena.allocator
-
 	asset_database_init(&INTERNAL.texture_database, G_TEXTURE_DB_PATH)
 	asset_database_read(&INTERNAL.texture_database)
 
@@ -170,7 +164,6 @@ texture_asset_import :: proc(p_options: TextureAssetImportOptions) -> AssetImpor
 	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
-	context.temp_allocator = temp_arena.allocator
 
 	// Check if the texture already exits
 	texture_name := filepath.short_stem(filepath.base(p_options.file_path))
@@ -229,7 +222,7 @@ texture_asset_import :: proc(p_options: TextureAssetImportOptions) -> AssetImpor
 
 	// Convert the texture to dds 
 	texconv_cmd := fmt.tprintf(
-		"app_data\\engine\\tools\\texconv.exe -pow2 -o %s -f %s %s ",
+		"app_data\\engine\\tools\\texconv.exe -pow2 -o %s -f %s %s > nul 2>&1",
 		G_TEXTURE_ASSETS_DIR,
 		compression_format,
 		p_options.file_path,
@@ -349,16 +342,14 @@ texture_asset_load_by_name :: proc(p_name: common.Name) -> TextureAssetRef {
 		return loaded_texture_asset_ref
 	}
 
-
-	log.info("Loading texture '%s'...\n", common.get_string(p_name))
+	log.infof("Loading texture '%s'...\n", common.get_string(p_name))
 
 	temp_arena: common.Arena
-	common.temp_arena_init(&temp_arena)
+	common.temp_arena_init(&temp_arena, common.MEGABYTE * 32)
 	defer common.arena_delete(temp_arena)
-	context.temp_allocator = temp_arena.allocator
 
 	// Open the texture file
-	asset_path := asset_create_path(G_TEXTURE_ASSETS_DIR, p_name, "dds", context.temp_allocator)
+	asset_path := asset_create_path(G_TEXTURE_ASSETS_DIR, p_name, "dds", temp_arena.allocator)
 
 	asset_path_c := strings.clone_to_cstring(asset_path, temp_arena.allocator)
 	texture_asset_file := libc.fopen(asset_path_c, "rb")

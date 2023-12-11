@@ -32,7 +32,7 @@ DrawStreamOp :: enum u32 {
 	BindIndexBuffer,
 	ChangeBindGroup,
 	SetInstanceCount,
-	SetFirstInstances,
+	SetFirstInstance,
 	SetDrawCount,
 	SubmitDraw,
 }
@@ -125,30 +125,23 @@ draw_stream_dispatch :: proc(p_cmd_buff_ref: CommandBufferRef, p_draw_stream: ^D
 		g_draw_stream_ops[op](&draw_stream_dispatch)
 	}
 }
+
 //---------------------------------------------------------------------------//
 
-draw_stream_reset :: proc(p_draw_stream: ^DrawStream) {
-	free_all(p_draw_stream.allocator)
-
-	p_draw_stream.encoded_draw_stream_data = make(
-		[dynamic]u32,
-		(8 * common.KILOBYTE) / size_of(u32),
-		p_draw_stream.allocator,
-	)
-	clear(&p_draw_stream.encoded_draw_stream_data)
-
-	p_draw_stream.push_constants = make(
-		[dynamic]rawptr,
-		(8 * common.KILOBYTE) / size_of(rawptr),
-		p_draw_stream.allocator,
-	)
-	clear(&p_draw_stream.push_constants)
+draw_stream_reset :: proc(p_draw_stream: ^DrawStream)  {
+	p_draw_stream.current_index_buffer_offset = 0
+	p_draw_stream.current_index_buffer_ref = InvalidBufferRef
+	p_draw_stream.current_pipeline_ref = InvalidPipelineRef
 }
 
 //---------------------------------------------------------------------------//
 
 draw_stream_destroy :: proc(p_draw_stream: DrawStream) {
 	delete(p_draw_stream.encoded_draw_stream_data)
+	for push_constant in p_draw_stream.push_constants {
+		free(push_constant, p_draw_stream.allocator)
+	}
+	delete(p_draw_stream.push_constants)
 }
 
 //---------------------------------------------------------------------------//
@@ -276,7 +269,7 @@ draw_stream_set_instance_count :: proc(p_draw_stream: ^DrawStream, p_instance_co
 //---------------------------------------------------------------------------//
 
 draw_stream_set_first_instance :: proc(p_draw_stream: ^DrawStream, p_first_instance: u32) {
-	draw_stream_write(p_draw_stream, .SetInstanceCount, p_first_instance)
+	draw_stream_write(p_draw_stream, .SetFirstInstance, p_first_instance)
 }
 
 //---------------------------------------------------------------------------//

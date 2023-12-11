@@ -24,7 +24,6 @@ struct VSInput {
     [[vk::location(1)]] float2 uv        : TEXCOORD0;
     [[vk::location(2)]] float2 normal    : NORMAL;
     [[vk::location(3)]] float2 tangent   : TANGENT;
-    uint instanceId                      : SV_INSTANCEID;
 };
 
 struct VSOutput {
@@ -32,9 +31,12 @@ struct VSOutput {
     [[vk::location(1)]] uint materialInstanceIdx    : MATERIAL_INSTANCE_IDX;
 };
 
-float4 main(in VSInput pVertexInput, out VSOutput pVertexOutput) : SV_Position {
+float4 main(
+        in VSInput pVertexInput, 
+        in uint instanceId : SV_INSTANCEID,
+        out VSOutput pVertexOutput) : SV_Position {
 
-    MeshInstancedDrawInfo meshInstancedDrawInfo = gMeshInstancedDrawInfoBuffer[pVertexInput.instanceId];
+    MeshInstancedDrawInfo meshInstancedDrawInfo = gMeshInstancedDrawInfoBuffer[instanceId];
     pVertexOutput.materialInstanceIdx = meshInstancedDrawInfo.materialInstanceIdx;
     pVertexOutput.uv = pVertexInput.uv;
     return mul(uPerView.proj, 

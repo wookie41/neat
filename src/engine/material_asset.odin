@@ -113,12 +113,6 @@ material_asset_init :: proc() {
 		G_ALLOCATORS.asset_allocator,
 	)
 
-	temp_arena: common.Arena
-	common.temp_arena_init(&temp_arena)
-	defer common.arena_delete(temp_arena)
-
-	context.temp_allocator = temp_arena.allocator
-
 	asset_database_init(&INTERNAL.material_database, G_MATERIAL_DB_PATH)
 	asset_database_read(&INTERNAL.material_database)
 }
@@ -143,13 +137,17 @@ material_asset_get :: proc(p_ref: MaterialAssetRef) -> ^MaterialAsset {
 
 material_asset_create :: proc(p_material_asset_ref: MaterialAssetRef) -> bool {
 
+	temp_arena: common.Arena
+	common.temp_arena_init(&temp_arena)
+	defer common.arena_delete(temp_arena)
+
 	material_asset := material_asset_get(p_material_asset_ref)
 
 	material_asset_path := asset_create_path(
 		G_MATERIAL_ASSETS_DIR,
 		material_asset.name,
 		"json",
-		context.temp_allocator,
+		temp_arena.allocator,
 	)
 
 	// Early out if material already exists
@@ -210,7 +208,6 @@ material_asset_save :: proc(p_ref: MaterialAssetRef) -> bool {
 	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
-	context.temp_allocator = temp_arena.allocator
 
 	// Write material properties
 	material_asset_data: []byte
@@ -236,7 +233,7 @@ material_asset_save :: proc(p_ref: MaterialAssetRef) -> bool {
 		G_MATERIAL_ASSETS_DIR,
 		material_asset.name,
 		"json",
-		context.temp_allocator,
+		temp_arena.allocator,
 	)
 
 	if os.write_entire_file(material_asset_path, material_asset_data) == false {
@@ -258,12 +255,10 @@ material_asset_load :: proc(p_name: common.Name) -> MaterialAssetRef {
 	}
 
 	temp_arena: common.Arena
-	common.temp_arena_init(&temp_arena)
+	common.temp_arena_init(&temp_arena, common.MEGABYTE)
 	defer common.arena_delete(temp_arena)
-	context.temp_allocator = temp_arena.allocator
 
 	material_name := common.get_string(p_name)
-
 
 	// Load  metadata
 	material_metadata: MaterialAssetMetadata
@@ -331,7 +326,7 @@ material_asset_load :: proc(p_name: common.Name) -> MaterialAssetRef {
 		G_MATERIAL_ASSETS_DIR,
 		p_name,
 		"json",
-		context.temp_allocator,
+		temp_arena.allocator,
 	)
 	material_data, success := os.read_entire_file(material_asset_path, temp_arena.allocator)
 
@@ -377,6 +372,10 @@ material_asset_save_properties_default :: proc(
 	json.Marshal_Error,
 ) {
 
+	temp_arena: common.Arena
+	common.temp_arena_init(&temp_arena)
+	defer common.arena_delete(temp_arena)
+
 	props_json := DefaultMaterialPropertiesAssetJSON {
 		flags     = renderer.material_instance_get_flags(p_material_instance_ref),
 		albedo    = p_material_properties.albedo,
@@ -419,7 +418,7 @@ material_asset_save_properties_default :: proc(
 	return json.marshal(
 		props_json,
 		json.Marshal_Options{spec = .JSON5, pretty = true},
-		context.temp_allocator,
+		temp_arena.allocator,
 	)
 }
 
@@ -433,6 +432,10 @@ material_asset_load_properties_default :: proc(
 	p_material_properties: ^renderer.DefaultMaterialTypeProperties,
 ) -> bool {
 
+	temp_arena: common.Arena
+	common.temp_arena_init(&temp_arena)
+	defer common.arena_delete(temp_arena)
+
 	material_props: DefaultMaterialPropertiesAssetJSON
 
 	material_asset := material_asset_get(p_material_asset_ref)
@@ -441,7 +444,7 @@ material_asset_load_properties_default :: proc(
 		p_material_properties_data,
 		&material_props,
 		.JSON5,
-		context.temp_allocator,
+		temp_arena.allocator,
 	)
 	if error != nil {
 		return false
@@ -505,7 +508,6 @@ material_asset_save_new_default :: proc(
 	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
-	context.temp_allocator = temp_arena.allocator
 
 	material_asset := material_asset_get(p_material_asset_ref)
 	material_file_name := strings.concatenate(
@@ -520,7 +522,7 @@ material_asset_save_new_default :: proc(
 
 	// Write the metadata file
 	material_metadata_file_path := common.aprintf(
-		context.temp_allocator,
+		temp_arena.allocator,
 		"%s%s.metadata",
 		G_MATERIAL_ASSETS_DIR,
 		common.get_string(material_asset.name),

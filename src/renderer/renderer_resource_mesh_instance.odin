@@ -117,10 +117,11 @@ mesh_instance_send_transform_data :: proc() {
 		if .MeshInstanceDataDirty in mesh_instance.flags {
 
 			buffer_upload_request := BufferUploadRequest {
-				dst_buff        = g_renderer_buffers.mesh_instance_info_buffer_ref,
-				dst_buff_offset = size_of(MeshInstanceInfoData) * mesh_instance_idx,
-				dst_queue_usage = .Graphics,
-				size            = size_of(MeshInstanceInfoData),
+				dst_buff          = g_renderer_buffers.mesh_instance_info_buffer_ref,
+				dst_buff_offset   = size_of(MeshInstanceInfoData) * mesh_instance_idx,
+				dst_queue_usage   = .Graphics,
+				first_usage_stage = .VertexShader,
+				size              = size_of(MeshInstanceInfoData),
 			}
 
 			buffer_upload_response := request_buffer_upload(buffer_upload_request)
@@ -133,6 +134,8 @@ mesh_instance_send_transform_data :: proc() {
 				&mesh_instance.model_matrix,
 				size_of(MeshInstanceInfoData),
 			)
+
+			run_pending_buffer_upload_request(buffer_upload_response.pending_upload_request)
 
 			mesh_instance.flags -= {.MeshInstanceDataDirty}
 		}

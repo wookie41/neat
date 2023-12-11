@@ -107,12 +107,13 @@ init_shaders :: proc() -> bool {
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
 
-	context.allocator = G_RENDERER_ALLOCATORS.temp_allocator
-	defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
+	temp_arena: common.Arena
+	common.temp_arena_init(&temp_arena, common.MEGABYTE * 2)
+	defer common.arena_delete(temp_arena)
 
 	// Load base shader permutations
 	shaders_config := "app_data/renderer/config/shaders.json"
-	shaders_json_data, file_read_ok := os.read_entire_file(shaders_config)
+	shaders_json_data, file_read_ok := os.read_entire_file(shaders_config, temp_arena.allocator)
 
 	if file_read_ok == false {
 		log.error("Failed to open the shaders config file")
@@ -136,7 +137,12 @@ init_shaders :: proc() -> bool {
 	}
 
 	// Parse the shader config file
-	if err := json.unmarshal(shaders_json_data, &shader_json_entries); err != nil {
+	if err := json.unmarshal(
+		shaders_json_data,
+		&shader_json_entries,
+		.JSON5,
+		temp_arena.allocator,
+	); err != nil {
 		log.errorf("Failed to unmarshal shaders json: %s\n", err)
 		return false
 	}

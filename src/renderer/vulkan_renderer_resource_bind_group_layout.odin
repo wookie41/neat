@@ -2,6 +2,7 @@
 package renderer
 //---------------------------------------------------------------------------//
 
+import "../common"
 import vk "vendor:vulkan"
 
 //---------------------------------------------------------------------------//
@@ -62,6 +63,8 @@ when USE_VULKAN_BACKEND {
 				mipmapMode   = .LINEAR,
 			}
 
+
+			// Nearest, clamp to edge
 			vk.CreateSampler(
 				G_RENDERER.device,
 				&sampler_create_info,
@@ -73,6 +76,7 @@ when USE_VULKAN_BACKEND {
 			sampler_create_info.addressModeV = .CLAMP_TO_BORDER
 			sampler_create_info.addressModeW = .CLAMP_TO_BORDER
 
+			// Nearest clamp to border
 			vk.CreateSampler(
 				G_RENDERER.device,
 				&sampler_create_info,
@@ -84,6 +88,7 @@ when USE_VULKAN_BACKEND {
 			sampler_create_info.addressModeV = .REPEAT
 			sampler_create_info.addressModeW = .REPEAT
 
+			// Nearest, repeat
 			vk.CreateSampler(
 				G_RENDERER.device,
 				&sampler_create_info,
@@ -98,6 +103,7 @@ when USE_VULKAN_BACKEND {
 			sampler_create_info.addressModeV = .CLAMP_TO_EDGE
 			sampler_create_info.addressModeW = .CLAMP_TO_EDGE
 
+			// Linear clamp to edge
 			vk.CreateSampler(
 				G_RENDERER.device,
 				&sampler_create_info,
@@ -109,6 +115,7 @@ when USE_VULKAN_BACKEND {
 			sampler_create_info.addressModeV = .CLAMP_TO_BORDER
 			sampler_create_info.addressModeW = .CLAMP_TO_BORDER
 
+			// Linear clamp to border
 			vk.CreateSampler(
 				G_RENDERER.device,
 				&sampler_create_info,
@@ -116,6 +123,8 @@ when USE_VULKAN_BACKEND {
 				&INTERNAL.immutable_samplers[4],
 			)
 
+
+			// Linear repeat
 			sampler_create_info.addressModeU = .REPEAT
 			sampler_create_info.addressModeV = .REPEAT
 			sampler_create_info.addressModeW = .REPEAT
@@ -135,6 +144,10 @@ when USE_VULKAN_BACKEND {
 
 	backend_create_bind_group_layout :: proc(p_bind_group_layout_ref: BindGroupLayoutRef) -> bool {
 
+		temp_arena: common.Arena
+		common.temp_arena_init(&temp_arena)
+		defer common.arena_delete(temp_arena)
+
 		bind_group_layout_idx := get_bind_group_layout_idx(p_bind_group_layout_ref)
 		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_idx]
 		backend_bind_group_layout := &g_resources.backend_bind_group_layouts[bind_group_layout_idx]
@@ -142,9 +155,9 @@ when USE_VULKAN_BACKEND {
 		binding_flags := make(
 			[]vk.DescriptorBindingFlags,
 			len(bind_group_layout.desc.bindings),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			temp_arena.allocator,
 		)
-		defer delete(binding_flags, G_RENDERER_ALLOCATORS.temp_allocator)
+		defer delete(binding_flags, temp_arena.allocator)
 
 		flags_create_info := vk.DescriptorSetLayoutBindingFlagsCreateInfo {
 			sType         = .DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
@@ -166,9 +179,8 @@ when USE_VULKAN_BACKEND {
 		descriptor_set_layout_bindings := make(
 			[]vk.DescriptorSetLayoutBinding,
 			u32(len(bind_group_layout.desc.bindings)),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			temp_arena.allocator,
 		)
-		defer delete(descriptor_set_layout_bindings, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		create_info := vk.DescriptorSetLayoutCreateInfo {
 			sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -195,11 +207,16 @@ when USE_VULKAN_BACKEND {
 				stage_flags += {.COMPUTE}
 			}
 
+
 			descriptor_binding^ = vk.DescriptorSetLayoutBinding {
-				binding            = i,
-				descriptorCount    = bind_group_binding.count,
-				pImmutableSamplers = raw_data(INTERNAL.immutable_samplers),
-				stageFlags         = stage_flags,
+				binding         = i,
+				descriptorCount = bind_group_binding.count,
+				stageFlags      = stage_flags,
+			}
+
+			if bind_group_binding.type == .Sampler {
+				descriptor_binding.pImmutableSamplers =
+				&INTERNAL.immutable_samplers[bind_group_binding.immutable_sampler_idx]
 			}
 
 			switch bind_group_binding.type {
@@ -256,7 +273,7 @@ when USE_VULKAN_BACKEND {
 		bind_group_idx := get_bind_group_layout_idx(p_bind_group_ref)
 		bind_group_layout := &g_resources.bind_group_layouts[bind_group_idx]
 		backend_bind_group_layout := &g_resources.backend_bind_group_layouts[bind_group_idx]
-		
+
 		cache_entry := &INTERNAL.descriptor_set_layout_cache[bind_group_layout.hash]
 		cache_entry.ref_count -= 1
 

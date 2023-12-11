@@ -1,0 +1,23 @@
+{
+	"base": {
+		"flags": 15
+	},
+	"albedo": [
+		1.00000000,
+		1.00000000,
+		1.00000000
+	],
+	"normal": [
+		0.00000000,
+		1.00000000,
+		0.00000000
+	],
+	"roughness": 0.50000000,
+	"metalness": 0.00000000,
+	"occlusion": 1.00000000,
+	"albedoImageName": "6772804448157695701",
+	"normalImageName": "759203620573749278",
+	"roughnessImageName": "13196865903111448057",
+	"metalnessImageName": "13196865903111448057",
+	"occlusionImageName": ""
+}

@@ -88,6 +88,7 @@ when USE_VULKAN_BACKEND {
 			.TriangleList = {
 				sType = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
 				topology = .TRIANGLE_LIST,
+				primitiveRestartEnable = false,
 			},
 		}
 
@@ -182,7 +183,6 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
-
 		// Init pipeline layout cache
 		INTERNAL.pipeline_layout_cache = make(
 			map[u32]PipelineLayoutCacheEntry,
@@ -193,7 +193,7 @@ when USE_VULKAN_BACKEND {
 		// Try to read pipeline cache file
 		pipeline_cache, ok := os.read_entire_file(
 			PIPELINE_CACHE_FILE,
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			G_RENDERER_ALLOCATORS.main_allocator,
 		)
 		defer free(raw_data(pipeline_cache))
 
@@ -221,9 +221,9 @@ when USE_VULKAN_BACKEND {
 
 		vk.GetPipelineCacheData(G_RENDERER.device, INTERNAL.vk_pipeline_cache, &cache_size, nil)
 
-		cache_data := make([]u8, cache_size, G_RENDERER_ALLOCATORS.temp_allocator)
-		delete(cache_data, G_RENDERER_ALLOCATORS.temp_allocator)
-		delete(INTERNAL.pipeline_layout_cache)
+		cache_data := make([]u8, cache_size, G_RENDERER_ALLOCATORS.main_allocator)
+		defer delete(cache_data, G_RENDERER_ALLOCATORS.main_allocator)
+		defer delete(INTERNAL.pipeline_layout_cache)
 
 		vk.GetPipelineCacheData(
 			G_RENDERER.device,
@@ -300,10 +300,8 @@ when USE_VULKAN_BACKEND {
 		color_blend_attachments := make(
 			[]vk.PipelineColorBlendAttachmentState,
 			len(render_pass.desc.layout.render_target_blend_types),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			temp_arena.allocator,
 		)
-		defer delete(color_blend_attachments, G_RENDERER_ALLOCATORS.temp_allocator)
-
 
 		for blend_type, i in render_pass.desc.layout.render_target_blend_types {
 			color_blend_attachments[i] = COLOR_BLEND_PER_TYPE[blend_type]
@@ -489,6 +487,10 @@ when USE_VULKAN_BACKEND {
 	@(private = "file")
 	create_pipeline_layout :: proc(p_pipeline_idx: u32, p_pipeline_layout_hash: u32) -> bool {
 
+		temp_arena: common.Arena
+		common.temp_arena_init(&temp_arena)
+		defer common.arena_delete(temp_arena)
+
 		pipeline := &g_resources.pipelines[p_pipeline_idx]
 		backend_pipeline := &g_resources.backend_pipelines[p_pipeline_idx]
 
@@ -496,9 +498,8 @@ when USE_VULKAN_BACKEND {
 		descriptor_set_layouts := make(
 			[]vk.DescriptorSetLayout,
 			len(pipeline.desc.bind_group_layout_refs),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			temp_arena.allocator,
 		)
-		defer delete(descriptor_set_layouts, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		for bind_group_layout_ref, i in pipeline.desc.bind_group_layout_refs {
 
@@ -522,9 +523,8 @@ when USE_VULKAN_BACKEND {
 		push_constant_ranges := make(
 			[]vk.PushConstantRange,
 			len(pipeline.desc.push_constants),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			temp_arena.allocator,
 		)
-		defer delete(push_constant_ranges, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		for push_constant, i in pipeline.desc.push_constants {
 			push_constant_ranges[i] = vk.PushConstantRange {

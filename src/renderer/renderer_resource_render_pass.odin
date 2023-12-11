@@ -231,11 +231,15 @@ end_render_pass :: #force_inline proc(
 
 @(private = "file")
 load_render_passes_from_config_file :: proc() -> bool {
-	context.allocator = G_RENDERER_ALLOCATORS.temp_allocator
-	defer free_all(G_RENDERER_ALLOCATORS.temp_allocator)
+	temp_arena: common.Arena
+	common.temp_arena_init(&temp_arena, common.MEGABYTE * 4)
+	defer common.arena_delete(temp_arena)
 
 	render_passes_config := "app_data/renderer/config/render_passes.json"
-	render_passes_json_data, file_read_ok := os.read_entire_file(render_passes_config)
+	render_passes_json_data, file_read_ok := os.read_entire_file(
+		render_passes_config,
+		temp_arena.allocator,
+	)
 
 	if file_read_ok == false {
 		return false
@@ -244,7 +248,12 @@ load_render_passes_from_config_file :: proc() -> bool {
 	// Parse the render passes config file
 	render_passes: []RenderPassJSONEntry
 
-	if err := json.unmarshal(render_passes_json_data, &render_passes); err != nil {
+	if err := json.unmarshal(
+		render_passes_json_data,
+		&render_passes,
+		.JSON5,
+		temp_arena.allocator,
+	); err != nil {
 		log.errorf("Failed to render passes shaders json: %s\n", err)
 		return false
 	}

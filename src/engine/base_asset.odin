@@ -140,6 +140,10 @@ asset_database_init :: proc(p_asset_database: ^AssetDatabase, p_db_file_path: st
 //---------------------------------------------------------------------------//
 
 asset_database_read :: proc(p_asset_database: ^AssetDatabase) -> bool {
+	temp_arena: common.Arena
+	common.temp_arena_init(&temp_arena)
+	defer common.arena_delete(temp_arena)
+
 	// Make sure that the database file is created
 	if os.exists(p_asset_database.db_file_path) == false {
 		f, err := os.open(p_asset_database.db_file_path, os.O_CREATE)
@@ -150,10 +154,7 @@ asset_database_read :: proc(p_asset_database: ^AssetDatabase) -> bool {
 	}
 
 	// Read the database file
-	db_data, db_read_ok := os.read_entire_file(
-		p_asset_database.db_file_path,
-		context.temp_allocator,
-	)
+	db_data, db_read_ok := os.read_entire_file(p_asset_database.db_file_path, temp_arena.allocator)
 	if db_read_ok == false {
 		return false
 	}
@@ -179,15 +180,18 @@ asset_database_read :: proc(p_asset_database: ^AssetDatabase) -> bool {
 //---------------------------------------------------------------------------//
 
 asset_database_save :: proc(p_asset_database: ^AssetDatabase) -> bool {
+	temp_arena: common.Arena
+	common.temp_arena_init(&temp_arena, common.MEGABYTE * 8)
+	defer common.arena_delete(temp_arena)
+
 	json_data, err := json.marshal(
 		p_asset_database.db_entries,
 		json.Marshal_Options{spec = .JSON5, pretty = true},
-		context.temp_allocator,
+		temp_arena.allocator,
 	)
 	if err != nil {
 		return false
 	}
-	defer delete(json_data, context.temp_allocator)
 	if os.write_entire_file(p_asset_database.db_file_path, json_data) == false {
 		return false
 	}

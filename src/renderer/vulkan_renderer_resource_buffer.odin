@@ -124,12 +124,15 @@ when USE_VULKAN_BACKEND {
 			buffer.mapped_ptr = cast(^u8)alloc_info.pMappedData
 		}
 
+		temp_arena: common.Arena
+		common.temp_arena_init(&temp_arena)
+		defer common.arena_delete(temp_arena)
+
 		vk_name := strings.clone_to_cstring(
 			common.get_string(buffer.desc.name),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			temp_arena.allocator,
 		)
-		defer delete(vk_name, G_RENDERER_ALLOCATORS.temp_allocator)
-
+		
 		name_info := vk.DebugUtilsObjectNameInfoEXT {
 			sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
 			objectHandle = u64(backend_buffer.vk_buffer),

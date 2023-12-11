@@ -93,12 +93,14 @@ material_instance_update_dirty_data :: proc(p_material_instance_ref: MaterialIns
 			material_instance.material_properties_buffer_entry_idx
 
 	// If material instance data is dirty, we need to issue a copy to the GPU
-	upload_request := request_buffer_upload(
+	upload_response := request_buffer_upload(
 		BufferUploadRequest{
 			dst_buff = g_renderer_buffers.material_instances_buffer_ref,
 			dst_buff_offset = material_instance_data_offset,
 			dst_queue_usage = .Graphics,
+			first_usage_stage = .VertexShader,
 			size = material_type.properties_size_in_bytes,
+			flags = {.RunOnNextFrame},
 		},
 	)
 
@@ -106,14 +108,14 @@ material_instance_update_dirty_data :: proc(p_material_instance_ref: MaterialIns
 		material_instance.material_properties_data_ptr,
 	)
 
-	if upload_request.ptr == nil {
+	if upload_response.ptr == nil {
 		material_instance.flags += {.Dirty}
 		return
 	}
 
 	material_instance.flags -= {.Dirty}
 
-	mem.copy(upload_request.ptr, material_props, int(material_type.properties_size_in_bytes))
+	mem.copy(upload_response.ptr, material_props, int(material_type.properties_size_in_bytes))
 }
 
 //---------------------------------------------------------------------------//

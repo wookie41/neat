@@ -173,7 +173,7 @@ buffer_allocate :: proc(p_buffer_ref: BufferRef, p_size: u32) -> (bool, BufferSu
 
 	alloc_info := vma.VirtualAllocationCreateInfo {
 		size = vk.DeviceSize(p_size),
-		flags = {.MIN_MEMORY},
+		flags = {.MIN_OFFSET, .MIN_MEMORY},
 	}
 
 	suballocation := BufferSuballocation{}

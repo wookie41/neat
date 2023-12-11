@@ -1,7 +1,7 @@
 {
 	"base": {
 		"name": 1012405842,
-		"uuid": 145968476569925745818217820648983765416,
+		"uuid": 128237475065000846897246615123838822352,
 		"type": 1,
 		"version": 1
 	},
@@ -10,32 +10,32 @@
 		{
 			"data_count": 59040,
 			"data_offset": 0,
-			"material_asset_name": 3227976488
+			"material_asset_name": 287659710
 		},
 		{
 			"data_count": 72534,
 			"data_offset": 59040,
-			"material_asset_name": 3706017023
+			"material_asset_name": 2039104496
 		},
 		{
 			"data_count": 24408,
 			"data_offset": 131574,
-			"material_asset_name": 2961483762
+			"material_asset_name": 2786566333
 		},
 		{
 			"data_count": 60288,
 			"data_offset": 155982,
-			"material_asset_name": 2355874675
+			"material_asset_name": 4066702208
 		},
 		{
 			"data_count": 65688,
 			"data_offset": 216270,
-			"material_asset_name": 1193464757
+			"material_asset_name": 1647622697
 		},
 		{
 			"data_count": 2208,
 			"data_offset": 281958,
-			"material_asset_name": 1911916861
+			"material_asset_name": 2913529708
 		}
 	],
 	"totalVertexSize": 2437248,

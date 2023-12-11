@@ -2,6 +2,7 @@ package renderer
 
 //---------------------------------------------------------------------------//
 
+import "../common"
 import vk "vendor:vulkan"
 
 //---------------------------------------------------------------------------//
@@ -49,12 +50,15 @@ when USE_VULKAN_BACKEND {
 
 		render_pass.flags += {.IsActive}
 
+		temp_arena: common.Arena
+		common.temp_arena_init(&temp_arena)
+		defer common.arena_delete(temp_arena)
+
 		image_input_barriers := make(
 			[]vk.ImageMemoryBarrier,
 			len(p_begin_info.interface.image_inputs),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			temp_arena.allocator,
 		)
-		defer delete(image_input_barriers, G_RENDERER_ALLOCATORS.temp_allocator)
 
 		image_input_barriers_count := 0
 
@@ -125,18 +129,16 @@ when USE_VULKAN_BACKEND {
 		color_attachments := make(
 			[]vk.RenderingAttachmentInfo,
 			len(p_begin_info.interface.image_outputs),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			temp_arena.allocator,
 		)
-		defer delete(color_attachments, G_RENDERER_ALLOCATORS.temp_allocator)
 		depth_attachment := vk.RenderingAttachmentInfo{}
 
 		image_output_barriers_count := 0
 		image_output_barriers := make(
 			[]vk.ImageMemoryBarrier,
 			len(p_begin_info.interface.image_outputs),
-			G_RENDERER_ALLOCATORS.temp_allocator,
+			temp_arena.allocator,
 		)
-		defer delete(image_output_barriers, G_RENDERER_ALLOCATORS.temp_allocator)
 		depth_attachment_barrier := vk.ImageMemoryBarrier{}
 
 		has_depth_attachment := false
@@ -150,8 +152,7 @@ when USE_VULKAN_BACKEND {
 
 			// Grab the proper swap image for this frame
 			if .SwapImage in image.desc.flags {
-				swap_image_ref :=
-					G_RENDERER.swap_image_refs[G_RENDERER.swap_img_idx]
+				swap_image_ref := G_RENDERER.swap_image_refs[G_RENDERER.swap_img_idx]
 				image_idx = get_image_idx(swap_image_ref)
 				image = &g_resources.images[image_idx]
 			}

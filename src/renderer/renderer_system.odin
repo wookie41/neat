@@ -128,21 +128,16 @@ G_RENDERER: struct {
 
 @(private)
 G_RENDERER_ALLOCATORS: struct {
-	main_allocator:             mem.Allocator,
-	// @TODO look for a better allocator here, but remember 
-	// that we need free internal arrays of the resource
-	temp_scratch_allocator:     mem.Scratch_Allocator,
-	temp_allocator:             mem.Allocator,
-	names_scratch_allocator:    mem.Scratch_Allocator,
-	names_allocator:            mem.Allocator,
-	resource_scratch_allocator: mem.Scratch_Allocator,
-	resource_allocator:         mem.Allocator,
-	frame_arena:                mem.Arena,
-	frame_allocator:            mem.Allocator,
+	main_allocator:        mem.Allocator,
+	names_arena:           mem.Arena,
+	names_allocator:       mem.Allocator,
+	frame_arena:           mem.Arena,
+	frame_allocator:       mem.Allocator,
+	resource_allocator:    mem.Allocator,
 
 	// Stack used to sub-allocate scratch arenas from that are used within a function scope 
-	temp_arenas_stack:          mem.Stack,
-	temp_arenas_allocator:      mem.Allocator,
+	temp_arenas_stack:     mem.Stack,
+	temp_arenas_allocator: mem.Allocator,
 }
 
 //---------------------------------------------------------------------------//
@@ -189,25 +184,8 @@ init :: proc(p_options: InitOptions) -> bool {
 	// Just take the current context allocator for now
 	G_RENDERER_ALLOCATORS.main_allocator = context.allocator
 
-	// Temp allocator
-	mem.scratch_allocator_init(
-		&G_RENDERER_ALLOCATORS.temp_scratch_allocator,
-		common.MEGABYTE * 8,
-		G_RENDERER_ALLOCATORS.main_allocator,
-	)
-	G_RENDERER_ALLOCATORS.temp_allocator = mem.scratch_allocator(
-		&G_RENDERER_ALLOCATORS.temp_scratch_allocator,
-	)
-
-	// Resource allocator
-	mem.scratch_allocator_init(
-		&G_RENDERER_ALLOCATORS.resource_scratch_allocator,
-		common.MEGABYTE * 8,
-		G_RENDERER_ALLOCATORS.main_allocator,
-	)
-	G_RENDERER_ALLOCATORS.resource_allocator = mem.scratch_allocator(
-		&G_RENDERER_ALLOCATORS.resource_scratch_allocator,
-	)
+	// Resource allocator (temporary, have to use pool allocator here)
+	G_RENDERER_ALLOCATORS.resource_allocator = G_RENDERER_ALLOCATORS.main_allocator
 
 	// Frame allocator
 	mem.arena_init(
@@ -217,21 +195,17 @@ init :: proc(p_options: InitOptions) -> bool {
 	G_RENDERER_ALLOCATORS.frame_allocator = mem.arena_allocator(&G_RENDERER_ALLOCATORS.frame_arena)
 
 	// Names allocator
-	mem.scratch_allocator_init(
-		&G_RENDERER_ALLOCATORS.names_scratch_allocator,
-		common.MEGABYTE * 8,
-		G_RENDERER_ALLOCATORS.main_allocator,
+	mem.arena_init(
+		&G_RENDERER_ALLOCATORS.names_arena,
+		make([]byte, common.MEGABYTE * 8, G_RENDERER_ALLOCATORS.main_allocator),
 	)
-	G_RENDERER_ALLOCATORS.names_allocator = mem.scratch_allocator(
-		&G_RENDERER_ALLOCATORS.names_scratch_allocator,
-	)
+	G_RENDERER_ALLOCATORS.names_allocator = mem.arena_allocator(&G_RENDERER_ALLOCATORS.names_arena)
 
 	INTERNAL.frame_idx = 0
 	INTERNAL.frame_id = 0
 
 	// Setup renderer context
 	context.allocator = G_RENDERER_ALLOCATORS.main_allocator
-	context.temp_allocator = G_RENDERER_ALLOCATORS.temp_allocator
 	context.logger = INTERNAL.logger
 
 	backend_init(p_options) or_return
@@ -251,7 +225,7 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	{
 		buffer_upload_options := BufferUploadInitOptions {
-			staging_buffer_size = 16 * common.MEGABYTE,
+			staging_buffer_size = 128 * common.MEGABYTE,
 			num_staging_regions = G_RENDERER.num_frames_in_flight,
 		}
 		init_buffer_upload(buffer_upload_options) or_return
@@ -371,6 +345,7 @@ init :: proc(p_options: InitOptions) -> bool {
 				count = 1,
 				shader_stages = {.Vertex, .Fragment, .Compute},
 				type = .Sampler,
+				immutable_sampler_idx = u32(i),
 			}
 		}
 
@@ -462,7 +437,6 @@ init :: proc(p_options: InitOptions) -> bool {
 update :: proc(p_dt: f32) {
 	// Setup renderer context
 	context.allocator = G_RENDERER_ALLOCATORS.main_allocator
-	context.temp_allocator = G_RENDERER_ALLOCATORS.temp_allocator
 	context.logger = INTERNAL.logger
 
 	cmd_buff_ref := get_frame_cmd_buffer_ref()
@@ -475,7 +449,7 @@ update :: proc(p_dt: f32) {
 
 	buffer_upload_start_async_cmd_buffer()
 	execute_queued_texture_copies()
-	run_buffer_upload_requests()
+	run_last_frame_buffer_upload_requests()
 	backend_buffer_upload_submit_async_transfers()
 
 	batch_update_bindless_array_entries()
@@ -484,9 +458,9 @@ update :: proc(p_dt: f32) {
 
 	buffer_upload_begin_frame()
 	image_upload_begin_frame()
+
 	material_instance_update_dirty_materials()
 	mesh_instance_send_transform_data()
-
 	uniform_buffer_management_update(p_dt)
 
 	backend_update(p_dt)
@@ -504,8 +478,6 @@ update :: proc(p_dt: f32) {
 	submit_current_frame()
 
 	advance_frame_idx()
-
-	assert(len(G_RENDERER_ALLOCATORS.temp_scratch_allocator.leaked_allocations) == 0)
 }
 
 //---------------------------------------------------------------------------//
@@ -540,7 +512,6 @@ submit_current_frame :: proc() {
 deinit :: proc() {
 	// Setup renderer context
 	context.allocator = G_RENDERER_ALLOCATORS.main_allocator
-	context.temp_allocator = G_RENDERER_ALLOCATORS.temp_allocator
 	context.logger = INTERNAL.logger
 
 	ui_shutdown()
@@ -568,7 +539,6 @@ WindowResizedEvent :: struct {
 handler_on_window_resized :: proc(p_event: WindowResizedEvent) {
 	// Setup renderer context
 	context.allocator = G_RENDERER_ALLOCATORS.main_allocator
-	context.temp_allocator = G_RENDERER_ALLOCATORS.temp_allocator
 	context.logger = INTERNAL.logger
 
 	backend_handler_on_window_resized(p_event)

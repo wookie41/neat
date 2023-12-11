@@ -9,6 +9,8 @@ import vma "../third_party/vma"
 import sdl "vendor:sdl2"
 import vk "vendor:vulkan"
 
+import "../common"
+
 //--------------------------------------------------------------------------//
 
 when USE_VULKAN_BACKEND {
@@ -84,15 +86,19 @@ when USE_VULKAN_BACKEND {
 		// Load the base vulkan procedures
 		vk.load_proc_addresses(sdl.Vulkan_GetVkGetInstanceProcAddr())
 
+		temp_arena: common.Arena
+		common.temp_arena_init(&temp_arena, common.MEGABYTE)
+		defer common.arena_delete(temp_arena)
+
 		// Create Vulkan Instance
 		{
 			using G_RENDERER
 			using G_RENDERER_ALLOCATORS
 
 			// Specify a list of required extensions and layers
-			instance_extensions := make([dynamic]cstring, G_RENDERER_ALLOCATORS.temp_allocator)
+			instance_extensions := make([dynamic]cstring, temp_arena.allocator)
 			defer delete(instance_extensions)
-			required_layers := make([dynamic]cstring, G_RENDERER_ALLOCATORS.temp_allocator)
+			required_layers := make([dynamic]cstring, temp_arena.allocator)
 			defer delete(required_layers)
 
 			// Add SDL extensions
@@ -120,11 +126,8 @@ when USE_VULKAN_BACKEND {
 			append(&instance_extensions, vk.KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)
 
 			// Check the required extensions and layers are supported
-			supported_extensions := make(
-				[dynamic]vk.ExtensionProperties,
-				G_RENDERER_ALLOCATORS.temp_allocator,
-			)
-			defer delete(supported_extensions)
+			supported_extensions := make([dynamic]vk.ExtensionProperties, temp_arena.allocator)
+
 			{
 				extension_count: u32
 				vk.EnumerateInstanceExtensionProperties(nil, &extension_count, nil)
@@ -136,10 +139,7 @@ when USE_VULKAN_BACKEND {
 				)
 			}
 
-			supported_layers := make(
-				[dynamic]vk.LayerProperties,
-				G_RENDERER_ALLOCATORS.temp_allocator,
-			)
+			supported_layers := make([dynamic]vk.LayerProperties, temp_arena.allocator)
 			defer delete(supported_layers)
 			{
 				layer_count: u32
@@ -227,9 +227,8 @@ when USE_VULKAN_BACKEND {
 			physical_devices := make(
 				[]vk.PhysicalDevice,
 				physical_device_count,
-				G_RENDERER_ALLOCATORS.temp_allocator,
+				temp_arena.allocator,
 			)
-			defer delete(physical_devices, G_RENDERER_ALLOCATORS.temp_allocator)
 
 			vk.EnumeratePhysicalDevices(
 				instance,
@@ -248,12 +247,7 @@ when USE_VULKAN_BACKEND {
 				extension_count: u32
 				vk.EnumerateDeviceExtensionProperties(pd, nil, &extension_count, nil)
 
-				extensions := make(
-					[]vk.ExtensionProperties,
-					extension_count,
-					G_RENDERER_ALLOCATORS.temp_allocator,
-				)
-				defer delete(extensions, G_RENDERER_ALLOCATORS.temp_allocator)
+				extensions := make([]vk.ExtensionProperties, extension_count, temp_arena.allocator)
 				vk.EnumerateDeviceExtensionProperties(
 					pd,
 					nil,
@@ -329,7 +323,7 @@ when USE_VULKAN_BACKEND {
 				queue_families := make(
 					[]vk.QueueFamilyProperties,
 					int(queue_family_count),
-					G_RENDERER_ALLOCATORS.temp_allocator,
+					temp_arena.allocator,
 				)
 
 				vk.GetPhysicalDeviceQueueFamilyProperties(
@@ -406,7 +400,7 @@ when USE_VULKAN_BACKEND {
 					queue_family_transfer_index = u32(transfer_index)
 
 					if queue_family_transfer_index != queue_family_compute_index {
-						G_RENDERER.gpu_device_flags += {.DedicatedTransferQueue}
+						//G_RENDERER.gpu_device_flags += {.DedicatedTransferQueue}
 					}
 
 					if queue_family_compute_index != queue_family_compute_index {
@@ -431,8 +425,7 @@ when USE_VULKAN_BACKEND {
 			using G_RENDERER_ALLOCATORS
 
 			// Avoid creating duplicates
-			queue_families := make(map[u32]int, 4, G_RENDERER_ALLOCATORS.temp_allocator)
-			defer delete(queue_families)
+			queue_families := make(map[u32]int, 4, temp_arena.allocator)
 			queue_families[queue_family_graphics_index] += 1
 			queue_families[queue_family_present_index] += 1
 			queue_families[queue_family_compute_index] += 1
@@ -441,9 +434,8 @@ when USE_VULKAN_BACKEND {
 			queue_priorities := make(
 				[]f32,
 				len(queue_families),
-				G_RENDERER_ALLOCATORS.temp_allocator,
+				temp_arena.allocator,
 			)
-			defer delete(queue_priorities, G_RENDERER_ALLOCATORS.temp_allocator)
 
 			for qfc in 0 ..< len(queue_families) {
 				queue_families[u32(qfc)] = 1.0
@@ -452,9 +444,8 @@ when USE_VULKAN_BACKEND {
 			queue_create_infos := make(
 				[]vk.DeviceQueueCreateInfo,
 				len(queue_families),
-				G_RENDERER_ALLOCATORS.temp_allocator,
+				temp_arena.allocator,
 			)
-			defer delete(queue_create_infos, G_RENDERER_ALLOCATORS.temp_allocator)
 
 			{
 				idx := 0

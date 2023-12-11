@@ -48,10 +48,11 @@ BindGroupLayoutBindingFlags :: distinct bit_set[BindGroupLayoutBindingFlagBits;u
 //---------------------------------------------------------------------------//
 
 BindGroupLayoutBinding :: struct {
-	type:          BindGroupLayoutBindingType,
-	shader_stages: ShaderStageFlags,
-	flags:         BindGroupLayoutBindingFlags,
-	count:         u32,
+	type:                  BindGroupLayoutBindingType,
+	shader_stages:         ShaderStageFlags,
+	flags:                 BindGroupLayoutBindingFlags,
+	count:                 u32,
+	immutable_sampler_idx: u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -111,7 +112,7 @@ allocate_bind_group_layout_ref :: proc(
 	ref := BindGroupLayoutRef(
 		common.ref_create(BindGroupLayoutResource, &G_BIND_GROUP_LAYOUT_REF_ARRAY, p_name),
 	)
-	
+
 	bind_group_layout := &g_resources.bind_group_layouts[get_bind_group_layout_idx(ref)]
 
 	bind_group_layout.desc.name = p_name

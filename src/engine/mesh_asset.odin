@@ -8,6 +8,7 @@ import "core:log"
 import "core:math/linalg/glsl"
 import "core:os"
 import "core:path/filepath"
+import "core:strconv"
 import "core:strings"
 
 import "../common"
@@ -128,12 +129,6 @@ mesh_asset_init :: proc() {
 	)
 	G_MESH_ASSET_ARRAY = make([]MeshAsset, MAX_MESH_ASSETS, G_ALLOCATORS.asset_allocator)
 
-	temp_arena: common.Arena
-	common.temp_arena_init(&temp_arena)
-	defer common.arena_delete(temp_arena)
-
-	context.temp_allocator = temp_arena.allocator
-
 	asset_database_init(&INTERNAL.mesh_database, G_MESH_DB_PATH)
 	asset_database_read(&INTERNAL.mesh_database)
 }
@@ -163,7 +158,7 @@ MeshImportContext :: struct {
 	mesh_feature_flags: MeshFeatureFlags,
 	sub_meshes:         []SubMesh,
 	mesh_dir:           string,
-	arena:              ^common.Arena,
+	mesh_name:          string,
 }
 
 //---------------------------------------------------------------------------//
@@ -188,12 +183,11 @@ mesh_asset_get :: proc(p_ref: MeshAssetRef) -> ^MeshAsset {
 mesh_asset_import :: proc(p_import_options: MeshAssetImportOptions) -> AssetImportResult {
 
 	temp_arena: common.Arena
-	common.temp_arena_init(&temp_arena)
+	common.temp_arena_init(&temp_arena, common.KILOBYTE * 128)
 	defer common.arena_delete(temp_arena)
-	context.temp_allocator = temp_arena.allocator
 
 	mesh_asset_name := filepath.short_stem(filepath.base(p_import_options.file_path))
-	mesh_file_path := strings.clone_to_cstring(p_import_options.file_path, context.temp_allocator)
+	mesh_file_path := strings.clone_to_cstring(p_import_options.file_path, temp_arena.allocator)
 
 	// Check if the mesh already exits
 	mesh_asset_file_name := strings.concatenate({mesh_asset_name, ".bin"}, temp_arena.allocator)
@@ -205,24 +199,37 @@ mesh_asset_import :: proc(p_import_options: MeshAssetImportOptions) -> AssetImpo
 		return {status = .Duplicate, name = common.create_name(mesh_asset_name)}
 	}
 
-	scene := assimp.import_file(mesh_file_path, {.OptimizeMeshes, .Triangulate, .FlipUVs})
-	if scene == nil {
+	scene := assimp.import_file(
+		mesh_file_path,
+		{
+			.OptimizeMeshes,
+			.Triangulate,
+			.FlipUVs,
+			.GenSmoothNormals,
+			.CalcTangentSpace,
+			.JoinIdenticalVertices,
+		},
+	)
+	if scene == nil ||
+	   (scene.mFlags & assimp.SCENE_FLAGS_INCOMPLETE) > 0 ||
+	   scene.mRootNode == nil {
 		return AssetImportResult{status = .Error}
 	}
 	defer assimp.release_import(scene)
 
 	mesh_import_ctx := MeshImportContext {
-		curr_idx = 0,
-		curr_vtx = 0,
-		mesh_dir = filepath.dir(p_import_options.file_path, temp_arena.allocator),
-		arena    = &temp_arena,
+		curr_idx  = 0,
+		curr_vtx  = 0,
+		mesh_dir  = filepath.dir(p_import_options.file_path, temp_arena.allocator),
+		mesh_name = mesh_asset_name,
 	}
+
+	log.infof("Importing mesh '%s'\n", mesh_asset_name)
 
 	// Calculate the number of vertices and indices
 	num_vertices: u32 = 0
 	num_indices: u32 = 0
 
-	// Assuming all submeshes will also have those features. I mean, it makes sense
 	if (scene.mMeshes[0].mNormals != nil) {
 		mesh_import_ctx.mesh_feature_flags += {.Normal}
 	}
@@ -330,6 +337,7 @@ mesh_asset_import :: proc(p_import_options: MeshAssetImportOptions) -> AssetImpo
 
 		return AssetImportResult{status = .Error}
 	}
+	defer os.close(fd)
 
 	if .IndexedDraw in mesh_import_ctx.mesh_feature_flags {
 		os.write_ptr(fd, raw_data(mesh_import_ctx.indices), int(mesh_metadata.total_index_size))
@@ -394,25 +402,18 @@ mesh_asset_load_by_name :: proc(p_mesh_asset_name: common.Name) -> MeshAssetRef 
 		}
 	}
 
+	log.infof("Loading mesh '%s'\n", common.get_string(p_mesh_asset_name))
+
 	temp_arena: common.Arena
-	common.temp_arena_init(&temp_arena)
+	common.temp_arena_init(&temp_arena, common.MEGABYTE)
 	defer common.arena_delete(temp_arena)
-	context.temp_allocator = temp_arena.allocator
 
 	mesh_asset_path := asset_create_path(
 		G_MESH_ASSETS_DIR,
 		p_mesh_asset_name,
 		"bin",
-		context.temp_allocator,
+		temp_arena.allocator,
 	)
-
-	// Determine how much data we need to allocate for the mesh data
-	mesh_data_size := os.file_size_from_path(mesh_asset_path)
-
-	// Allocate arena for the mesh data
-	mesh_data_arena: common.Arena
-	common.arena_init(&mesh_data_arena, u32(mesh_data_size), G_ALLOCATORS.main_allocator)
-	defer common.arena_delete(mesh_data_arena)
 
 	// Load metadata
 	mesh_metadata: MeshAssetMetadata
@@ -427,13 +428,13 @@ mesh_asset_load_by_name :: proc(p_mesh_asset_name: common.Name) -> MeshAssetRef 
 		)
 		mesh_metadata_json, success := os.read_entire_file(
 			mesh_metadata_file_path,
-			context.temp_allocator,
+			temp_arena.allocator,
 		)
 		if !success {
 			log.warnf("Failed to load mesh '%s' - couldn't load metadata\n", mesh_name)
 			return InvalidMeshAssetRef
 		}
-		err := json.unmarshal(mesh_metadata_json, &mesh_metadata, .JSON5, context.temp_allocator)
+		err := json.unmarshal(mesh_metadata_json, &mesh_metadata, .JSON5, temp_arena.allocator)
 		if err != nil {
 			log.warnf("Failed to load mesh '%s' - couldn't read metadata\n", mesh_name)
 			return InvalidMeshAssetRef
@@ -441,11 +442,12 @@ mesh_asset_load_by_name :: proc(p_mesh_asset_name: common.Name) -> MeshAssetRef 
 	}
 
 	// Load mesh data
-	mesh_data, success := os.read_entire_file(mesh_asset_path, mesh_data_arena.allocator)
+	mesh_data, success := os.read_entire_file(mesh_asset_path, G_ALLOCATORS.main_allocator)
 	if success == false {
 		log.warnf("Failed to load mesh '%s' - couldn't open file %s\n", mesh_name, mesh_asset_path)
 		return InvalidMeshAssetRef
 	}
+	defer delete(mesh_data, G_ALLOCATORS.main_allocator)
 
 	// Create renderer mesh
 	mesh_resource_ref := renderer.allocate_mesh_ref(
@@ -518,6 +520,7 @@ mesh_asset_load_by_name :: proc(p_mesh_asset_name: common.Name) -> MeshAssetRef 
 	for sub_mesh_metadata, i in mesh_metadata.sub_meshes {
 
 		material_asset_ref := material_asset_load(sub_mesh_metadata.material_asset_name)
+		assert(material_asset_ref != InvalidMaterialAssetRef)
 		material_asset := material_asset_get(material_asset_ref)
 
 		mesh_resource.desc.sub_meshes[i] = renderer.SubMesh {
@@ -569,17 +572,39 @@ assimp_load_node :: proc(
 	p_import_ctx: ^MeshImportContext,
 ) {
 
+	temp_arena: common.Arena
+	common.temp_arena_init(&temp_arena)
+	defer common.arena_delete(temp_arena)
+
 	for i in 0 ..< p_node.mNumMeshes {
 		assimp_mesh := p_scene.mMeshes[p_node.mMeshes[i]]
-		assimp_mesh_name := string(assimp_mesh.mName.data[:assimp_mesh.mName.length])
-
 		assimp_material := p_scene.mMaterials[assimp_mesh.mMaterialIndex]
+
+		assimp_material_name: assimp.String
+		assimp.get_material_string(
+			assimp_material,
+			assimp.MATKEY_NAME,
+			0,
+			0,
+			&assimp_material_name,
+		)
+		material_name := string(assimp_material_name.data[:assimp_material_name.length])
+		if assimp_material_name.length == 0 {
+			buff: [64]byte
+			material_idx := strconv.itoa(buff[:], int(p_import_ctx.current_sub_mesh))
+			material_name = strings.clone(material_idx, temp_arena.allocator)
+		}
+
+		material_name = strings.concatenate(
+			{p_import_ctx.mesh_name, "_", material_name},
+			temp_arena.allocator,
+		)
 
 		// Create a new material asset for this submesh
 		material_props := DefaultMaterialPropertiesAssetJSON {
 			flags = 0,
 		}
-		material_asset_name := common.create_name(assimp_mesh_name)
+		material_asset_name := common.create_name(material_name)
 		material_asset_ref := allocate_material_asset_ref(material_asset_name)
 		material_asset := material_asset_get(material_asset_ref)
 		material_asset.material_type_name = common.create_name("Default")
@@ -668,27 +693,33 @@ assimp_load_node :: proc(
 				assimp_mesh.mVertices[j].z,
 			}
 
-			if .Normal in p_import_ctx.mesh_feature_flags {
+			if assimp_mesh.mNormals != nil {
 				p_import_ctx.normals[p_import_ctx.curr_vtx] = {
 					assimp_mesh.mNormals[j].x,
 					assimp_mesh.mNormals[j].y,
 					assimp_mesh.mNormals[j].z,
 				}
+			} else {
+				p_import_ctx.normals[p_import_ctx.curr_vtx] = {0, 0, 0}
 			}
 
-			if .Tangent in p_import_ctx.mesh_feature_flags {
+			if assimp_mesh.mTangents != nil {
 				p_import_ctx.tangents[p_import_ctx.curr_vtx] = {
 					assimp_mesh.mTangents[j].x,
 					assimp_mesh.mTangents[j].y,
 					assimp_mesh.mTangents[j].z,
 				}
+			} else {
+				p_import_ctx.tangents[p_import_ctx.curr_vtx] = {0, 0, 0}
 			}
 
-			if .UV in p_import_ctx.mesh_feature_flags {
+			if assimp_mesh.mTextureCoords[0] != nil {
 				p_import_ctx.uvs[p_import_ctx.curr_vtx] = {
 					assimp_mesh.mTextureCoords[0][j].x,
 					assimp_mesh.mTextureCoords[0][j].y,
 				}
+			} else {
+				p_import_ctx.uvs[p_import_ctx.curr_vtx] = {0, 0}
 			}
 
 			p_import_ctx.curr_vtx += 1
@@ -721,6 +752,10 @@ assimp_material_import_texture :: proc(
 	p_out_flags: ^u32,
 	p_texture_flag: u32,
 ) {
+	temp_arena: common.Arena
+	common.temp_arena_init(&temp_arena)
+	defer common.arena_delete(temp_arena)
+
 	texture_path: assimp.String
 	assimp_get_material_texture(p_assimp_material, p_assimp_texture_type, &texture_path)
 
@@ -728,11 +763,13 @@ assimp_material_import_texture :: proc(
 		return
 	}
 
+	texture_file_path := string(texture_path.data[:texture_path.length])
+	if filepath.is_abs(texture_file_path) == false {
+		texture_file_path = filepath.join({p_mesh_dir, texture_file_path}, temp_arena.allocator)
+	}
+
 	texture_import_options := TextureAssetImportOptions {
-		file_path = filepath.join(
-			{p_mesh_dir, string(texture_path.data[:texture_path.length])},
-			context.temp_allocator,
-		),
+		file_path = texture_file_path,
 	}
 
 	if p_assimp_texture_type == .AitexturetypeNormals {

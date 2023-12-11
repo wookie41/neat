@@ -73,14 +73,20 @@ buffer_management_init :: proc() -> bool {
 			common.create_name("MeshInstancedDrawInfo"),
 		)
 
-		mesh_instanced_draw_info_buffer := &g_resources.buffers[get_buffer_idx(material_instances_buffer_ref)]
+		mesh_instanced_draw_info_buffer := &g_resources.buffers[get_buffer_idx(mesh_instanced_draw_info_buffer_ref)]
 
-		mesh_instanced_draw_info_buffer.desc.flags = storage_buffer_flags
-		mesh_instanced_draw_info_buffer.desc.usage = {.DynamicStorageBuffer, .TransferDst}
+		mesh_instanced_draw_info_buffer.desc.flags = {.Dedicated}
+		mesh_instanced_draw_info_buffer.desc.usage = {.DynamicStorageBuffer}
 		mesh_instanced_draw_info_buffer.desc.size =
 			MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE * G_RENDERER.num_frames_in_flight
 
-		create_buffer(material_instances_buffer_ref) or_return
+		if .IntegratedGPU in G_RENDERER.gpu_device_flags {
+			mesh_instanced_draw_info_buffer.desc.flags += {.Mapped}
+		} else {
+			mesh_instanced_draw_info_buffer.desc.usage += {.TransferDst}
+		}
+
+		create_buffer(mesh_instanced_draw_info_buffer_ref) or_return
 	}
 
 	return true
