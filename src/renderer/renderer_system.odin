@@ -85,6 +85,8 @@ g_resources: struct {
 //---------------------------------------------------------------------------//
 
 g_resource_refs: struct {
+	pipelines:      common.RefArray(PipelineResource),
+	shaders:        common.RefArray(ShaderResource),
 	mesh_instances: common.RefArray(MeshInstanceResource),
 }
 
@@ -438,6 +440,9 @@ update :: proc(p_dt: f32) {
 	// Setup renderer context
 	context.allocator = G_RENDERER_ALLOCATORS.main_allocator
 	context.logger = INTERNAL.logger
+
+	pipelines_update()
+	shaders_update()
 
 	cmd_buff_ref := get_frame_cmd_buffer_ref()
 

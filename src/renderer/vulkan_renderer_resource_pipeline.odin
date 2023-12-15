@@ -14,10 +14,20 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
+	DeferredPipelineDelete :: struct {
+		pipeline_layout_hash: u32,
+		vk_pipeline:          vk.Pipeline,
+		wait_fence:           vk.Fence,
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private = "file")
 	INTERNAL: struct {
 		pipeline_layout_cache:          map[u32]PipelineLayoutCacheEntry,
 		vk_pipeline_cache:              vk.PipelineCache,
 		vk_empty_descriptor_set_layout: vk.DescriptorSetLayout,
+		deferred_pipeline_deletions:    [dynamic]DeferredPipelineDelete,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -211,11 +221,49 @@ when USE_VULKAN_BACKEND {
 
 		vk.CreatePipelineCache(G_RENDERER.device, &create_info, nil, &INTERNAL.vk_pipeline_cache)
 
+		INTERNAL.deferred_pipeline_deletions = make([dynamic]DeferredPipelineDelete)
+
 		return true
 	}
 
 	//---------------------------------------------------------------------------//
 
+	@(private)
+	backend_pipelines_update :: proc() {
+
+		// Process deferred deletes
+		deferred_deletes := make([dynamic]DeferredPipelineDelete)
+		for deferred_delete in &INTERNAL.deferred_pipeline_deletions {
+
+			// Command buffer with using this pipeline is still in use
+			if vk.GetFenceStatus(G_RENDERER.device, deferred_delete.wait_fence) == .NOT_READY {
+				append(&deferred_deletes, deferred_delete)
+				continue
+
+			}
+
+			// Safe to delete pipeline
+
+			cache_entry := &INTERNAL.pipeline_layout_cache[deferred_delete.pipeline_layout_hash]
+			assert(cache_entry.ref_count > 0)
+			cache_entry.ref_count -= 1
+
+			if cache_entry.ref_count == 0 {
+				vk.DestroyPipelineLayout(G_RENDERER.device, cache_entry.vk_pipeline_layout, nil)
+				delete_key(&INTERNAL.pipeline_layout_cache, deferred_delete.pipeline_layout_hash)
+			}
+
+			vk.DestroyPipeline(G_RENDERER.device, deferred_delete.vk_pipeline, nil)
+
+		}
+
+		clear(&INTERNAL.deferred_pipeline_deletions)
+		INTERNAL.deferred_pipeline_deletions = deferred_deletes
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
 	backend_deinit_pipelines :: proc() {
 		cache_size: int
 
@@ -443,7 +491,7 @@ when USE_VULKAN_BACKEND {
 		assert(cache_entry.ref_count > 0)
 		cache_entry.ref_count -= 1
 
-		// Delete the pipeline if needed
+		// Delete the pipeline layout if needed
 		if cache_entry.ref_count == 0 {
 			vk.DestroyPipelineLayout(G_RENDERER.device, cache_entry.vk_pipeline_layout, nil)
 			delete_key(&INTERNAL.pipeline_layout_cache, pipeline_layout_hash)
@@ -453,6 +501,25 @@ when USE_VULKAN_BACKEND {
 	}
 
 	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_reset_pipeline :: proc(p_pipeline_ref: PipelineRef) {
+
+		pipeline_idx := get_pipeline_idx(p_pipeline_ref)
+		backend_pipeline := &g_resources.backend_pipelines[pipeline_idx]
+
+		append(
+			&INTERNAL.deferred_pipeline_deletions,
+			DeferredPipelineDelete{
+				pipeline_layout_hash = hash_pipeline_layout(pipeline_idx),
+				vk_pipeline = backend_pipeline.vk_pipeline,
+				wait_fence = G_RENDERER.frame_fences[get_frame_idx()],
+			},
+		)
+	}
+
+	//---------------------------------------------------------------------------//
+
 
 	@(private)
 	backend_bind_pipeline :: proc(
@@ -547,7 +614,7 @@ when USE_VULKAN_BACKEND {
 
 		if len(pipeline.desc.push_constants) > 0 {
 			create_info.pushConstantRangeCount = u32(len(pipeline.desc.push_constants))
-			create_info.pPushConstantRanges = &push_constant_ranges[0]	
+			create_info.pPushConstantRanges = &push_constant_ranges[0]
 		}
 
 		if vk.CreatePipelineLayout(

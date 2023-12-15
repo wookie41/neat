@@ -130,13 +130,9 @@ PipelineStageFlags :: distinct bit_set[PipelineStageFlagBits;u16]
 
 //---------------------------------------------------------------------------//
 
-@(private = "file")
-G_PIPELINE_REF_ARRAY: common.RefArray(PipelineResource)
-
-//---------------------------------------------------------------------------//
-
+@(private)
 init_pipelines :: proc() -> bool {
-	G_PIPELINE_REF_ARRAY = common.ref_array_create(
+	g_resource_refs.pipelines = common.ref_array_create(
 		PipelineResource,
 		MAX_PIPELINES,
 		G_RENDERER_ALLOCATORS.main_allocator,
@@ -156,6 +152,12 @@ init_pipelines :: proc() -> bool {
 	return true
 }
 
+@(private)
+pipelines_update :: proc() {
+	backend_pipelines_update()
+}
+
+@(private)
 deinit_pipelines :: proc() {
 	backend_deinit_pipelines()
 }
@@ -167,7 +169,7 @@ allocate_pipeline_ref :: proc(
 	p_bind_group_layouts_count: u32,
 	p_push_constants_count: u32,
 ) -> PipelineRef {
-	ref := PipelineRef(common.ref_create(PipelineResource, &G_PIPELINE_REF_ARRAY, p_name))
+	ref := PipelineRef(common.ref_create(PipelineResource, &g_resource_refs.pipelines, p_name))
 	pipeline := &g_resources.pipelines[get_pipeline_idx(ref)]
 	pipeline.desc.name = p_name
 	pipeline.desc.bind_group_layout_refs = make(
@@ -202,7 +204,7 @@ create_graphics_pipeline :: proc(p_ref: PipelineRef) -> bool {
 //---------------------------------------------------------------------------//
 
 get_pipeline_idx :: #force_inline proc(p_ref: PipelineRef) -> u32 {
-	return common.ref_get_idx(&G_PIPELINE_REF_ARRAY, p_ref)
+	return common.ref_get_idx(&g_resource_refs.pipelines, p_ref)
 }
 
 //---------------------------------------------------------------------------//
@@ -217,7 +219,18 @@ destroy_pipeline :: proc(p_ref: PipelineRef) {
 	pipeline.desc.push_constants = nil
 
 	backend_destroy_pipeline(p_ref)
-	common.ref_free(&G_PIPELINE_REF_ARRAY, p_ref)
+}
+
+//---------------------------------------------------------------------------//
+
+reset_pipeline :: proc(p_ref: PipelineRef) {
+	pipeline := &g_resources.pipelines[get_pipeline_idx(p_ref)]
+	backend_reset_pipeline(p_ref)
+	if pipeline.type == .Graphics {
+		backend_create_graphics_pipeline(p_ref)
+	} else {
+		assert(false)
+	}
 }
 
 //---------------------------------------------------------------------------//

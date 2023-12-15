@@ -43,11 +43,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_create_shader :: proc(
-		p_ref: ShaderRef,
-	) -> (
-		create_result: bool,
-	) {
+	backend_create_shader :: proc(p_ref: ShaderRef) -> (create_result: bool) {
 
 		shader_idx := get_shader_idx(p_ref)
 		shader := &g_resources.shaders[shader_idx]
@@ -154,5 +150,15 @@ when USE_VULKAN_BACKEND {
 	}
 
 	//---------------------------------------------------------------------------//
+
+	backend_reload_shader :: proc(p_shader_ref: ShaderRef) -> bool {
+		shader := &g_resources.backend_shaders[get_shader_idx(p_shader_ref)]
+		old_vk_module := shader.vk_module
+		if backend_create_shader(p_shader_ref) == true {
+			vk.DestroyShaderModule(G_RENDERER.device, old_vk_module, nil)
+			return true
+		}
+		return false
+	}
 
 }
