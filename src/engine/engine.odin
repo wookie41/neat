@@ -107,12 +107,13 @@ run :: proc() {
 
 	last_frame_time := time.now()
 	target_dt: f32 = 1.0 / 60.0
+	accumulated_dt: f32 = 0
 
 	for running {
 
 		current_time := time.now()
-		dt := f32(time.duration_seconds(time.diff(last_frame_time, current_time)))
-		render_dt := dt
+		accumulated_dt += f32(time.duration_seconds(time.diff(last_frame_time, current_time)))
+		last_frame_time = current_time
 
 		mouse_pos: glsl.ivec2
 		pressed_mouse_buttons := sdl.GetMouseState(&mouse_pos.x, &mouse_pos.y)
@@ -165,9 +166,9 @@ run :: proc() {
 			camera_add_rotation(f32(x_delta), -f32(y_delta))
 		}
 
-		for dt > target_dt {
+		for accumulated_dt > target_dt {
 			camera_update(target_dt)
-			dt -= target_dt
+			accumulated_dt -= target_dt
 		}
 
 		// Update renderer camera
@@ -178,7 +179,7 @@ run :: proc() {
 		renderer.g_render_camera.near_plane = Camera.near_plane
 		renderer.g_render_camera.far_plane = Camera.far_plane
 
-		renderer.update(render_dt)
+		renderer.update(target_dt)
 
 		INTERNAL.last_frame_mouse_pos = mouse_pos
 	}
