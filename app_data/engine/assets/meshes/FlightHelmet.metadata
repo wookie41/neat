@@ -1,40 +1,52 @@
 {
 	"base": {
 		"name": 1012405842,
-		"uuid": 128237475065000846897246615123838822352,
+		"uuid": 32911534608904056884074202042277185152,
 		"type": 1,
 		"version": 1
 	},
 	"featureFlags": 15,
 	"subMeshes": [
 		{
-			"data_count": 59040,
-			"data_offset": 0,
+			"vertexOffset": 0,
+			"vertexCount": 10472,
+			"indexOffset": 0,
+			"indexCount": 59040,
 			"material_asset_name": 287659710
 		},
 		{
-			"data_count": 72534,
-			"data_offset": 59040,
+			"vertexOffset": 10472,
+			"vertexCount": 13638,
+			"indexOffset": 59040,
+			"indexCount": 72534,
 			"material_asset_name": 2039104496
 		},
 		{
-			"data_count": 24408,
-			"data_offset": 131574,
+			"vertexOffset": 24110,
+			"vertexCount": 4676,
+			"indexOffset": 131574,
+			"indexCount": 24408,
 			"material_asset_name": 2786566333
 		},
 		{
-			"data_count": 60288,
-			"data_offset": 155982,
+			"vertexOffset": 28786,
+			"vertexCount": 13636,
+			"indexOffset": 155982,
+			"indexCount": 60288,
 			"material_asset_name": 4066702208
 		},
 		{
-			"data_count": 65688,
-			"data_offset": 216270,
+			"vertexOffset": 42422,
+			"vertexCount": 12534,
+			"indexOffset": 216270,
+			"indexCount": 65688,
 			"material_asset_name": 1647622697
 		},
 		{
-			"data_count": 2208,
-			"data_offset": 281958,
+			"vertexOffset": 54956,
+			"vertexCount": 436,
+			"indexOffset": 281958,
+			"indexCount": 2208,
 			"material_asset_name": 2913529708
 		}
 	],

@@ -1,135 +1,185 @@
 {
 	"base": {
 		"name": 207878904,
-		"uuid": 91833986478076135780998385764286228588,
+		"uuid": 267682419952734358275748693186336285328,
 		"type": 1,
 		"version": 1
 	},
 	"featureFlags": 15,
 	"subMeshes": [
 		{
-			"data_count": 94308,
-			"data_offset": 0,
+			"vertexOffset": 0,
+			"vertexCount": 24162,
+			"indexOffset": 0,
+			"indexCount": 94308,
 			"material_asset_name": 3677232924
 		},
 		{
-			"data_count": 10416,
-			"data_offset": 94308,
+			"vertexOffset": 24162,
+			"vertexCount": 3932,
+			"indexOffset": 94308,
+			"indexCount": 10416,
 			"material_asset_name": 2888380298
 		},
 		{
-			"data_count": 53064,
-			"data_offset": 104724,
+			"vertexOffset": 28094,
+			"vertexCount": 9848,
+			"indexOffset": 104724,
+			"indexCount": 53064,
 			"material_asset_name": 891321904
 		},
 		{
-			"data_count": 12258,
-			"data_offset": 157788,
+			"vertexOffset": 37942,
+			"vertexCount": 2259,
+			"indexOffset": 157788,
+			"indexCount": 12258,
 			"material_asset_name": 1109872294
 		},
 		{
-			"data_count": 2388,
-			"data_offset": 170046,
+			"vertexOffset": 40201,
+			"vertexCount": 1070,
+			"indexOffset": 170046,
+			"indexCount": 2388,
 			"material_asset_name": 3695434501
 		},
 		{
-			"data_count": 30504,
-			"data_offset": 172434,
+			"vertexOffset": 41271,
+			"vertexCount": 11262,
+			"indexOffset": 172434,
+			"indexCount": 30504,
 			"material_asset_name": 2873420691
 		},
 		{
-			"data_count": 17628,
-			"data_offset": 202938,
+			"vertexOffset": 52533,
+			"vertexCount": 5038,
+			"indexOffset": 202938,
+			"indexCount": 17628,
 			"material_asset_name": 843954729
 		},
 		{
-			"data_count": 8448,
-			"data_offset": 220566,
+			"vertexOffset": 57571,
+			"vertexCount": 3532,
+			"indexOffset": 220566,
+			"indexCount": 8448,
 			"material_asset_name": 1162513087
 		},
 		{
-			"data_count": 59484,
-			"data_offset": 229014,
+			"vertexOffset": 61103,
+			"vertexCount": 11828,
+			"indexOffset": 229014,
+			"indexCount": 59484,
 			"material_asset_name": 3589642030
 		},
 		{
-			"data_count": 63,
-			"data_offset": 288498,
+			"vertexOffset": 72931,
+			"vertexCount": 23,
+			"indexOffset": 288498,
+			"indexCount": 63,
 			"material_asset_name": 2733811640
 		},
 		{
-			"data_count": 33024,
-			"data_offset": 288561,
+			"vertexOffset": 72954,
+			"vertexCount": 6520,
+			"indexOffset": 288561,
+			"indexCount": 33024,
 			"material_asset_name": 4179270704
 		},
 		{
-			"data_count": 96,
-			"data_offset": 321585,
+			"vertexOffset": 79474,
+			"vertexCount": 64,
+			"indexOffset": 321585,
+			"indexCount": 96,
 			"material_asset_name": 2384309414
 		},
 		{
-			"data_count": 21264,
-			"data_offset": 321681,
+			"vertexOffset": 79538,
+			"vertexCount": 12272,
+			"indexOffset": 321681,
+			"indexCount": 21264,
 			"material_asset_name": 387251484
 		},
 		{
-			"data_count": 9126,
-			"data_offset": 342945,
+			"vertexOffset": 91810,
+			"vertexCount": 1732,
+			"indexOffset": 342945,
+			"indexCount": 9126,
 			"material_asset_name": 1611910538
 		},
 		{
-			"data_count": 49536,
-			"data_offset": 352071,
+			"vertexOffset": 93542,
+			"vertexCount": 9780,
+			"indexOffset": 352071,
+			"indexCount": 49536,
 			"material_asset_name": 4269234217
 		},
 		{
-			"data_count": 69624,
-			"data_offset": 401607,
+			"vertexOffset": 103322,
+			"vertexCount": 23038,
+			"indexOffset": 401607,
+			"indexCount": 69624,
 			"material_asset_name": 2305845439
 		},
 		{
-			"data_count": 43008,
-			"data_offset": 471231,
+			"vertexOffset": 126360,
+			"vertexCount": 7739,
+			"indexOffset": 471231,
+			"indexCount": 43008,
 			"material_asset_name": 276379909
 		},
 		{
-			"data_count": 49536,
-			"data_offset": 514239,
+			"vertexOffset": 134099,
+			"vertexCount": 9780,
+			"indexOffset": 514239,
+			"indexCount": 49536,
 			"material_asset_name": 1736313235
 		},
 		{
-			"data_count": 56832,
-			"data_offset": 563775,
+			"vertexOffset": 143879,
+			"vertexCount": 10248,
+			"indexOffset": 563775,
+			"indexCount": 56832,
 			"material_asset_name": 4156625922
 		},
 		{
-			"data_count": 2640,
-			"data_offset": 620607,
+			"vertexOffset": 154127,
+			"vertexCount": 1100,
+			"indexOffset": 620607,
+			"indexCount": 2640,
 			"material_asset_name": 2160469140
 		},
 		{
-			"data_count": 43008,
-			"data_offset": 623247,
+			"vertexOffset": 155227,
+			"vertexCount": 7739,
+			"indexOffset": 623247,
+			"indexCount": 43008,
 			"material_asset_name": 3526873075
 		},
 		{
-			"data_count": 49488,
-			"data_offset": 666255,
+			"vertexOffset": 162966,
+			"vertexCount": 12292,
+			"indexOffset": 666255,
+			"indexCount": 49488,
 			"material_asset_name": 2771451749
 		},
 		{
-			"data_count": 43452,
-			"data_offset": 715743,
+			"vertexOffset": 175258,
+			"vertexCount": 11890,
+			"indexOffset": 715743,
+			"indexCount": 43452,
 			"material_asset_name": 1010413279
 		},
 		{
-			"data_count": 27552,
-			"data_offset": 759195,
+			"vertexOffset": 187148,
+			"vertexCount": 5308,
+			"indexOffset": 759195,
+			"indexCount": 27552,
 			"material_asset_name": 1262394953
 		},
 		{
-			"data_count": 54,
-			"data_offset": 786747,
+			"vertexOffset": 192456,
+			"vertexCount": 36,
+			"indexOffset": 786747,
+			"indexCount": 54,
 			"material_asset_name": 3579448298
 		}
 	],
