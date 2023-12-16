@@ -64,27 +64,29 @@ SubMesh :: struct {
 //---------------------------------------------------------------------------//
 
 MeshDesc :: struct {
-	name:       common.Name,
+	name:           common.Name,
 	// Misc flags, telling is if mesh is using indexed draw or not etc.
-	flags:      MeshFlags,
+	flags:          MeshFlags,
 	// Flags specyfing which features the mesh has (position, normals, UVs etc.)
-	features:   MeshFeatureFlags,
+	features:       MeshFeatureFlags,
 	// List of submeshes that actually define the ranges in vertex/index data
-	sub_meshes: []SubMesh,
+	sub_meshes:     []SubMesh,
 	// Mesh data
-	indices:    []INDEX_DATA_TYPE,
-	position:   []glsl.vec3,
-	uv:         []glsl.vec2,
-	normal:     []glsl.vec3,
-	tangent:    []glsl.vec3,
+	indices:        []INDEX_DATA_TYPE,
+	position:       []glsl.vec3,
+	uv:             []glsl.vec2,
+	normal:         []glsl.vec3,
+	tangent:        []glsl.vec3,
+	// Allocator that was used to allocate memory for the vertex and index data
+	data_allocator: mem.Allocator, 
 }
 
 //---------------------------------------------------------------------------//
 
 MeshResource :: struct {
 	desc:                     MeshDesc,
-	vertex_count: u32,
-	index_count: u32,
+	vertex_count:             u32,
+	index_count:              u32,
 	vertex_buffer_allocation: BufferSuballocation,
 	index_buffer_allocation:  BufferSuballocation,
 }
