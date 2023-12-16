@@ -1,5 +1,5 @@
-package renderer
 
+package renderer
 //---------------------------------------------------------------------------//
 
 import "../common"
@@ -54,10 +54,10 @@ MeshFeatureFlags :: distinct bit_set[MeshFeatureFlagBits;u16]
 //---------------------------------------------------------------------------//
 
 SubMesh :: struct {
-	// Offset and number of vertices/indices for this submesh
-	// Usage depends on wether the mesh is using indexed draw or not
-	data_offset:           u32,
-	data_count:            u32,
+	index_offset:          u32, // in number of indices
+	index_count:           u32,
+	vertex_offset:         u32, // in number of vertices
+	vertex_count:          u32,
 	material_instance_ref: MaterialInstanceRef,
 }
 
@@ -83,6 +83,8 @@ MeshDesc :: struct {
 
 MeshResource :: struct {
 	desc:                     MeshDesc,
+	vertex_count: u32,
+	index_count: u32,
 	vertex_buffer_allocation: BufferSuballocation,
 	index_buffer_allocation:  BufferSuballocation,
 }
@@ -157,6 +159,9 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 	index_count := len(mesh.desc.indices)
 	vertex_count := len(mesh.desc.position)
 
+	mesh.index_count = u32(index_count)
+	mesh.vertex_count = u32(vertex_count)
+
 	// Check if the data that is actually provided has the expected number of elements
 	assert(len(mesh.desc.uv) == 0 || len(mesh.desc.uv) == vertex_count)
 	assert(len(mesh.desc.normal) == 0 || len(mesh.desc.normal) == vertex_count)
@@ -180,7 +185,7 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 		return false
 	}
 
-	// Suballocate the vertex and index buffers
+	// Suballocate the vertex buffer
 	vertex_allocation_successful, vertex_allocation := buffer_allocate(
 		INTERNAL.vertex_buffer_ref,
 		u32(vertex_data_size),
@@ -215,11 +220,7 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 
 		upload_response := request_buffer_upload(index_buffer_upload_request)
 
-		mem.copy(
-			upload_response.ptr,
-			raw_data(mesh.desc.indices),
-			index_data_size,
-		)
+		mem.copy(upload_response.ptr, raw_data(mesh.desc.indices), index_data_size)
 
 		mesh.index_buffer_allocation = index_allocation
 	}
@@ -239,98 +240,36 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 
 		vertex_data_ptr := (^byte)(upload_response.ptr)
 
-		// Upload data and pad with 0s if neccessary 
-		for i in 0 ..< vertex_count {
-			mem.copy(
-				mem.ptr_offset(vertex_data_ptr, VERTEX_STRIDE * i),
-				&mesh.desc.position[i],
-				size_of(mesh.desc.position[0]),
-			)
-		}
+		mem.copy(
+			vertex_data_ptr,
+			&mesh.desc.position[0],
+			size_of(mesh.desc.position[0]) * vertex_count,
+		)
 
-		// UV
+		uv_ptr := mem.ptr_offset(vertex_data_ptr, size_of(mesh.desc.position[0]) * vertex_count)
+		normal_ptr := mem.ptr_offset(uv_ptr, size_of(mesh.desc.uv[0]) * vertex_count)
+		tangent_ptr := mem.ptr_offset(normal_ptr, size_of(mesh.desc.normal[0]) * vertex_count)
+
 		if .UV in mesh.desc.features {
-			for i in 0 ..< vertex_count {
-				mem.copy(
-					mem.ptr_offset(
-						vertex_data_ptr,
-						VERTEX_STRIDE * i + size_of(mesh.desc.position[0]),
-					),
-					&mesh.desc.uv[i],
-					size_of(mesh.desc.uv[0]),
-				)
-			}
+			mem.copy(uv_ptr, &mesh.desc.uv[0], size_of(mesh.desc.uv[0]) * vertex_count)
 		} else {
-			for i in 0 ..< vertex_count {
-				mem.copy(
-					mem.ptr_offset(
-						vertex_data_ptr,
-						VERTEX_STRIDE * i + size_of(mesh.desc.position[0]),
-					),
-					&ZERO_VECTOR,
-					size_of(mesh.desc.uv[0]),
-				)
-			}
+			mem.zero(uv_ptr, size_of(mesh.desc.uv[0]) * vertex_count)
 		}
 
-		// Normal
 		if .Normal in mesh.desc.features {
-			for i in 0 ..< vertex_count {
-				mem.copy(
-					mem.ptr_offset(
-						vertex_data_ptr,
-						VERTEX_STRIDE * i +
-						size_of(mesh.desc.position[0]) +
-						size_of(mesh.desc.uv[0]),
-					),
-					&mesh.desc.normal[i],
-					size_of(mesh.desc.normal[0]),
-				)
-			}
+			mem.copy(normal_ptr, &mesh.desc.normal[0], size_of(mesh.desc.normal[0]) * vertex_count)
 		} else {
-			for i in 0 ..< vertex_count {
-				mem.copy(
-					mem.ptr_offset(
-						vertex_data_ptr,
-						VERTEX_STRIDE * i +
-						size_of(mesh.desc.position[0]) +
-						size_of(mesh.desc.uv[0]),
-					),
-					&ZERO_VECTOR,
-					size_of(mesh.desc.normal[0]),
-				)
-			}
+			mem.zero(normal_ptr, size_of(mesh.desc.normal[0]) * vertex_count)
 		}
 
-		// Tangent
 		if .Tangent in mesh.desc.features {
-			for i in 0 ..< vertex_count {
-				mem.copy(
-					mem.ptr_offset(
-						vertex_data_ptr,
-						VERTEX_STRIDE * i +
-						size_of(mesh.desc.position[0]) +
-						size_of(mesh.desc.uv[0]) +
-						size_of(mesh.desc.normal[0]),
-					),
-					&mesh.desc.tangent[i],
-					size_of(mesh.desc.tangent[0]),
-				)
-			}
+			mem.copy(
+				tangent_ptr,
+				&mesh.desc.tangent[0],
+				size_of(mesh.desc.tangent[0]) * vertex_count,
+			)
 		} else {
-			for i in 0 ..< vertex_count {
-				mem.copy(
-					mem.ptr_offset(
-						vertex_data_ptr,
-						VERTEX_STRIDE * i +
-						size_of(mesh.desc.position[0]) +
-						size_of(mesh.desc.uv[0]) +
-						size_of(mesh.desc.normal[0]),
-					),
-					&ZERO_VECTOR,
-					size_of(mesh.desc.tangent[0]),
-				)
-			}
+			mem.zero(tangent_ptr, size_of(mesh.desc.tangent[0]) * vertex_count)
 		}
 	}
 

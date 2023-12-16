@@ -64,8 +64,10 @@ MeshFeatureFlags :: distinct bit_set[MeshFeatureFlagBits;u16]
 
 @(private = "file")
 SubMeshMetadata :: struct {
-	data_count:          u32,
-	data_offset:         u32,
+	vertex_offset:       u32 `json:"vertexOffset"`,
+	vertex_count:        u32 `json:"vertexCount"`,
+	index_offset:        u32 `json:"indexOffset"`,
+	index_count:         u32 `json:"indexCount"`,
 	material_asset_name: common.Name,
 }
 
@@ -137,9 +139,10 @@ mesh_asset_init :: proc() {
 
 @(private = "file")
 SubMesh :: struct {
-	data_offset:         u32,
-	data_count:          u32,
 	vertex_offset:       u32,
+	vertex_count:        u32,
+	index_offset:        u32,
+	index_count:         u32,
 	material_asset_name: common.Name,
 }
 
@@ -305,8 +308,10 @@ mesh_asset_import :: proc(p_import_options: MeshAssetImportOptions) -> AssetImpo
 
 	for sub_mesh, i in mesh_import_ctx.sub_meshes {
 		mesh_metadata.sub_meshes[i] = SubMeshMetadata {
-			data_count          = sub_mesh.data_count,
-			data_offset         = sub_mesh.data_offset,
+			vertex_offset       = sub_mesh.vertex_offset,
+			vertex_count        = sub_mesh.vertex_count,
+			index_offset        = sub_mesh.index_offset,
+			index_count         = sub_mesh.index_count,
 			material_asset_name = sub_mesh.material_asset_name,
 		}
 	}
@@ -457,16 +462,16 @@ mesh_asset_load_by_name :: proc(p_mesh_asset_name: common.Name) -> MeshAssetRef 
 	mesh_resource_idx := renderer.get_mesh_idx(mesh_resource_ref)
 	mesh_resource := &renderer.g_resources.meshes[mesh_resource_idx]
 
-	mesh_data_offset := mesh_metadata.total_index_size
+	vertex_data_offset := mesh_metadata.total_index_size
 
 	mesh_resource.desc.position = common.slice_cast(
 		glsl.vec3,
 		mesh_data,
-		mesh_data_offset,
+		vertex_data_offset,
 		mesh_metadata.num_vertices,
 	)
 
-	mesh_data_offset += size_of(glsl.vec3) * mesh_metadata.num_vertices
+	vertex_data_offset += size_of(glsl.vec3) * mesh_metadata.num_vertices
 
 	// Setup mesh flags, features and data pointer
 	if .IndexedDraw in mesh_metadata.feature_flags {
@@ -484,36 +489,36 @@ mesh_asset_load_by_name :: proc(p_mesh_asset_name: common.Name) -> MeshAssetRef 
 		mesh_resource.desc.normal = common.slice_cast(
 			glsl.vec3,
 			mesh_data,
-			mesh_data_offset,
+			vertex_data_offset,
 			mesh_metadata.num_vertices,
 		)
 
 		mesh_resource.desc.features += {.Normal}
-		mesh_data_offset += size_of(glsl.vec3) * mesh_metadata.num_vertices
+		vertex_data_offset += size_of(glsl.vec3) * mesh_metadata.num_vertices
 	}
 
 	if .Tangent in mesh_metadata.feature_flags {
 		mesh_resource.desc.tangent = common.slice_cast(
 			glsl.vec3,
 			mesh_data,
-			mesh_data_offset,
+			vertex_data_offset,
 			mesh_metadata.num_vertices,
 		)
 
 		mesh_resource.desc.features += {.Tangent}
-		mesh_data_offset += size_of(glsl.vec3) * mesh_metadata.num_vertices
+		vertex_data_offset += size_of(glsl.vec3) * mesh_metadata.num_vertices
 	}
 
 	if .UV in mesh_metadata.feature_flags {
 		mesh_resource.desc.uv = common.slice_cast(
 			glsl.vec2,
 			mesh_data,
-			mesh_data_offset,
+			vertex_data_offset,
 			mesh_metadata.num_vertices,
 		)
 
 		mesh_resource.desc.features += {.UV}
-		mesh_data_offset += size_of(glsl.vec2) * mesh_metadata.num_vertices
+		vertex_data_offset += size_of(glsl.vec2) * mesh_metadata.num_vertices
 	}
 
 	// Setup submeshes information
@@ -524,8 +529,10 @@ mesh_asset_load_by_name :: proc(p_mesh_asset_name: common.Name) -> MeshAssetRef 
 		material_asset := material_asset_get(material_asset_ref)
 
 		mesh_resource.desc.sub_meshes[i] = renderer.SubMesh {
-			data_offset           = sub_mesh_metadata.data_offset,
-			data_count            = sub_mesh_metadata.data_count,
+			vertex_offset         = sub_mesh_metadata.vertex_offset,
+			vertex_count          = sub_mesh_metadata.vertex_count,
+			index_offset          = sub_mesh_metadata.index_offset,
+			index_count           = sub_mesh_metadata.index_count,
 			material_instance_ref = material_asset.material_instance_ref,
 		}
 	}
@@ -674,16 +681,10 @@ assimp_load_node :: proc(
 		// Load mesh data
 		sub_mesh := &p_import_ctx.sub_meshes[p_import_ctx.current_sub_mesh]
 
-		if .IndexedDraw in p_import_ctx.mesh_feature_flags {
-			sub_mesh.data_count = assimp_mesh.mNumFaces * 3
-			sub_mesh.data_offset = p_import_ctx.curr_idx
-
-		} else {
-			sub_mesh.data_count = assimp_mesh.mNumVertices
-			sub_mesh.data_offset = p_import_ctx.curr_vtx
-		}
-
+		sub_mesh.vertex_count = assimp_mesh.mNumVertices
 		sub_mesh.vertex_offset = p_import_ctx.curr_vtx
+		sub_mesh.index_count = assimp_mesh.mNumFaces * 3
+		sub_mesh.index_offset = p_import_ctx.curr_idx
 
 		for j in 0 ..< assimp_mesh.mNumVertices {
 

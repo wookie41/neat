@@ -43,7 +43,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_create_shader :: proc(p_ref: ShaderRef) -> (create_result: bool) {
+		backend_create_shader :: proc(p_ref: ShaderRef) -> (create_result: bool) {
 
 		shader_idx := get_shader_idx(p_ref)
 		shader := &g_resources.shaders[shader_idx]

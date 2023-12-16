@@ -7,6 +7,7 @@ import "../common"
 import "core:encoding/xml"
 import "core:hash"
 import "core:log"
+import "core:math/linalg/glsl"
 import "core:mem"
 import "core:slice"
 
@@ -26,6 +27,7 @@ MeshBatch :: struct {
 	vertex_buffer_offset: u32,
 	index_buffer_offset:  u32,
 	index_count:          u32,
+	mesh_vertex_count:    u32,
 	instance_count:       u32,
 	material_type_ref:    MaterialTypeRef,
 	instanced_draw_infos: [dynamic]MeshInstancedDrawInfo,
@@ -258,15 +260,13 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 			}
 
 			mesh_batch := MeshBatch {
-				index_buffer_offset  = mesh.index_buffer_allocation.offset + size_of(u32) * submesh.data_offset,
-				index_count          = submesh.data_count,
+				index_buffer_offset  = mesh.index_buffer_allocation.offset + size_of(u32) * submesh.index_offset,
+				index_count          = submesh.index_count,
+				mesh_vertex_count    = mesh.vertex_count,
 				instance_count       = 1,
 				vertex_buffer_offset = mesh.vertex_buffer_allocation.offset,
 				material_type_ref    = material_instance.desc.material_type_ref,
-				instanced_draw_infos = make(
-					[dynamic]MeshInstancedDrawInfo,
-					temp_arena.allocator,
-				),
+				instanced_draw_infos = make([dynamic]MeshInstancedDrawInfo, temp_arena.allocator),
 			}
 
 			append(&mesh_batch.instanced_draw_infos, instanced_draw_info)
@@ -303,10 +303,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 	}
 
 	// This will store aggregated instanced draw infos so we can issue a single copy
-	mesh_instanced_draws_infos := make(
-		[dynamic]MeshInstancedDrawInfo,
-		temp_arena.allocator,
-	)
+	mesh_instanced_draws_infos := make([dynamic]MeshInstancedDrawInfo, temp_arena.allocator)
 	num_instances_dispatched: u32 = 0
 
 	draw_stream := draw_stream_create(temp_arena.allocator)
@@ -347,12 +344,38 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 					append(&mesh_instanced_draws_infos, mesh_batch.instanced_draw_infos[i])
 				}
 
+				uv_offset := mesh_batch.mesh_vertex_count * size_of(glsl.vec3)
+				normal_offset := uv_offset + mesh_batch.mesh_vertex_count * size_of(glsl.vec2)
+				tangent_offset := normal_offset + mesh_batch.mesh_vertex_count * size_of(glsl.vec3)
+
 				draw_stream_set_vertex_buffer(
 					&draw_stream,
 					mesh_get_global_vertex_buffer_ref(),
 					0,
 					mesh_batch.vertex_buffer_offset,
 				)
+
+				draw_stream_set_vertex_buffer(
+					&draw_stream,
+					mesh_get_global_vertex_buffer_ref(),
+					1,
+					mesh_batch.vertex_buffer_offset + uv_offset,
+				)
+
+				draw_stream_set_vertex_buffer(
+					&draw_stream,
+					mesh_get_global_vertex_buffer_ref(),
+					2,
+					mesh_batch.vertex_buffer_offset + normal_offset,
+				)
+
+				draw_stream_set_vertex_buffer(
+					&draw_stream,
+					mesh_get_global_vertex_buffer_ref(),
+					3,
+					mesh_batch.vertex_buffer_offset + tangent_offset,
+				)
+
 
 				draw_stream_set_index_buffer(
 					&draw_stream,
