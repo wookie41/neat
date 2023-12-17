@@ -192,7 +192,6 @@ render_tasks_update :: proc(p_dt: f32) {
 		render_task := &g_resources.render_tasks[get_render_task_idx(render_task_ref)]
 		INTERNAL.render_task_functions[render_task.desc.type].end_frame(render_task_ref)
 	}
-
 }
 
 //--------------------------------------------------------------------------//

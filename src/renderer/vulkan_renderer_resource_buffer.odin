@@ -56,7 +56,7 @@ when USE_VULKAN_BACKEND {
 		buffer := &g_resources.buffers[image_idx]
 		backend_buffer := &g_resources.backend_buffers[image_idx]
 
-		backend_buffer.owning_queue_family_idx = vk.QUEUE_FAMILY_IGNORED
+		backend_buffer.owning_queue_family_idx = G_RENDERER.queue_family_graphics_index
 
 		vk_usage: vk.BufferUsageFlags
 		for usage in BufferUsageFlagBits {

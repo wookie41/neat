@@ -333,10 +333,10 @@ when USE_VULKAN_BACKEND {
 			mip_buffer_offsets = make(
 				[]u32,
 				int(image.desc.mip_count),
-				G_RENDERER_ALLOCATORS.frame_allocator,
+				get_frame_allocator(),
 			),
 		}
-		defer delete(texture_copy.mip_buffer_offsets, G_RENDERER_ALLOCATORS.frame_allocator)
+		defer delete(texture_copy.mip_buffer_offsets, get_frame_allocator())
 
 		staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer)]
 
@@ -667,12 +667,12 @@ when USE_VULKAN_BACKEND {
 
 		dst_access_mask := vk.AccessFlags{.SHADER_READ}
 
-		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
-			post_transfer_src_queue = G_RENDERER.queue_family_transfer_index
-			post_transfer_dst_queue = G_RENDERER.queue_family_graphics_index
+		// if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+		// 	post_transfer_src_queue = G_RENDERER.queue_family_transfer_index
+		// 	post_transfer_dst_queue = G_RENDERER.queue_family_graphics_index
 
-			dst_access_mask = {}
-		}
+		// 	dst_access_mask = {}
+		// }
 
 		for _, i in G_RENDERER.queued_textures_copies {
 
@@ -759,16 +759,10 @@ when USE_VULKAN_BACKEND {
 			.FRAGMENT_SHADER,
 			.COMPUTE_SHADER,
 		}
-		transfer_cmd_buff := cmd_buff
-		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
-			transfer_cmd_buff = get_frame_transfer_cmd_buffer()
-			after_transfer_stages_dst = {.TOP_OF_PIPE}
-		}
-
 
 		// Transition the images to transfer
 		vk.CmdPipelineBarrier(
-			transfer_cmd_buff,
+			cmd_buff,
 			{.TOP_OF_PIPE},
 			{.TRANSFER},
 			nil,
@@ -784,7 +778,7 @@ when USE_VULKAN_BACKEND {
 		for copy, i in vk_copies {
 
 			vk.CmdCopyBufferToImage(
-				transfer_cmd_buff,
+				cmd_buff,
 				copy.buffer,
 				copy.image,
 				.TRANSFER_DST_OPTIMAL,
@@ -793,21 +787,21 @@ when USE_VULKAN_BACKEND {
 			)
 
 
-			if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
-				// Release
-				vk.CmdPipelineBarrier(
-					transfer_cmd_buff,
-					{.TRANSFER},
-					{.TOP_OF_PIPE},
-					nil,
-					0,
-					nil,
-					0,
-					nil,
-					1,
-					&to_sample_barriers[i],
-				)
-			}
+			// if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+			// 	// Release
+			// 	vk.CmdPipelineBarrier(
+			// 		transfer_cmd_buff,
+			// 		{.TRANSFER},
+			// 		{.TOP_OF_PIPE},
+			// 		nil,
+			// 		0,
+			// 		nil,
+			// 		0,
+			// 		nil,
+			// 		1,
+			// 		&to_sample_barriers[i],
+			// 	)
+			// }
 
 			// Acquire
 			vk.CmdPipelineBarrier(

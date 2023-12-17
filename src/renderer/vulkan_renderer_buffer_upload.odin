@@ -13,30 +13,152 @@ when USE_VULKAN_BACKEND {
 
 	@(private = "file")
 	INTERNAL: struct {
-		transfer_fences: []vk.Fence,
+		transfer_fences_pre_graphics:  []vk.Fence,
+		transfer_fences_post_graphics: []vk.Fence,
+		transfer_queue_copies:         [dynamic]TransferQueueCopy,
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private = "file")
+	TransferQueueCopy :: struct {
+		dst_buffer_ref:                  BufferRef,
+		size:                            u32,
+		offset:                          u32,
+		post_transfer_stage:             PipelineStageFlagBits,
+		post_transfer_queue_family_idx:  u32,
+		async_upload_callback_user_data: rawptr,
+		async_upload_finished_callback:  proc(p_user_data: rawptr),
+		frame_idx:                       u32,
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_buffer_wait_for_transfers :: proc() {
+	backend_wait_for_transfer_resources :: proc() {
 		// Make sure that the GPU is no longer reading the current staging buffer region
-		vk.WaitForFences(
-			G_RENDERER.device,
-			1,
-			&INTERNAL.transfer_fences[get_frame_idx()],
-			true,
-			max(u64),
+		fences := []vk.Fence{
+			INTERNAL.transfer_fences_pre_graphics[get_frame_idx()],
+			INTERNAL.transfer_fences_post_graphics[get_frame_idx()],
+		}
+		vk.WaitForFences(G_RENDERER.device, u32(len(fences)), &fences[0], true, max(u64))
+		vk.ResetFences(G_RENDERER.device, u32(len(fences)), &fences[0])
+		}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_buffer_upload_finalize_finished_uploads :: proc() {
+
+		// Always start the buffer so the fence gets properly signalled
+		backend_buffer_upload_start_async_cmd_buffer_pre_graphics()
+
+		if len(INTERNAL.transfer_queue_copies) == 0 {
+			delete(INTERNAL.transfer_queue_copies)
+			INTERNAL.transfer_queue_copies = nil
+			return
+		}
+
+		if INTERNAL.transfer_queue_copies == nil {
+			return
+		}
+
+		// Hand back ownership of all of the buffer regions that we were uploading to using this cmd buffer
+		transfer_queue_copies := make(
+			[dynamic]TransferQueueCopy,
+			G_RENDERER_ALLOCATORS.main_allocator,
 		)
+
+		transfer_cmd_buff := get_frame_transfer_cmd_buffer_pre_graphics()
+
+		for transfer_queue_copy in &INTERNAL.transfer_queue_copies {
+			if transfer_queue_copy.frame_idx != get_frame_idx() {
+				append(&transfer_queue_copies, transfer_queue_copy)
+				continue
+			}
+
+			// Issue release/acquire barriers
+			dst_buffer_idx := get_buffer_idx(transfer_queue_copy.dst_buffer_ref)
+			backend_dst_buffer := &g_resources.backend_buffers[dst_buffer_idx]
+
+			src_cmd_buffer_ref := get_frame_cmd_buffer_ref()
+			src_cmd_buffer :=
+				g_resources.backend_cmd_buffers[get_cmd_buffer_idx(src_cmd_buffer_ref)].vk_cmd_buff
+
+			if transfer_queue_copy.post_transfer_queue_family_idx ==
+			   G_RENDERER.queue_family_compute_index {
+				src_cmd_buffer = get_frame_compute_cmd_buffer()
+			}
+
+			release_acquire_barrier := vk.BufferMemoryBarrier {
+				sType = .BUFFER_MEMORY_BARRIER,
+				pNext = nil,
+				size = vk.DeviceSize(transfer_queue_copy.size),
+				offset = vk.DeviceSize(transfer_queue_copy.offset),
+				buffer = backend_dst_buffer.vk_buffer,
+				srcAccessMask = {.TRANSFER_WRITE},
+				srcQueueFamilyIndex = G_RENDERER.queue_family_transfer_index,
+				dstQueueFamilyIndex = transfer_queue_copy.post_transfer_queue_family_idx,
+			}
+
+			// Release
+			vk.CmdPipelineBarrier(
+				transfer_cmd_buff,
+				{.TRANSFER},
+				{.TOP_OF_PIPE},
+				nil,
+				0,
+				nil,
+				1,
+				&release_acquire_barrier,
+				0,
+				nil,
+			)
+
+
+			// Acquire
+			vk.CmdPipelineBarrier(
+				src_cmd_buffer,
+				{.TRANSFER},
+				{.TOP_OF_PIPE},
+				nil,
+				0,
+				nil,
+				1,
+				&release_acquire_barrier,
+				0,
+				nil,
+			)
+
+			if transfer_queue_copy.async_upload_finished_callback != nil {
+				transfer_queue_copy.async_upload_finished_callback(
+					transfer_queue_copy.async_upload_callback_user_data,
+				)	
+			}
+		}
+
+		delete(INTERNAL.transfer_queue_copies)
+		INTERNAL.transfer_queue_copies = transfer_queue_copies
+
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
 	backend_init_buffer_upload :: proc(p_options: BufferUploadInitOptions) -> bool {
-		INTERNAL.transfer_fences = make(
+		INTERNAL.transfer_fences_pre_graphics = make(
 			[]vk.Fence,
 			int(p_options.num_staging_regions),
+			G_RENDERER_ALLOCATORS.main_allocator,
+		)
+		INTERNAL.transfer_fences_post_graphics = make(
+			[]vk.Fence,
+			int(p_options.num_staging_regions),
+			G_RENDERER_ALLOCATORS.main_allocator,
+		)
+
+		INTERNAL.transfer_queue_copies = make(
+			[dynamic]TransferQueueCopy,
 			G_RENDERER_ALLOCATORS.main_allocator,
 		)
 
@@ -53,7 +175,18 @@ when USE_VULKAN_BACKEND {
 					   G_RENDERER.device,
 					   &fence_create_info,
 					   nil,
-					   &INTERNAL.transfer_fences[i],
+					   &INTERNAL.transfer_fences_pre_graphics[i],
+				   ) !=
+				   .SUCCESS {
+					// Not bothering to destroy the already created fences here, as we'll shutdown the application
+					return false
+				}
+
+				if vk.CreateFence(
+					   G_RENDERER.device,
+					   &fence_create_info,
+					   nil,
+					   &INTERNAL.transfer_fences_post_graphics[i],
 				   ) !=
 				   .SUCCESS {
 					// Not bothering to destroy the already created fences here, as we'll shutdown the application
@@ -68,76 +201,25 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_buffer_upload_pre_frame_submit :: proc(
-		p_requests: map[BufferRef][dynamic]PendingBufferUploadRequest,
-	) {
-		// Release the buffers on the src queue when using a dedicated transfer queue
-		if (.DedicatedTransferQueue in G_RENDERER.gpu_device_flags) == false {
-			return
+	backend_buffer_upload_start_async_cmd_buffer_pre_graphics :: proc() {
+		transfer_cmd_buff_pre_graphics := get_frame_transfer_cmd_buffer_pre_graphics()
+		begin_info := vk.CommandBufferBeginInfo {
+			sType = .COMMAND_BUFFER_BEGIN_INFO,
+			flags = {.ONE_TIME_SUBMIT},
 		}
-
-		for buffer_ref, _ in p_requests {
-
-			buffer := &g_resources.buffers[get_buffer_idx(buffer_ref)]
-			backend_buffer := &g_resources.backend_buffers[get_buffer_idx(buffer_ref)]
-
-			src_cmd_buffer :=
-				g_resources.backend_cmd_buffers[get_cmd_buffer_idx(get_frame_cmd_buffer_ref())].vk_cmd_buff
-
-			src_queue := vk.QUEUE_FAMILY_IGNORED
-
-			is_not_first_usage := backend_buffer.owning_queue_family_idx != max(u32)
-			not_owning_buffer :=
-				backend_buffer.owning_queue_family_idx != G_RENDERER.queue_family_transfer_index
-
-			if is_not_first_usage && not_owning_buffer {
-				src_queue = backend_buffer.owning_queue_family_idx
-
-				if src_queue == G_RENDERER.queue_family_compute_index {
-					src_cmd_buffer = get_frame_compute_cmd_buffer()
-				}
-			}
-
-
-			buffer_barrier := vk.BufferMemoryBarrier {
-				sType = .BUFFER_MEMORY_BARRIER,
-				pNext = nil,
-				size = vk.DeviceSize(buffer.desc.size),
-				offset = 0,
-				buffer = backend_buffer.vk_buffer,
-				dstAccessMask = {.TRANSFER_WRITE},
-				srcQueueFamilyIndex = src_queue,
-				dstQueueFamilyIndex = G_RENDERER.queue_family_transfer_index,
-			}
-
-			// Release barrier
-			vk.CmdPipelineBarrier(
-				src_cmd_buffer,
-				{.BOTTOM_OF_PIPE},
-				{.TRANSFER},
-				nil,
-				0,
-				nil,
-				1,
-				&buffer_barrier,
-				0,
-				nil,
-			)
-
-		}
+		vk.BeginCommandBuffer(transfer_cmd_buff_pre_graphics, &begin_info)
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_buffer_upload_start_async_cmd_buffer :: proc() {
-		transfer_cmd_buff := get_frame_transfer_cmd_buffer()
+	backend_buffer_upload_start_async_cmd_buffer_post_graphics :: proc() {
+		transfer_cmd_buff_post_graphics := get_frame_transfer_cmd_buffer_post_graphics()
 		begin_info := vk.CommandBufferBeginInfo {
 			sType = .COMMAND_BUFFER_BEGIN_INFO,
 			flags = {.ONE_TIME_SUBMIT},
 		}
-		vk.BeginCommandBuffer(transfer_cmd_buff, &begin_info)
-
+		vk.BeginCommandBuffer(transfer_cmd_buff_post_graphics, &begin_info)
 	}
 
 	//---------------------------------------------------------------------------//
@@ -149,53 +231,13 @@ when USE_VULKAN_BACKEND {
 		p_pending_requests: [dynamic]PendingBufferUploadRequest,
 	) {
 
-		transfer_cmd_buff := get_frame_transfer_cmd_buffer()
-
 		temp_arena := common.Arena{}
 		common.temp_arena_init(&temp_arena)
 		defer common.arena_delete(temp_arena)
 
 		dst_buffer_idx := get_buffer_idx(p_dst_buffer_ref)
 		dst_buffer := &g_resources.buffers[dst_buffer_idx]
-		backend_dst_buffer := &g_resources.backend_buffers[get_buffer_idx(p_dst_buffer_ref)]
-
-		// Acquire barrier for the dst buffer if we're using a dedicated transfer queue
-		is_not_first_usage := backend_dst_buffer.owning_queue_family_idx != max(u32)
-		not_owning_buffer :=
-			backend_dst_buffer.owning_queue_family_idx != G_RENDERER.queue_family_transfer_index
-
-		src_queue := vk.QUEUE_FAMILY_IGNORED
-
-		if (is_not_first_usage && not_owning_buffer) &&
-		   .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
-
-			src_queue = backend_dst_buffer.owning_queue_family_idx
-
-			buffer_barrier := vk.BufferMemoryBarrier {
-				sType = .BUFFER_MEMORY_BARRIER,
-				pNext = nil,
-				size = vk.DeviceSize(dst_buffer.desc.size),
-				offset = 0,
-				buffer = backend_dst_buffer.vk_buffer,
-				dstAccessMask = {.TRANSFER_WRITE},
-				srcQueueFamilyIndex = src_queue,
-				dstQueueFamilyIndex = G_RENDERER.queue_family_transfer_index,
-			}
-
-			// Acquire barrier
-			vk.CmdPipelineBarrier(
-				transfer_cmd_buff,
-				{.BOTTOM_OF_PIPE},
-				{.TRANSFER},
-				nil,
-				0,
-				nil,
-				1,
-				&buffer_barrier,
-				0,
-				nil,
-			)
-		}
+		backend_dst_buffer := &g_resources.backend_buffers[dst_buffer_idx]
 
 		access_mask := vk.AccessFlags{}
 		if .VertexBuffer in dst_buffer.desc.usage {
@@ -227,9 +269,36 @@ when USE_VULKAN_BACKEND {
 
 		backend_staging_buff := &g_resources.backend_buffers[get_buffer_idx(p_staging_buffer_ref)]
 
+		cmd_buffer_ref := get_frame_cmd_buffer_ref()
+		backend_cmd_buff := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buffer_ref)]
+
+		// Issue pre-copy barrier
+		pre_upload_barrier := vk.BufferMemoryBarrier {
+			sType = .BUFFER_MEMORY_BARRIER,
+			pNext = nil,
+			size = vk.DeviceSize(dst_buffer.desc.size),
+			offset = 0,
+			buffer = backend_dst_buffer.vk_buffer,
+			dstAccessMask = {.TRANSFER_WRITE},
+			srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+			dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		}
+
+		vk.CmdPipelineBarrier(
+			backend_cmd_buff.vk_cmd_buff,
+			{.TOP_OF_PIPE},
+			{.TRANSFER},
+			nil,
+			0,
+			nil,
+			1,
+			&pre_upload_barrier,
+			0,
+			nil,
+		)
 		// Run the copies
 		vk.CmdCopyBuffer(
-			transfer_cmd_buff,
+			backend_cmd_buff.vk_cmd_buff,
 			backend_staging_buff.vk_buffer,
 			backend_dst_buffer.vk_buffer,
 			u32(len(buffer_copies)),
@@ -243,111 +312,323 @@ when USE_VULKAN_BACKEND {
 			offset = 0,
 			buffer = backend_dst_buffer.vk_buffer,
 			srcAccessMask = {.TRANSFER_WRITE},
+			dstAccessMask = access_mask,
 			srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
 			dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
 		}
 
-		// If the buffer wasn't originally owned by any queue, then put in on the graphics queue
-		if src_queue == vk.QUEUE_FAMILY_IGNORED {
-			src_queue = G_RENDERER.queue_family_graphics_index
-		}
-
-		// Issue a release barrier for the dst buffer if we're using a dedicated transfer queue
-		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
-
-			buffer_barrier.srcQueueFamilyIndex = G_RENDERER.queue_family_transfer_index
-			buffer_barrier.dstQueueFamilyIndex = src_queue
-
-			backend_dst_buffer.owning_queue_family_idx = src_queue
-
-			// Release from transfer...
-			vk.CmdPipelineBarrier(
-				transfer_cmd_buff,
-				{.TRANSFER},
-				{.TOP_OF_PIPE},
-				nil,
-				0,
-				nil,
-				1,
-				&buffer_barrier,
-				0,
-				nil,
-			)
-
-			src_cmd_buffer :=
-				g_resources.backend_cmd_buffers[get_cmd_buffer_idx(get_frame_cmd_buffer_ref())].vk_cmd_buff
-
-			if is_not_first_usage && not_owning_buffer {
-				if src_queue == G_RENDERER.queue_family_compute_index {
-					src_cmd_buffer = get_frame_compute_cmd_buffer()
-				}
-			}
-
-			// ... and acquire on the original queue
-			vk.CmdPipelineBarrier(
-				src_cmd_buffer,
-				{.TRANSFER},
-				{.TOP_OF_PIPE},
-				nil,
-				0,
-				nil,
-				1,
-				&buffer_barrier,
-				0,
-				nil,
-			)
-
-		} else {
-			// Otherwise issue a standard memory barrier
-			buffer_barrier.dstAccessMask = access_mask
-			vk.CmdPipelineBarrier(
-				transfer_cmd_buff,
-				{.TRANSFER},
-				dst_stages,
-				nil,
-				0,
-				nil,
-				1,
-				&buffer_barrier,
-				0,
-				nil,
-			)
-		}
-
+		// Issue a post copy memory barrier
+		buffer_barrier.dstAccessMask = access_mask
+		vk.CmdPipelineBarrier(
+			backend_cmd_buff.vk_cmd_buff,
+			{.TRANSFER},
+			dst_stages,
+			nil,
+			0,
+			nil,
+			1,
+			&buffer_barrier,
+			0,
+			nil,
+		)
 	}
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_buffer_upload_submit_async_transfers :: proc() {
-		if (.DedicatedTransferQueue in G_RENDERER.gpu_device_flags) == false {
-			return
-		}
+	backend_buffer_upload_submit_pre_graphics :: proc() {
 
-		transfer_cmd_buff := get_frame_transfer_cmd_buffer()
-
-		G_RENDERER.should_wait_on_transfer_semaphore = true
-
-		vk.ResetFences(G_RENDERER.device, 1, &INTERNAL.transfer_fences[get_frame_idx()])
-
+		transfer_cmd_buff := get_frame_transfer_cmd_buffer_pre_graphics()
 		vk.EndCommandBuffer(transfer_cmd_buff)
 
 		submit_info := vk.SubmitInfo {
-			sType                = .SUBMIT_INFO,
-			commandBufferCount   = 1,
-			pCommandBuffers      = &transfer_cmd_buff,
-			signalSemaphoreCount = 1,
-			pSignalSemaphores    = &G_RENDERER.transfer_finished_semaphores[get_frame_idx()],
+			sType              = .SUBMIT_INFO,
+			commandBufferCount = 1,
+			pCommandBuffers    = &transfer_cmd_buff,
 		}
 
 		vk.QueueSubmit(
 			G_RENDERER.transfer_queue,
 			1,
 			&submit_info,
-			INTERNAL.transfer_fences[get_frame_idx()],
+			INTERNAL.transfer_fences_pre_graphics[get_frame_idx()],
 		)
-
 	}
 
 	//---------------------------------------------------------------------------//
 
+	@(private)
+	backend_buffer_upload_submit_post_graphics :: proc() {
+
+		transfer_cmd_buff := get_frame_transfer_cmd_buffer_post_graphics()
+		vk.EndCommandBuffer(transfer_cmd_buff)
+
+		submit_info := vk.SubmitInfo {
+			sType              = .SUBMIT_INFO,
+			commandBufferCount = 1,
+			pCommandBuffers    = &transfer_cmd_buff,
+		}
+
+		vk.QueueSubmit(
+			G_RENDERER.transfer_queue,
+			1,
+			&submit_info,
+			INTERNAL.transfer_fences_post_graphics[get_frame_idx()],
+		)
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_buffer_upload_run_sliced_sync :: proc(
+		p_dst_buffer_ref: BufferRef,
+		p_dst_buffer_offset: u32,
+		p_src_buffer_ref: BufferRef,
+		p_src_buffer_offset: u32,
+		p_size_in_bytes: u32,
+		p_post_transfer_stage: PipelineStageFlagBits,
+		p_transfer_finished_callback: proc(p_user_data: rawptr),
+		p_transfer_finished_user_data: rawptr,
+		p_is_last_upload: bool,
+		p_total_size: u32,
+		p_base_offset: u32,
+	) {
+
+		cmd_buff_ref := get_frame_cmd_buffer_ref()
+		backend_cmd_buff := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buff_ref)]
+
+		dst_buffer_idx := get_buffer_idx(p_dst_buffer_ref)
+		dst_buffer := &g_resources.buffers[dst_buffer_idx]
+		backend_dst_buffer := &g_resources.backend_buffers[get_buffer_idx(p_dst_buffer_ref)]
+		backend_src_buff := &g_resources.backend_buffers[get_buffer_idx(p_src_buffer_ref)]
+
+		// Run the copy
+		buffer_copy := vk.BufferCopy {
+			srcOffset = vk.DeviceSize(p_src_buffer_offset),
+			dstOffset = vk.DeviceSize(p_dst_buffer_offset),
+			size      = vk.DeviceSize(p_size_in_bytes),
+		}
+
+		vk.CmdCopyBuffer(
+			backend_cmd_buff.vk_cmd_buff,
+			backend_src_buff.vk_buffer,
+			backend_dst_buffer.vk_buffer,
+			1,
+			&buffer_copy,
+		)
+
+		// Determine access mask
+		access_mask := vk.AccessFlags{}
+		if .VertexBuffer in dst_buffer.desc.usage {
+			access_mask = {.VERTEX_ATTRIBUTE_READ}
+		} else if .IndexBuffer in dst_buffer.desc.usage {
+			access_mask = {.INDEX_READ}
+		} else if .UniformBuffer in dst_buffer.desc.usage ||
+		   .DynamicUniformBuffer in dst_buffer.desc.usage {
+			access_mask = {.UNIFORM_READ}
+		} else if .StorageBuffer in dst_buffer.desc.usage ||
+		   .DynamicStorageBuffer in dst_buffer.desc.usage {
+			access_mask = {.SHADER_READ}
+		} else {
+			// You shouldn't be here, uploading to this buffer is not supported at the moment
+			assert(false)
+		}
+
+		if p_is_last_upload {
+
+			// Issue a post-copy barrier
+			post_upload_barrier := vk.BufferMemoryBarrier {
+				sType = .BUFFER_MEMORY_BARRIER,
+				pNext = nil,
+				size = vk.DeviceSize(p_size_in_bytes),
+				offset = vk.DeviceSize(p_dst_buffer_offset),
+				buffer = backend_dst_buffer.vk_buffer,
+				srcAccessMask = {.TRANSFER_WRITE},
+				dstAccessMask = access_mask,
+				srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+				dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+			}
+
+			vk.CmdPipelineBarrier(
+				backend_cmd_buff.vk_cmd_buff,
+				{.TRANSFER},
+				{backend_map_pipeline_stage(p_post_transfer_stage)},
+				nil,
+				0,
+				nil,
+				1,
+				&post_upload_barrier,
+				0,
+				nil,
+			)
+
+			if p_transfer_finished_callback != nil {
+				p_transfer_finished_callback(p_transfer_finished_user_data)
+			}
+		}
+	}
+
+	//---------------------------------------------------------------------------//
+
+
+	@(private)
+	backend_buffer_upload_run_sliced_async :: proc(
+		p_dst_buffer_ref: BufferRef,
+		p_dst_buffer_offset: u32,
+		p_src_buffer_ref: BufferRef,
+		p_src_buffer_offset: u32,
+		p_size_in_bytes: u32,
+		p_post_transfer_stage: PipelineStageFlagBits,
+		p_transfer_finished_callback: proc(p_user_data: rawptr),
+		p_transfer_finished_user_data: rawptr,
+		p_is_last_upload: bool,
+		p_total_size: u32,
+		p_base_offset: u32,
+	) {
+
+		transfer_cmd_buff := get_frame_transfer_cmd_buffer_post_graphics()
+
+		dst_buffer_idx := get_buffer_idx(p_dst_buffer_ref)
+		backend_dst_buffer := &g_resources.backend_buffers[dst_buffer_idx]
+		backend_src_buff := &g_resources.backend_buffers[get_buffer_idx(p_src_buffer_ref)]
+
+		src_queue := backend_dst_buffer.owning_queue_family_idx
+
+		src_cmd_buffer_ref := get_frame_cmd_buffer_ref()
+		src_cmd_buffer :=
+			g_resources.backend_cmd_buffers[get_cmd_buffer_idx(src_cmd_buffer_ref)].vk_cmd_buff
+
+		if src_queue == G_RENDERER.queue_family_compute_index {
+			src_cmd_buffer = get_frame_compute_cmd_buffer()
+		}
+
+		// Run the copy
+		buffer_copy := vk.BufferCopy {
+			srcOffset = vk.DeviceSize(p_src_buffer_offset),
+			dstOffset = vk.DeviceSize(p_dst_buffer_offset),
+			size      = vk.DeviceSize(p_size_in_bytes),
+		}
+
+		vk.CmdCopyBuffer(
+			transfer_cmd_buff,
+			backend_src_buff.vk_buffer,
+			backend_dst_buffer.vk_buffer,
+			1,
+			&buffer_copy,
+		)
+
+		// Add an entry into the transfer array
+		if p_is_last_upload {
+			transfer_queue_copy := TransferQueueCopy {
+				dst_buffer_ref                  = p_dst_buffer_ref,
+				size                            = p_total_size,
+				offset                          = p_base_offset,
+				post_transfer_stage             = p_post_transfer_stage,
+				post_transfer_queue_family_idx  = src_queue,
+				async_upload_callback_user_data = p_transfer_finished_user_data,
+				async_upload_finished_callback  = p_transfer_finished_callback,
+				frame_idx                       = get_frame_idx(),
+			}
+
+			append(&INTERNAL.transfer_queue_copies, transfer_queue_copy)
+		}
+	}
+
+	//---------------------------------------------------------------------------//
+
+	backend_begin_sliced_upload_for_buffer :: proc(
+		p_buffer_ref: BufferRef,
+		p_size_in_bytes: u32,
+		p_offset: u32,
+	) {
+
+		backend_dst_buffer := &g_resources.backend_buffers[get_buffer_idx(p_buffer_ref)]
+
+		// Non-dedicated transfer queue path
+		if (.DedicatedTransferQueue in G_RENDERER.gpu_device_flags) == false {
+
+			cmd_buff_ref := get_frame_cmd_buffer_ref()
+			backend_cmd_buff := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buff_ref)]
+
+			// Issue pre-copy barrier
+			pre_upload_barrier := vk.BufferMemoryBarrier {
+				sType = .BUFFER_MEMORY_BARRIER,
+				pNext = nil,
+				size = vk.DeviceSize(p_size_in_bytes),
+				offset = vk.DeviceSize(p_offset),
+				buffer = backend_dst_buffer.vk_buffer,
+				dstAccessMask = {.TRANSFER_WRITE},
+				srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+				dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+			}
+
+			vk.CmdPipelineBarrier(
+				backend_cmd_buff.vk_cmd_buff,
+				{.TOP_OF_PIPE},
+				{.TRANSFER},
+				nil,
+				0,
+				nil,
+				1,
+				&pre_upload_barrier,
+				0,
+				nil,
+			)
+
+			return
+		}
+
+
+		transfer_cmd_buff := get_frame_transfer_cmd_buffer_post_graphics()
+
+		src_queue := backend_dst_buffer.owning_queue_family_idx
+
+		src_cmd_buffer_ref := get_frame_cmd_buffer_ref()
+		src_cmd_buffer :=
+			g_resources.backend_cmd_buffers[get_cmd_buffer_idx(src_cmd_buffer_ref)].vk_cmd_buff
+
+		if src_queue == G_RENDERER.queue_family_compute_index {
+			src_cmd_buffer = get_frame_compute_cmd_buffer()
+		}
+
+		// Issue release and acquire buffer range 
+		release_acquire_barrier := vk.BufferMemoryBarrier {
+			sType = .BUFFER_MEMORY_BARRIER,
+			pNext = nil,
+			size = vk.DeviceSize(p_size_in_bytes),
+			offset = vk.DeviceSize(p_offset),
+			buffer = backend_dst_buffer.vk_buffer,
+			dstAccessMask = {.TRANSFER_WRITE},
+			srcQueueFamilyIndex = src_queue,
+			dstQueueFamilyIndex = G_RENDERER.queue_family_transfer_index,
+		}
+
+		// Release
+		vk.CmdPipelineBarrier(
+			src_cmd_buffer,
+			{.BOTTOM_OF_PIPE},
+			{.TRANSFER},
+			nil,
+			0,
+			nil,
+			1,
+			&release_acquire_barrier,
+			0,
+			nil,
+		)
+
+		// Acquire
+		vk.CmdPipelineBarrier(
+			transfer_cmd_buff,
+			{.BOTTOM_OF_PIPE},
+			{.TRANSFER},
+			nil,
+			0,
+			nil,
+			1,
+			&release_acquire_barrier,
+			0,
+			nil,
+		)
+
+	}
 }

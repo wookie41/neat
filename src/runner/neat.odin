@@ -8,8 +8,8 @@ import "core:os"
 
 main :: proc() {
 	engine_opts := engine.InitOptions {
-		window_width  = 1280,
-		window_height = 720,
+		window_width  = 1920,
+		window_height = 1080,
 	}
 	if engine.init(engine_opts) == false {
 		os.exit(-1)

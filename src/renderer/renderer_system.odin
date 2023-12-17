@@ -133,8 +133,8 @@ G_RENDERER_ALLOCATORS: struct {
 	main_allocator:        mem.Allocator,
 	names_arena:           mem.Arena,
 	names_allocator:       mem.Allocator,
-	frame_arena:           mem.Arena,
-	frame_allocator:       mem.Allocator,
+	frame_arenas:          []mem.Arena,
+	frame_allocators:      []mem.Allocator,
 	resource_allocator:    mem.Allocator,
 
 	// Stack used to sub-allocate scratch arenas from that are used within a function scope 
@@ -189,12 +189,22 @@ init :: proc(p_options: InitOptions) -> bool {
 	// Resource allocator (temporary, have to use pool allocator here)
 	G_RENDERER_ALLOCATORS.resource_allocator = G_RENDERER_ALLOCATORS.main_allocator
 
-	// Frame allocator
-	mem.arena_init(
-		&G_RENDERER_ALLOCATORS.frame_arena,
-		make([]byte, common.MEGABYTE * 8, G_RENDERER_ALLOCATORS.main_allocator),
+	// Frame allocators
+	G_RENDERER_ALLOCATORS.frame_arenas = make([]mem.Arena, 2, G_RENDERER_ALLOCATORS.main_allocator)
+	G_RENDERER_ALLOCATORS.frame_allocators = make(
+		[]mem.Allocator,
+		2,
+		G_RENDERER_ALLOCATORS.main_allocator,
 	)
-	G_RENDERER_ALLOCATORS.frame_allocator = mem.arena_allocator(&G_RENDERER_ALLOCATORS.frame_arena)
+	for i in 0 ..< 2 {
+		mem.arena_init(
+			&G_RENDERER_ALLOCATORS.frame_arenas[i],
+			make([]byte, common.MEGABYTE * 8, G_RENDERER_ALLOCATORS.main_allocator),
+		)
+		G_RENDERER_ALLOCATORS.frame_allocators[i] = mem.arena_allocator(
+			&G_RENDERER_ALLOCATORS.frame_arenas[i],
+		)
+	}
 
 	// Names allocator
 	mem.arena_init(
@@ -227,8 +237,9 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	{
 		buffer_upload_options := BufferUploadInitOptions {
-			staging_buffer_size = 128 * common.MEGABYTE,
-			num_staging_regions = G_RENDERER.num_frames_in_flight,
+			staging_buffer_size       = 8 * common.MEGABYTE,
+			staging_async_buffer_size = 8 * common.MEGABYTE,
+			num_staging_regions       = G_RENDERER.num_frames_in_flight,
 		}
 		init_buffer_upload(buffer_upload_options) or_return
 	}
@@ -419,9 +430,7 @@ init :: proc(p_options: InitOptions) -> bool {
 				},
 			},
 		)
-
 	}
-
 
 	g_render_camera.position = {0, 0, 0}
 	g_render_camera.forward = {0, 0, -1}
@@ -441,6 +450,8 @@ update :: proc(p_dt: f32) {
 	context.allocator = G_RENDERER_ALLOCATORS.main_allocator
 	context.logger = INTERNAL.logger
 
+	free_all(get_frame_allocator())
+
 	pipelines_update()
 	shaders_update()
 
@@ -450,16 +461,14 @@ update :: proc(p_dt: f32) {
 
 	begin_command_buffer(cmd_buff_ref)
 
+	buffer_upload_finalize_finished_uploads()
+
 	ui_begin_frame()
 
-	buffer_upload_start_async_cmd_buffer()
 	execute_queued_texture_copies()
 	run_last_frame_buffer_upload_requests()
-	backend_buffer_upload_submit_async_transfers()
-
 	batch_update_bindless_array_entries()
-
-	free_all(G_RENDERER_ALLOCATORS.frame_allocator)
+	buffer_upload_process_async_requests()
 
 	buffer_upload_begin_frame()
 	image_upload_begin_frame()
@@ -473,8 +482,6 @@ update :: proc(p_dt: f32) {
 	render_tasks_update(p_dt)
 
 	backend_post_render()
-
-	buffer_upload_pre_frame_submit()
 
 	ui_submit()
 
@@ -509,7 +516,9 @@ advance_frame_idx :: proc() {
 
 @(private)
 submit_current_frame :: proc() {
+	buffer_upload_submit_pre_graphics()
 	backend_submit_current_frame()
+	buffer_upload_submit_post_graphics()
 }
 
 //---------------------------------------------------------------------------//
@@ -787,6 +796,13 @@ renderer_config_load_render_tasks :: proc(p_doc: ^xml.Document) -> bool {
 
 process_sdl_event :: proc(p_sdl_event: ^sdl.Event) {
 	ui_process_event(p_sdl_event)
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
+get_frame_allocator :: proc() -> mem.Allocator {
+	return G_RENDERER_ALLOCATORS.frame_allocators[get_frame_id() % 2]
 }
 
 //---------------------------------------------------------------------------//

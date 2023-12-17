@@ -8,7 +8,6 @@ import "core:encoding/xml"
 import "core:hash"
 import "core:log"
 import "core:math/linalg/glsl"
-import "core:mem"
 import "core:slice"
 
 //---------------------------------------------------------------------------//
@@ -234,6 +233,11 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 		mesh_idx := get_mesh_idx(mesh_instance.desc.mesh_ref)
 		mesh := &g_resources.meshes[mesh_idx]
 
+		if (mesh.data_upload_context.finished_uploads_count !=
+			   mesh.data_upload_context.needed_uploads_count) {
+			continue
+		}
+
 		for submesh, submesh_idx in mesh.desc.sub_meshes {
 
 			material_instance_idx := get_material_instance_idx(submesh.material_instance_ref)
@@ -394,10 +398,23 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 		}
 	}
 
+	cmd_buff_ref := get_frame_cmd_buffer_ref()
+
+
+	// @TODO Remove when we stop drawing directly to the swapchain
+	if len(mesh_instanced_draws_infos) == 0 {
+		render_task_begin_render_pass(
+			mesh_render_task_data.render_pass_ref,
+			&mesh_render_task_data.render_pass_interface,
+		)
+		end_render_pass(mesh_render_task_data.render_pass_ref, cmd_buff_ref)
+		return
+	}
 	// Copy the mesh instanced draw info to the GPU
 	instanced_draw_infos_size_in_bytes := u32(
 		size_of(MeshInstancedDrawInfo) * len(mesh_instanced_draws_infos),
 	)
+
 	upload_response := request_buffer_upload(
 		BufferUploadRequest{
 			dst_buff = g_renderer_buffers.mesh_instanced_draw_info_buffer_ref,
@@ -405,28 +422,20 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 			dst_queue_usage = .Graphics,
 			first_usage_stage = .VertexShader,
 			size = instanced_draw_infos_size_in_bytes,
+			data_ptr = raw_data(mesh_instanced_draws_infos),
 		},
 	)
 
-	if upload_response.ptr == nil {
+	if upload_response.status == .Failed {
 		log.warn("Failed to copy mesh instanced draw info\n")
 		return
 	}
-
-	mem.copy(
-		upload_response.ptr,
-		raw_data(mesh_instanced_draws_infos),
-		int(instanced_draw_infos_size_in_bytes),
-	)
-
-	run_pending_buffer_upload_request(upload_response.pending_upload_request)
 
 	// Dispatch the draw stream
 	render_task_begin_render_pass(
 		mesh_render_task_data.render_pass_ref,
 		&mesh_render_task_data.render_pass_interface,
 	)
-	cmd_buff_ref := get_frame_cmd_buffer_ref()
 
 	draw_stream_dispatch(cmd_buff_ref, &draw_stream)
 

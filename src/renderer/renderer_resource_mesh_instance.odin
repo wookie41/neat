@@ -6,7 +6,6 @@ package renderer
 import "../common"
 import "core:c"
 import "core:math/linalg/glsl"
-import "core:mem"
 
 //---------------------------------------------------------------------------//
 
@@ -117,25 +116,19 @@ mesh_instance_send_transform_data :: proc() {
 		if .MeshInstanceDataDirty in mesh_instance.flags {
 
 			buffer_upload_request := BufferUploadRequest {
-				dst_buff          = g_renderer_buffers.mesh_instance_info_buffer_ref,
-				dst_buff_offset   = size_of(MeshInstanceInfoData) * mesh_instance_idx,
-				dst_queue_usage   = .Graphics,
+				dst_buff = g_renderer_buffers.mesh_instance_info_buffer_ref,
+				dst_buff_offset = size_of(MeshInstanceInfoData) * mesh_instance_idx,
+				dst_queue_usage = .Graphics,
 				first_usage_stage = .VertexShader,
-				size              = size_of(MeshInstanceInfoData),
+				size = size_of(MeshInstanceInfoData),
+				flags = {.RunOnNextFrame},
+				data_ptr = &mesh_instance.model_matrix,
 			}
 
 			buffer_upload_response := request_buffer_upload(buffer_upload_request)
-			if buffer_upload_response.ptr == nil {
+			if buffer_upload_response.status == .Failed {
 				continue
 			}
-
-			mem.copy(
-				buffer_upload_response.ptr,
-				&mesh_instance.model_matrix,
-				size_of(MeshInstanceInfoData),
-			)
-
-			run_pending_buffer_upload_request(buffer_upload_response.pending_upload_request)
 
 			mesh_instance.flags -= {.MeshInstanceDataDirty}
 		}

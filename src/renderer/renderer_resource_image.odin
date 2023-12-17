@@ -386,7 +386,7 @@ find_image_by_str :: proc(p_str: string) -> ImageRef {
 image_upload_begin_frame :: proc() {
 	G_RENDERER.queued_textures_copies = make(
 		[dynamic]TextureCopy,
-		G_RENDERER_ALLOCATORS.frame_allocator,
+		get_frame_allocator(),
 	)
 	backend_image_upload_begin_frame()
 }

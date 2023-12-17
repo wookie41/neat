@@ -26,6 +26,19 @@ Ref :: struct($T: typeid) {
 
 //---------------------------------------------------------------------------//
 
+ref_is_alive :: #force_inline proc(p_ref_array: ^RefArray($R), p_ref: Ref(R)) -> bool {
+	idx := u32(p_ref.ref >> 24)
+
+	gen := ref_get_generation(p_ref)
+	if gen != p_ref_array.generations[idx] {
+		return false
+	}
+
+	return true
+}
+
+//---------------------------------------------------------------------------//
+
 ref_get_idx :: #force_inline proc(p_ref_array: ^RefArray($R), p_ref: Ref(R)) -> u32 {
 	idx := u32(p_ref.ref >> 24)
 	assert(idx < p_ref_array.next_idx)

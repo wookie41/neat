@@ -6,10 +6,13 @@ import "core:c"
 import "core:encoding/json"
 import "core:log"
 import "core:math/linalg/glsl"
+import "core:mem"
 import "core:os"
 import "core:path/filepath"
+import "core:slice"
 import "core:strconv"
 import "core:strings"
+import "core:sys/windows"
 
 import "../common"
 import "../renderer"
@@ -456,156 +459,274 @@ mesh_asset_load_by_name :: proc(p_mesh_asset_name: common.Name) -> (ret_mesh_ref
 	mesh_resource.desc.data_allocator = G_ALLOCATORS.main_allocator
 
 	// Load mesh data
-	mesh_file, err := os.open(mesh_asset_path, os.O_RDONLY)
-	if err != 0 {
+
+	mesh_asset_path_w := windows.utf8_to_wstring(mesh_asset_path, temp_arena.allocator)
+
+	mesh_file_handle := windows.CreateFileW(
+		mesh_asset_path_w,
+		windows.GENERIC_READ,
+		windows.FILE_SHARE_READ,
+		nil,
+		windows.OPEN_EXISTING,
+		windows.FILE_ATTRIBUTE_NORMAL,
+		nil,
+	)
+	if mesh_file_handle == windows.INVALID_HANDLE_VALUE {
 		log.warnf("Failed to load mesh '%s' - couldn't open file\n", mesh_name)
 		return InvalidMeshAssetRef
 	}
-
-	defer if ret_mesh_ref == InvalidMeshAssetRef {
-
-		delete(mesh_resource.desc.position, mesh_resource.desc.data_allocator)
-
-		if .IndexedDraw in mesh_metadata.feature_flags {
-			delete(mesh_resource.desc.indices, mesh_resource.desc.data_allocator)
-		}
-		if .Normal in mesh_metadata.feature_flags {
-			delete(mesh_resource.desc.normal, mesh_resource.desc.data_allocator)
-		}
-		if .Tangent in mesh_metadata.feature_flags {
-			delete(mesh_resource.desc.tangent, mesh_resource.desc.data_allocator)
-		}
-		if .UV in mesh_metadata.feature_flags {
-			delete(mesh_resource.desc.uv, mesh_resource.desc.data_allocator)
-		}
+	defer if (ret_mesh_ref == InvalidMeshAssetRef) {
+		windows.CloseHandle(mesh_file_handle)
 	}
 
-
-	// Read indices
-	bytes_read: int
-	read_res: os.Errno
-
-	if .IndexedDraw in mesh_metadata.feature_flags {
-		mesh_resource.desc.flags += {.Indexed}
-
-		mesh_resource.desc.indices = make(
-			[]u32,
-			mesh_metadata.num_indices,
-			mesh_resource.desc.data_allocator,
-		)
-
-		bytes_read, read_res = os.read_ptr(
-			mesh_file,
-			raw_data(mesh_resource.desc.indices),
-			int(mesh_metadata.total_index_size),
-		)
-
-		if read_res != 0 {
-			log.warnf(
-				"Failed to load mesh '%s' - couldn't read index data: err %d\n",
-				mesh_name,
-				read_res,
-			)
-			return InvalidMeshAssetRef
-		}
-	}
-
-	// Read positions
-	mesh_resource.desc.position = make(
-		[]glsl.vec3,
-		mesh_metadata.num_vertices,
-		mesh_resource.desc.data_allocator,
+	mesh_file_mapping_handle := windows.CreateFileMappingW(
+		mesh_file_handle,
+		nil,
+		windows.PAGE_READONLY,
+		0,
+		0,
+		nil,
 	)
-	bytes_read, read_res = os.read_ptr(
-		mesh_file,
-		raw_data(mesh_resource.desc.position),
-		int(mesh_metadata.num_vertices) * size_of(glsl.vec3),
-	)
-
-	if read_res != 0 {
-		log.warnf(
-			"Failed to load mesh '%s' - couldn't read position data: err %d\n",
-			mesh_name,
-			read_res,
-		)
+	if mesh_file_mapping_handle == windows.INVALID_HANDLE_VALUE {
+		log.warnf("Failed to load mesh '%s' - couldn't create mapping handle\n", mesh_name)
 		return InvalidMeshAssetRef
 	}
 
-	if .Normal in mesh_metadata.feature_flags {
+	mesh_file_mapped_ptr := windows.MapViewOfFile(
+		mesh_file_mapping_handle,
+		windows.FILE_MAP_READ,
+		0,
+		0,
+		0,
+	)
 
-		mesh_resource.desc.features += {.Normal}
-
-		mesh_resource.desc.normal = make(
-			[]glsl.vec3,
-			mesh_metadata.num_vertices,
-			mesh_resource.desc.data_allocator,
-		)
-
-		bytes_read, read_res = os.read_ptr(
-			mesh_file,
-			raw_data(mesh_resource.desc.normal),
-			int(mesh_metadata.num_vertices) * size_of(glsl.vec3),
-		)
-
-		if read_res != 0 {
-			log.warnf(
-				"Failed to load mesh '%s' - couldn't read normal data: err %d\n",
-				mesh_name,
-				read_res,
-			)
-			return InvalidMeshAssetRef
-		}
+	if mesh_file_mapped_ptr == nil {
+		log.warnf("Failed to load mesh '%s' - couldn't map file\n", mesh_name)
+		return InvalidMeshAssetRef
 	}
 
+	// mesh_file, err := os.open(mesh_asset_path, os.O_RDONLY)
+	// if err != 0 {
+	// 	return InvalidMeshAssetRef
+	// }
+
+	mesh_resource.desc.file_handle = mesh_file_handle
+	mesh_resource.desc.file_mapping_handle = mesh_file_mapping_handle
+	mesh_resource.desc.file_mapped_ptr = mesh_file_mapped_ptr
+
+	// Setup index pointer
+	current_data_ptr := (^byte)(mesh_file_mapped_ptr)
+	if .IndexedDraw in mesh_metadata.feature_flags {
+		mesh_resource.desc.flags += {.Indexed}
+		mesh_resource.desc.indices = slice.from_ptr(
+			(^u32)(current_data_ptr),
+			int(mesh_metadata.num_indices),
+		)
+
+		current_data_ptr = mem.ptr_offset(current_data_ptr, (mesh_metadata.total_index_size))
+	}
+
+	// Setup positions pointer
+	mesh_resource.desc.position = slice.from_ptr(
+		(^glsl.vec3)(current_data_ptr),
+		int(mesh_metadata.num_vertices),
+	)
+
+	current_data_ptr = mem.ptr_offset(
+		current_data_ptr,
+		size_of(glsl.vec3) * (mesh_metadata.num_vertices),
+	)
+
+
+	// Setup normals pointer
+	if .Normal in mesh_metadata.feature_flags {
+		mesh_resource.desc.features += {.Normal}
+
+		mesh_resource.desc.normal = slice.from_ptr(
+			(^glsl.vec3)(current_data_ptr),
+			int(mesh_metadata.num_vertices),
+		)
+
+		current_data_ptr = mem.ptr_offset(
+			current_data_ptr,
+			size_of(glsl.vec3) * (mesh_metadata.num_vertices),
+		)
+	}
+
+	// Setup tangents pointer
 	if .Tangent in mesh_metadata.feature_flags {
 		mesh_resource.desc.features += {.Tangent}
 
-		mesh_resource.desc.tangent = make(
-			[]glsl.vec3,
-			mesh_metadata.num_vertices,
-			mesh_resource.desc.data_allocator,
+		mesh_resource.desc.tangent = slice.from_ptr(
+			(^glsl.vec3)(current_data_ptr),
+			int(mesh_metadata.num_vertices),
 		)
 
-		bytes_read, read_res = os.read_ptr(
-			mesh_file,
-			raw_data(mesh_resource.desc.tangent),
-			int(mesh_metadata.num_vertices) * size_of(glsl.vec3),
+		current_data_ptr = mem.ptr_offset(
+			current_data_ptr,
+			size_of(glsl.vec3) * (mesh_metadata.num_vertices),
 		)
-
-		if read_res != 0 {
-			log.warnf(
-				"Failed to load mesh '%s' - couldn't read tangetn data: err %d\n",
-				mesh_name,
-				read_res,
-			)
-			return InvalidMeshAssetRef
-		}
 	}
 
+	// Setup uvs pointer
 	if .UV in mesh_metadata.feature_flags {
 		mesh_resource.desc.features += {.UV}
 
-		mesh_resource.desc.uv = make(
-			[]glsl.vec2,
-			mesh_metadata.num_vertices,
-			mesh_resource.desc.data_allocator,
+		mesh_resource.desc.uv = slice.from_ptr(
+			(^glsl.vec2)(current_data_ptr),
+			int(mesh_metadata.num_vertices),
 		)
 
-		bytes_read, read_res = os.read_ptr(
-			mesh_file,
-			raw_data(mesh_resource.desc.uv),
-			int(mesh_metadata.num_vertices) * size_of(glsl.vec2),
+		current_data_ptr = mem.ptr_offset(
+			current_data_ptr,
+			size_of(glsl.vec2) * (mesh_metadata.num_vertices),
 		)
-
-		if read_res != 0 {
-			log.warnf(
-				"Failed to load mesh '%s' - couldn't read normal data: err %d\n",
-				mesh_name,
-				read_res,
-			)
-			return InvalidMeshAssetRef
-		}
 	}
+
+	// defer if ret_mesh_ref == InvalidMeshAssetRef {
+
+	// 	delete(mesh_resource.desc.position, mesh_resource.desc.data_allocator)
+
+	// 	if .IndexedDraw in mesh_metadata.feature_flags {
+	// 		delete(mesh_resource.desc.indices, mesh_resource.desc.data_allocator)
+	// 	}
+	// 	if .Normal in mesh_metadata.feature_flags {
+	// 		delete(mesh_resource.desc.normal, mesh_resource.desc.data_allocator)
+	// 	}
+	// 	if .Tangent in mesh_metadata.feature_flags {
+	// 		delete(mesh_resource.desc.tangent, mesh_resource.desc.data_allocator)
+	// 	}
+	// 	if .UV in mesh_metadata.feature_flags {
+	// 		delete(mesh_resource.desc.uv, mesh_resource.desc.data_allocator)
+	// 	}
+	// }
+
+
+	// Read indices
+	// bytes_read: int
+	// read_res: os.Errno
+
+	// if .IndexedDraw in mesh_metadata.feature_flags {
+	// 	mesh_resource.desc.flags += {.Indexed}
+
+	// 	mesh_resource.desc.indices = make(
+	// 		[]u32,
+	// 		mesh_metadata.num_indices,
+	// 		mesh_resource.desc.data_allocator,
+	// 	)
+
+	// 	bytes_read, read_res = os.read_ptr(
+	// 		mesh_file,
+	// 		raw_data(mesh_resource.desc.indices),
+	// 		int(mesh_metadata.total_index_size),
+	// 	)
+
+	// 	if read_res != 0 {
+	// 		log.warnf(
+	// 			"Failed to load mesh '%s' - couldn't read index data: err %d\n",
+	// 			mesh_name,
+	// 			read_res,
+	// 		)
+	// 		return InvalidMeshAssetRef
+	// 	}
+	// }
+
+	// // Read positions
+	// mesh_resource.desc.position = make(
+	// 	[]glsl.vec3,
+	// 	mesh_metadata.num_vertices,
+	// 	mesh_resource.desc.data_allocator,
+	// )
+	// bytes_read, read_res = os.read_ptr(
+	// 	mesh_file,
+	// 	raw_data(mesh_resource.desc.position),
+	// 	int(mesh_metadata.num_vertices) * size_of(glsl.vec3),
+	// )
+
+	// if read_res != 0 {
+	// 	log.warnf(
+	// 		"Failed to load mesh '%s' - couldn't read position data: err %d\n",
+	// 		mesh_name,
+	// 		read_res,
+	// 	)
+	// 	return InvalidMeshAssetRef
+	// }
+
+	// if .Normal in mesh_metadata.feature_flags {
+
+	// 	mesh_resource.desc.features += {.Normal}
+
+	// 	mesh_resource.desc.normal = make(
+	// 		[]glsl.vec3,
+	// 		mesh_metadata.num_vertices,
+	// 		mesh_resource.desc.data_allocator,
+	// 	)
+
+	// 	bytes_read, read_res = os.read_ptr(
+	// 		mesh_file,
+	// 		raw_data(mesh_resource.desc.normal),
+	// 		int(mesh_metadata.num_vertices) * size_of(glsl.vec3),
+	// 	)
+
+	// 	if read_res != 0 {
+	// 		log.warnf(
+	// 			"Failed to load mesh '%s' - couldn't read normal data: err %d\n",
+	// 			mesh_name,
+	// 			read_res,
+	// 		)
+	// 		return InvalidMeshAssetRef
+	// 	}
+	// }
+
+	// if .Tangent in mesh_metadata.feature_flags {
+	// 	mesh_resource.desc.features += {.Tangent}
+
+	// 	mesh_resource.desc.tangent = make(
+	// 		[]glsl.vec3,
+	// 		mesh_metadata.num_vertices,
+	// 		mesh_resource.desc.data_allocator,
+	// 	)
+
+	// 	bytes_read, read_res = os.read_ptr(
+	// 		mesh_file,
+	// 		raw_data(mesh_resource.desc.tangent),
+	// 		int(mesh_metadata.num_vertices) * size_of(glsl.vec3),
+	// 	)
+
+	// 	if read_res != 0 {
+	// 		log.warnf(
+	// 			"Failed to load mesh '%s' - couldn't read tangent data: err %d\n",
+	// 			mesh_name,
+	// 			read_res,
+	// 		)
+	// 		return InvalidMeshAssetRef
+	// 	}
+	// }
+
+	// if .UV in mesh_metadata.feature_flags {
+	// 	mesh_resource.desc.features += {.UV}
+
+	// 	mesh_resource.desc.uv = make(
+	// 		[]glsl.vec2,
+	// 		mesh_metadata.num_vertices,
+	// 		mesh_resource.desc.data_allocator,
+	// 	)
+
+	// 	bytes_read, read_res = os.read_ptr(
+	// 		mesh_file,
+	// 		raw_data(mesh_resource.desc.uv),
+	// 		int(mesh_metadata.num_vertices) * size_of(glsl.vec2),
+	// 	)
+
+	// 	if read_res != 0 {
+	// 		log.warnf(
+	// 			"Failed to load mesh '%s' - couldn't read normal data: err %d\n",
+	// 			mesh_name,
+	// 			read_res,
+	// 		)
+	// 		return InvalidMeshAssetRef
+	// 	}
+	// }
 
 	// Setup submeshes information
 	for sub_mesh_metadata, i in mesh_metadata.sub_meshes {

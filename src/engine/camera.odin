@@ -26,7 +26,7 @@ Camera: struct {
 
 camera_init :: proc() {
 	using Camera
-	position = {0, 0, 3}
+	position = {50, 150, 500}
 	speed = 0.5
 	near_plane = 0.1
 	far_plane = 100000.0

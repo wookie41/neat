@@ -21,14 +21,15 @@ when USE_VULKAN_BACKEND {
 
 	@(private = "file")
 	INTERNAL: struct {
-		graphics_command_pools:        []vk.CommandPool,
-		transfer_command_pools:        []vk.CommandPool,
-		compute_command_pools:         []vk.CommandPool,
-		transfer_cmd_buffers:          []vk.CommandBuffer,
-		compute_cmd_buffers:           []vk.CommandBuffer,
-		immediate_submit_command_pool: vk.CommandPool,
-		immediate_submit_cmd_buffer:   vk.CommandBuffer,
-		immediate_submit_fence:        vk.Fence,
+		graphics_command_pools:             []vk.CommandPool,
+		transfer_command_pools:             []vk.CommandPool,
+		compute_command_pools:              []vk.CommandPool,
+		transfer_cmd_buffers_pre_graphics:  []vk.CommandBuffer,
+		transfer_cmd_buffers_post_graphics: []vk.CommandBuffer,
+		compute_cmd_buffers:                []vk.CommandBuffer,
+		immediate_submit_command_pool:      vk.CommandPool,
+		immediate_submit_cmd_buffer:        vk.CommandBuffer,
+		immediate_submit_fence:             vk.Fence,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -46,6 +47,7 @@ when USE_VULKAN_BACKEND {
 		create_command_pools(
 			u32(G_RENDERER.queue_family_graphics_index),
 			false,
+			true,
 			INTERNAL.graphics_command_pools,
 			nil,
 		) or_return
@@ -57,7 +59,12 @@ when USE_VULKAN_BACKEND {
 				int(G_RENDERER.num_frames_in_flight),
 				G_RENDERER_ALLOCATORS.resource_allocator,
 			)
-			INTERNAL.transfer_cmd_buffers = make(
+			INTERNAL.transfer_cmd_buffers_pre_graphics = make(
+				[]vk.CommandBuffer,
+				int(G_RENDERER.num_frames_in_flight),
+				G_RENDERER_ALLOCATORS.resource_allocator,
+			)
+			INTERNAL.transfer_cmd_buffers_post_graphics = make(
 				[]vk.CommandBuffer,
 				int(G_RENDERER.num_frames_in_flight),
 				G_RENDERER_ALLOCATORS.resource_allocator,
@@ -65,8 +72,17 @@ when USE_VULKAN_BACKEND {
 			create_command_pools(
 				u32(G_RENDERER.queue_family_transfer_index),
 				true,
+				true,
 				INTERNAL.transfer_command_pools,
-				INTERNAL.transfer_cmd_buffers,
+				INTERNAL.transfer_cmd_buffers_pre_graphics,
+			) or_return
+
+			create_command_pools(
+				u32(G_RENDERER.queue_family_transfer_index),
+				true,
+				false,
+				INTERNAL.transfer_command_pools,
+				INTERNAL.transfer_cmd_buffers_post_graphics,
 			) or_return
 		}
 
@@ -84,6 +100,7 @@ when USE_VULKAN_BACKEND {
 			)
 			create_command_pools(
 				u32(G_RENDERER.queue_family_compute_index),
+				true,
 				true,
 				INTERNAL.compute_command_pools,
 				INTERNAL.compute_cmd_buffers,
@@ -142,21 +159,24 @@ when USE_VULKAN_BACKEND {
 	create_command_pools :: proc(
 		p_queue_family_idx: u32,
 		p_allocate_command_buffers: bool,
+		p_create_command_pools: bool,
 		p_cmd_pools: []vk.CommandPool,
 		p_cmd_buffers: []vk.CommandBuffer,
 	) -> bool {
 
-		pool_info := vk.CommandPoolCreateInfo {
-			sType = .COMMAND_POOL_CREATE_INFO,
-			queueFamilyIndex = p_queue_family_idx,
-			flags = {.RESET_COMMAND_BUFFER},
-		}
+		if p_create_command_pools {
+			pool_info := vk.CommandPoolCreateInfo {
+				sType = .COMMAND_POOL_CREATE_INFO,
+				queueFamilyIndex = p_queue_family_idx,
+				flags = {.RESET_COMMAND_BUFFER},
+			}
 
-		for i in 0 ..< G_RENDERER.num_frames_in_flight {
-			if vk.CreateCommandPool(G_RENDERER.device, &pool_info, nil, &p_cmd_pools[i]) !=
-			   .SUCCESS {
-				log.error("Couldn't create command pool")
-				return false
+			for i in 0 ..< G_RENDERER.num_frames_in_flight {
+				if vk.CreateCommandPool(G_RENDERER.device, &pool_info, nil, &p_cmd_pools[i]) !=
+				   .SUCCESS {
+					log.error("Couldn't create command pool")
+					return false
+				}
 			}
 		}
 
@@ -247,9 +267,20 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	get_frame_transfer_cmd_buffer :: proc() -> vk.CommandBuffer {
+	get_frame_transfer_cmd_buffer_pre_graphics :: proc() -> vk.CommandBuffer {
 		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
-			return INTERNAL.transfer_cmd_buffers[get_frame_idx()]
+			return INTERNAL.transfer_cmd_buffers_post_graphics[get_frame_idx()]
+		}
+		cmd_buff_ref := get_frame_cmd_buffer_ref()
+		return g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buff_ref)].vk_cmd_buff
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	get_frame_transfer_cmd_buffer_post_graphics :: proc() -> vk.CommandBuffer {
+		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+			return INTERNAL.transfer_cmd_buffers_pre_graphics[get_frame_idx()]
 		}
 		cmd_buff_ref := get_frame_cmd_buffer_ref()
 		return g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buff_ref)].vk_cmd_buff
