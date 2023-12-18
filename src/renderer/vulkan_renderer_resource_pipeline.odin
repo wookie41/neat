@@ -203,7 +203,7 @@ when USE_VULKAN_BACKEND {
 
 		vk.CreatePipelineCache(G_RENDERER.device, &create_info, nil, &INTERNAL.vk_pipeline_cache)
 
-		INTERNAL.deferred_pipeline_deletions = make([dynamic]DeferredPipelineDelete)
+		INTERNAL.deferred_pipeline_deletions = make([dynamic]DeferredPipelineDelete, get_frame_allocator())
 
 		return true
 	}
@@ -214,7 +214,7 @@ when USE_VULKAN_BACKEND {
 	backend_pipelines_update :: proc() {
 
 		// Process deferred deletes
-		deferred_deletes := make([dynamic]DeferredPipelineDelete)
+		deferred_deletes := make([dynamic]DeferredPipelineDelete, get_next_frame_allocator())
 		for deferred_delete in &INTERNAL.deferred_pipeline_deletions {
 
 			// Command buffer with using this pipeline is still in use
@@ -239,7 +239,6 @@ when USE_VULKAN_BACKEND {
 
 		}
 
-		clear(&INTERNAL.deferred_pipeline_deletions)
 		INTERNAL.deferred_pipeline_deletions = deferred_deletes
 	}
 

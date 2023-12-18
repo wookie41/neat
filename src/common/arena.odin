@@ -56,3 +56,7 @@ temp_arena_init :: proc(p_arena: ^Arena, p_arena_size: u32 = DEFAULT_TEMP_ARENA_
 }
 
 //---------------------------------------------------------------------------//
+
+arena_reset_all :: proc() {
+	free_all(INTERNAL.temp_arenas_allocator)
+}

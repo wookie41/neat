@@ -222,7 +222,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 	mesh_render_task_data := (^MeshRenderTaskData)(mesh_render_task.data_ptr)
 
 	// Batch meshes that share the same material
-	mesh_batches := make(map[MeshBatchKey]MeshBatch, 512, temp_arena.allocator)
+	mesh_batches := make(map[MeshBatchKey]MeshBatch, 16, temp_arena.allocator)
 
 	for i in 0 ..< g_resource_refs.mesh_instances.alive_count {
 

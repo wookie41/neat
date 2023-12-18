@@ -12,6 +12,7 @@ import "core:os"
 import "core:slice"
 import "core:strconv"
 import "core:strings"
+import "core:runtime"
 
 //---------------------------------------------------------------------------//
 
@@ -203,3 +204,20 @@ xml_get_u32_attribute :: proc(
 
 	return u32(val), true
 }
+
+//---------------------------------------------------------------------------//
+
+// Converts slice into a dynamic array without cloning or allocating memory
+@(require_results)
+into_dynamic :: proc(a: $T/[]$E) -> [dynamic]E {
+	s := transmute(runtime.Raw_Slice)a
+	d := runtime.Raw_Dynamic_Array{
+		data = s.data,
+		len  = s.len,
+		cap  = s.len,
+		allocator = runtime.nil_allocator(),
+	}
+	return transmute([dynamic]E)d
+}
+
+//---------------------------------------------------------------------------//

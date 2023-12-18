@@ -4,7 +4,6 @@ package renderer
 
 import "core:log"
 import "core:mem"
-
 import "../common"
 
 /*
@@ -153,10 +152,7 @@ init_buffer_upload :: proc(p_options: BufferUploadInitOptions) -> bool {
 
 	// Create an async staging buffer upload for sliced uploads
 	{
-		INTERNAL.async_uploads = make(
-			[dynamic]AsyncUploadInfo,
-			G_RENDERER_ALLOCATORS.main_allocator,
-		)
+		INTERNAL.async_uploads = make([dynamic]AsyncUploadInfo, get_frame_allocator())
 
 		INTERNAL.async_staging_buffer_ref = allocate_buffer_ref(
 			common.create_name("AsyncUploadStagingBuffer"),
@@ -247,10 +243,12 @@ request_buffer_upload :: proc(p_request: BufferUploadRequest) -> BufferUploadRes
 	}
 
 	pending_request := buffer_upload_send_data(p_request)
+	requests := common.into_dynamic([]PendingBufferUploadRequest{pending_request})
+
 	backend_run_buffer_upload_requests(
 		INTERNAL.staging_buffer_ref,
 		p_request.dst_buff,
-		[dynamic]PendingBufferUploadRequest{pending_request},
+		requests,
 	)
 
 	return BufferUploadResponse{status = .Uploaded}
@@ -270,12 +268,12 @@ run_last_frame_buffer_upload_requests :: proc() {
 
 		not_satisfied_requests := make(
 			[dynamic]BufferUploadRequest,
-			G_RENDERER_ALLOCATORS.main_allocator,
+			get_next_frame_allocator(),
 		)
 
 		requests_to_run := make(
 			[dynamic]PendingBufferUploadRequest,
-			G_RENDERER_ALLOCATORS.main_allocator,
+			get_frame_allocator(),
 		)
 		defer delete(requests_to_run)
 
@@ -348,14 +346,15 @@ buffer_upload_process_async_requests :: proc() {
 
 	// Always start the buffer so the fence gets properly signalled
 	if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
-		backend_buffer_upload_start_async_cmd_buffer_post_graphics()
+		backend_buffer_upload_start_async_prepare()
 	}
+
+	async_uploads := make([dynamic]AsyncUploadInfo, get_next_frame_allocator())
 
 	if len(INTERNAL.async_uploads) == 0 {
+		INTERNAL.async_uploads = async_uploads
 		return
 	}
-
-	async_uploads := make([dynamic]AsyncUploadInfo, G_RENDERER_ALLOCATORS.main_allocator)
 
 	backend_upload_sliced_proc := backend_buffer_upload_run_sliced_sync
 	if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
@@ -431,7 +430,6 @@ buffer_upload_process_async_requests :: proc() {
 		}
 	}
 
-	delete(INTERNAL.async_uploads)
 	INTERNAL.async_uploads = async_uploads
 }
 
@@ -461,3 +459,5 @@ buffer_upload_finalize_finished_uploads :: proc() {
 		backend_buffer_upload_finalize_finished_uploads()
 	}
 }
+
+//---------------------------------------------------------------------------//

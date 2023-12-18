@@ -15,13 +15,13 @@ when USE_VULKAN_BACKEND {
 	INTERNAL: struct {
 		transfer_fences_pre_graphics:  []vk.Fence,
 		transfer_fences_post_graphics: []vk.Fence,
-		transfer_queue_copies:         [dynamic]TransferQueueCopy,
+		finished_transfer_infos:       [dynamic]FinishedTransferInfo,
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	TransferQueueCopy :: struct {
+	FinishedTransferInfo :: struct {
 		dst_buffer_ref:                  BufferRef,
 		size:                            u32,
 		offset:                          u32,
@@ -29,7 +29,6 @@ when USE_VULKAN_BACKEND {
 		post_transfer_queue_family_idx:  u32,
 		async_upload_callback_user_data: rawptr,
 		async_upload_finished_callback:  proc(p_user_data: rawptr),
-		frame_idx:                       u32,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -43,7 +42,7 @@ when USE_VULKAN_BACKEND {
 		}
 		vk.WaitForFences(G_RENDERER.device, u32(len(fences)), &fences[0], true, max(u64))
 		vk.ResetFences(G_RENDERER.device, u32(len(fences)), &fences[0])
-		}
+	}
 
 	//---------------------------------------------------------------------------//
 
@@ -53,39 +52,23 @@ when USE_VULKAN_BACKEND {
 		// Always start the buffer so the fence gets properly signalled
 		backend_buffer_upload_start_async_cmd_buffer_pre_graphics()
 
-		if len(INTERNAL.transfer_queue_copies) == 0 {
-			delete(INTERNAL.transfer_queue_copies)
-			INTERNAL.transfer_queue_copies = nil
+		if len(INTERNAL.finished_transfer_infos) == 0 {
 			return
 		}
-
-		if INTERNAL.transfer_queue_copies == nil {
-			return
-		}
-
-		// Hand back ownership of all of the buffer regions that we were uploading to using this cmd buffer
-		transfer_queue_copies := make(
-			[dynamic]TransferQueueCopy,
-			G_RENDERER_ALLOCATORS.main_allocator,
-		)
 
 		transfer_cmd_buff := get_frame_transfer_cmd_buffer_pre_graphics()
 
-		for transfer_queue_copy in &INTERNAL.transfer_queue_copies {
-			if transfer_queue_copy.frame_idx != get_frame_idx() {
-				append(&transfer_queue_copies, transfer_queue_copy)
-				continue
-			}
+		for finished_transfer_info in &INTERNAL.finished_transfer_infos {
 
 			// Issue release/acquire barriers
-			dst_buffer_idx := get_buffer_idx(transfer_queue_copy.dst_buffer_ref)
+			dst_buffer_idx := get_buffer_idx(finished_transfer_info.dst_buffer_ref)
 			backend_dst_buffer := &g_resources.backend_buffers[dst_buffer_idx]
 
 			src_cmd_buffer_ref := get_frame_cmd_buffer_ref()
 			src_cmd_buffer :=
 				g_resources.backend_cmd_buffers[get_cmd_buffer_idx(src_cmd_buffer_ref)].vk_cmd_buff
 
-			if transfer_queue_copy.post_transfer_queue_family_idx ==
+			if finished_transfer_info.post_transfer_queue_family_idx ==
 			   G_RENDERER.queue_family_compute_index {
 				src_cmd_buffer = get_frame_compute_cmd_buffer()
 			}
@@ -93,12 +76,12 @@ when USE_VULKAN_BACKEND {
 			release_acquire_barrier := vk.BufferMemoryBarrier {
 				sType = .BUFFER_MEMORY_BARRIER,
 				pNext = nil,
-				size = vk.DeviceSize(transfer_queue_copy.size),
-				offset = vk.DeviceSize(transfer_queue_copy.offset),
+				size = vk.DeviceSize(finished_transfer_info.size),
+				offset = vk.DeviceSize(finished_transfer_info.offset),
 				buffer = backend_dst_buffer.vk_buffer,
 				srcAccessMask = {.TRANSFER_WRITE},
 				srcQueueFamilyIndex = G_RENDERER.queue_family_transfer_index,
-				dstQueueFamilyIndex = transfer_queue_copy.post_transfer_queue_family_idx,
+				dstQueueFamilyIndex = finished_transfer_info.post_transfer_queue_family_idx,
 			}
 
 			// Release
@@ -130,16 +113,12 @@ when USE_VULKAN_BACKEND {
 				nil,
 			)
 
-			if transfer_queue_copy.async_upload_finished_callback != nil {
-				transfer_queue_copy.async_upload_finished_callback(
-					transfer_queue_copy.async_upload_callback_user_data,
-				)	
+			if finished_transfer_info.async_upload_finished_callback != nil {
+				finished_transfer_info.async_upload_finished_callback(
+					finished_transfer_info.async_upload_callback_user_data,
+				)
 			}
 		}
-
-		delete(INTERNAL.transfer_queue_copies)
-		INTERNAL.transfer_queue_copies = transfer_queue_copies
-
 	}
 
 	//---------------------------------------------------------------------------//
@@ -157,9 +136,9 @@ when USE_VULKAN_BACKEND {
 			G_RENDERER_ALLOCATORS.main_allocator,
 		)
 
-		INTERNAL.transfer_queue_copies = make(
-			[dynamic]TransferQueueCopy,
-			G_RENDERER_ALLOCATORS.main_allocator,
+		INTERNAL.finished_transfer_infos = make(
+			[dynamic]FinishedTransferInfo,
+			get_frame_allocator(),
 		)
 
 		// Create the fences used to make sure the we can safely fill the buffer from the CPU side
@@ -213,13 +192,18 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_buffer_upload_start_async_cmd_buffer_post_graphics :: proc() {
+	backend_buffer_upload_start_async_prepare :: proc() {
 		transfer_cmd_buff_post_graphics := get_frame_transfer_cmd_buffer_post_graphics()
 		begin_info := vk.CommandBufferBeginInfo {
 			sType = .COMMAND_BUFFER_BEGIN_INFO,
 			flags = {.ONE_TIME_SUBMIT},
 		}
 		vk.BeginCommandBuffer(transfer_cmd_buff_post_graphics, &begin_info)
+		INTERNAL.finished_transfer_infos = make(
+			[dynamic]FinishedTransferInfo,
+			get_next_frame_allocator(),
+		)	
+
 	}
 
 	//---------------------------------------------------------------------------//
@@ -518,7 +502,7 @@ when USE_VULKAN_BACKEND {
 
 		// Add an entry into the transfer array
 		if p_is_last_upload {
-			transfer_queue_copy := TransferQueueCopy {
+			finished_transfer_info := FinishedTransferInfo {
 				dst_buffer_ref                  = p_dst_buffer_ref,
 				size                            = p_total_size,
 				offset                          = p_base_offset,
@@ -526,10 +510,9 @@ when USE_VULKAN_BACKEND {
 				post_transfer_queue_family_idx  = src_queue,
 				async_upload_callback_user_data = p_transfer_finished_user_data,
 				async_upload_finished_callback  = p_transfer_finished_callback,
-				frame_idx                       = get_frame_idx(),
 			}
 
-			append(&INTERNAL.transfer_queue_copies, transfer_queue_copy)
+			append(&INTERNAL.finished_transfer_infos, finished_transfer_info)
 		}
 	}
 

@@ -450,7 +450,7 @@ update :: proc(p_dt: f32) {
 	context.allocator = G_RENDERER_ALLOCATORS.main_allocator
 	context.logger = INTERNAL.logger
 
-	free_all(get_frame_allocator())
+	common.arena_reset_all()
 
 	pipelines_update()
 	shaders_update()
@@ -488,6 +488,7 @@ update :: proc(p_dt: f32) {
 	end_command_buffer(cmd_buff_ref)
 
 	submit_current_frame()
+	free_all(get_frame_allocator())
 
 	advance_frame_idx()
 }
@@ -805,4 +806,11 @@ get_frame_allocator :: proc() -> mem.Allocator {
 	return G_RENDERER_ALLOCATORS.frame_allocators[get_frame_id() % 2]
 }
 
+
+//---------------------------------------------------------------------------//
+
+@(private)
+get_next_frame_allocator :: proc() -> mem.Allocator {
+	return G_RENDERER_ALLOCATORS.frame_allocators[(get_frame_id() + 1) % 2]
+}
 //---------------------------------------------------------------------------//
