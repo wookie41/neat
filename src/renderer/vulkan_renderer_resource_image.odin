@@ -410,7 +410,10 @@ when USE_VULKAN_BACKEND {
 
 		} else {
 			aspect_mask += {.COLOR}
-			usage += {.COLOR_ATTACHMENT}
+			if image.desc.format < .CompressedFormatsStart ||
+			   image.desc.format > .CompressedFormatsEnd {
+				usage += {.COLOR_ATTACHMENT}
+			}
 		}
 
 		if .Sampled in image.desc.flags {
@@ -771,16 +774,16 @@ when USE_VULKAN_BACKEND {
 			image := &g_resources.images[image_idx]
 			backend_image := &g_resources.backend_images[image_idx]
 
-			image.flags += {.IsUploaded}
-
 			if image.desc.file_mapping.mapped_ptr == nil {
 				for mip_data in image.desc.data_per_mip {
 					delete(mip_data, image.desc.mip_data_allocator)
 				}
 			} else {
 				common.unmap_file(image.desc.file_mapping)
-				image.desc.file_mapping = {}	
+				image.desc.file_mapping = {}
 			}
+
+			// append(&INTERNAL.bindless_array_updates, finished_upload.image_ref)
 
 			cmd_buffer_ref := get_frame_cmd_buffer_ref()
 			cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buffer_ref)]

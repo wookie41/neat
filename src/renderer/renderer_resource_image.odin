@@ -164,7 +164,6 @@ ImageDescFlags :: distinct bit_set[ImageDescFlagBits;u8]
 //---------------------------------------------------------------------------//
 
 ImageFlagBits :: enum u8 {
-	IsUploaded,
 }
 ImageFlags :: distinct bit_set[ImageFlagBits;u8]
 
@@ -342,7 +341,6 @@ free_image_ref :: proc(p_ref: ImageRef) {
 create_texture_image :: proc(p_ref: ImageRef) -> bool {
 
 	image := &g_resources.images[get_image_idx(p_ref)]
-	image.flags = ImageFlags{}
 
 	// 3D texture loading not supported right now
 	assert(image.desc.type == .TwoDimensional)

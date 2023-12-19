@@ -122,6 +122,7 @@ G_RENDERER: struct {
 	bindless_textures_array_bind_group_layout_ref: BindGroupLayoutRef,
 	global_bind_group_ref:                         BindGroupRef,
 	bindless_textures_array_bind_group_ref:        BindGroupRef,
+	default_image_ref:                             ImageRef,
 }
 
 //---------------------------------------------------------------------------//
@@ -134,7 +135,6 @@ G_RENDERER_ALLOCATORS: struct {
 	frame_arenas:          []mem.Arena,
 	frame_allocators:      []mem.Allocator,
 	resource_allocator:    mem.Allocator,
-
 	// Stack used to sub-allocate scratch arenas from that are used within a function scope 
 	temp_arenas_stack:     mem.Stack,
 	temp_arenas_allocator: mem.Allocator,
@@ -393,6 +393,21 @@ init :: proc(p_options: InitOptions) -> bool {
 	init_material_types() or_return
 	init_material_instances() or_return
 	init_mesh_instances() or_return
+
+	// Create a default image that we'll use when a texture is missing
+	{
+		G_RENDERER.default_image_ref = allocate_image_ref(common.create_name("DefaultImage"))
+		default_image := &g_resources.images[get_image_idx(G_RENDERER.default_image_ref)]
+
+		default_image.desc.type = .TwoDimensional
+		default_image.desc.dimensions = glsl.uvec3{4, 4, 1}
+		default_image.desc.flags = {.Sampled}
+		default_image.desc.sample_count_flags = {._1}
+		default_image.desc.format = .BC1_RGB_UNorm
+		default_image.desc.mip_count = 1
+
+		create_image(G_RENDERER.default_image_ref)
+	}
 
 	load_renderer_config()
 	uniform_buffer_management_init()
