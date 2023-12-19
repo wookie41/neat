@@ -11,7 +11,7 @@ TINYIMAGEFORMAT_DXGIFORMAT :: 1;
 TinyDDS_ContextHandle :: ^TinyDDS_Context;
 TinyDDS_AllocFunc :: #type proc(user : rawptr, size : _c.size_t) -> rawptr;
 TinyDDS_FreeFunc :: #type proc(user : rawptr, memory : rawptr);
-TinyDDS_ReadFunc :: #type proc(user : rawptr, buffer : rawptr, byteCount : _c.size_t) -> _c.size_t;
+TinyDDS_ReadFunc :: #type proc(user : rawptr, buffer : rawptr, byteCount : _c.size_t, header : bool) -> _c.size_t;
 TinyDDS_SeekFunc :: #type proc(user : rawptr, offset : i64) -> bool;
 TinyDDS_TellFunc :: #type proc(user : rawptr) -> i64;
 TinyDDS_ErrorFunc :: #type proc(user : rawptr, msg : cstring);

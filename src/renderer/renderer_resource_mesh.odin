@@ -7,7 +7,6 @@ import "core:c"
 import "core:log"
 import "core:math/linalg/glsl"
 import "core:mem"
-import "core:sys/windows"
 
 //---------------------------------------------------------------------------//
 
@@ -64,24 +63,22 @@ SubMesh :: struct {
 //---------------------------------------------------------------------------//
 
 MeshDesc :: struct {
-	name:                common.Name,
+	name:           common.Name,
 	// Misc flags, telling is if mesh is using indexed draw or not etc.
-	flags:               MeshDescFlags,
+	flags:          MeshDescFlags,
 	// Flags specyfing which features the mesh has (position, normals, UVs etc.)
-	features:            MeshFeatureFlags,
+	features:       MeshFeatureFlags,
 	// List of submeshes that actually define the ranges in vertex/index data
-	sub_meshes:          []SubMesh,
+	sub_meshes:     []SubMesh,
 	// Mesh data
-	indices:             []INDEX_DATA_TYPE,
-	position:            []glsl.vec3,
-	uv:                  []glsl.vec2,
-	normal:              []glsl.vec3,
-	tangent:             []glsl.vec3,
-	// Allocator that was used to allocate memory for the vertex and index data
-	data_allocator:      mem.Allocator,
-	file_handle:         windows.HANDLE,
-	file_mapping_handle: windows.HANDLE,
-	file_mapped_ptr:     rawptr,
+	indices:        []INDEX_DATA_TYPE,
+	position:       []glsl.vec3,
+	uv:             []glsl.vec2,
+	normal:         []glsl.vec3,
+	tangent:        []glsl.vec3,
+	// Allocator that was used to allocate memory for the vertex and index data 
+	data_allocator: mem.Allocator,
+	file_mapping:   common.FileMemoryMapping,
 }
 
 //---------------------------------------------------------------------------//
@@ -409,16 +406,14 @@ mesh_upload_finished_callback :: proc(p_user_data: rawptr) {
 	mesh_ref.ref = mesh_data_upload_ctx.mesh_ref
 
 	if common.ref_is_alive(&G_MESH_REF_ARRAY, mesh_ref) == false {
-		log.warnf("Upload ongoing for mesh that's not alive anymore")
+		log.warnf("Upload ongoing for mesh that's not alive anymore\n")
 		return
 	}
 
 	mesh_data_upload_ctx.finished_uploads_count += 1
 	if mesh_data_upload_ctx.finished_uploads_count == mesh_data_upload_ctx.needed_uploads_count {
 		mesh := &g_resources.meshes[get_mesh_idx(mesh_ref)]
-		windows.UnmapViewOfFile(mesh.desc.file_mapped_ptr)
-		windows.CloseHandle(mesh.desc.file_mapping_handle)
-		windows.CloseHandle(mesh.desc.file_handle)
+		common.unmap_file(mesh.desc.file_mapping)
 	}
 }
 

@@ -34,36 +34,38 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	BackendRendererState :: struct {
-		window:                          ^sdl.Window,
-		windowID:                        u32,
-		instance:                        vk.Instance,
-		physical_device:                 vk.PhysicalDevice,
-		surface_capabilities:            vk.SurfaceCapabilitiesKHR,
-		device_properties:               vk.PhysicalDeviceProperties,
-		swapchain_formats:               []vk.SurfaceFormatKHR,
-		swapchain_present_modes:         []vk.PresentModeKHR,
-		queue_family_graphics_index:     u32,
-		queue_family_present_index:      u32,
-		queue_family_compute_index:      u32,
-		queue_family_transfer_index:     u32,
-		device:                          vk.Device,
-		graphics_queue:                  vk.Queue,
-		present_queue:                   vk.Queue,
-		compute_queue:                   vk.Queue,
-		transfer_queue:                  vk.Queue,
-		surface:                         vk.SurfaceKHR,
-		swapchain_format:                vk.SurfaceFormatKHR,
-		present_mode:                    vk.PresentModeKHR,
-		swap_extent:                     vk.Extent2D,
-		swapchain:                       vk.SwapchainKHR,
-		swapchain_images:                [dynamic]vk.Image,
-		swapchain_image_views:           [dynamic]vk.ImageView,
-		render_finished_semaphores:      [dynamic]vk.Semaphore,
-		image_available_semaphores:      [dynamic]vk.Semaphore,
-		frame_fences:                    [dynamic]vk.Fence,
-		vma_allocator:                   vma.Allocator,
-		misc_flags:                      BackendMiscFlags,
-		swap_img_idx:                    u32,
+		window:                        ^sdl.Window,
+		windowID:                      u32,
+		instance:                      vk.Instance,
+		physical_device:               vk.PhysicalDevice,
+		surface_capabilities:          vk.SurfaceCapabilitiesKHR,
+		device_properties:             vk.PhysicalDeviceProperties,
+		swapchain_formats:             []vk.SurfaceFormatKHR,
+		swapchain_present_modes:       []vk.PresentModeKHR,
+		queue_family_graphics_index:   u32,
+		queue_family_present_index:    u32,
+		queue_family_compute_index:    u32,
+		queue_family_transfer_index:   u32,
+		device:                        vk.Device,
+		graphics_queue:                vk.Queue,
+		present_queue:                 vk.Queue,
+		compute_queue:                 vk.Queue,
+		transfer_queue:                vk.Queue,
+		surface:                       vk.SurfaceKHR,
+		swapchain_format:              vk.SurfaceFormatKHR,
+		present_mode:                  vk.PresentModeKHR,
+		swap_extent:                   vk.Extent2D,
+		swapchain:                     vk.SwapchainKHR,
+		swapchain_images:              [dynamic]vk.Image,
+		swapchain_image_views:         [dynamic]vk.ImageView,
+		render_finished_semaphores:    [dynamic]vk.Semaphore,
+		image_available_semaphores:    [dynamic]vk.Semaphore,
+		frame_fences:                  [dynamic]vk.Fence,
+		vma_allocator:                 vma.Allocator,
+		misc_flags:                    BackendMiscFlags,
+		swap_img_idx:                  u32,
+		transfer_fences_pre_graphics:  []vk.Fence,
+		transfer_fences_post_graphics: []vk.Fence,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -966,6 +968,16 @@ recreate_swapchain :: proc() {
 backend_handler_on_window_resized :: proc(p_event: WindowResizedEvent) {
 	if p_event.windowID == G_RENDERER.windowID {
 		G_RENDERER.misc_flags += {.WINDOW_RESIZED}
+	}
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
+backend_begin :: proc() {
+	if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+		backend_buffer_upload_start_async_cmd_buffer_pre_graphics()
+		backend_buffer_upload_start_async_cmd_buffer_post_graphics()
 	}
 }
 

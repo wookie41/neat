@@ -30,16 +30,15 @@ MAX_NUM_FRAMES_IN_FLIGHT :: #config(NUM_FRAMES_IN_FLIGHT, 2)
 // @TODO Move to a config file
 
 @(private)
-MAX_TEST :: #config(MAX_TEST, 128)
 MAX_SHADERS :: #config(MAX_SHADERS, 128)
 MAX_IMAGES :: #config(MAX_IMAGES, 256)
 MAX_BUFFERS :: #config(MAX_BUFFERS, 256)
-MAX_RENDER_PASSES :: #config(MAX_RENDER_PASSES, 256)
-MAX_RENDER_PASS_INSTANCES :: #config(MAX_RENDER_PASSES, 256)
+MAX_RENDER_PASSES :: #config(MAX_RENDER_PASSES, 128)
+MAX_RENDER_PASS_INSTANCES :: #config(MAX_RENDER_PASSES, 128)
 MAX_PIPELINES :: #config(MAX_PIPELINES, 128)
 MAX_COMMAND_BUFFERS :: #config(MAX_COMMAND_BUFFERS, 32)
-MAX_BIND_GROUP_LAYOUTS :: #config(MAX_BIND_GROUP_LAYOUTS, 1024)
-MAX_BIND_GROUPS :: #config(MAX_BIND_GROUPS, 1024)
+MAX_BIND_GROUP_LAYOUTS :: #config(MAX_BIND_GROUP_LAYOUTS, 32)
+MAX_BIND_GROUPS :: #config(MAX_BIND_GROUPS, 256)
 MAX_RENDER_TASKS :: #config(MAX_RENDER_TASKS, 64)
 MAX_MATERIAL_TYPES :: #config(MAX_MATERIAL_TYPES, 64)
 MAX_MATERIAL_PASSES :: #config(MAX_MATERIAL_PASSES, 256)
@@ -117,7 +116,6 @@ G_RENDERER: struct {
 	config:                                        RendererConfig,
 	num_frames_in_flight:                          u32,
 	primary_cmd_buffer_ref:                        []CommandBufferRef,
-	queued_textures_copies:                        [dynamic]TextureCopy,
 	swap_image_refs:                               []ImageRef,
 	gpu_device_flags:                              GPUDeviceFlags,
 	global_bind_group_layout_ref:                  BindGroupLayoutRef,
@@ -199,7 +197,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	for i in 0 ..< 2 {
 		mem.arena_init(
 			&G_RENDERER_ALLOCATORS.frame_arenas[i],
-			make([]byte, common.MEGABYTE * 8, G_RENDERER_ALLOCATORS.main_allocator),
+			make([]byte, common.MEGABYTE * 16, G_RENDERER_ALLOCATORS.main_allocator),
 		)
 		G_RENDERER_ALLOCATORS.frame_allocators[i] = mem.arena_allocator(
 			&G_RENDERER_ALLOCATORS.frame_arenas[i],
@@ -229,7 +227,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	init_bind_groups()
 	init_buffers()
 	init_meshes()
-	init_images()
+	init_images() or_return
 	init_command_buffers(p_options) or_return
 	buffer_management_init() or_return
 
@@ -455,23 +453,25 @@ update :: proc(p_dt: f32) {
 	pipelines_update()
 	shaders_update()
 
-	cmd_buff_ref := get_frame_cmd_buffer_ref()
-
 	backend_wait_for_frame_resources()
 
+	cmd_buff_ref := get_frame_cmd_buffer_ref()
+
 	begin_command_buffer(cmd_buff_ref)
+	backend_begin()
 
 	buffer_upload_finalize_finished_uploads()
+	image_upload_finalize_finished_uploads()
 
 	ui_begin_frame()
 
-	execute_queued_texture_copies()
 	run_last_frame_buffer_upload_requests()
 	batch_update_bindless_array_entries()
 	buffer_upload_process_async_requests()
+	image_upload_progress_copies()
 
-	buffer_upload_begin_frame()
 	image_upload_begin_frame()
+	buffer_upload_begin_frame()
 
 	material_instance_update_dirty_materials()
 	mesh_instance_send_transform_data()
@@ -564,16 +564,6 @@ handler_on_window_resized :: proc(p_event: WindowResizedEvent) {
 @(private)
 get_frame_cmd_buffer_ref :: proc() -> CommandBufferRef {
 	return G_RENDERER.primary_cmd_buffer_ref[get_frame_idx()]
-}
-
-//---------------------------------------------------------------------------//
-
-@(private)
-execute_queued_texture_copies :: proc() {
-	cmd_buff_ref := get_frame_cmd_buffer_ref()
-	if len(G_RENDERER.queued_textures_copies) > 0 {
-		backend_execute_queued_texture_copies(cmd_buff_ref)
-	}
 }
 
 //---------------------------------------------------------------------------//

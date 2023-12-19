@@ -345,24 +345,22 @@ texture_asset_load_by_name :: proc(p_name: common.Name) -> TextureAssetRef {
 	log.infof("Loading texture '%s'...\n", common.get_string(p_name))
 
 	temp_arena: common.Arena
-	common.temp_arena_init(&temp_arena, common.MEGABYTE * 32)
+	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
 
 	// Open the texture file
 	asset_path := asset_create_path(G_TEXTURE_ASSETS_DIR, p_name, "dds", temp_arena.allocator)
 
-	asset_path_c := strings.clone_to_cstring(asset_path, temp_arena.allocator)
-	texture_asset_file := libc.fopen(asset_path_c, "rb")
-	if texture_asset_file == nil {
-		log.errorf("Failed open texture asset file: %s\n", asset_path)
+	texture_asset_file_mapping, mapping_succeess := common.mmap_file(asset_path)
+	if mapping_succeess == false {
+		log.errorf("Failed to map texture asset file: %s\n", asset_path)
 		return InvalidTextureAssetRef
 	}
-	defer libc.fclose(texture_asset_file)
 
 	// Init tiny dds
 	user_data := TinyDDSUserData {
-		temp_arena         = &temp_arena,
-		texture_asset_file = texture_asset_file,
+		temp_arena       = &temp_arena,
+		file_mapping_ptr = texture_asset_file_mapping.mapped_ptr,
 	}
 
 	texture_metadata: TextureAssetMetadata
@@ -436,7 +434,7 @@ texture_asset_load_by_name :: proc(p_name: common.Name) -> TextureAssetRef {
 	if !texture_asset_load_texture_data_tiny_dds(
 		   tinydds_ctx,
 		   texture_asset,
-		   temp_arena.allocator,
+		   G_ALLOCATORS.main_allocator,
 	   ) {
 		common.ref_free(&G_TEXTURE_ASSET_REF_ARRAY, texture_ref)
 		return InvalidTextureAssetRef
@@ -453,14 +451,20 @@ texture_asset_load_by_name :: proc(p_name: common.Name) -> TextureAssetRef {
 	#partial switch texture_asset.format {
 	case .BC1_Unorm:
 		image.desc.format = .BC1_RGBA_UNorm
+		image.desc.block_size = 8
 	case .BC3_UNorm:
 		image.desc.format = .BC3_UNorm
+		image.desc.block_size = 16
 	case .BC4_UNorm:
 		image.desc.format = .BC4_UNorm
+		image.desc.block_size = 8
 	case .BC5_SNorm:
 		image.desc.format = .BC5_SNorm
+		image.desc.block_size = 16
 	case .BC6H_UFloat16:
 		image.desc.format = .BC6H_UFloat
+		image.desc.block_size = 16
+
 	case:
 		texture_asset_unload(texture_ref)
 		renderer.destroy_image(image_ref)
@@ -474,6 +478,7 @@ texture_asset_load_by_name :: proc(p_name: common.Name) -> TextureAssetRef {
 	image.desc.data_per_mip = texture_asset.texture_datas[0].data_per_mip
 	image.desc.dimensions = glsl.uvec3{texture_asset.width, texture_asset.height, 1}
 	image.desc.sample_count_flags = {._1}
+	image.desc.file_mapping = texture_asset_file_mapping
 
 	if renderer.create_texture_image(image_ref) == false {
 		texture_asset_unload(texture_ref)
@@ -489,15 +494,20 @@ texture_asset_load_by_name :: proc(p_name: common.Name) -> TextureAssetRef {
 
 @(private = "file")
 TinyDDSUserData :: struct {
-	temp_arena:         ^common.Arena,
-	texture_asset_file: ^libc.FILE,
+	temp_arena:       ^common.Arena,
+	file_mapping_ptr: rawptr,
+	offset:           i64,
+	alloc:            c.size_t,
 }
 
 //---------------------------------------------------------------------------//
 
 @(private = "file")
 tinydds_alloc :: proc(user: rawptr, size: c.size_t) -> rawptr {
-	return raw_data(make([]byte, size, G_ALLOCATORS.asset_allocator))
+	user_data := (^TinyDDSUserData)(user)
+	ptr := mem.ptr_offset((^byte)(user_data.file_mapping_ptr), int(user_data.alloc))
+	user_data.alloc += size
+	return ptr
 }
 
 //---------------------------------------------------------------------------//
@@ -513,24 +523,30 @@ tinydds_alloc_temp :: proc(user: rawptr, size: c.size_t) -> rawptr {
 
 @(private = "file")
 tinydds_free :: proc(user: rawptr, memory: rawptr) {
-	// We're not resetting the tinydds context, instead we manually free the texture data explcilty
-	// so we don't care about this call
 }
+
 //---------------------------------------------------------------------------//
 
 @(private = "file")
 tinydds_free_temp :: proc(user: rawptr, memory: rawptr) {
-	// We use an arena when loading the dds that is freed at the end of the call
-	// So no need to free memory here
 }
-
 
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-tinydds_read :: proc(user: rawptr, buffer: rawptr, byte_count: c.size_t) -> c.size_t {
+tinydds_read :: proc(
+	user: rawptr,
+	buffer: rawptr,
+	byte_count: c.size_t,
+	header: bool,
+) -> c.size_t {
 	user_data := (^TinyDDSUserData)(user)
-	return libc.fread(buffer, byte_count, 1, user_data.texture_asset_file) * byte_count
+	ptr := mem.ptr_offset((^byte)(user_data.file_mapping_ptr), user_data.offset)
+	if header {
+		mem.copy(buffer, ptr, int(byte_count))
+		user_data.alloc += byte_count
+	}
+	return byte_count
 }
 
 //---------------------------------------------------------------------------//
@@ -538,7 +554,8 @@ tinydds_read :: proc(user: rawptr, buffer: rawptr, byte_count: c.size_t) -> c.si
 @(private = "file")
 tinydds_seek :: proc(user: rawptr, offset: i64) -> bool {
 	user_data := (^TinyDDSUserData)(user)
-	return libc.fseek(user_data.texture_asset_file, i32(offset), 0) == 0
+	user_data.offset = offset
+	return true
 }
 
 //---------------------------------------------------------------------------//
@@ -546,7 +563,7 @@ tinydds_seek :: proc(user: rawptr, offset: i64) -> bool {
 @(private = "file")
 tinydds_tell :: proc(user: rawptr) -> i64 {
 	user_data := (^TinyDDSUserData)(user)
-	return i64(libc.ftell(user_data.texture_asset_file))
+	return user_data.offset
 }
 
 //---------------------------------------------------------------------------//

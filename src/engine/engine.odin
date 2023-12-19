@@ -48,7 +48,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	G_ENGINE_LOG = log.create_console_logger()
 	context.logger = G_ENGINE_LOG
 
-	mem_init(MemoryInitOptions{total_available_memory = 512 * common.MEGABYTE})
+	mem_init(MemoryInitOptions{total_available_memory = 64 * common.MEGABYTE})
 
 	common.init_names(G_ALLOCATORS.string_allocator)
 

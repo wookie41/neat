@@ -11,5 +11,6 @@ TODO:
 -> Allow for empty fragment shader when loading material types (prepass)
 -> Material types don't verify if a shader with a given path exists -> fix that
 -> Create a separate pool for UPDATE_AFTER_BIND vulkan_renderer_resource_bind_group.odin
--> Buffer upload code dependes on num frames in flight - the number of staging regions is created based on 
+-> Buffer upload (and image upload) code dependes on num frames in flight - the number of staging regions is created based on 
     on that and never touched again after the initial setup. Same goes for async transfer sync primitives.
+    

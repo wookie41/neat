@@ -13,9 +13,7 @@ when USE_VULKAN_BACKEND {
 
 	@(private = "file")
 	INTERNAL: struct {
-		transfer_fences_pre_graphics:  []vk.Fence,
-		transfer_fences_post_graphics: []vk.Fence,
-		finished_transfer_infos:       [dynamic]FinishedTransferInfo,
+		finished_transfer_infos: [dynamic]FinishedTransferInfo,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -37,8 +35,8 @@ when USE_VULKAN_BACKEND {
 	backend_wait_for_transfer_resources :: proc() {
 		// Make sure that the GPU is no longer reading the current staging buffer region
 		fences := []vk.Fence{
-			INTERNAL.transfer_fences_pre_graphics[get_frame_idx()],
-			INTERNAL.transfer_fences_post_graphics[get_frame_idx()],
+			G_RENDERER.transfer_fences_pre_graphics[get_frame_idx()],
+			G_RENDERER.transfer_fences_post_graphics[get_frame_idx()],
 		}
 		vk.WaitForFences(G_RENDERER.device, u32(len(fences)), &fences[0], true, max(u64))
 		vk.ResetFences(G_RENDERER.device, u32(len(fences)), &fences[0])
@@ -48,9 +46,6 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_buffer_upload_finalize_finished_uploads :: proc() {
-
-		// Always start the buffer so the fence gets properly signalled
-		backend_buffer_upload_start_async_cmd_buffer_pre_graphics()
 
 		if len(INTERNAL.finished_transfer_infos) == 0 {
 			return
@@ -119,18 +114,23 @@ when USE_VULKAN_BACKEND {
 				)
 			}
 		}
+
+		INTERNAL.finished_transfer_infos = make(
+			[dynamic]FinishedTransferInfo,
+			get_next_frame_allocator(),
+		)
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
 	backend_init_buffer_upload :: proc(p_options: BufferUploadInitOptions) -> bool {
-		INTERNAL.transfer_fences_pre_graphics = make(
+		G_RENDERER.transfer_fences_pre_graphics = make(
 			[]vk.Fence,
 			int(p_options.num_staging_regions),
 			G_RENDERER_ALLOCATORS.main_allocator,
 		)
-		INTERNAL.transfer_fences_post_graphics = make(
+		G_RENDERER.transfer_fences_post_graphics = make(
 			[]vk.Fence,
 			int(p_options.num_staging_regions),
 			G_RENDERER_ALLOCATORS.main_allocator,
@@ -154,7 +154,7 @@ when USE_VULKAN_BACKEND {
 					   G_RENDERER.device,
 					   &fence_create_info,
 					   nil,
-					   &INTERNAL.transfer_fences_pre_graphics[i],
+					   &G_RENDERER.transfer_fences_pre_graphics[i],
 				   ) !=
 				   .SUCCESS {
 					// Not bothering to destroy the already created fences here, as we'll shutdown the application
@@ -165,7 +165,7 @@ when USE_VULKAN_BACKEND {
 					   G_RENDERER.device,
 					   &fence_create_info,
 					   nil,
-					   &INTERNAL.transfer_fences_post_graphics[i],
+					   &G_RENDERER.transfer_fences_post_graphics[i],
 				   ) !=
 				   .SUCCESS {
 					// Not bothering to destroy the already created fences here, as we'll shutdown the application
@@ -192,18 +192,13 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_buffer_upload_start_async_prepare :: proc() {
+	backend_buffer_upload_start_async_cmd_buffer_post_graphics :: proc() {
 		transfer_cmd_buff_post_graphics := get_frame_transfer_cmd_buffer_post_graphics()
 		begin_info := vk.CommandBufferBeginInfo {
 			sType = .COMMAND_BUFFER_BEGIN_INFO,
 			flags = {.ONE_TIME_SUBMIT},
 		}
 		vk.BeginCommandBuffer(transfer_cmd_buff_post_graphics, &begin_info)
-		INTERNAL.finished_transfer_infos = make(
-			[dynamic]FinishedTransferInfo,
-			get_next_frame_allocator(),
-		)	
-
 	}
 
 	//---------------------------------------------------------------------------//
@@ -334,7 +329,7 @@ when USE_VULKAN_BACKEND {
 			G_RENDERER.transfer_queue,
 			1,
 			&submit_info,
-			INTERNAL.transfer_fences_pre_graphics[get_frame_idx()],
+			G_RENDERER.transfer_fences_pre_graphics[get_frame_idx()],
 		)
 	}
 
@@ -356,7 +351,7 @@ when USE_VULKAN_BACKEND {
 			G_RENDERER.transfer_queue,
 			1,
 			&submit_info,
-			INTERNAL.transfer_fences_post_graphics[get_frame_idx()],
+			G_RENDERER.transfer_fences_post_graphics[get_frame_idx()],
 		)
 	}
 

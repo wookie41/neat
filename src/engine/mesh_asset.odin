@@ -12,7 +12,6 @@ import "core:path/filepath"
 import "core:slice"
 import "core:strconv"
 import "core:strings"
-import "core:sys/windows"
 
 import "../common"
 import "../renderer"
@@ -459,49 +458,12 @@ mesh_asset_load_by_name :: proc(p_mesh_asset_name: common.Name) -> (ret_mesh_ref
 	mesh_resource.desc.data_allocator = G_ALLOCATORS.main_allocator
 
 	// Load mesh data
-
-	mesh_asset_path_w := windows.utf8_to_wstring(mesh_asset_path, temp_arena.allocator)
-
-	mesh_file_handle := windows.CreateFileW(
-		mesh_asset_path_w,
-		windows.GENERIC_READ,
-		windows.FILE_SHARE_READ,
-		nil,
-		windows.OPEN_EXISTING,
-		windows.FILE_ATTRIBUTE_NORMAL,
-		nil,
-	)
-	if mesh_file_handle == windows.INVALID_HANDLE_VALUE {
-		log.warnf("Failed to load mesh '%s' - couldn't open file\n", mesh_name)
-		return InvalidMeshAssetRef
-	}
-	defer if (ret_mesh_ref == InvalidMeshAssetRef) {
-		windows.CloseHandle(mesh_file_handle)
-	}
-
-	mesh_file_mapping_handle := windows.CreateFileMappingW(
-		mesh_file_handle,
-		nil,
-		windows.PAGE_READONLY,
-		0,
-		0,
-		nil,
-	)
-	if mesh_file_mapping_handle == windows.INVALID_HANDLE_VALUE {
-		log.warnf("Failed to load mesh '%s' - couldn't create mapping handle\n", mesh_name)
-		return InvalidMeshAssetRef
-	}
-
-	mesh_file_mapped_ptr := windows.MapViewOfFile(
-		mesh_file_mapping_handle,
-		windows.FILE_MAP_READ,
-		0,
-		0,
-		0,
-	)
-
-	if mesh_file_mapped_ptr == nil {
-		log.warnf("Failed to load mesh '%s' - couldn't map file\n", mesh_name)
+	file_mapping, mapping_success := common.mmap_file(mesh_asset_path)
+	if mapping_success == false {
+		log.warnf(
+			"Failed to load mesh '%s' - couldn't mmap file\n",
+			common.get_string(p_mesh_asset_name),
+		)
 		return InvalidMeshAssetRef
 	}
 
@@ -510,12 +472,10 @@ mesh_asset_load_by_name :: proc(p_mesh_asset_name: common.Name) -> (ret_mesh_ref
 	// 	return InvalidMeshAssetRef
 	// }
 
-	mesh_resource.desc.file_handle = mesh_file_handle
-	mesh_resource.desc.file_mapping_handle = mesh_file_mapping_handle
-	mesh_resource.desc.file_mapped_ptr = mesh_file_mapped_ptr
+	mesh_resource.desc.file_mapping = file_mapping
 
 	// Setup index pointer
-	current_data_ptr := (^byte)(mesh_file_mapped_ptr)
+	current_data_ptr := (^byte)(file_mapping.mapped_ptr)
 	if .IndexedDraw in mesh_metadata.feature_flags {
 		mesh_resource.desc.flags += {.Indexed}
 		mesh_resource.desc.indices = slice.from_ptr(

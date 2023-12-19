@@ -15,7 +15,7 @@ main :: proc() {
 		os.exit(-1)
 	}
 
-		engine.mesh_asset_import(
+	engine.mesh_asset_import(
 		engine.MeshAssetImportOptions{
 			file_path = "D:/glTF-Sample-Models-master/glTF-Sample-Models-master/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
 		},
@@ -56,7 +56,7 @@ main :: proc() {
 				renderer.create_mesh_instance(mesh_instance_ref)
 
 				mesh_instance.model_matrix *= glsl.mat4Translate(
-					glsl.vec3{f32(i) * 100.0, f32(j) * 100, f32(k) * 100} ,
+					glsl.vec3{f32(i) * 100.0, f32(j) * 100, f32(k) * 100},
 				)
 
 				mesh_scale := mesh_scales[(i + j + k) % 3]

@@ -5,7 +5,7 @@ package renderer
 import "../common"
 import vma "../third_party/vma"
 import "core:log"
-import "core:mem"
+import "core:math/linalg/glsl"
 import "core:strings"
 import vk "vendor:vulkan"
 
@@ -66,37 +66,28 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
+	FinishedImageUpload :: struct {
+		image_ref: ImageRef,
+		fence:     vk.Fence,
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private = "file")
 	INTERNAL: struct {
 		// Buffer used to upload the initial contents of the images
-		staging_buffer:                    BufferRef,
-		staging_buffer_offset:             u32,
-		single_staging_buffer_region_size: u32,
-		bindless_descriptor_pool:          vk.DescriptorPool,
-		bindless_array_updates:            [dynamic]ImageRef,
+		bindless_descriptor_pool: vk.DescriptorPool,
+		bindless_array_updates:   [dynamic]ImageRef,
+		finished_image_uploads:   [dynamic]FinishedImageUpload,
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
 	backend_init_images :: proc() {
-		INTERNAL.staging_buffer_offset = 0
-		INTERNAL.single_staging_buffer_region_size = common.MEGABYTE * 256 // @TODO Make this smaller!
-		INTERNAL.staging_buffer = allocate_buffer_ref(common.create_name("ImageStagingBuffer"))
-		staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer)]
-		staging_buffer.desc.size =
-			INTERNAL.single_staging_buffer_region_size * G_RENDERER.num_frames_in_flight
-		staging_buffer.desc.flags = {.HostWrite, .Mapped}
-		staging_buffer.desc.usage = {.TransferSrc}
-		create_buffer(INTERNAL.staging_buffer)
+		INTERNAL.bindless_array_updates = make([dynamic]ImageRef)
+		INTERNAL.finished_image_uploads = make([dynamic]FinishedImageUpload, get_frame_allocator())
 	}
-
-	//---------------------------------------------------------------------------//
-
-	backend_image_upload_begin_frame :: proc() {
-		INTERNAL.staging_buffer_offset = 0
-	}
-
-	//---------------------------------------------------------------------------//
 
 	@(private)
 	backend_create_texture_image :: proc(p_image_ref: ImageRef) -> bool {
@@ -277,10 +268,6 @@ when USE_VULKAN_BACKEND {
 				subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
 			}
 
-			temp_arena: common.Arena
-			common.temp_arena_init(&temp_arena)
-			defer common.arena_delete(temp_arena)
-	
 			for i in 0 ..< image.desc.mip_count {
 				backend_image.vk_layout_per_mip[i] = .UNDEFINED
 				view_create_info.subresourceRange.baseMipLevel = u32(i)
@@ -327,46 +314,7 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
-		texture_copy := TextureCopy {
-			buffer_ref         = INTERNAL.staging_buffer,
-			image_ref          = p_image_ref,
-			mip_buffer_offsets = make(
-				[]u32,
-				int(image.desc.mip_count),
-				get_frame_allocator(),
-			),
-		}
-		defer delete(texture_copy.mip_buffer_offsets, get_frame_allocator())
-
-		staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer)]
-
-		// Queue image copies
-		for mip_data, i in image.desc.data_per_mip {
-
-			// Make sure we have enough space in the staging buffer
-			assert(
-				INTERNAL.staging_buffer_offset + u32(len(mip_data)) <
-				INTERNAL.single_staging_buffer_region_size,
-			)
-
-			staging_buffer_offset :=
-				INTERNAL.staging_buffer_offset +
-				INTERNAL.single_staging_buffer_region_size * get_frame_idx()
-
-			// Copy mip data into the staging buffer
-			mem.copy(
-				mem.ptr_offset(staging_buffer.mapped_ptr, staging_buffer_offset),
-				raw_data(mip_data),
-				len(mip_data),
-			)
-			delete(mip_data, G_RENDERER_ALLOCATORS.main_allocator)
-
-			texture_copy.mip_buffer_offsets[i] = staging_buffer_offset
-
-			INTERNAL.staging_buffer_offset += u32(len(mip_data))
-		}
-
-		append(&G_RENDERER.queued_textures_copies, texture_copy)
+		append(&INTERNAL.bindless_array_updates, p_image_ref)
 
 		return true
 	}
@@ -630,198 +578,6 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_execute_queued_texture_copies :: proc(p_cmd_buff_ref: CommandBufferRef) {
-		temp_arena: common.Arena
-		common.temp_arena_init(&temp_arena, common.MEGABYTE) // The parser is quite memory hungry
-		defer common.arena_delete(temp_arena)
-
-		VkCopyEntry :: struct {
-			buffer:     vk.Buffer,
-			image:      vk.Image,
-			mip_copies: []vk.BufferImageCopy,
-		}
-
-		to_transfer_barriers := make(
-			[]vk.ImageMemoryBarrier,
-			len(G_RENDERER.queued_textures_copies),
-			temp_arena.allocator,
-		)
-
-		vk_copies := make(
-			[]VkCopyEntry,
-			len(G_RENDERER.queued_textures_copies),
-			temp_arena.allocator,
-		)
-
-		to_sample_barriers := make(
-			[]vk.ImageMemoryBarrier,
-			len(G_RENDERER.queued_textures_copies),
-			temp_arena.allocator,
-		)
-
-		pre_transfer_src_queue := vk.QUEUE_FAMILY_IGNORED
-		pre_transfer_dst_queue := vk.QUEUE_FAMILY_IGNORED
-
-		post_transfer_src_queue := vk.QUEUE_FAMILY_IGNORED
-		post_transfer_dst_queue := vk.QUEUE_FAMILY_IGNORED
-
-		dst_access_mask := vk.AccessFlags{.SHADER_READ}
-
-		// if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
-		// 	post_transfer_src_queue = G_RENDERER.queue_family_transfer_index
-		// 	post_transfer_dst_queue = G_RENDERER.queue_family_graphics_index
-
-		// 	dst_access_mask = {}
-		// }
-
-		for _, i in G_RENDERER.queued_textures_copies {
-
-			texture_copy := G_RENDERER.queued_textures_copies[i]
-
-			image_idx := get_image_idx(texture_copy.image_ref)
-			image := &g_resources.images[image_idx]
-			backend_image := &g_resources.backend_images[image_idx]
-
-			buffer_idx := get_buffer_idx(texture_copy.buffer_ref)
-			buffer := &g_resources.buffers[buffer_idx]
-			backend_buffer := &g_resources.backend_buffers[buffer_idx]
-
-			// Crate a transfer barrier for the entire texture, including all of it's mips
-			{
-				image_barrier := &to_transfer_barriers[i]
-				image_barrier.sType = .IMAGE_MEMORY_BARRIER
-				image_barrier.oldLayout = .UNDEFINED
-				image_barrier.newLayout = .TRANSFER_DST_OPTIMAL
-				image_barrier.srcQueueFamilyIndex = pre_transfer_src_queue
-				image_barrier.dstQueueFamilyIndex = pre_transfer_dst_queue
-				image_barrier.image = backend_image.vk_image
-				image_barrier.subresourceRange.aspectMask = {.COLOR}
-				image_barrier.subresourceRange.baseArrayLayer = 0
-				image_barrier.subresourceRange.layerCount = 1
-				image_barrier.subresourceRange.baseMipLevel = 0
-				image_barrier.subresourceRange.levelCount = u32(image.desc.mip_count)
-				image_barrier.dstAccessMask = {.TRANSFER_WRITE}
-			}
-
-			// Create a to-sample barrier for the entire texture, including all of it's mips
-			{
-				image_barrier := &to_sample_barriers[i]
-				image_barrier^ = to_transfer_barriers[i]
-
-				image_barrier.oldLayout = .TRANSFER_DST_OPTIMAL
-				image_barrier.newLayout = .SHADER_READ_ONLY_OPTIMAL
-				image_barrier.srcAccessMask = {.TRANSFER_WRITE}
-				image_barrier.dstAccessMask = dst_access_mask
-				image_barrier.srcQueueFamilyIndex = post_transfer_src_queue
-				image_barrier.dstQueueFamilyIndex = post_transfer_dst_queue
-			}
-
-			vk_copy_entry := VkCopyEntry {
-				buffer     = backend_buffer.vk_buffer,
-				image      = backend_image.vk_image,
-				mip_copies = make(
-					[]vk.BufferImageCopy,
-					u32(len(texture_copy.mip_buffer_offsets)),
-					temp_arena.allocator,
-				),
-			}
-
-			// Create the vulkan copies
-			for offset, mip in texture_copy.mip_buffer_offsets {
-
-				vk_copy_entry.mip_copies[mip] = {
-					bufferOffset = vk.DeviceSize(offset),
-					imageSubresource = {
-						aspectMask = {.COLOR},
-						baseArrayLayer = 0,
-						layerCount = 1,
-						mipLevel = u32(mip),
-					},
-					imageExtent = {
-						width = image.desc.dimensions[0] >> u32(mip),
-						height = image.desc.dimensions[1] >> u32(mip),
-						depth = 1,
-					},
-				}
-
-
-				backend_image.vk_layout_per_mip[mip] = .SHADER_READ_ONLY_OPTIMAL
-			}
-
-			vk_copies[i] = vk_copy_entry
-
-			append(&INTERNAL.bindless_array_updates, texture_copy.image_ref)
-		}
-
-		cmd_buff := g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)].vk_cmd_buff
-		after_transfer_stages_dst := vk.PipelineStageFlags{
-			.VERTEX_SHADER,
-			.FRAGMENT_SHADER,
-			.COMPUTE_SHADER,
-		}
-
-		// Transition the images to transfer
-		vk.CmdPipelineBarrier(
-			cmd_buff,
-			{.TOP_OF_PIPE},
-			{.TRANSFER},
-			nil,
-			0,
-			nil,
-			0,
-			nil,
-			u32(len(vk_copies)),
-			&to_transfer_barriers[0],
-		)
-
-		// Copy the image data
-		for copy, i in vk_copies {
-
-			vk.CmdCopyBufferToImage(
-				cmd_buff,
-				copy.buffer,
-				copy.image,
-				.TRANSFER_DST_OPTIMAL,
-				u32(len(copy.mip_copies)),
-				raw_data(copy.mip_copies),
-			)
-
-
-			// if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
-			// 	// Release
-			// 	vk.CmdPipelineBarrier(
-			// 		transfer_cmd_buff,
-			// 		{.TRANSFER},
-			// 		{.TOP_OF_PIPE},
-			// 		nil,
-			// 		0,
-			// 		nil,
-			// 		0,
-			// 		nil,
-			// 		1,
-			// 		&to_sample_barriers[i],
-			// 	)
-			// }
-
-			// Acquire
-			vk.CmdPipelineBarrier(
-				cmd_buff,
-				{.TRANSFER},
-				after_transfer_stages_dst,
-				nil,
-				0,
-				nil,
-				0,
-				nil,
-				1,
-				&to_sample_barriers[i],
-			)
-		}
-	}
-
-	//---------------------------------------------------------------------------//
-
-	@(private)
 	backend_batch_update_bindless_array_entries :: proc() {
 		temp_arena: common.Arena
 		common.temp_arena_init(&temp_arena)
@@ -837,17 +593,9 @@ when USE_VULKAN_BACKEND {
 		)
 		bindless_bind_group := &g_resources.backend_bind_groups[bindless_bind_group_idx]
 
-		descriptor_writes := make(
-			[]vk.WriteDescriptorSet,
-			u32(num_writes),
-			temp_arena.allocator,
-		)
+		descriptor_writes := make([]vk.WriteDescriptorSet, u32(num_writes), temp_arena.allocator)
 
-		image_infos := make(
-			[]vk.DescriptorImageInfo,
-			u32(num_writes),
-			temp_arena.allocator,
-		)
+		image_infos := make([]vk.DescriptorImageInfo, u32(num_writes), temp_arena.allocator)
 
 		for image_ref, i in INTERNAL.bindless_array_updates {
 
@@ -883,4 +631,228 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
+	@(private)
+	backend_image_upload_initialize :: proc(p_ref: ImageRef) {
+
+		image_idx := get_image_idx(p_ref)
+		image := &g_resources.images[image_idx]
+		backend_image := &g_resources.backend_images[image_idx]
+
+		// If we have a dedicated transfer queue, then hand off ownership
+		// to the transfer queue for the data uploads
+		to_transfer_barrier := vk.ImageMemoryBarrier {
+			sType = .IMAGE_MEMORY_BARRIER,
+			oldLayout = .UNDEFINED,
+			newLayout = .TRANSFER_DST_OPTIMAL,
+			image = backend_image.vk_image,
+			subresourceRange = {
+				aspectMask = {.COLOR},
+				baseArrayLayer = 0,
+				layerCount = 1,
+				baseMipLevel = 0,
+				levelCount = u32(image.desc.mip_count),
+			},
+			dstAccessMask = {.TRANSFER_WRITE},
+		}
+
+		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+			transfer_cmd_buff := get_frame_transfer_cmd_buffer_post_graphics()
+
+			vk.CmdPipelineBarrier(
+				transfer_cmd_buff,
+				{.TOP_OF_PIPE},
+				{.TRANSFER},
+				nil,
+				0,
+				nil,
+				0,
+				nil,
+				1,
+				&to_transfer_barrier,
+			)
+
+			return
+		}
+
+		cmd_buffer_ref := get_frame_cmd_buffer_ref()
+		cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buffer_ref)]
+
+		// Otherwise just prepare it to copy
+		vk.CmdPipelineBarrier(
+			cmd_buffer.vk_cmd_buff,
+			{.TOP_OF_PIPE},
+			{.TRANSFER},
+			nil,
+			0,
+			nil,
+			0,
+			nil,
+			1,
+			&to_transfer_barrier,
+		)
+
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_issue_image_copy :: proc(
+		p_image_ref: ImageRef,
+		p_current_mip: u8,
+		p_staging_buffer_ref: BufferRef,
+		p_staging_buffer_offset: u32,
+		p_size: glsl.uvec2,
+		p_offset: glsl.uvec2,
+	) {
+
+		image_idx := get_image_idx(p_image_ref)
+		backend_image := &g_resources.backend_images[image_idx]
+
+		backend_buffer := &g_resources.backend_buffers[get_buffer_idx(p_staging_buffer_ref)]
+
+		image_copy := vk.BufferImageCopy {
+			bufferOffset = vk.DeviceSize(p_staging_buffer_offset),
+			imageOffset = vk.Offset3D{i32(p_offset.x), i32(p_offset.y), 0},
+			imageSubresource = {
+				aspectMask = {.COLOR},
+				baseArrayLayer = 0,
+				layerCount = 1,
+				mipLevel = u32(p_current_mip),
+			},
+			imageExtent = {width = p_size.x, height = p_size.y, depth = 1},
+		}
+
+		cmd_buffer_ref := get_frame_cmd_buffer_ref()
+		cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buffer_ref)]
+		vk_cmd_buff := cmd_buffer.vk_cmd_buff
+
+		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+			vk_cmd_buff = get_frame_transfer_cmd_buffer_post_graphics()
+		}
+
+		vk.CmdCopyBufferToImage(
+			vk_cmd_buff,
+			backend_buffer.vk_buffer,
+			backend_image.vk_image,
+			.TRANSFER_DST_OPTIMAL,
+			1,
+			&image_copy,
+		)
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_finish_image_copy :: proc(p_image_ref: ImageRef) {
+		append(
+			&INTERNAL.finished_image_uploads,
+			FinishedImageUpload{
+				image_ref = p_image_ref,
+				fence = G_RENDERER.transfer_fences_post_graphics[get_frame_idx()],
+			},
+		)
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_finalize_async_image_copies :: proc() {
+
+		finished_image_uploads := make([dynamic]FinishedImageUpload, get_next_frame_allocator())
+
+		for finished_upload in &INTERNAL.finished_image_uploads {
+
+			if vk.GetFenceStatus(G_RENDERER.device, finished_upload.fence) != .SUCCESS {
+				append(&finished_image_uploads, finished_upload)
+				continue
+			}
+
+			image_idx := get_image_idx(finished_upload.image_ref)
+			image := &g_resources.images[image_idx]
+			backend_image := &g_resources.backend_images[image_idx]
+
+			image.flags += {.IsUploaded}
+
+			if image.desc.file_mapping.mapped_ptr == nil {
+				for mip_data in image.desc.data_per_mip {
+					delete(mip_data, image.desc.mip_data_allocator)
+				}
+			} else {
+				common.unmap_file(image.desc.file_mapping)
+				image.desc.file_mapping = {}	
+			}
+
+			cmd_buffer_ref := get_frame_cmd_buffer_ref()
+			cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buffer_ref)]
+
+			to_sample_barrier := vk.ImageMemoryBarrier {
+				sType = .IMAGE_MEMORY_BARRIER,
+				oldLayout = .TRANSFER_DST_OPTIMAL,
+				newLayout = .SHADER_READ_ONLY_OPTIMAL,
+				srcAccessMask = {.TRANSFER_WRITE},
+				image = backend_image.vk_image,
+				subresourceRange = {
+					aspectMask = {.COLOR},
+					baseArrayLayer = 0,
+					layerCount = 1,
+					baseMipLevel = 0,
+					levelCount = u32(image.desc.mip_count),
+				},
+			}
+
+			if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+
+				transfer_cmd_buff := get_frame_transfer_cmd_buffer_pre_graphics()
+				to_sample_barrier.srcQueueFamilyIndex = G_RENDERER.queue_family_transfer_index
+				to_sample_barrier.dstQueueFamilyIndex = G_RENDERER.queue_family_graphics_index
+
+				// Release
+				vk.CmdPipelineBarrier(
+					transfer_cmd_buff,
+					{.TRANSFER},
+					{.TOP_OF_PIPE},
+					nil,
+					0,
+					nil,
+					0,
+					nil,
+					1,
+					&to_sample_barrier,
+				)
+
+				// Acquire
+				vk.CmdPipelineBarrier(
+					cmd_buffer.vk_cmd_buff,
+					{.TRANSFER},
+					{.TOP_OF_PIPE},
+					nil,
+					0,
+					nil,
+					0,
+					nil,
+					1,
+					&to_sample_barrier,
+				)
+
+				continue
+			}
+
+			to_sample_barrier.dstAccessMask = {.SHADER_READ}
+
+			vk.CmdPipelineBarrier(
+				cmd_buffer.vk_cmd_buff,
+				{.TRANSFER},
+				{.VERTEX_SHADER, .FRAGMENT_SHADER, .COMPUTE_SHADER},
+				nil,
+				0,
+				nil,
+				0,
+				nil,
+				1,
+				&to_sample_barrier,
+			)
+		}
+
+		INTERNAL.finished_image_uploads = finished_image_uploads
+	}
 }

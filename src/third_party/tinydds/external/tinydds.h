@@ -26,7 +26,7 @@ typedef struct TinyDDS_Context *TinyDDS_ContextHandle;
 
 typedef void *(*TinyDDS_AllocFunc)(void *user, size_t size);
 typedef void (*TinyDDS_FreeFunc)(void *user, void *memory);
-typedef size_t (*TinyDDS_ReadFunc)(void *user, void *buffer, size_t byteCount);
+typedef size_t (*TinyDDS_ReadFunc)(void *user, void *buffer, size_t byteCount, bool header);
 typedef bool (*TinyDDS_SeekFunc)(void *user, int64_t offset);
 typedef int64_t (*TinyDDS_TellFunc)(void *user);
 typedef void (*TinyDDS_ErrorFunc)(void *user, char const *msg);
@@ -1348,7 +1348,7 @@ bool TinyDDS_ReadHeader(TinyDDS_ContextHandle handle) {
 		return false;
 
 	ctx->headerPos = ctx->callbacks.tellFn(ctx->user);
-	if( ctx->callbacks.readFn(ctx->user, &ctx->header, sizeof(TinyDDS_Header)) != sizeof(TinyDDS_Header)) {
+	if( ctx->callbacks.readFn(ctx->user, &ctx->header, sizeof(TinyDDS_Header), true) != sizeof(TinyDDS_Header)) {
 		ctx->callbacks.errorFn(ctx->user, "Could not read DDS header");
 		return false;
 	}
@@ -1356,7 +1356,7 @@ bool TinyDDS_ReadHeader(TinyDDS_ContextHandle handle) {
 	// try the easy case of a modern dx10 DDS file
 	if ((ctx->header.formatFlags & TINYDDS_DDPF_FOURCC) &&
 			(ctx->header.formatFourCC == TINYDDS_MAKE_RIFFCODE('D', 'X', '1', '0'))) {
-		ctx->callbacks.readFn(ctx->user, &ctx->headerDx10, sizeof(TinyDDS_HeaderDX10));
+		ctx->callbacks.readFn(ctx->user, &ctx->headerDx10, sizeof(TinyDDS_HeaderDX10), true);
 
 		if (ctx->headerDx10.DXGIFormat >= TDDS_SYNTHESISED_DXGIFORMATS) {
 			ctx->callbacks.errorFn(ctx->user, "DX10 Header has an invalid DXGI_FORMAT code");
@@ -1414,7 +1414,7 @@ bool TinyDDS_ReadHeader(TinyDDS_ContextHandle handle) {
 
 		ctx->clut = (uint32_t*) ctx->callbacks.allocFn(ctx->user, clutSize);
 
-		if( ctx->callbacks.readFn(ctx->user, (void*)ctx->clut, clutSize) != clutSize) {
+		if( ctx->callbacks.readFn(ctx->user, (void*)ctx->clut, clutSize, true) != clutSize) {
 			ctx->callbacks.errorFn(ctx->user, "Could not read DDS CLUT");
 			return false;
 		}
@@ -1678,7 +1678,7 @@ void const *TinyDDS_ImageRawData(TinyDDS_ContextHandle handle, uint32_t depth, u
 		uint8_t *dstPtr = (uint8_t*)ctx->mipmaps[mipmaplevel];
 		for (uint32_t i = 0u;i < 6;++i) {
 			ctx->callbacks.seekFn(ctx->user, offset + ctx->firstImagePos);
-			size_t read = ctx->callbacks.readFn(ctx->user, (void *) dstPtr, faceSize);
+			size_t read = ctx->callbacks.readFn(ctx->user, (void *) dstPtr, faceSize, false);
 			if(read != faceSize) {
 				ctx->callbacks.errorFn(ctx->user, "Face size mismatch");
 				ctx->callbacks.freeFn(ctx->user, (void*)&ctx->mipmaps[mipmaplevel]);
@@ -1710,7 +1710,7 @@ void const *TinyDDS_ImageRawData(TinyDDS_ContextHandle handle, uint32_t depth, u
 
 	ctx->mipmaps[mipmaplevel] = (uint8_t const *) ctx->callbacks.allocFn(ctx->user, size);
 	if (!ctx->mipmaps[mipmaplevel]) return NULL;
-	size_t read = ctx->callbacks.readFn(ctx->user, (void *) ctx->mipmaps[mipmaplevel], size);
+	size_t read = ctx->callbacks.readFn(ctx->user, (void *) ctx->mipmaps[mipmaplevel], size, false);
 	if(read != size) {
 		ctx->callbacks.errorFn(ctx->user, "Read failed");
 		ctx->callbacks.freeFn(ctx->user, (void*)&ctx->mipmaps[mipmaplevel]);

@@ -6,17 +6,6 @@ import "core:log"
 import "core:mem"
 import "../common"
 
-/*
-	Upload works by getting a pointer into the staging buffer at which 
-	the data should be uploaded by the user by calling request_buffer_upload(), 
-	Later, at the end of the current frame, all of the data in the 
-	staging buffer will be transfered to the appropriate buffers, specified 
-	by the dst_buff in the UploadRequest Ref and appropriate barriers
-	will be placed for synchronization.
-	If the request can't be satisfied in the current frame, request_buffer_upload()
-	will return a nullptr.
- */
-
 //---------------------------------------------------------------------------//
 
 BufferUploadRequestFlagBits :: enum u8 {
@@ -344,11 +333,6 @@ request_buffer_upload_integrated :: proc(p_request: BufferUploadRequest) -> Buff
 @(private)
 buffer_upload_process_async_requests :: proc() {
 
-	// Always start the buffer so the fence gets properly signalled
-	if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
-		backend_buffer_upload_start_async_prepare()
-	}
-
 	async_uploads := make([dynamic]AsyncUploadInfo, get_next_frame_allocator())
 
 	if len(INTERNAL.async_uploads) == 0 {
@@ -360,6 +344,8 @@ buffer_upload_process_async_requests :: proc() {
 	if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 		backend_upload_sliced_proc = backend_buffer_upload_run_sliced_async
 	}
+
+	staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.async_staging_buffer_ref)]
 
 	for async_upload_info in &INTERNAL.async_uploads {
 
@@ -396,7 +382,6 @@ buffer_upload_process_async_requests :: proc() {
 		async_upload_info.current_size_in_bytes -= upload_size
 
 		// Upload the data into staging buffer
-		staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.async_staging_buffer_ref)]
 		staging_buffer_offset :=
 			INTERNAL.single_async_staging_region_size * get_frame_idx() +
 			INTERNAL.async_staging_buffer_offset
