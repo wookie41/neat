@@ -315,12 +315,19 @@ image_upload_begin_frame :: proc() {
 
 allocate_image_ref :: proc(p_name: common.Name) -> ImageRef {
 	ref := ImageRef(common.ref_create(ImageResource, &G_IMAGE_REF_ARRAY, p_name))
-	img_idx := get_image_idx(ref)
-	image := &g_resources.images[img_idx]
+	reset_image_ref(ref)
+	image := &g_resources.images[get_image_idx(ref)]
 	image.desc.name = p_name
-	image.desc.file_mapping = {}
-	image.desc.flags = {}
 	return ref
+}
+
+//---------------------------------------------------------------------------//
+
+reset_image_ref :: proc(p_image_ref: ImageRef) {
+	image := &g_resources.images[get_image_idx(p_image_ref)]
+	backend_image := &g_resources.backend_images[get_image_idx(p_image_ref)]
+	image^ = ImageResource{}
+	backend_image^ = BackendImageResource{}
 }
 
 //---------------------------------------------------------------------------//

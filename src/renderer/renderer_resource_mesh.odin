@@ -322,16 +322,24 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 
 allocate_mesh_ref :: proc(p_name: common.Name, p_num_submeshes: u32) -> MeshRef {
 	ref := MeshRef(common.ref_create(MeshResource, &G_MESH_REF_ARRAY, p_name))
-	mesh_idx := get_mesh_idx(ref)
-	g_resources.meshes[mesh_idx] = MeshResource{}
-	g_resources.meshes[mesh_idx].desc.name = p_name
-	g_resources.meshes[mesh_idx].desc.sub_meshes = make(
+	reset_mesh_ref(ref)
+	mesh := &g_resources.meshes[get_mesh_idx(ref)]
+	mesh.desc.name = p_name
+	mesh.desc.sub_meshes = make(
 		[]SubMesh,
 		p_num_submeshes,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
 	return ref
 }
+
+//---------------------------------------------------------------------------//
+
+reset_mesh_ref :: proc(p_mesh_ref: MeshRef) {
+	mesh := &g_resources.meshes[get_mesh_idx(p_mesh_ref)]
+	mesh^ = MeshResource{}
+}
+
 //---------------------------------------------------------------------------//
 
 get_mesh_idx :: proc(p_ref: MeshRef) -> u32 {
@@ -413,7 +421,27 @@ mesh_upload_finished_callback :: proc(p_user_data: rawptr) {
 	mesh_data_upload_ctx.finished_uploads_count += 1
 	if mesh_data_upload_ctx.finished_uploads_count == mesh_data_upload_ctx.needed_uploads_count {
 		mesh := &g_resources.meshes[get_mesh_idx(mesh_ref)]
-		common.unmap_file(mesh.desc.file_mapping)
+		if mesh.desc.file_mapping.mapped_ptr != nil {
+			common.unmap_file(mesh.desc.file_mapping)
+			return
+		}
+
+		delete(mesh.desc.position, mesh.desc.data_allocator)
+		if mesh.desc.indices != nil {
+			delete(mesh.desc.indices, mesh.desc.data_allocator)
+		}
+
+		if mesh.desc.uv != nil {
+			delete(mesh.desc.uv, mesh.desc.data_allocator)
+		}
+
+		if mesh.desc.normal != nil {
+			delete(mesh.desc.normal, mesh.desc.data_allocator)
+		}
+
+		if mesh.desc.tangent != nil {
+			delete(mesh.desc.tangent, mesh.desc.data_allocator)
+		}
 	}
 }
 
