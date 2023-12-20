@@ -747,12 +747,13 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_finish_image_copy :: proc(p_image_ref: ImageRef) {
+		fence := G_RENDERER.frame_fences[get_frame_idx()]
+		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+			fence = G_RENDERER.transfer_fences_post_graphics[get_frame_idx()]
+		}
 		append(
 			&INTERNAL.finished_image_uploads,
-			FinishedImageUpload{
-				image_ref = p_image_ref,
-				fence = G_RENDERER.transfer_fences_post_graphics[get_frame_idx()],
-			},
+			FinishedImageUpload{image_ref = p_image_ref, fence = fence},
 		)
 	}
 

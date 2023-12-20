@@ -2,9 +2,9 @@ package renderer
 
 //---------------------------------------------------------------------------//
 
+import "../common"
 import "core:log"
 import "core:mem"
-import "../common"
 
 //---------------------------------------------------------------------------//
 
@@ -234,11 +234,7 @@ request_buffer_upload :: proc(p_request: BufferUploadRequest) -> BufferUploadRes
 	pending_request := buffer_upload_send_data(p_request)
 	requests := common.into_dynamic([]PendingBufferUploadRequest{pending_request})
 
-	backend_run_buffer_upload_requests(
-		INTERNAL.staging_buffer_ref,
-		p_request.dst_buff,
-		requests,
-	)
+	backend_run_buffer_upload_requests(INTERNAL.staging_buffer_ref, p_request.dst_buff, requests)
 
 	return BufferUploadResponse{status = .Uploaded}
 }
@@ -255,15 +251,9 @@ run_last_frame_buffer_upload_requests :: proc() {
 
 	for buffer_ref, pending_requests in INTERNAL.last_frame_requests_per_buffer {
 
-		not_satisfied_requests := make(
-			[dynamic]BufferUploadRequest,
-			get_next_frame_allocator(),
-		)
+		not_satisfied_requests := make([dynamic]BufferUploadRequest, get_next_frame_allocator())
 
-		requests_to_run := make(
-			[dynamic]PendingBufferUploadRequest,
-			get_frame_allocator(),
-		)
+		requests_to_run := make([dynamic]PendingBufferUploadRequest, get_frame_allocator())
 		defer delete(requests_to_run)
 
 		for request in pending_requests {
@@ -323,7 +313,9 @@ request_buffer_upload_integrated :: proc(p_request: BufferUploadRequest) -> Buff
 	buffer := &g_resources.buffers[get_buffer_idx(p_request.dst_buff)]
 	dst_ptr := mem.ptr_offset(buffer.mapped_ptr, p_request.dst_buff_offset)
 	mem.copy(dst_ptr, p_request.data_ptr, int(p_request.size))
-	p_request.async_upload_finished_callback(p_request.async_upload_callback_user_data)
+	if p_request.async_upload_finished_callback != nil {
+		p_request.async_upload_finished_callback(p_request.async_upload_callback_user_data)
+	}
 	return BufferUploadResponse{status = .Uploaded}
 }
 
