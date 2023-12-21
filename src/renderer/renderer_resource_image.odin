@@ -163,8 +163,7 @@ ImageDescFlags :: distinct bit_set[ImageDescFlagBits;u8]
 
 //---------------------------------------------------------------------------//
 
-ImageFlagBits :: enum u8 {
-}
+ImageFlagBits :: enum u8 {}
 ImageFlags :: distinct bit_set[ImageFlagBits;u8]
 
 //---------------------------------------------------------------------------//
@@ -366,8 +365,11 @@ create_texture_image :: proc(p_ref: ImageRef) -> bool {
 	// Queue data copy for this texture
 	image_upload_info := ImageUploadInfo {
 		image_ref = p_ref,
-		current_mip = 0,
-		single_upload_size_in_texels = calculate_image_upload_size(image.desc.dimensions, 0),
+		current_mip = image.desc.mip_count - 1,
+		single_upload_size_in_texels = calculate_image_upload_size(
+			image.desc.dimensions,
+			image.desc.mip_count - 1,
+		),
 		mip_offset_in_texels = {0, 0},
 		is_initialized = false,
 	}
@@ -501,7 +503,7 @@ image_upload_progress_copies :: proc() {
 					image_upload_info.single_upload_size_in_texels.y
 			}
 
-			is_last_mip := image_upload_info.current_mip == (image.desc.mip_count - 1)
+			is_last_mip := image_upload_info.current_mip == 0
 			mip_upload_done := image_upload_info.mip_offset_in_texels.y == mip_dimensions.y
 
 			// Copy the data to the staging buffer
@@ -542,7 +544,7 @@ image_upload_progress_copies :: proc() {
 			}
 
 			if mip_upload_done {
-				image_upload_info.current_mip += 1
+				image_upload_info.current_mip -= 1
 				image_upload_info.mip_offset_in_texels = glsl.uvec2{0, 0}
 				image_upload_info.single_upload_size_in_texels = calculate_image_upload_size(
 					image.desc.dimensions,
