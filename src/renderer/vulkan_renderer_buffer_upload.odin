@@ -27,6 +27,7 @@ when USE_VULKAN_BACKEND {
 		post_transfer_queue_family_idx:  u32,
 		async_upload_callback_user_data: rawptr,
 		async_upload_finished_callback:  proc(p_user_data: rawptr),
+		fence_idx:                       u8,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -52,8 +53,17 @@ when USE_VULKAN_BACKEND {
 		}
 
 		transfer_cmd_buff := get_frame_transfer_cmd_buffer_pre_graphics()
+		finished_transfer_infos := make([dynamic]FinishedTransferInfo, get_next_frame_allocator())
 
 		for finished_transfer_info in &INTERNAL.finished_transfer_infos {
+
+			upload_done_fence :=
+				G_RENDERER.transfer_fences_post_graphics[finished_transfer_info.fence_idx]
+
+			if vk.GetFenceStatus(G_RENDERER.device, upload_done_fence) != .SUCCESS {
+				append(&finished_transfer_infos, finished_transfer_info)
+				continue
+			}
 
 			// Issue release/acquire barriers
 			dst_buffer_idx := get_buffer_idx(finished_transfer_info.dst_buffer_ref)
@@ -115,10 +125,7 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
-		INTERNAL.finished_transfer_infos = make(
-			[dynamic]FinishedTransferInfo,
-			get_next_frame_allocator(),
-		)
+		INTERNAL.finished_transfer_infos = finished_transfer_infos
 	}
 
 	//---------------------------------------------------------------------------//
@@ -505,6 +512,7 @@ when USE_VULKAN_BACKEND {
 				post_transfer_queue_family_idx  = src_queue,
 				async_upload_callback_user_data = p_transfer_finished_user_data,
 				async_upload_finished_callback  = p_transfer_finished_callback,
+				fence_idx                       = u8(get_frame_idx()),
 			}
 
 			append(&INTERNAL.finished_transfer_infos, finished_transfer_info)
