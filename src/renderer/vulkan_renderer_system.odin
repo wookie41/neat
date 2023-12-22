@@ -584,62 +584,9 @@ backend_wait_for_frame_resources :: proc() {
 	frame_idx := get_frame_idx()
 
 	vk.WaitForFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx], true, max(u64))
-	vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx])
 
 	if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 		backend_wait_for_transfer_resources()
-	}
-}
-//---------------------------------------------------------------------------//
-
-@(private)
-backend_update :: proc(p_dt: f32) {
-
-	frame_idx := get_frame_idx()
-
-	// Wait until frame resources will not be used anymore
-	// @TODO Move this after recording the command buffer to save some performance
-	acquire_result := vk.AcquireNextImageKHR(
-		G_RENDERER.device,
-		G_RENDERER.swapchain,
-		c.UINT64_MAX,
-		G_RENDERER.image_available_semaphores[frame_idx],
-		0,
-		&G_RENDERER.swap_img_idx,
-	)
-	// Check if we need to recreate the swapchain
-	should_recreate_swapchain := .WINDOW_RESIZED in G_RENDERER.misc_flags
-	G_RENDERER.misc_flags -= {.WINDOW_RESIZED}
-
-	if acquire_result != .SUCCESS {
-		if acquire_result == .ERROR_OUT_OF_DATE_KHR || acquire_result == .SUBOPTIMAL_KHR {
-			should_recreate_swapchain |= true
-		}
-	}
-
-	if should_recreate_swapchain {
-		recreate_swapchain()
-		create_swap_images()
-
-		vk.AcquireNextImageKHR(
-			G_RENDERER.device,
-			G_RENDERER.swapchain,
-			c.UINT64_MAX,
-			G_RENDERER.image_available_semaphores[frame_idx],
-			0,
-			&G_RENDERER.swap_img_idx,
-		)
-
-		vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx])
-
-		return
-	}
-
-	// We have to put the current swap image in the undefined state, so proper barriers are issued
-	{
-		swap_image_ref := G_RENDERER.swap_image_refs[G_RENDERER.swap_img_idx]
-		image_backend := &g_resources.backend_images[get_image_idx(swap_image_ref)]
-		image_backend.vk_layout_per_mip[0] = .UNDEFINED
 	}
 }
 
@@ -688,6 +635,7 @@ backend_submit_current_frame :: proc() {
 
 	// Submit
 	{
+		vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[get_frame_idx()])
 
 		submit_info := vk.SubmitInfo {
 			sType                = .SUBMIT_INFO,
@@ -794,6 +742,11 @@ create_swapchain :: proc(p_is_recreating: bool = false) -> bool {
 
 	// Create the swapchain
 	{
+		// handle different queue families
+		queue_families := []u32{
+			u32(G_RENDERER.queue_family_graphics_index),
+			u32(G_RENDERER.queue_family_present_index),
+		}
 		create_info := vk.SwapchainCreateInfoKHR {
 			sType = .SWAPCHAIN_CREATE_INFO_KHR,
 			surface = G_RENDERER.surface,
@@ -808,17 +761,12 @@ create_swapchain :: proc(p_is_recreating: bool = false) -> bool {
 			compositeAlpha = {.OPAQUE},
 			presentMode = G_RENDERER.present_mode,
 			clipped = true,
-		}
-
-		// handle different queue families
-		queue_families := []u32{
-			u32(G_RENDERER.queue_family_graphics_index),
-			u32(G_RENDERER.queue_family_present_index),
+			queueFamilyIndexCount = 1,
+			pQueueFamilyIndices = raw_data(queue_families),
 		}
 		if G_RENDERER.queue_family_graphics_index != G_RENDERER.queue_family_present_index {
 			create_info.imageSharingMode = .CONCURRENT
 			create_info.queueFamilyIndexCount = 2
-			create_info.pQueueFamilyIndices = raw_data(queue_families)
 		}
 
 		// finally the swapchain
@@ -974,7 +922,56 @@ backend_handler_on_window_resized :: proc(p_event: WindowResizedEvent) {
 //---------------------------------------------------------------------------//
 
 @(private)
-backend_begin :: proc() {
+backend_begin_frame :: proc() {
+
+	frame_idx := get_frame_idx()
+
+	// Wait until frame resources will not be used anymore
+	// @TODO Move this after recording the command buffer to save some performance
+	acquire_result := vk.AcquireNextImageKHR(
+		G_RENDERER.device,
+		G_RENDERER.swapchain,
+		c.UINT64_MAX,
+		G_RENDERER.image_available_semaphores[frame_idx],
+		0,
+		&G_RENDERER.swap_img_idx,
+	)
+	// Check if we need to recreate the swapchain
+	should_recreate_swapchain := .WINDOW_RESIZED in G_RENDERER.misc_flags
+	G_RENDERER.misc_flags -= {.WINDOW_RESIZED}
+
+	if acquire_result != .SUCCESS {
+		if acquire_result == .ERROR_OUT_OF_DATE_KHR || acquire_result == .SUBOPTIMAL_KHR {
+			should_recreate_swapchain |= true
+		}
+	}
+
+	if should_recreate_swapchain {
+		recreate_swapchain()
+		create_swap_images()
+
+		vk.AcquireNextImageKHR(
+			G_RENDERER.device,
+			G_RENDERER.swapchain,
+			c.UINT64_MAX,
+			G_RENDERER.image_available_semaphores[frame_idx],
+			0,
+			&G_RENDERER.swap_img_idx,
+		)
+
+		vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx])
+
+		return
+	}
+
+	// We have to put the current swap image in the undefined state, so proper barriers are issued
+	{
+		swap_image_ref := G_RENDERER.swap_image_refs[G_RENDERER.swap_img_idx]
+		image_backend := &g_resources.backend_images[get_image_idx(swap_image_ref)]
+		image_backend.vk_layout_per_mip[0] = .UNDEFINED
+	}
+
+
 	if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 		backend_buffer_upload_start_async_cmd_buffer_pre_graphics()
 		backend_buffer_upload_start_async_cmd_buffer_post_graphics()

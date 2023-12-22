@@ -3,11 +3,14 @@ package renderer
 //---------------------------------------------------------------------------//
 
 import "../common"
+
 import vma "../third_party/vma"
+import vk "vendor:vulkan"
+
+import "core:intrinsics"
 import "core:log"
 import "core:math/linalg/glsl"
 import "core:strings"
-import vk "vendor:vulkan"
 
 //---------------------------------------------------------------------------//
 
@@ -58,17 +61,18 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	RunningImageUpload :: struct {
-		image_ref:             ImageRef,
-		upload_finished_fence: vk.Fence,
+	FinishedImageUpload :: struct {
+		image_ref: ImageRef,
+		fence_idx: u8,
+		mip:       u8,
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	FinishedImageUpload :: struct {
-		image_ref: ImageRef,
-		fence:     vk.Fence,
+	BindlessArrayUpdate :: struct {
+		image_ref:         ImageRef,
+		use_default_image: bool,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -77,23 +81,25 @@ when USE_VULKAN_BACKEND {
 	INTERNAL: struct {
 		// Buffer used to upload the initial contents of the images
 		bindless_descriptor_pool: vk.DescriptorPool,
-		bindless_array_updates:   [dynamic]ImageRef,
+		bindless_array_updates:   [dynamic]BindlessArrayUpdate,
 		finished_image_uploads:   [dynamic]FinishedImageUpload,
+		default_image_ref:        ImageRef,
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
 	backend_init_images :: proc() {
-		INTERNAL.bindless_array_updates = make([dynamic]ImageRef)
+		INTERNAL.bindless_array_updates = make([dynamic]BindlessArrayUpdate)
 		INTERNAL.finished_image_uploads = make([dynamic]FinishedImageUpload, get_frame_allocator())
+		INTERNAL.default_image_ref = InvalidImageRef
 	}
 
 	@(private)
 	backend_create_texture_image :: proc(p_image_ref: ImageRef) -> bool {
 
 		temp_arena: common.Arena
-		common.temp_arena_init(&temp_arena)
+		common.temp_arena_init(&temp_arena, common.MEGABYTE)
 		defer common.arena_delete(temp_arena)
 
 		image_idx := get_image_idx(p_image_ref)
@@ -265,12 +271,16 @@ when USE_VULKAN_BACKEND {
 				image = backend_image.vk_image,
 				viewType = vk_image_view_type,
 				format = vk_image_format,
-				subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
+				subresourceRange = {aspectMask = {.COLOR}, layerCount = 1},
 			}
 
 			for i in 0 ..< image.desc.mip_count {
+
 				backend_image.vk_layout_per_mip[i] = .UNDEFINED
+
 				view_create_info.subresourceRange.baseMipLevel = u32(i)
+				view_create_info.subresourceRange.levelCount = u32(image.desc.mip_count) - u32(i)
+
 				if vk.CreateImageView(
 					   G_RENDERER.device,
 					   &view_create_info,
@@ -314,7 +324,10 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
-		append(&INTERNAL.bindless_array_updates, p_image_ref)
+		append(
+			&INTERNAL.bindless_array_updates,
+			BindlessArrayUpdate{image_ref = p_image_ref, use_default_image = true},
+		)
 
 		return true
 	}
@@ -515,7 +528,12 @@ when USE_VULKAN_BACKEND {
 
 		vk.SetDebugUtilsObjectNameEXT(G_RENDERER.device, &name_info)
 
-		append(&INTERNAL.bindless_array_updates, p_image_ref)
+		if .AddToBindlessArray in image.desc.flags {
+			append(
+				&INTERNAL.bindless_array_updates,
+				BindlessArrayUpdate{image_ref = p_image_ref, use_default_image = false},
+			)
+		}
 
 		image_backend.per_mip_vk_view = make(
 			[]vk.ImageView,
@@ -600,9 +618,15 @@ when USE_VULKAN_BACKEND {
 
 		image_infos := make([]vk.DescriptorImageInfo, u32(num_writes), temp_arena.allocator)
 
-		for image_ref, i in INTERNAL.bindless_array_updates {
+		if INTERNAL.default_image_ref == InvalidImageRef {
+			INTERNAL.default_image_ref = find_image("DefaultImage")
+		}
 
-			image_idx := get_image_idx(image_ref)
+		backend_default_image := &g_resources.backend_images[get_image_idx(INTERNAL.default_image_ref)]
+
+		for bindless_update, i in INTERNAL.bindless_array_updates {
+
+			image_idx := get_image_idx(bindless_update.image_ref)
 			image := &g_resources.images[image_idx]
 			backend_image := &g_resources.backend_images[image_idx]
 
@@ -611,6 +635,11 @@ when USE_VULKAN_BACKEND {
 				imageLayout = .SHADER_READ_ONLY_OPTIMAL,
 				imageView   = backend_image.all_mips_vk_view,
 			}
+
+			if bindless_update.use_default_image {
+				image_infos[i].imageView = backend_default_image.all_mips_vk_view
+			}
+
 			descriptor_writes[i] = vk.WriteDescriptorSet {
 				sType           = .WRITE_DESCRIPTOR_SET,
 				descriptorCount = 1,
@@ -629,6 +658,8 @@ when USE_VULKAN_BACKEND {
 			0,
 			nil,
 		)
+
+		//INTERNAL.bindless_array_updates = make([dynamic]ImageRef, get_next_frame_allocator())
 		clear(&INTERNAL.bindless_array_updates)
 	}
 
@@ -699,31 +730,48 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_issue_image_copy :: proc(
+	backend_issue_image_copies :: proc(
 		p_image_ref: ImageRef,
 		p_current_mip: u8,
 		p_staging_buffer_ref: BufferRef,
-		p_staging_buffer_offset: u32,
 		p_size: glsl.uvec2,
-		p_offset: glsl.uvec2,
+		p_mip_region_copies: [dynamic]ImageMipRegionCopy,
 	) {
+
+		temp_arena := common.Arena{}
+		common.temp_arena_init(&temp_arena)
+		defer common.arena_delete(temp_arena)
+
+		buffer_image_copies := make(
+			[]vk.BufferImageCopy,
+			len(p_mip_region_copies),
+			temp_arena.allocator,
+		)
 
 		image_idx := get_image_idx(p_image_ref)
 		backend_image := &g_resources.backend_images[image_idx]
 
 		backend_buffer := &g_resources.backend_buffers[get_buffer_idx(p_staging_buffer_ref)]
 
-		image_copy := vk.BufferImageCopy {
-			bufferOffset = vk.DeviceSize(p_staging_buffer_offset),
-			imageOffset = vk.Offset3D{i32(p_offset.x), i32(p_offset.y), 0},
-			imageSubresource = {
-				aspectMask = {.COLOR},
-				baseArrayLayer = 0,
-				layerCount = 1,
-				mipLevel = u32(p_current_mip),
-			},
-			imageExtent = {width = p_size.x, height = p_size.y, depth = 1},
+		for mip_region_copy, i in p_mip_region_copies {
+			buffer_image_copies[i] = vk.BufferImageCopy {
+				bufferOffset = vk.DeviceSize(mip_region_copy.staging_buffer_offset),
+				imageOffset = vk.Offset3D{
+					i32(mip_region_copy.offset.x),
+					i32(mip_region_copy.offset.y),
+					0,
+				},
+				imageSubresource = {
+					aspectMask = {.COLOR},
+					baseArrayLayer = 0,
+					layerCount = 1,
+					mipLevel = u32(p_current_mip),
+				},
+				imageExtent = {width = p_size.x, height = p_size.y, depth = 1},
+			}
+
 		}
+
 
 		cmd_buffer_ref := get_frame_cmd_buffer_ref()
 		cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buffer_ref)]
@@ -738,23 +786,21 @@ when USE_VULKAN_BACKEND {
 			backend_buffer.vk_buffer,
 			backend_image.vk_image,
 			.TRANSFER_DST_OPTIMAL,
-			1,
-			&image_copy,
+			u32(len(buffer_image_copies)),
+			&buffer_image_copies[0],
 		)
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_finish_image_copy :: proc(p_image_ref: ImageRef) {
-		fence := G_RENDERER.frame_fences[get_frame_idx()]
-		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
-			fence = G_RENDERER.transfer_fences_post_graphics[get_frame_idx()]
+	backend_finish_image_copy :: proc(p_image_ref: ImageRef, p_mip: u8) {
+		finished_upload := FinishedImageUpload {
+			image_ref = p_image_ref,
+			fence_idx = u8(get_frame_idx()),
+			mip       = p_mip,
 		}
-		append(
-			&INTERNAL.finished_image_uploads,
-			FinishedImageUpload{image_ref = p_image_ref, fence = fence},
-		)
+		append(&INTERNAL.finished_image_uploads, finished_upload)
 	}
 
 	//---------------------------------------------------------------------------//
@@ -762,29 +808,45 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_finalize_async_image_copies :: proc() {
 
+		temp_arena: common.Arena
+		common.temp_arena_init(&temp_arena, common.MEGABYTE)
+		defer common.arena_delete(temp_arena)
+
 		finished_image_uploads := make([dynamic]FinishedImageUpload, get_next_frame_allocator())
+		unique_image_refs := make_map(
+			map[ImageRef]u8,
+			len(INTERNAL.finished_image_uploads),
+			temp_arena.allocator,
+		)
 
 		for finished_upload in &INTERNAL.finished_image_uploads {
 
-			if vk.GetFenceStatus(G_RENDERER.device, finished_upload.fence) != .SUCCESS {
+			upload_done_fence := G_RENDERER.frame_fences[finished_upload.fence_idx]
+			if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+				upload_done_fence =
+					G_RENDERER.transfer_fences_post_graphics[finished_upload.fence_idx]
+			}
+
+
+			if vk.GetFenceStatus(G_RENDERER.device, upload_done_fence) != .SUCCESS {
 				append(&finished_image_uploads, finished_upload)
 				continue
 			}
+
+			unique_image_refs[finished_upload.image_ref] = 0
 
 			image_idx := get_image_idx(finished_upload.image_ref)
 			image := &g_resources.images[image_idx]
 			backend_image := &g_resources.backend_images[image_idx]
 
+			image.loaded_mips_mask |= (1 << finished_upload.mip)
+
 			if image.desc.file_mapping.mapped_ptr == nil {
-				for mip_data in image.desc.data_per_mip {
-					delete(mip_data, image.desc.mip_data_allocator)
-				}
-			} else {
+				delete(image.desc.data_per_mip[finished_upload.mip], image.desc.mip_data_allocator)
+			} else if finished_upload.mip == 0 {
 				common.unmap_file(image.desc.file_mapping)
 				image.desc.file_mapping = {}
 			}
-
-			// append(&INTERNAL.bindless_array_updates, finished_upload.image_ref)
 
 			cmd_buffer_ref := get_frame_cmd_buffer_ref()
 			cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buffer_ref)]
@@ -799,8 +861,8 @@ when USE_VULKAN_BACKEND {
 					aspectMask = {.COLOR},
 					baseArrayLayer = 0,
 					layerCount = 1,
-					baseMipLevel = 0,
-					levelCount = u32(image.desc.mip_count),
+					baseMipLevel = u32(finished_upload.mip),
+					levelCount = 1,
 				},
 			}
 
@@ -858,5 +920,68 @@ when USE_VULKAN_BACKEND {
 		}
 
 		INTERNAL.finished_image_uploads = finished_image_uploads
+
+		if len(unique_image_refs) == 0 {
+			return
+		}
+
+		// Update the bindless array
+		bindless_bind_group_idx := get_bind_group_idx(
+			G_RENDERER.bindless_textures_array_bind_group_ref,
+		)
+		bindless_bind_group := &g_resources.backend_bind_groups[bindless_bind_group_idx]
+
+		descriptor_writes := make(
+			[]vk.WriteDescriptorSet,
+			len(unique_image_refs),
+			temp_arena.allocator,
+		)
+
+		image_infos := make([]vk.DescriptorImageInfo, len(unique_image_refs), temp_arena.allocator)
+
+		num_bindless_updates := 0
+
+		for image_ref in unique_image_refs {
+			image_idx := get_image_idx(image_ref)
+			image := &g_resources.images[image_idx]
+			backend_image := &g_resources.backend_images[image_idx]
+
+			mip_count := image.desc.mip_count
+			loaded_mips_mask := ~image.loaded_mips_mask
+			loaded_mips_mask = loaded_mips_mask << (16 - mip_count)
+			highest_loaded_mip :=
+				mip_count - min(u8(intrinsics.count_leading_zeros(loaded_mips_mask)), mip_count)
+
+			if highest_loaded_mip < image.desc.mip_count {
+				// Update the descriptor in the bindless array 
+				// if we have any  consecutive mip chain loaded
+				image_infos[num_bindless_updates] = vk.DescriptorImageInfo {
+					imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+					imageView   = backend_image.per_mip_vk_view[highest_loaded_mip],
+				}
+				descriptor_writes[num_bindless_updates] = vk.WriteDescriptorSet {
+					sType           = .WRITE_DESCRIPTOR_SET,
+					descriptorCount = 1,
+					descriptorType  = .SAMPLED_IMAGE,
+					dstSet          = bindless_bind_group.vk_descriptor_set,
+					pImageInfo      = &image_infos[num_bindless_updates],
+					dstArrayElement = image.bindless_idx,
+					dstBinding      = 6,
+				}
+
+				num_bindless_updates += 1
+			}
+
+		}
+
+		vk.UpdateDescriptorSets(
+			G_RENDERER.device,
+			u32(num_bindless_updates),
+			raw_data(descriptor_writes),
+			0,
+			nil,
+		)
 	}
+
+	//---------------------------------------------------------------------------//
 }

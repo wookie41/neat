@@ -246,15 +246,19 @@ run_last_frame_buffer_upload_requests :: proc() {
 	last_frame_requests_per_buffer := make_map(
 		map[BufferRef][dynamic]BufferUploadRequest,
 		32,
-		get_frame_allocator(),
+		get_next_frame_allocator(),
 	)
+
+	temp_arena := common.Arena{}
+	common.temp_arena_init(&temp_arena)
+	defer common.arena_delete(temp_arena)
 
 	for buffer_ref, pending_requests in INTERNAL.last_frame_requests_per_buffer {
 
-		not_satisfied_requests := make([dynamic]BufferUploadRequest, get_next_frame_allocator())
+		common.arena_reset(temp_arena)
 
-		requests_to_run := make([dynamic]PendingBufferUploadRequest, get_frame_allocator())
-		defer delete(requests_to_run)
+		not_satisfied_requests := make([dynamic]BufferUploadRequest, get_next_frame_allocator())
+		requests_to_run := make([dynamic]PendingBufferUploadRequest, temp_arena.allocator)
 
 		for request in pending_requests {
 
@@ -263,7 +267,6 @@ run_last_frame_buffer_upload_requests :: proc() {
 				append(&not_satisfied_requests, request)
 				continue
 			}
-
 
 			append(&requests_to_run, buffer_upload_send_data(request))
 		}

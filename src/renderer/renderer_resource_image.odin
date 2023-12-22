@@ -157,6 +157,7 @@ ImageDescFlagBits :: enum u8 {
 	Storage,
 	Sampled,
 	SwapImage,
+	AddToBindlessArray,
 }
 ImageDescFlags :: distinct bit_set[ImageDescFlagBits;u8]
 
@@ -207,9 +208,10 @@ ImageDesc :: struct {
 //---------------------------------------------------------------------------//
 
 ImageResource :: struct {
-	desc:         ImageDesc,
-	flags:        ImageFlags,
-	bindless_idx: u32,
+	desc:             ImageDesc,
+	flags:            ImageFlags,
+	bindless_idx:     u32,
+	loaded_mips_mask: u16, // mip 0 is the first bit
 }
 
 //---------------------------------------------------------------------------//
@@ -261,6 +263,14 @@ ImageUploadInfo :: struct {
 //---------------------------------------------------------------------------//
 
 @(private)
+ImageMipRegionCopy :: struct {
+	offset:                glsl.uvec2,
+	staging_buffer_offset: u32,
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
 init_images :: proc() -> bool {
 	G_IMAGE_REF_ARRAY = common.ref_array_create(
 		ImageResource,
@@ -285,7 +295,7 @@ init_images :: proc() -> bool {
 	// Create the staging buffer for image uploads
 	{
 		INTERNAL.staging_buffer_offset = 0
-		INTERNAL.staging_buffer_single_region_size = common.MEGABYTE * 4
+		INTERNAL.staging_buffer_single_region_size = common.MEGABYTE * 8
 		INTERNAL.staging_buffer_ref = allocate_buffer_ref(common.create_name("ImageStagingBuffer"))
 
 		staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer_ref)]
@@ -298,6 +308,21 @@ init_images :: proc() -> bool {
 	}
 
 	backend_init_images()
+
+	// Create a default image that we'll use when a texture is missing
+	{
+		G_RENDERER.default_image_ref = allocate_image_ref(common.create_name("DefaultImage"))
+		default_image := &g_resources.images[get_image_idx(G_RENDERER.default_image_ref)]
+
+		default_image.desc.type = .TwoDimensional
+		default_image.desc.dimensions = glsl.uvec3{4, 4, 1}
+		default_image.desc.flags = {.Sampled, .AddToBindlessArray}
+		default_image.desc.sample_count_flags = {._1}
+		default_image.desc.format = .BC1_RGB_UNorm
+		default_image.desc.mip_count = 1
+
+		create_image(G_RENDERER.default_image_ref)
+	}
 
 	return true
 }
@@ -340,21 +365,17 @@ free_image_ref :: proc(p_ref: ImageRef) {
 create_texture_image :: proc(p_ref: ImageRef) -> bool {
 
 	image := &g_resources.images[get_image_idx(p_ref)]
-
+	image.bindless_idx = image_allocate_new_bindless_array_entry()
 	// 3D texture loading not supported right now
 	assert(image.desc.type == .TwoDimensional)
-
-	if len(INTERNAL.free_bindless_indices) > 0 {
-		image.bindless_idx = pop(&INTERNAL.free_bindless_indices)
-	} else {
-		image.bindless_idx = INTERNAL.next_bindless_idx
-		INTERNAL.next_bindless_idx += 1
-	}
 
 	assert(
 		(image.desc.format > .ColorFormatsStart && image.desc.format < .ColorFormatsEnd) ||
 		(image.desc.format > .CompressedFormatsStart && image.desc.format < .CompressedFormatsEnd),
 	)
+
+	// the loaded mips bitmask is 16 bit, but 2^15x2^15 should be enough for the texture
+	assert(image.desc.mip_count <= 16)
 
 	if backend_create_texture_image(p_ref) == false {
 		append(&INTERNAL.free_bindless_indices, image.bindless_idx)
@@ -382,12 +403,12 @@ create_image :: proc(p_image_ref: ImageRef) -> bool {
 
 	image := &g_resources.images[get_image_idx(p_image_ref)]
 
-	if len(INTERNAL.free_bindless_indices) > 0 {
-		image.bindless_idx = pop(&INTERNAL.free_bindless_indices)
-	} else {
-		image.bindless_idx = INTERNAL.next_bindless_idx
-		INTERNAL.next_bindless_idx += 1
+	if .AddToBindlessArray in image.desc.flags {
+		image.bindless_idx = image_allocate_new_bindless_array_entry()
 	}
+
+	// the loaded mips bitmask is 16 bit, but 2^15x2^15 should be enough for the texture
+	assert(image.desc.mip_count <= 16)
 
 	if backend_create_image(p_image_ref) == false {
 		append(&INTERNAL.free_bindless_indices, image.bindless_idx)
@@ -460,7 +481,14 @@ image_upload_progress_copies :: proc() {
 	staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer_ref)]
 
 	in_progress := INTERNAL.image_uploads_in_progress
+
+	temp_arena := common.Arena{}
+	common.temp_arena_init(&temp_arena)
+	defer common.arena_delete(temp_arena)
+
 	for image_upload_info in &in_progress {
+
+		common.arena_reset(temp_arena)
 
 		if !image_upload_info.is_initialized {
 			backend_image_upload_initialize(image_upload_info.image_ref)
@@ -468,6 +496,7 @@ image_upload_progress_copies :: proc() {
 		}
 
 		image := &g_resources.images[get_image_idx(image_upload_info.image_ref)]
+		mip_region_copies := make([dynamic]ImageMipRegionCopy, temp_arena.allocator)
 
 		// Upload as many blocks of this texture as we can
 		for {
@@ -484,6 +513,17 @@ image_upload_progress_copies :: proc() {
 			if (upload_size + INTERNAL.staging_buffer_offset) >
 			   INTERNAL.staging_buffer_single_region_size {
 				append(&image_uploads_in_progress, image_upload_info)
+
+				if len(mip_region_copies) > 0 {
+					backend_issue_image_copies(
+						image_upload_info.image_ref,
+						image_upload_info.current_mip,
+						INTERNAL.staging_buffer_ref,
+						image_upload_info.single_upload_size_in_texels,
+						mip_region_copies,
+					)
+				}
+
 				break
 			}
 
@@ -528,22 +568,36 @@ image_upload_progress_copies :: proc() {
 				staging_buffer_ptr = mem.ptr_offset(staging_buffer_ptr, row_upload_size)
 			}
 
-			// Issue the upload
-			backend_issue_image_copy(
-				image_upload_info.image_ref,
-				image_upload_info.current_mip,
-				INTERNAL.staging_buffer_ref,
-				staging_buffer_offset,
-				image_upload_info.single_upload_size_in_texels,
-				mip_offset_in_texels,
+			append(
+				&mip_region_copies,
+				ImageMipRegionCopy{
+					offset = mip_offset_in_texels,
+					staging_buffer_offset = staging_buffer_offset,
+				},
 			)
 
-			if is_last_mip && mip_upload_done {
-				backend_finish_image_copy(image_upload_info.image_ref)
-				break
-			}
-
 			if mip_upload_done {
+
+				backend_issue_image_copies(
+					image_upload_info.image_ref,
+					image_upload_info.current_mip,
+					INTERNAL.staging_buffer_ref,
+					image_upload_info.single_upload_size_in_texels,
+					mip_region_copies,
+				)
+
+				common.arena_reset(temp_arena)
+				mip_region_copies = make([dynamic]ImageMipRegionCopy, temp_arena.allocator)
+
+				backend_finish_image_copy(
+					image_upload_info.image_ref,
+					image_upload_info.current_mip,
+				)
+
+				if is_last_mip {
+					break
+				}
+
 				image_upload_info.current_mip -= 1
 				image_upload_info.mip_offset_in_texels = glsl.uvec2{0, 0}
 				image_upload_info.single_upload_size_in_texels = calculate_image_upload_size(
@@ -572,6 +626,18 @@ calculate_image_upload_size :: proc(p_image_dimensions: glsl.uvec3, p_mip: u8) -
 @(private)
 image_upload_finalize_finished_uploads :: proc() {
 	backend_finalize_async_image_copies()
+}
+
+//--------------------------------------------------------------------------//
+
+@(private = "file")
+image_allocate_new_bindless_array_entry :: proc() -> u32 {
+	if len(INTERNAL.free_bindless_indices) > 0 {
+		return pop(&INTERNAL.free_bindless_indices)
+	}
+	bindless_idx := INTERNAL.next_bindless_idx
+	INTERNAL.next_bindless_idx += 1
+	return bindless_idx
 }
 
 //--------------------------------------------------------------------------//

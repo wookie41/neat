@@ -394,21 +394,6 @@ init :: proc(p_options: InitOptions) -> bool {
 	init_material_instances() or_return
 	init_mesh_instances() or_return
 
-	// Create a default image that we'll use when a texture is missing
-	{
-		G_RENDERER.default_image_ref = allocate_image_ref(common.create_name("DefaultImage"))
-		default_image := &g_resources.images[get_image_idx(G_RENDERER.default_image_ref)]
-
-		default_image.desc.type = .TwoDimensional
-		default_image.desc.dimensions = glsl.uvec3{4, 4, 1}
-		default_image.desc.flags = {.Sampled}
-		default_image.desc.sample_count_flags = {._1}
-		default_image.desc.format = .BC1_RGB_UNorm
-		default_image.desc.mip_count = 1
-
-		create_image(G_RENDERER.default_image_ref)
-	}
-
 	load_renderer_config()
 	uniform_buffer_management_init()
 
@@ -465,19 +450,18 @@ update :: proc(p_dt: f32) {
 
 	common.arena_reset_all()
 
+	backend_wait_for_frame_resources()
+
 	pipelines_update()
 	shaders_update()
 
-	backend_wait_for_frame_resources()
-
 	cmd_buff_ref := get_frame_cmd_buffer_ref()
-
 	begin_command_buffer(cmd_buff_ref)
-	backend_begin()
 
 	buffer_upload_finalize_finished_uploads()
 	image_upload_finalize_finished_uploads()
-
+	
+	backend_begin_frame()
 	ui_begin_frame()
 
 	run_last_frame_buffer_upload_requests()
@@ -491,8 +475,6 @@ update :: proc(p_dt: f32) {
 	material_instance_update_dirty_materials()
 	mesh_instance_send_transform_data()
 	uniform_buffer_management_update(p_dt)
-
-	backend_update(p_dt)
 
 	render_tasks_update(p_dt)
 
