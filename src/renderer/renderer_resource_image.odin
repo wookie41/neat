@@ -476,18 +476,53 @@ find_image_by_str :: proc(p_str: string) -> ImageRef {
 
 @(private)
 image_upload_progress_copies :: proc() {
+	temp_arena := common.Arena{}
+	common.temp_arena_init(&temp_arena, common.KILOBYTE * 256)
+	defer common.arena_delete(temp_arena)
 
-	image_uploads_in_progress := make([dynamic]ImageUploadInfo, get_next_frame_allocator())
-	staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer_ref)]
+	temp_arena2 := common.Arena{}
+	common.temp_arena_init(&temp_arena2, common.KILOBYTE * 256)
+	defer common.arena_delete(temp_arena2)
 
-	in_progress := INTERNAL.image_uploads_in_progress
+	surviving_uploads := make([dynamic]ImageUploadInfo, temp_arena.allocator)
+	current_uploads := INTERNAL.image_uploads_in_progress
 
+	arenas := []common.Arena{temp_arena2, temp_arena}
+	arena_idx := 0
+
+	for try_progress_image_copies(current_uploads, &surviving_uploads) {
+		current_uploads = surviving_uploads
+		
+		common.arena_reset(arenas[arena_idx])
+		surviving_uploads = make([dynamic]ImageUploadInfo, arenas[arena_idx].allocator)
+
+		arena_idx = (arena_idx + 1) % 2
+	}
+
+	INTERNAL.image_uploads_in_progress = make(
+		[dynamic]ImageUploadInfo,
+		len(surviving_uploads),
+		get_next_frame_allocator(),
+	)
+
+	copy(INTERNAL.image_uploads_in_progress[:], surviving_uploads[:])
+}
+
+@(private = "file")
+try_progress_image_copies :: proc(
+	p_current_uploads: [dynamic]ImageUploadInfo,
+	p_surviving_uploads: ^[dynamic]ImageUploadInfo,
+) -> bool {
 	temp_arena := common.Arena{}
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
 
-	for image_upload_info in &in_progress {
+	staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer_ref)]
+	any_uploads_performed := false
 
+	for _, i in p_current_uploads {
+
+		image_upload_info := &p_current_uploads[i]
 		common.arena_reset(temp_arena)
 
 		if !image_upload_info.is_initialized {
@@ -512,7 +547,7 @@ image_upload_progress_copies :: proc() {
 
 			if (upload_size + INTERNAL.staging_buffer_offset) >
 			   INTERNAL.staging_buffer_single_region_size {
-				append(&image_uploads_in_progress, image_upload_info)
+				append(p_surviving_uploads, image_upload_info^)
 
 				if len(mip_region_copies) > 0 {
 					backend_issue_image_copies(
@@ -522,6 +557,7 @@ image_upload_progress_copies :: proc() {
 						image_upload_info.single_upload_size_in_texels,
 						mip_region_copies,
 					)
+					any_uploads_performed = true
 				}
 
 				break
@@ -585,9 +621,7 @@ image_upload_progress_copies :: proc() {
 					image_upload_info.single_upload_size_in_texels,
 					mip_region_copies,
 				)
-
-				common.arena_reset(temp_arena)
-				mip_region_copies = make([dynamic]ImageMipRegionCopy, temp_arena.allocator)
+				any_uploads_performed = true
 
 				backend_finish_image_copy(
 					image_upload_info.image_ref,
@@ -604,11 +638,14 @@ image_upload_progress_copies :: proc() {
 					image.desc.dimensions,
 					image_upload_info.current_mip,
 				)
+
+				append(p_surviving_uploads, image_upload_info^)
+				break
 			}
 		}
 	}
 
-	INTERNAL.image_uploads_in_progress = image_uploads_in_progress
+	return any_uploads_performed
 }
 
 //--------------------------------------------------------------------------//
