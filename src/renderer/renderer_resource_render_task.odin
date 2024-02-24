@@ -197,9 +197,9 @@ render_tasks_update :: proc(p_dt: f32) {
 //--------------------------------------------------------------------------//
 
 @(private)
-render_task_setup_render_pass_interface :: proc(
+render_task_setup_render_pass_bindings :: proc(
 	p_render_task_config: ^RenderTaskConfig,
-	p_out_interface: ^RenderPassInterface,
+	p_out_bindings: ^RenderPassBindings,
 ) -> bool {
 
 	temp_arena: common.Arena
@@ -333,11 +333,11 @@ render_task_setup_render_pass_interface :: proc(
 		append(&output_images, render_pass_output_image)
 	}
 
-	p_out_interface.image_inputs = common.to_static_slice(
+	p_out_bindings.image_inputs = common.to_static_slice(
 		input_images,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
-	p_out_interface.image_outputs = common.to_static_slice(
+	p_out_bindings.image_outputs = common.to_static_slice(
 		output_images,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
@@ -349,11 +349,11 @@ render_task_setup_render_pass_interface :: proc(
 
 render_task_begin_render_pass :: proc(
 	p_render_pass_ref: RenderPassRef,
-	p_render_pass_interface: ^RenderPassInterface,
+	p_render_pass_bindings: ^RenderPassBindings,
 ) {
 
 	render_pass_begin_info := RenderPassBeginInfo {
-		interface = p_render_pass_interface,
+		bindings = p_render_pass_bindings,
 	}
 
 	begin_render_pass(p_render_pass_ref, get_frame_cmd_buffer_ref(), &render_pass_begin_info)

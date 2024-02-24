@@ -110,7 +110,7 @@ RenderPassImageOutput :: struct {
 
 //---------------------------------------------------------------------------//
 
-RenderPassInterface :: struct {
+RenderPassBindings :: struct {
 	image_inputs:  []RenderPassImageInput,
 	image_outputs: []RenderPassImageOutput,
 }
@@ -118,7 +118,7 @@ RenderPassInterface :: struct {
 //---------------------------------------------------------------------------//
 
 RenderPassBeginInfo :: struct {
-	interface: ^RenderPassInterface,
+	bindings: ^RenderPassBindings,
 }
 
 //---------------------------------------------------------------------------//

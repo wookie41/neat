@@ -56,14 +56,14 @@ when USE_VULKAN_BACKEND {
 
 		image_input_barriers := make(
 			[]vk.ImageMemoryBarrier,
-			len(p_begin_info.interface.image_inputs),
+			len(p_begin_info.bindings.image_inputs),
 			temp_arena.allocator,
 		)
 
 		image_input_barriers_count := 0
 
 		// Prepare barriers for image inputs
-		for input in p_begin_info.interface.image_inputs {
+		for input in p_begin_info.bindings.image_inputs {
 
 			image_idx := get_image_idx(input.image_ref)
 			image := &g_resources.images[image_idx]
@@ -128,7 +128,7 @@ when USE_VULKAN_BACKEND {
 		color_attachments_count := 0
 		color_attachments := make(
 			[]vk.RenderingAttachmentInfo,
-			len(p_begin_info.interface.image_outputs),
+			len(p_begin_info.bindings.image_outputs),
 			temp_arena.allocator,
 		)
 		depth_attachment := vk.RenderingAttachmentInfo{}
@@ -136,7 +136,7 @@ when USE_VULKAN_BACKEND {
 		image_output_barriers_count := 0
 		image_output_barriers := make(
 			[]vk.ImageMemoryBarrier,
-			len(p_begin_info.interface.image_outputs),
+			len(p_begin_info.bindings.image_outputs),
 			temp_arena.allocator,
 		)
 		depth_attachment_barrier := vk.ImageMemoryBarrier{}
@@ -145,7 +145,7 @@ when USE_VULKAN_BACKEND {
 		depth_barrier_needed := false
 
 		// Prepare barriers and rendering attachments for outputs
-		for output in p_begin_info.interface.image_outputs {
+		for output in p_begin_info.bindings.image_outputs {
 
 			image_idx := get_image_idx(output.image_ref)
 			image := &g_resources.images[image_idx]

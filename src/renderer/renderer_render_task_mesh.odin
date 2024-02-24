@@ -16,7 +16,7 @@ import "core:slice"
 MeshRenderTaskData :: struct {
 	render_pass_ref:       RenderPassRef,
 	material_pass_refs:    []MaterialPassRef,
-	render_pass_interface: RenderPassInterface,
+	render_pass_bindings: RenderPassBindings,
 }
 
 //---------------------------------------------------------------------------//
@@ -81,12 +81,12 @@ create_instance :: proc(
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
 
-	render_pass_interface: RenderPassInterface
-	render_task_setup_render_pass_interface(p_render_task_config, &render_pass_interface)
+	render_pass_bindings: RenderPassBindings
+	render_task_setup_render_pass_bindings(p_render_task_config, &render_pass_bindings)
 
 	defer if res == false {
-		delete(render_pass_interface.image_inputs, G_RENDERER_ALLOCATORS.resource_allocator)
-		delete(render_pass_interface.image_outputs, G_RENDERER_ALLOCATORS.resource_allocator)
+		delete(render_pass_bindings.image_inputs, G_RENDERER_ALLOCATORS.resource_allocator)
+		delete(render_pass_bindings.image_outputs, G_RENDERER_ALLOCATORS.resource_allocator)
 	}
 
 	mesh_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
@@ -169,7 +169,7 @@ create_instance :: proc(
 	}
 
 	mesh_render_task.data_ptr = rawptr(mesh_render_task_data)
-	mesh_render_task_data.render_pass_interface = render_pass_interface
+	mesh_render_task_data.render_pass_bindings = render_pass_bindings
 
 	return true
 }
@@ -183,15 +183,15 @@ destroy_instance :: proc(p_render_task_ref: RenderTaskRef) {
 	if mesh_render_task_data != nil {
 		delete(mesh_render_task_data.material_pass_refs, G_RENDERER_ALLOCATORS.resource_allocator)
 	}
-	if mesh_render_task_data.render_pass_interface.image_inputs != nil {
+	if mesh_render_task_data.render_pass_bindings.image_inputs != nil {
 		delete(
-			mesh_render_task_data.render_pass_interface.image_inputs,
+			mesh_render_task_data.render_pass_bindings.image_inputs,
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
 	}
-	if mesh_render_task_data.render_pass_interface.image_outputs != nil {
+	if mesh_render_task_data.render_pass_bindings.image_outputs != nil {
 		delete(
-			mesh_render_task_data.render_pass_interface.image_outputs,
+			mesh_render_task_data.render_pass_bindings.image_outputs,
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
 	}
@@ -233,11 +233,13 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 		mesh_idx := get_mesh_idx(mesh_instance.desc.mesh_ref)
 		mesh := &g_resources.meshes[mesh_idx]
 
+		// Skip mesh if it's data is still being uploaded
 		if (mesh.data_upload_context.finished_uploads_count !=
 			   mesh.data_upload_context.needed_uploads_count) {
 			continue
 		}
 
+		// Add an instanced draw call for each submesh
 		for submesh, submesh_idx in mesh.desc.sub_meshes {
 
 			material_instance_idx := get_material_instance_idx(submesh.material_instance_ref)
@@ -306,7 +308,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 		buffer_management_get_mesh_instanced_info_buffer_offset(),
 	}
 
-	// This will store aggregated instanced draw infos so we can issue a single copy
+	// Aggregate instanced draw infos so we can issue a single copy and create the draw stream
 	mesh_instanced_draws_infos := make([dynamic]MeshInstancedDrawInfo, temp_arena.allocator)
 	num_instances_dispatched: u32 = 0
 
@@ -400,12 +402,11 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 
 	cmd_buff_ref := get_frame_cmd_buffer_ref()
 
-
 	// @TODO Remove when we stop drawing directly to the swapchain
 	if len(mesh_instanced_draws_infos) == 0 {
 		render_task_begin_render_pass(
 			mesh_render_task_data.render_pass_ref,
-			&mesh_render_task_data.render_pass_interface,
+			&mesh_render_task_data.render_pass_bindings,
 		)
 		end_render_pass(mesh_render_task_data.render_pass_ref, cmd_buff_ref)
 		return
@@ -434,7 +435,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 	// Dispatch the draw stream
 	render_task_begin_render_pass(
 		mesh_render_task_data.render_pass_ref,
-		&mesh_render_task_data.render_pass_interface,
+		&mesh_render_task_data.render_pass_bindings,
 	)
 
 	draw_stream_dispatch(cmd_buff_ref, &draw_stream)
