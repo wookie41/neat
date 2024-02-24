@@ -458,11 +458,12 @@ update :: proc(p_dt: f32) {
 	cmd_buff_ref := get_frame_cmd_buffer_ref()
 	begin_command_buffer(cmd_buff_ref)
 
+	backend_begin_frame()
+	ui_begin_frame()
+
 	buffer_upload_finalize_finished_uploads()
 	image_upload_finalize_finished_uploads()
 	
-	backend_begin_frame()
-	ui_begin_frame()
 
 	run_last_frame_buffer_upload_requests()
 	batch_update_bindless_array_entries()

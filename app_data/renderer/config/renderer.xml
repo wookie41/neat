@@ -1,6 +1,9 @@
 <RendererConfig renderWidth="1920" renderHeight="1080">
     <Images>
-        <DepthBuffer format="Depth32SFloat" resolution="full" sampled="" />
+        <GBufferColor format="RGBA8UNorm" resolution="full" sampled="" />
+        <GBufferNormals format="RGBA16SNorm" resolution="full" sampled="" />
+        <GBufferParameters format="RG8UNorm" resolution="full" sampled="" />
+        <DepthBuffer  format="Depth32SFloat" resolution="full" sampled="" />
     </Images>
     <RenderTasks>
         <Mesh name="Mesh" renderPass="TestRenderPass">

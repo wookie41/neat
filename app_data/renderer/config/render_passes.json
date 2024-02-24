@@ -2,7 +2,7 @@
     {
         "name": "TestRenderPass",
         "renderTargets": [
-            { "format": "BGRA8_SRGB", "blendType": "Default" }
+            { "format": "RGBA8_UNorm" }
         ],
         "depthFormat": "Depth32SFloat",
         "resolution": "Full"

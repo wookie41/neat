@@ -301,12 +301,15 @@ load_render_passes_from_config_file :: proc() -> bool {
 
 		for render_target_entry, i in render_pass_entry.render_targets {
 			assert(render_target_entry.format in G_IMAGE_FORMAT_NAME_MAPPING)
-			assert(render_target_entry.blend_type in G_BLEND_TYPE_NAME_MAPPING)
+
+			render_pass.desc.layout.render_target_blend_types[i] = .Default
+			if render_target_entry.blend_type in G_BLEND_TYPE_NAME_MAPPING {
+				render_pass.desc.layout.render_target_blend_types[i] =
+					G_BLEND_TYPE_NAME_MAPPING[render_target_entry.blend_type]
+			}
 
 			render_pass.desc.layout.render_target_formats[i] =
 				G_IMAGE_FORMAT_NAME_MAPPING[render_target_entry.format]
-			render_pass.desc.layout.render_target_blend_types[i] =
-				G_BLEND_TYPE_NAME_MAPPING[render_target_entry.blend_type]
 		}
 
 		// @TODO primitive typ, rasterizer overrides

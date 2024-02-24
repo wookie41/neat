@@ -72,19 +72,25 @@ Resolution :: enum u8 {
 @(private)
 G_IMAGE_FORMAT_NAME_MAPPING := map[string]ImageFormat {
 	"Depth32SFloat" = .Depth32SFloat,
+	"R8UNorm"       = .R8UNorm,
 	"R32UInt"       = .R32UInt,
 	"R32Int"        = .R32Int,
 	"R32SFloat"     = .R32SFloat,
+	"RG8UNorm"      = .RG8UNorm,
 	"RG32UInt"      = .RG32UInt,
 	"RG32Int"       = .RG32Int,
 	"RG32SFloat"    = .RG32SFloat,
+	"RGB8UNorm"     = .RGB8UNorm,
 	"RGB32UInt"     = .RGB32UInt,
 	"RGB32Int"      = .RGB32Int,
 	"RGB32SFloat"   = .RGB32SFloat,
+	"RGBA8UNorm"    = .RGBA8UNorm,
+	"RGBA16SNorm"   = .RGBA16SNorm,
 	"RGBA32UInt"    = .RGBA32UInt,
 	"RGBA32Int"     = .RGBA32Int,
 	"RGBA32SFloat"  = .RGBA32SFloat,
 	"RGBA8_SRGB"    = .RGBA8_SRGB,
+	"BGRA8_SRGB"    = .BGRA8_SRGB,
 	"BGRA8_SRGB"    = .BGRA8_SRGB,
 }
 
@@ -108,21 +114,26 @@ ImageFormat :: enum u16 {
 	R32Int,
 	R32SFloat,
 	RFormatsEnd,
+	R8UNorm,
 	RGFormatsStart,
+	RG8UNorm,
 	RG32UInt,
 	RG32Int,
 	RG32SFloat,
 	RGFormatsEnd,
 	RGBFormatsStart,
+	RGB8UNorm,
 	RGB32UInt,
 	RGB32Int,
 	RGB32SFloat,
 	RGBFormatsEnd,
 	RGBAFormatsStart,
+	RGBA8UNorm,
 	RGBA32UInt,
 	RGBA32Int,
 	RGBA32SFloat,
 	R11G11B10,
+	RGBA16SNorm,
 	RGBAFormatsEnd,
 	SRGB_FormatsStart,
 	RGBA8_SRGB,
@@ -492,7 +503,7 @@ image_upload_progress_copies :: proc() {
 
 	for try_progress_image_copies(current_uploads, &surviving_uploads) {
 		current_uploads = surviving_uploads
-		
+
 		common.arena_reset(arenas[arena_idx])
 		surviving_uploads = make([dynamic]ImageUploadInfo, arenas[arena_idx].allocator)
 
