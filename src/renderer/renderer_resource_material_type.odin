@@ -241,8 +241,8 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 		assert(success)
 
 		// Create the PSO
-		material_pass.pipeline_ref = allocate_pipeline_ref(material_pass.desc.name, 3, 0)
-		pipeline := &g_resources.pipelines[get_pipeline_idx(material_pass.pipeline_ref)]
+		material_pass.pipeline_ref = graphics_pipeline_allocate_ref(material_pass.desc.name, 3, 0)
+		pipeline := &g_resources.graphics_pipelines[get_graphics_pipeline_idx(material_pass.pipeline_ref)]
 		pipeline.desc.bind_group_layout_refs = {
 			InvalidBindGroupRefLayout, // Slot 0 not used
 			G_RENDERER.global_bind_group_layout_ref,
@@ -254,7 +254,7 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 		pipeline.desc.frag_shader_ref = material_pass.fragment_shader_ref
 		pipeline.desc.vertex_layout = .Mesh
 
-		success = create_graphics_pipeline(material_pass.pipeline_ref)
+		success = graphics_pipeline_create(material_pass.pipeline_ref)
 		assert(success)
 	}
 

@@ -88,7 +88,7 @@ RenderPassImageInputFlags :: distinct bit_set[RenderPassImageInputFlagBits;u8]
 RenderPassImageInput :: struct {
 	image_ref: ImageRef,
 	flags:     RenderPassImageInputFlags,
-	mip:       u32,
+	mip:       u16,
 }
 
 //---------------------------------------------------------------------------//
@@ -104,7 +104,7 @@ RenderPassImageOutputFlags :: distinct bit_set[RenderPassImageOutputFlagBits;u8]
 RenderPassImageOutput :: struct {
 	image_ref:   ImageRef,
 	flags:       RenderPassImageOutputFlags,
-	mip:         u32,
+	mip:         u16,
 	clear_color: glsl.vec4,
 }
 
@@ -166,9 +166,26 @@ init_render_passes :: proc() -> bool {
 //---------------------------------------------------------------------------//
 
 
-allocate_render_pass_ref :: proc(p_name: common.Name) -> RenderPassRef {
+allocate_render_pass_ref :: proc(
+	p_name: common.Name,
+	p_render_target_count: int,
+) -> RenderPassRef {
 	ref := RenderPassRef(common.ref_create(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_name))
 	g_resources.render_passes[get_render_pass_idx(ref)].desc.name = p_name
+
+	render_pass := &g_resources.render_passes[get_render_pass_idx(ref)]
+	render_pass.desc.layout.render_target_formats = make(
+		[]ImageFormat,
+		p_render_target_count,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
+	render_pass.desc.layout.render_target_blend_types = make(
+		[]ColorBlendType,
+		p_render_target_count,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
+
+
 	return ref
 }
 
@@ -176,7 +193,7 @@ allocate_render_pass_ref :: proc(p_name: common.Name) -> RenderPassRef {
 
 create_render_pass :: proc(p_render_pass_ref: RenderPassRef) -> bool {
 	if backend_create_render_pass(p_render_pass_ref) == false {
-		common.ref_free(&G_RENDER_PASS_REF_ARRAY, p_render_pass_ref)
+		destroy_render_pass(p_render_pass_ref)
 		return false
 	}
 	return true
@@ -209,12 +226,16 @@ destroy_render_pass :: proc(p_ref: RenderPassRef) {
 	common.ref_free(&G_RENDER_PASS_REF_ARRAY, p_ref)
 }
 
+//---------------------------------------------------------------------------//
+
 @(private)
 begin_render_pass :: proc(
 	p_render_pass_ref: RenderPassRef,
 	p_cmd_buff_ref: CommandBufferRef,
 	p_begin_info: ^RenderPassBeginInfo,
 ) {
+
+	transition_resources(p_cmd_buff_ref, p_begin_info.bindings, .Graphics)
 	backend_begin_render_pass(p_render_pass_ref, p_cmd_buff_ref, p_begin_info)
 }
 
@@ -260,7 +281,10 @@ load_render_passes_from_config_file :: proc() -> bool {
 
 	// Create render passes 
 	for render_pass_entry in render_passes {
-		render_pass_ref := allocate_render_pass_ref(common.create_name(render_pass_entry.name))
+		render_pass_ref := allocate_render_pass_ref(
+			common.create_name(render_pass_entry.name),
+			len(render_pass_entry.render_targets),
+		)
 
 		render_pass := &g_resources.render_passes[get_render_pass_idx(render_pass_ref)]
 
@@ -288,16 +312,6 @@ load_render_passes_from_config_file :: proc() -> bool {
 
 		// Parse render targets
 		assert(len(render_pass_entry.render_targets) > 0)
-		render_pass.desc.layout.render_target_formats = make(
-			[]ImageFormat,
-			len(render_pass_entry.render_targets),
-			G_RENDERER_ALLOCATORS.resource_allocator,
-		)
-		render_pass.desc.layout.render_target_blend_types = make(
-			[]ColorBlendType,
-			len(render_pass_entry.render_targets),
-			G_RENDERER_ALLOCATORS.resource_allocator,
-		)
 
 		for render_target_entry, i in render_pass_entry.render_targets {
 			assert(render_target_entry.format in G_IMAGE_FORMAT_NAME_MAPPING)

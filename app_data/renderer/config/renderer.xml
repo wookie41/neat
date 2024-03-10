@@ -3,13 +3,24 @@
         <GBufferColor format="RGBA8UNorm" resolution="full" sampled="" />
         <GBufferNormals format="RGBA16SNorm" resolution="full" sampled="" />
         <GBufferParameters format="RG8UNorm" resolution="full" sampled="" />
+        <SceneHDR format="R11G11B10UFloat" resolution="full" sampled="" storage="" />
         <DepthBuffer  format="Depth32SFloat" resolution="full" sampled="" />
     </Images>
     <RenderTasks>
-        <Mesh name="Mesh" renderPass="TestRenderPass">
-            <OutputImage name="SwapImage" clear="0, 0, 0, 0"/>
+        <Mesh name="Mesh" renderPass="GBuffer">
+            <OutputImage name="GBufferColor" clear="0, 0, 0, 0"/>
+            <OutputImage name="GBufferNormals" clear="0, 0, 0, 0"/>
+            <OutputImage name="GBufferParameters" clear="0, 0, 0, 0"/>
             <OutputImage name="DepthBuffer" clear="1"/>
             <MaterialPass name="TestMaterialPass" />
         </Mesh>
+        <FullScreen name="Lighting" shader="blit.comp" resolution="Full">
+            <InputImage name="GBufferColor"/>
+            <InputImage name="SceneHDR" storage=""/>
+        </FullScreen>
+        <FullScreen name="BlitSwapchain" shader="blit_to_swapchain.frag" resolution="Display">
+            <InputImage name="SceneHDR"/>
+            <OutputImage name="SwapImage"/>
+        </FullScreen>
     </RenderTasks>
 </RendererConfig>

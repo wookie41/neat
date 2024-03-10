@@ -91,7 +91,7 @@ create_instance :: proc(
 
 	mesh_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
 
-	// Find the material pass
+	// Find the render pass
 	render_pass_name := xml.find_attribute_val_by_key(
 		p_render_task_config.doc,
 		p_render_task_config.render_task_element_id,
@@ -195,6 +195,7 @@ destroy_instance :: proc(p_render_task_ref: RenderTaskRef) {
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
 	}
+	free(mesh_render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
 }
 
 //---------------------------------------------------------------------------//

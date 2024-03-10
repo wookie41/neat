@@ -1,5 +1,6 @@
-#include "./bindless.incl.hlsl"
-#include "./constant_buffers.incl.hlsl"
+#include "bindless.hlsli"
+#include "constant_buffers.hlsli"
+#include "base.hlsli"
 
 struct MeshInstancedDrawInfo
 {
@@ -15,7 +16,6 @@ struct MeshInstanceInfo
 [[vk::binding(2, 1)]]
 StructuredBuffer<MeshInstanceInfo> gMeshInstanceInfoBuffer;
 
-
 [[vk::binding(4, 1)]]
 StructuredBuffer<MeshInstancedDrawInfo> gMeshInstancedDrawInfoBuffer;
 
@@ -26,19 +26,14 @@ struct VSInput {
     [[vk::location(3)]] float3 tangent   : TANGENT;
 };
 
-struct VSOutput {
-    [[vk::location(0)]] float2 uv                   : TEXCOORD0;
-    [[vk::location(1)]] uint materialInstanceIdx    : MATERIAL_INSTANCE_IDX;
-};
-
 float4 main(
         in VSInput pVertexInput, 
-        in uint instanceId : SV_INSTANCEID,
-        out VSOutput pVertexOutput) : SV_Position {
+        in uint pInstanceId : SV_INSTANCEID,
+        out FragmentInput pFragmentInput) : SV_Position {
 
-    MeshInstancedDrawInfo meshInstancedDrawInfo = gMeshInstancedDrawInfoBuffer[instanceId];
-    pVertexOutput.materialInstanceIdx = meshInstancedDrawInfo.materialInstanceIdx;
-    pVertexOutput.uv = pVertexInput.uv;
+    MeshInstancedDrawInfo meshInstancedDrawInfo = gMeshInstancedDrawInfoBuffer[pInstanceId];
+    pFragmentInput.materialInstanceIdx = meshInstancedDrawInfo.materialInstanceIdx;
+    pFragmentInput.uv = pVertexInput.uv;
     return mul(uPerView.proj, 
         mul(uPerView.view, 
         mul(gMeshInstanceInfoBuffer[meshInstancedDrawInfo.meshInstanceIdx].modelMatrix, 

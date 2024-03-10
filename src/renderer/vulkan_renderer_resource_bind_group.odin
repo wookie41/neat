@@ -85,9 +85,9 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_bind_bind_group :: proc(
+	backend_bind_group_bind_graphics :: proc(
 		p_cmd_buff_ref: CommandBufferRef,
-		p_pipeline_ref: PipelineRef,
+		p_pipeline_ref: GraphicsPipelineRef,
 		p_bind_group_ref: BindGroupRef,
 		p_target: u32,
 		p_dynamic_offsets: []u32,
@@ -95,13 +95,40 @@ when USE_VULKAN_BACKEND {
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
 		backend_bind_group := &g_resources.backend_bind_groups[get_bind_group_idx(p_bind_group_ref)]
 
-		pipeline_idx := get_pipeline_idx(p_pipeline_ref)
-		pipeline := &g_resources.pipelines[pipeline_idx]
-		backend_pipeline := &g_resources.backend_pipelines[pipeline_idx]
+		pipeline_idx := get_graphics_pipeline_idx(p_pipeline_ref)
+		backend_pipeline := &g_resources.backend_graphics_pipelines[pipeline_idx]
 
 		vk.CmdBindDescriptorSets(
 			backend_cmd_buffer.vk_cmd_buff,
-			map_pipeline_bind_point(pipeline.type),
+			.GRAPHICS,
+			backend_pipeline.vk_pipeline_layout,
+			p_target,
+			1,
+			&backend_bind_group.vk_descriptor_set,
+			u32(len(p_dynamic_offsets)),
+			raw_data(p_dynamic_offsets),
+		)
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_bind_group_bind_compute :: proc(
+		p_cmd_buff_ref: CommandBufferRef,
+		p_pipeline_ref: ComputePipelineRef,
+		p_bind_group_ref: BindGroupRef,
+		p_target: u32,
+		p_dynamic_offsets: []u32,
+	) {
+		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
+		backend_bind_group := &g_resources.backend_bind_groups[get_bind_group_idx(p_bind_group_ref)]
+
+		pipeline_idx := get_compute_pipeline_idx(p_pipeline_ref)
+		backend_pipeline := &g_resources.backend_compute_pipelines[pipeline_idx]
+
+		vk.CmdBindDescriptorSets(
+			backend_cmd_buffer.vk_cmd_buff,
+			.COMPUTE,
 			backend_pipeline.vk_pipeline_layout,
 			p_target,
 			1,
@@ -227,13 +254,13 @@ when USE_VULKAN_BACKEND {
 				if image_binding.mip > 0 {
 					image_writes[image_write_idx].imageView =
 						backend_image.per_mip_vk_view[image_binding.mip]
-					image_writes[image_write_idx].imageLayout =
-						backend_image.vk_layout_per_mip[image_binding.mip]
 
 				} else {
 					image_writes[image_write_idx].imageView = backend_image.all_mips_vk_view
-					image_writes[image_write_idx].imageLayout = backend_image.vk_layout_per_mip[0]
 				}
+
+				image_writes[image_write_idx].imageLayout =
+					.GENERAL if binding.type == .StorageImage else .SHADER_READ_ONLY_OPTIMAL
 
 				descriptor_writes[num_descriptor_writes] = vk.WriteDescriptorSet {
 					sType           = .WRITE_DESCRIPTOR_SET,

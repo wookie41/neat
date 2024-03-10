@@ -52,7 +52,7 @@ DrawStream :: struct {
 	push_constants:              [dynamic]rawptr,
 	current_index_buffer_ref:    BufferRef,
 	current_index_buffer_offset: u32,
-	current_pipeline_ref:        PipelineRef,
+	current_pipeline_ref:        GraphicsPipelineRef,
 	allocator:                   mem.Allocator,
 }
 
@@ -65,19 +65,11 @@ DrawStreamDispatch :: struct {
 	cmd_buff_ref:          CommandBufferRef,
 	current_draw:          u32,
 	current_push_constant: u32,
-	pipeline_ref:          PipelineRef,
+	pipeline_ref:          GraphicsPipelineRef,
 	draw_count:            u32,
 	instance_count:        u32,
 	first_instance:        u32,
 	index_buffer_ref:      BufferRef,
-}
-
-//---------------------------------------------------------------------------//
-
-@(private)
-BindGroupsWithOffsets :: struct {
-	bind_group_ref:  BindGroupRef,
-	dynamic_offsets: []u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -102,7 +94,7 @@ draw_stream_create :: proc(p_draw_stream_allocator: mem.Allocator) -> DrawStream
 	clear(&draw_stream.push_constants)
 
 	draw_stream.current_index_buffer_ref = InvalidBufferRef
-	draw_stream.current_pipeline_ref = InvalidPipelineRef
+	draw_stream.current_pipeline_ref = InvalidGraphicsPipelineRef
 
 	return draw_stream
 }
@@ -128,10 +120,10 @@ draw_stream_dispatch :: proc(p_cmd_buff_ref: CommandBufferRef, p_draw_stream: ^D
 
 //---------------------------------------------------------------------------//
 
-draw_stream_reset :: proc(p_draw_stream: ^DrawStream)  {
+draw_stream_reset :: proc(p_draw_stream: ^DrawStream) {
 	p_draw_stream.current_index_buffer_offset = 0
 	p_draw_stream.current_index_buffer_ref = InvalidBufferRef
-	p_draw_stream.current_pipeline_ref = InvalidPipelineRef
+	p_draw_stream.current_pipeline_ref = InvalidGraphicsPipelineRef
 }
 
 //---------------------------------------------------------------------------//
@@ -151,7 +143,7 @@ draw_stream_add_draw :: proc(
 	p_draw_stream: ^DrawStream,
 	p_draw_count: u32,
 	p_instance_count: u32,
-	p_pipeline_ref: PipelineRef = InvalidPipelineRef,
+	p_pipeline_ref: GraphicsPipelineRef = InvalidGraphicsPipelineRef,
 	p_vertex_buffers: []OffsetBuffer = {},
 	p_index_buffer: OffsetBuffer = InvalidOffsetBuffer,
 	p_index_type: IndexType = .UInt32,
@@ -206,7 +198,7 @@ draw_stream_add_draw :: proc(
 
 //---------------------------------------------------------------------------//
 
-draw_stream_set_pipeline :: proc(p_draw_stream: ^DrawStream, p_pipeline_ref: PipelineRef) {
+draw_stream_set_pipeline :: proc(p_draw_stream: ^DrawStream, p_pipeline_ref: GraphicsPipelineRef) {
 	draw_stream_write(p_draw_stream, .BindPipeline, p_pipeline_ref.ref)
 }
 
@@ -288,10 +280,10 @@ draw_stream_submit_draw :: proc(p_draw_stream: ^DrawStream) {
 //---------------------------------------------------------------------------//
 
 draw_stream_dispatch_bind_pipeline :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
-	pipeline_ref := PipelineRef {
+	pipeline_ref := GraphicsPipelineRef {
 		ref = draw_stream_dispatch_read_next(p_draw_stream_dispatch),
 	}
-	bind_pipeline(pipeline_ref, p_draw_stream_dispatch.cmd_buff_ref)
+	graphics_pipeline_bind(pipeline_ref, p_draw_stream_dispatch.cmd_buff_ref)
 	p_draw_stream_dispatch.pipeline_ref = pipeline_ref
 }
 
@@ -358,7 +350,7 @@ draw_stream_dispatch_change_bind_group :: proc(p_draw_stream_dispatch: ^DrawStre
 	bind_group_ref := BindGroupRef{draw_stream_dispatch_read_next(p_draw_stream_dispatch)}
 	binding := draw_stream_dispatch_read_next(p_draw_stream_dispatch)
 	dynamic_offsets := draw_stream_dispatch_read_slice(p_draw_stream_dispatch)
-	bind_bind_group(
+	bind_group_bind(
 		p_draw_stream_dispatch.cmd_buff_ref,
 		p_draw_stream_dispatch.pipeline_ref,
 		bind_group_ref,
@@ -371,10 +363,10 @@ draw_stream_dispatch_change_bind_group :: proc(p_draw_stream_dispatch: ^DrawStre
 
 @(private = "file")
 draw_stream_dispatcher_submit_draw :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
-	assert(p_draw_stream_dispatch.pipeline_ref != InvalidPipelineRef)
+	assert(p_draw_stream_dispatch.pipeline_ref != InvalidGraphicsPipelineRef)
 
 	// Collect push constants for the current pipeline
-	pipeline := &g_resources.pipelines[get_pipeline_idx(p_draw_stream_dispatch.pipeline_ref)]
+	pipeline := &g_resources.graphics_pipelines[get_graphics_pipeline_idx(p_draw_stream_dispatch.pipeline_ref)]
 
 	push_constants_start := p_draw_stream_dispatch.current_push_constant
 	push_constants_count := u32(len(pipeline.desc.push_constants))

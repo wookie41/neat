@@ -41,7 +41,14 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	BackendPipelineResource :: struct {
+	BackendGraphicsPipelineResource :: struct {
+		vk_pipeline:        vk.Pipeline,
+		vk_pipeline_layout: vk.PipelineLayout,
+	}
+
+	//---------------------------------------------------------------------------//
+
+	BackendComputePipelineResource :: struct {
 		vk_pipeline:        vk.Pipeline,
 		vk_pipeline_layout: vk.PipelineLayout,
 	}
@@ -50,6 +57,7 @@ when USE_VULKAN_BACKEND {
 
 	@(private = "file")
 	VERTEX_BINDINGS_PER_TYPE := map[VertexLayout][]vk.VertexInputBindingDescription {
+		.Empty = {},
 		// position, uv, normal, tangent
 		.Mesh = {
 			{binding = 0, stride = size_of(glsl.vec3), inputRate = .VERTEX},
@@ -63,6 +71,7 @@ when USE_VULKAN_BACKEND {
 
 	@(private = "file")
 	VERTEX_ATTRIBUTES_PER_TYPE := map[VertexLayout][]vk.VertexInputAttributeDescription {
+		.Empty = {},
 		// position, uv, normal, tangent
 		.Mesh = {
 			{binding = 0, location = 0, format = .R32G32B32_SFLOAT, offset = 0},
@@ -92,6 +101,7 @@ when USE_VULKAN_BACKEND {
 				sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
 				polygonMode = .FILL,
 				lineWidth = 1.0,
+				cullMode = {.BACK},
 			},
 		}
 
@@ -156,7 +166,7 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	backend_init_pipelines :: proc() -> bool {
+	backend_pipelines_init :: proc() -> bool {
 		// Create an empty descriptor set layout used to fill gaps
 		{
 			create_info := vk.DescriptorSetLayoutCreateInfo {
@@ -178,7 +188,7 @@ when USE_VULKAN_BACKEND {
 		// Init pipeline layout cache
 		INTERNAL.pipeline_layout_cache = make(
 			map[u32]PipelineLayoutCacheEntry,
-			MAX_PIPELINES,
+			MAX_GRAPHICS_PIPELINES + MAX_COMPUTE_PIPELINES,
 			G_RENDERER_ALLOCATORS.main_allocator,
 		)
 
@@ -203,7 +213,10 @@ when USE_VULKAN_BACKEND {
 
 		vk.CreatePipelineCache(G_RENDERER.device, &create_info, nil, &INTERNAL.vk_pipeline_cache)
 
-		INTERNAL.deferred_pipeline_deletions = make([dynamic]DeferredPipelineDelete, get_frame_allocator())
+		INTERNAL.deferred_pipeline_deletions = make(
+			[dynamic]DeferredPipelineDelete,
+			get_frame_allocator(),
+		)
 
 		return true
 	}
@@ -225,7 +238,6 @@ when USE_VULKAN_BACKEND {
 			}
 
 			// Safe to delete pipeline
-
 			cache_entry := &INTERNAL.pipeline_layout_cache[deferred_delete.pipeline_layout_hash]
 			assert(cache_entry.ref_count > 0)
 			cache_entry.ref_count -= 1
@@ -245,7 +257,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_deinit_pipelines :: proc() {
+	backend_pipelines_deinit :: proc() {
 		cache_size: int
 
 		vk.GetPipelineCacheData(G_RENDERER.device, INTERNAL.vk_pipeline_cache, &cache_size, nil)
@@ -266,11 +278,11 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	backend_create_graphics_pipeline :: proc(p_ref: PipelineRef) -> bool {
+	backend_graphics_pipeline_create :: proc(p_ref: GraphicsPipelineRef) -> bool {
 
-		pipeline_idx := get_pipeline_idx(p_ref)
-		pipeline := &g_resources.pipelines[pipeline_idx]
-		backend_pipeline := &g_resources.backend_pipelines[pipeline_idx]
+		pipeline_idx := get_graphics_pipeline_idx(p_ref)
+		pipeline := &g_resources.graphics_pipelines[pipeline_idx]
+		backend_pipeline := &g_resources.backend_graphics_pipelines[pipeline_idx]
 
 		temp_arena: common.Arena
 		common.temp_arena_init(&temp_arena)
@@ -311,11 +323,15 @@ when USE_VULKAN_BACKEND {
 		vertex_attribute_descriptions := VERTEX_ATTRIBUTES_PER_TYPE[pipeline.desc.vertex_layout]
 
 		vertex_input_info := vk.PipelineVertexInputStateCreateInfo {
-			sType                           = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-			vertexBindingDescriptionCount   = u32(len(vertex_binding_descriptions)),
-			pVertexBindingDescriptions      = &vertex_binding_descriptions[0],
-			vertexAttributeDescriptionCount = u32(len(vertex_attribute_descriptions)),
-			pVertexAttributeDescriptions    = &vertex_attribute_descriptions[0],
+			sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+		}
+		if pipeline.desc.vertex_layout != .Empty {
+			vertex_input_info.vertexBindingDescriptionCount = u32(len(vertex_binding_descriptions))
+			vertex_input_info.pVertexBindingDescriptions = &vertex_binding_descriptions[0]
+			vertex_input_info.vertexAttributeDescriptionCount = u32(
+				len(vertex_attribute_descriptions),
+			)
+			vertex_input_info.pVertexAttributeDescriptions = &vertex_attribute_descriptions[0]
 		}
 
 		// Rasterizer
@@ -348,20 +364,14 @@ when USE_VULKAN_BACKEND {
 		// Depth stencil
 		depth_stencil := DEPTH_STENCIL_STATE_PER_TYPE[render_pass.desc.depth_stencil_type]
 
-		// Pipeline layout - first check if we have a matching pipeline layout in the cache
-		pipeline_layout_hash := vert_shader.hash ~ frag_shader.hash
-		if pipeline_layout_hash in INTERNAL.pipeline_layout_cache {
-			// If so, use it
-			cache_entry := &INTERNAL.pipeline_layout_cache[pipeline_layout_hash]
-			cache_entry.ref_count += 1
-			backend_pipeline.vk_pipeline_layout = cache_entry.vk_pipeline_layout
-		} else {
-			// Otherwise create a new one 
-			success := create_pipeline_layout(pipeline_idx, pipeline_layout_hash)
-			if success == false {
-				return false
-			}
-		}
+		// Pipeline layout
+		pipeline_layout_hash := hash_pipeline_layout(vert_shader.hash, frag_shader.hash)
+		vk_pipeline_layout := get_cached_or_create_pipeline_layout(
+			pipeline_layout_hash,
+			pipeline.desc.bind_group_layout_refs,
+			pipeline.desc.push_constants,
+		) or_return
+		backend_pipeline.vk_pipeline_layout = vk_pipeline_layout
 
 		// Map color attachment formats
 		color_attachment_formats := make(
@@ -370,7 +380,6 @@ when USE_VULKAN_BACKEND {
 			temp_arena.allocator,
 		)
 		defer delete(color_attachment_formats, temp_arena.allocator)
-
 
 		for format, i in render_pass.desc.layout.render_target_formats {
 			color_attachment_formats[i] = G_IMAGE_FORMAT_MAPPING[format]
@@ -460,12 +469,12 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_destroy_pipeline :: proc(p_pipeline_ref: PipelineRef) {
+	backend_graphics_pipeline_destroy :: proc(p_pipeline_ref: GraphicsPipelineRef) {
 
-		pipeline_idx := get_pipeline_idx(p_pipeline_ref)
-		backend_pipeline := &g_resources.backend_pipelines[pipeline_idx]
+		pipeline_idx := get_graphics_pipeline_idx(p_pipeline_ref)
+		backend_pipeline := &g_resources.backend_graphics_pipelines[pipeline_idx]
 
-		pipeline_layout_hash := hash_pipeline_layout(pipeline_idx)
+		pipeline_layout_hash := hash_pipeline_layout(p_pipeline_ref)
 		assert(pipeline_layout_hash in INTERNAL.pipeline_layout_cache)
 
 		cache_entry := &INTERNAL.pipeline_layout_cache[pipeline_layout_hash]
@@ -478,21 +487,10 @@ when USE_VULKAN_BACKEND {
 			delete_key(&INTERNAL.pipeline_layout_cache, pipeline_layout_hash)
 		}
 
-		vk.DestroyPipeline(G_RENDERER.device, backend_pipeline.vk_pipeline, nil)
-	}
-
-	//---------------------------------------------------------------------------//
-
-	@(private)
-	backend_reset_pipeline :: proc(p_pipeline_ref: PipelineRef) {
-
-		pipeline_idx := get_pipeline_idx(p_pipeline_ref)
-		backend_pipeline := &g_resources.backend_pipelines[pipeline_idx]
-
 		append(
 			&INTERNAL.deferred_pipeline_deletions,
 			DeferredPipelineDelete{
-				pipeline_layout_hash = hash_pipeline_layout(pipeline_idx),
+				pipeline_layout_hash = pipeline_layout_hash,
 				vk_pipeline = backend_pipeline.vk_pipeline,
 				wait_fence = G_RENDERER.frame_fences[get_frame_idx()],
 			},
@@ -501,55 +499,97 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-
 	@(private)
-	backend_bind_pipeline :: proc(
-		p_pipeline_ref: PipelineRef,
+	backend_graphics_pipeline_bind :: proc(
+		p_pipeline_ref: GraphicsPipelineRef,
 		p_cmd_buffer_ref: CommandBufferRef,
 	) {
-		pipeline_idx := get_pipeline_idx(p_pipeline_ref)
-		pipeline := &g_resources.pipelines[pipeline_idx]
-		backend_pipeline := &g_resources.backend_pipelines[pipeline_idx]
+		pipeline_idx := get_graphics_pipeline_idx(p_pipeline_ref)
+		backend_pipeline := &g_resources.backend_graphics_pipelines[pipeline_idx]
 
-		bind_point := map_pipeline_bind_point(pipeline.type)
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buffer_ref)]
-		vk.CmdBindPipeline(
-			backend_cmd_buffer.vk_cmd_buff,
-			bind_point,
-			backend_pipeline.vk_pipeline,
+		vk.CmdBindPipeline(backend_cmd_buffer.vk_cmd_buff, .GRAPHICS, backend_pipeline.vk_pipeline)
+	}
+
+	hash_pipeline_layout :: proc {
+		hash_graphics_pipeline_layout_ref,
+		hash_compute_pipeline_layout_ref,
+		hash_graphics_pipeline_layout_shaders,
+		hash_compute_pipeline_layout_shaders,
+	}
+	//---------------------------------------------------------------------------//
+
+	@(private = "file")
+	hash_graphics_pipeline_layout_ref :: #force_inline proc(
+		p_pipeline_ref: GraphicsPipelineRef,
+	) -> u32 {
+		pipeline := &g_resources.graphics_pipelines[get_graphics_pipeline_idx(p_pipeline_ref)]
+		vert_shader_hash := g_resources.shaders[get_shader_idx(pipeline.desc.vert_shader_ref)].hash
+		frag_shader_hash := g_resources.shaders[get_shader_idx(pipeline.desc.frag_shader_ref)].hash
+		return hash_graphics_pipeline_layout_shaders(vert_shader_hash,frag_shader_hash)
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private = "file")
+	hash_compute_pipeline_layout_ref :: #force_inline proc(
+		p_pipeline_ref: ComputePipelineRef,
+	) -> u32 {
+		pipeline := &g_resources.compute_pipelines[get_compute_pipeline_idx(p_pipeline_ref)]
+		return hash_compute_pipeline_layout_shaders(g_resources.shaders[get_shader_idx(pipeline.desc.compute_shader_ref)].hash)
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private = "file")
+	hash_graphics_pipeline_layout_shaders :: proc(
+		p_vert_shader_hash: u32,
+		p_frag_shader_hash: u32,
+	) -> u32 {
+		return(
+			p_vert_shader_hash ~
+			p_frag_shader_hash ~
+			u32(ShaderStage.Vertex) ~
+			u32(ShaderStage.Fragment) \
 		)
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	hash_pipeline_layout :: #force_inline proc(p_pipeline_idx: u32) -> u32 {
-		pipeline := &g_resources.pipelines[p_pipeline_idx]
-		vert_shader_hash := g_resources.shaders[get_shader_idx(pipeline.desc.vert_shader_ref)].hash
-		frag_shader_hash := g_resources.shaders[get_shader_idx(pipeline.desc.frag_shader_ref)].hash
-		return vert_shader_hash ~ frag_shader_hash
+	hash_compute_pipeline_layout_shaders :: proc(
+		p_compute_hash: u32,
+	) -> u32 {
+		return(
+			p_compute_hash ~
+			u32(ShaderStage.Compute)
+		)
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	create_pipeline_layout :: proc(p_pipeline_idx: u32, p_pipeline_layout_hash: u32) -> bool {
+	create_pipeline_layout :: proc(
+		p_pipeline_layout_hash: u32,
+		p_bind_group_layout_refs: []BindGroupLayoutRef,
+		p_push_constants: []PushConstantDesc,
+	) -> (
+		vk.PipelineLayout,
+		bool,
+	) {
 
 		temp_arena: common.Arena
 		common.temp_arena_init(&temp_arena)
 		defer common.arena_delete(temp_arena)
 
-		pipeline := &g_resources.pipelines[p_pipeline_idx]
-		backend_pipeline := &g_resources.backend_pipelines[p_pipeline_idx]
-
 		// Gather descriptor layouts from each bind group layout
 		descriptor_set_layouts := make(
 			[]vk.DescriptorSetLayout,
-			len(pipeline.desc.bind_group_layout_refs),
+			len(p_bind_group_layout_refs),
 			temp_arena.allocator,
 		)
 
-		for bind_group_layout_ref, i in pipeline.desc.bind_group_layout_refs {
+		for bind_group_layout_ref, i in p_bind_group_layout_refs {
 
 			if bind_group_layout_ref == InvalidBindGroupRefLayout {
 				descriptor_set_layouts[i] = INTERNAL.vk_empty_descriptor_set_layout
@@ -570,11 +610,11 @@ when USE_VULKAN_BACKEND {
 
 		push_constant_ranges := make(
 			[]vk.PushConstantRange,
-			len(pipeline.desc.push_constants),
+			len(p_push_constants),
 			temp_arena.allocator,
 		)
 
-		for push_constant, i in pipeline.desc.push_constants {
+		for push_constant, i in p_push_constants {
 			push_constant_ranges[i] = vk.PushConstantRange {
 				offset = push_constant.offset_in_bytes,
 				size   = push_constant.size_in_bytes,
@@ -593,29 +633,25 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
-		if len(pipeline.desc.push_constants) > 0 {
-			create_info.pushConstantRangeCount = u32(len(pipeline.desc.push_constants))
+		if len(p_push_constants) > 0 {
+			create_info.pushConstantRangeCount = u32(len(p_push_constants))
 			create_info.pPushConstantRanges = &push_constant_ranges[0]
 		}
 
-		if vk.CreatePipelineLayout(
-			   G_RENDERER.device,
-			   &create_info,
-			   nil,
-			   &backend_pipeline.vk_pipeline_layout,
-		   ) !=
+		vk_pipeline_layout: vk.PipelineLayout
+		if vk.CreatePipelineLayout(G_RENDERER.device, &create_info, nil, &vk_pipeline_layout) !=
 		   .SUCCESS {
 			log.warn("Failed to create pipeline layout")
-			return false
+			return vk.PipelineLayout{}, false
 		}
 
 		// Add entry to cache
 		INTERNAL.pipeline_layout_cache[p_pipeline_layout_hash] = PipelineLayoutCacheEntry {
 			ref_count          = 1,
-			vk_pipeline_layout = backend_pipeline.vk_pipeline_layout,
+			vk_pipeline_layout = vk_pipeline_layout,
 		}
 
-		return true
+		return vk_pipeline_layout, true
 	}
 
 	//---------------------------------------------------------------------------//
@@ -625,6 +661,170 @@ when USE_VULKAN_BACKEND {
 		type:  u32,
 		slot:  u32,
 		count: u32,
+	}
+
+	//---------------------------------------------------------------------------//
+
+	backend_compute_pipeline_create :: proc(p_ref: ComputePipelineRef) -> bool {
+
+		pipeline_idx := get_compute_pipeline_idx(p_ref)
+		pipeline := &g_resources.compute_pipelines[pipeline_idx]
+		backend_pipeline := &g_resources.backend_compute_pipelines[pipeline_idx]
+
+		temp_arena: common.Arena
+		common.temp_arena_init(&temp_arena)
+		defer common.arena_delete(temp_arena)
+
+		compute_shader_idx := get_shader_idx(pipeline.desc.compute_shader_ref)
+		compute_shader := &g_resources.shaders[compute_shader_idx]
+		backend_compute_shader := &g_resources.backend_shaders[compute_shader_idx]
+
+		compute_stage_info := vk.PipelineShaderStageCreateInfo {
+			sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+			stage = {.COMPUTE},
+			module = backend_compute_shader.vk_module,
+			pName = "main",
+		}
+
+		// Pipeline layout 
+		backend_pipeline.vk_pipeline_layout = get_cached_or_create_pipeline_layout(
+			hash_pipeline_layout(compute_shader.hash),
+			pipeline.desc.bind_group_layout_refs,
+			pipeline.desc.push_constants,
+		) or_return
+
+		pipeline_info := vk.ComputePipelineCreateInfo {
+			sType  = .COMPUTE_PIPELINE_CREATE_INFO,
+			layout = backend_pipeline.vk_pipeline_layout,
+			stage  = compute_stage_info,
+		}
+
+		if res := vk.CreateComputePipelines(
+			G_RENDERER.device,
+			0,
+			1,
+			&pipeline_info,
+			nil,
+			&backend_pipeline.vk_pipeline,
+		); res != .SUCCESS {
+			log.warnf("Couldn't create compute pipeline: %s", res)
+			return false
+		}
+
+		return true
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_compute_pipeline_destroy :: proc(p_pipeline_ref: ComputePipelineRef) {
+
+		pipeline_idx := get_compute_pipeline_idx(p_pipeline_ref)
+		backend_pipeline := &g_resources.backend_compute_pipelines[pipeline_idx]
+
+		pipeline_layout_hash := hash_pipeline_layout(p_pipeline_ref)
+		assert(pipeline_layout_hash in INTERNAL.pipeline_layout_cache)
+
+		cache_entry := &INTERNAL.pipeline_layout_cache[pipeline_layout_hash]
+		assert(cache_entry.ref_count > 0)
+		cache_entry.ref_count -= 1
+
+		// Delete the pipeline layout if needed
+		if cache_entry.ref_count == 0 {
+			vk.DestroyPipelineLayout(G_RENDERER.device, cache_entry.vk_pipeline_layout, nil)
+			delete_key(&INTERNAL.pipeline_layout_cache, pipeline_layout_hash)
+		}
+
+		append(
+			&INTERNAL.deferred_pipeline_deletions,
+			DeferredPipelineDelete{
+				pipeline_layout_hash = pipeline_layout_hash,
+				vk_pipeline = backend_pipeline.vk_pipeline,
+				wait_fence = G_RENDERER.frame_fences[get_frame_idx()],
+			},
+		)
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private = "file")
+	get_cached_or_create_pipeline_layout :: proc(
+		p_pipeline_layout_hash: u32,
+		p_bind_group_layout_refs: []BindGroupLayoutRef,
+		p_push_constants: []PushConstantDesc,
+	) -> (
+		vk.PipelineLayout,
+		bool,
+	) {
+		// First check if we have a matching pipeline layout in the cache
+		if p_pipeline_layout_hash in INTERNAL.pipeline_layout_cache {
+			// If so, use it
+			cache_entry := &INTERNAL.pipeline_layout_cache[p_pipeline_layout_hash]
+			cache_entry.ref_count += 1
+			return cache_entry.vk_pipeline_layout, true
+		}
+
+		// Otherwise create a new one 
+		pipeline_layout, success := create_pipeline_layout(
+			p_pipeline_layout_hash,
+			p_bind_group_layout_refs,
+			p_push_constants,
+		)
+		if success == false {
+			return vk.PipelineLayout{}, false
+		}
+
+		return pipeline_layout, true
+	}
+	//---------------------------------------------------------------------------//
+
+
+	@(private)
+	backend_compute_pipeline_bind :: proc(
+		p_pipeline_ref: ComputePipelineRef,
+		p_cmd_buffer_ref: CommandBufferRef,
+	) {
+		pipeline_idx := get_compute_pipeline_idx(p_pipeline_ref)
+		backend_pipeline := &g_resources.backend_compute_pipelines[pipeline_idx]
+
+		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buffer_ref)]
+		vk.CmdBindPipeline(backend_cmd_buffer.vk_cmd_buff, .COMPUTE, backend_pipeline.vk_pipeline)
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_graphics_pipeline_reset :: proc(p_pipeline_ref: GraphicsPipelineRef) {
+
+		pipeline_idx := get_graphics_pipeline_idx(p_pipeline_ref)
+		backend_pipeline := &g_resources.backend_graphics_pipelines[pipeline_idx]
+
+		append(
+			&INTERNAL.deferred_pipeline_deletions,
+			DeferredPipelineDelete{
+				pipeline_layout_hash = hash_pipeline_layout(p_pipeline_ref),
+				vk_pipeline = backend_pipeline.vk_pipeline,
+				wait_fence = G_RENDERER.frame_fences[get_frame_idx()],
+			},
+		)
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_compute_pipeline_reset :: proc(p_pipeline_ref: ComputePipelineRef) {
+
+		pipeline_idx := get_compute_pipeline_idx(p_pipeline_ref)
+		backend_pipeline := &g_resources.backend_compute_pipelines[pipeline_idx]
+
+		append(
+			&INTERNAL.deferred_pipeline_deletions,
+			DeferredPipelineDelete{
+				pipeline_layout_hash = hash_pipeline_layout(p_pipeline_ref),
+				vk_pipeline = backend_pipeline.vk_pipeline,
+				wait_fence = G_RENDERER.frame_fences[get_frame_idx()],
+			},
+		)
 	}
 
 	//---------------------------------------------------------------------------//

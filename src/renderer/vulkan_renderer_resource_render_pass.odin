@@ -54,77 +54,6 @@ when USE_VULKAN_BACKEND {
 		common.temp_arena_init(&temp_arena)
 		defer common.arena_delete(temp_arena)
 
-		image_input_barriers := make(
-			[]vk.ImageMemoryBarrier,
-			len(p_begin_info.bindings.image_inputs),
-			temp_arena.allocator,
-		)
-
-		image_input_barriers_count := 0
-
-		// Prepare barriers for image inputs
-		for input in p_begin_info.bindings.image_inputs {
-
-			image_idx := get_image_idx(input.image_ref)
-			image := &g_resources.images[image_idx]
-
-			input_usage := ImageUsage.SampledImage
-			new_layout := vk.ImageLayout.ATTACHMENT_OPTIMAL
-			dst_access_mask := vk.AccessFlags{.SHADER_READ}
-
-			if .Storage in input.flags {
-				dst_access_mask += {.SHADER_WRITE}
-				new_layout = vk.ImageLayout.GENERAL
-				input_usage = ImageUsage.General
-			} else if image.desc.format > .DepthFormatsStart &&
-			   image.desc.format < .DepthFormatsEnd {
-
-				if image.desc.format > .DepthStencilFormatsStart &&
-				   image.desc.format < .DepthStencilFormatsEnd {
-					new_layout = vk.ImageLayout.DEPTH_STENCIL_READ_ONLY_OPTIMAL
-				}
-				new_layout = vk.ImageLayout.DEPTH_READ_ONLY_OPTIMAL
-			}
-
-			image_backend := &g_resources.backend_images[image_idx]
-
-			old_layout := image_backend.vk_layout_per_mip[0]
-			mip_count := image.desc.mip_count
-			mip: u32 = 0
-
-			if .AddressSubresource in input.flags {
-				mip = input.mip
-				old_layout = image_backend.vk_layout_per_mip[mip]
-				mip_count = 1
-			}
-
-			// Check if this image needs to be transitioned
-			if old_layout == new_layout {
-				continue
-			}
-
-
-			image_input_barriers[image_input_barriers_count] = vk.ImageMemoryBarrier {
-				sType = .IMAGE_MEMORY_BARRIER,
-				dstAccessMask = dst_access_mask,
-				oldLayout = old_layout,
-				newLayout = new_layout,
-				image = image_backend.vk_image,
-				subresourceRange = {
-					aspectMask = {.COLOR},
-					baseArrayLayer = 0,
-					layerCount = 1,
-					baseMipLevel = mip,
-					levelCount = u32(mip_count),
-				},
-			}
-
-			image_backend.vk_layout_per_mip[mip] = new_layout
-
-			image_input_barriers_count += 1
-		}
-
-
 		color_attachments_count := 0
 		color_attachments := make(
 			[]vk.RenderingAttachmentInfo,
@@ -132,19 +61,9 @@ when USE_VULKAN_BACKEND {
 			temp_arena.allocator,
 		)
 		depth_attachment := vk.RenderingAttachmentInfo{}
-
-		image_output_barriers_count := 0
-		image_output_barriers := make(
-			[]vk.ImageMemoryBarrier,
-			len(p_begin_info.bindings.image_outputs),
-			temp_arena.allocator,
-		)
-		depth_attachment_barrier := vk.ImageMemoryBarrier{}
-
 		has_depth_attachment := false
-		depth_barrier_needed := false
 
-		// Prepare barriers and rendering attachments for outputs
+		// Prepare rendering attachments for outputs
 		for output in p_begin_info.bindings.image_outputs {
 
 			image_idx := get_image_idx(output.image_ref)
@@ -201,124 +120,36 @@ when USE_VULKAN_BACKEND {
 					storeOp = .STORE,
 				}
 
-				// Check if this image needs to be transitioned
-				if image_backend.vk_layout_per_mip[output.mip] == new_layout {
-					continue
-				}
-
-				depth_barrier_needed = true
-
-				depth_attachment_barrier = {
-					sType = .IMAGE_MEMORY_BARRIER,
-					dstAccessMask = {
-						.DEPTH_STENCIL_ATTACHMENT_READ,
-						.DEPTH_STENCIL_ATTACHMENT_WRITE,
-					},
-					oldLayout = image_backend.vk_layout_per_mip[output.mip],
-					newLayout = new_layout,
-					image = image_backend.vk_image,
-					subresourceRange = {
-						aspectMask = {.DEPTH},
-						baseArrayLayer = 0,
-						layerCount = 1,
-						baseMipLevel = output.mip,
-						levelCount = 1,
-					},
-				}
-			} else {
-
-				new_layout = .ATTACHMENT_OPTIMAL
-
-				color_attachments[color_attachments_count] = {
-					sType = .RENDERING_ATTACHMENT_INFO,
-					pNext = nil,
-					clearValue = {color = {float32 = cast([4]f32)output.clear_color}},
-					imageLayout = new_layout,
-					imageView = image_view,
-					loadOp = load_op,
-					storeOp = .STORE,
-				}
-
-				color_attachments_count += 1
-
-				// Check if this image needs to be transitioned
-				if image_backend.vk_layout_per_mip[output.mip] == new_layout {
-					continue
-				}
-
-				image_output_barriers[image_output_barriers_count] = {
-					sType = .IMAGE_MEMORY_BARRIER,
-					dstAccessMask = {.COLOR_ATTACHMENT_WRITE},
-					oldLayout = image_backend.vk_layout_per_mip[output.mip],
-					newLayout = new_layout,
-					image = image_backend.vk_image,
-					subresourceRange = {
-						aspectMask = {.COLOR},
-						baseArrayLayer = 0,
-						layerCount = 1,
-						baseMipLevel = output.mip,
-						levelCount = 1,
-					},
-				}
-				image_output_barriers_count += 1
-
+				continue
 			}
+
+			// Handle color attachments
+			new_layout = .ATTACHMENT_OPTIMAL
+
+			color_attachments[color_attachments_count] = {
+				sType = .RENDERING_ATTACHMENT_INFO,
+				pNext = nil,
+				clearValue = {color = {float32 = cast([4]f32)output.clear_color}},
+				imageLayout = new_layout,
+				imageView = image_view,
+				loadOp = load_op,
+				storeOp = .STORE,
+			}
+
+			color_attachments_count += 1
+
 			image_backend.vk_layout_per_mip[output.mip] = new_layout
 		}
 
 		cmd_buffer_idx := get_cmd_buffer_idx(p_cmd_buff_ref)
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[cmd_buffer_idx]
 
-		// Insert input barriers
-		if image_input_barriers_count > 0 {
-			vk.CmdPipelineBarrier(
-				backend_cmd_buffer.vk_cmd_buff,
-				{.BOTTOM_OF_PIPE},
-				{.VERTEX_SHADER, .FRAGMENT_SHADER, .COMPUTE_SHADER},
-				{},
-				0,
-				nil,
-				0,
-				nil,
-				u32(image_input_barriers_count),
-				&image_input_barriers[0],
-			)
-		}
-
-		// Insert depth attachment barrier
-		if depth_barrier_needed {
-			vk.CmdPipelineBarrier(
-				backend_cmd_buffer.vk_cmd_buff,
-				{.TOP_OF_PIPE},
-				{.EARLY_FRAGMENT_TESTS},
-				{},
-				0,
-				nil,
-				0,
-				nil,
-				1,
-				&depth_attachment_barrier,
-			)
-		}
-
-		// Insert output barriers
-		if image_output_barriers_count > 0 {
-			vk.CmdPipelineBarrier(
-				backend_cmd_buffer.vk_cmd_buff,
-				{.TOP_OF_PIPE},
-				{.COLOR_ATTACHMENT_OUTPUT},
-				{},
-				0,
-				nil,
-				0,
-				nil,
-				u32(image_output_barriers_count),
-				&image_output_barriers[0],
-			)
-		}
-
 		// Prepare the rendering info
-		render_area := G_RENDERER.swap_extent
+		resolution := get_resolution(render_pass.desc.resolution)
+		render_area := vk.Extent2D {
+			width  = resolution.x,
+			height = resolution.y,
+		}
 
 		#partial switch render_pass.desc.resolution {
 		case .Half:
@@ -353,6 +184,7 @@ when USE_VULKAN_BACKEND {
 			extent = render_area,
 		}
 
+		// Setup render state
 		vk.CmdBeginRendering(backend_cmd_buffer.vk_cmd_buff, &rendering_info)
 		vk.CmdSetViewport(backend_cmd_buffer.vk_cmd_buff, 0, 1, &viewport)
 		vk.CmdSetScissor(backend_cmd_buffer.vk_cmd_buff, 0, 1, &scissor)

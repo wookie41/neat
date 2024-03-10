@@ -3,7 +3,7 @@
         "name": "TestMaterialPass",
         "vertexShaderPath": "base.vert.hlsl",
         "fragmentShaderPath": "base.frag.hlsl",
-        "renderPass": "TestRenderPass"
+        "renderPass": "GBuffer"
     }
     // {
     //     "name": "TestMaterialPassPrePass",

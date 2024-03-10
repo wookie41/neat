@@ -208,6 +208,29 @@ xml_get_u32_attribute :: proc(
 
 //---------------------------------------------------------------------------//
 
+xml_get_u16_attribute :: proc(
+	p_doc: ^xml.Document,
+	p_element_id: u32,
+	p_attr_name: string,
+) -> (
+	u16,
+	bool,
+) {
+	str, found := xml.find_attribute_val_by_key(p_doc, p_element_id, p_attr_name)
+	if found == false {
+		return 0, false
+	}
+
+	val, success := strconv.parse_uint(str, 10)
+	if success == false {
+		return 0, false
+	}
+
+	return u16(val), true
+}
+
+//---------------------------------------------------------------------------//
+
 // Converts slice into a dynamic array without cloning or allocating memory
 @(require_results)
 into_dynamic :: proc(a: $T/[]$E) -> [dynamic]E {

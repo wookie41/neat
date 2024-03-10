@@ -57,11 +57,13 @@ G_RESOLUTION_NAME_MAPPING := map[string]Resolution {
 	"Full"    = .Full,
 	"Half"    = .Half,
 	"Quarter" = .Quarter,
+	"Display" = .Display,
 }
 
 //---------------------------------------------------------------------------//
 
 Resolution :: enum u8 {
+	Display,
 	Full,
 	Half,
 	Quarter,
@@ -71,27 +73,27 @@ Resolution :: enum u8 {
 
 @(private)
 G_IMAGE_FORMAT_NAME_MAPPING := map[string]ImageFormat {
-	"Depth32SFloat" = .Depth32SFloat,
-	"R8UNorm"       = .R8UNorm,
-	"R32UInt"       = .R32UInt,
-	"R32Int"        = .R32Int,
-	"R32SFloat"     = .R32SFloat,
-	"RG8UNorm"      = .RG8UNorm,
-	"RG32UInt"      = .RG32UInt,
-	"RG32Int"       = .RG32Int,
-	"RG32SFloat"    = .RG32SFloat,
-	"RGB8UNorm"     = .RGB8UNorm,
-	"RGB32UInt"     = .RGB32UInt,
-	"RGB32Int"      = .RGB32Int,
-	"RGB32SFloat"   = .RGB32SFloat,
-	"RGBA8UNorm"    = .RGBA8UNorm,
-	"RGBA16SNorm"   = .RGBA16SNorm,
-	"RGBA32UInt"    = .RGBA32UInt,
-	"RGBA32Int"     = .RGBA32Int,
-	"RGBA32SFloat"  = .RGBA32SFloat,
-	"RGBA8_SRGB"    = .RGBA8_SRGB,
-	"BGRA8_SRGB"    = .BGRA8_SRGB,
-	"BGRA8_SRGB"    = .BGRA8_SRGB,
+	"Depth32SFloat"   = .Depth32SFloat,
+	"R8UNorm"         = .R8UNorm,
+	"R32UInt"         = .R32UInt,
+	"R32Int"          = .R32Int,
+	"R32SFloat"       = .R32SFloat,
+	"RG8UNorm"        = .RG8UNorm,
+	"RG32UInt"        = .RG32UInt,
+	"RG32Int"         = .RG32Int,
+	"RG32SFloat"      = .RG32SFloat,
+	"RGB8UNorm"       = .RGB8UNorm,
+	"RGB32UInt"       = .RGB32UInt,
+	"RGB32Int"        = .RGB32Int,
+	"RGB32SFloat"     = .RGB32SFloat,
+	"RGBA8UNorm"      = .RGBA8UNorm,
+	"RGBA16SNorm"     = .RGBA16SNorm,
+	"RGBA32UInt"      = .RGBA32UInt,
+	"RGBA32Int"       = .RGBA32Int,
+	"RGBA32SFloat"    = .RGBA32SFloat,
+	"RGBA8_SRGB"      = .RGBA8_SRGB,
+	"BGRA8_SRGB"      = .BGRA8_SRGB,
+	"R11G11B10UFloat" = .R11G11B10UFloat,
 }
 
 //---------------------------------------------------------------------------//
@@ -132,7 +134,7 @@ ImageFormat :: enum u16 {
 	RGBA32UInt,
 	RGBA32Int,
 	RGBA32SFloat,
-	R11G11B10,
+	R11G11B10UFloat,
 	RGBA16SNorm,
 	RGBAFormatsEnd,
 	SRGB_FormatsStart,

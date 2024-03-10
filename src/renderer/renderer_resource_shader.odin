@@ -1,4 +1,3 @@
-
 package renderer
 
 // @TODO Figure out when we should free the shader, as they can be used by
@@ -61,9 +60,7 @@ ShaderStageFlags :: distinct bit_set[ShaderStage;u8]
 
 //---------------------------------------------------------------------------//
 
-ShaderFlagBits :: enum u16 {
-	UsesBindlessArray,
-}
+ShaderFlagBits :: enum u16 {}
 
 ShaderFlags :: distinct bit_set[ShaderFlagBits;u16]
 
@@ -162,7 +159,6 @@ init_shaders :: proc() -> bool {
 				feature,
 				G_RENDERER_ALLOCATORS.resource_allocator,
 			)
-
 		}
 
 		if strings.has_suffix(entry.name, ".vert") {
@@ -198,13 +194,13 @@ deinit_shaders :: proc() {
 
 create_shader :: proc(p_shader_ref: ShaderRef) -> bool {
 	shader := &g_resources.shaders[get_shader_idx(p_shader_ref)]
-	shader_hash := calculate_hash_for_shader(&shader.desc)
-	assert((shader_hash in INTERNAL.shader_by_hash) == false)
+	shader.hash = calculate_hash_for_shader(&shader.desc)
+	assert((shader.hash in INTERNAL.shader_by_hash) == false)
 	if backend_create_shader(p_shader_ref) == false {
 		destroy_shader(p_shader_ref)
 		return false
 	}
-	INTERNAL.shader_by_hash[shader_hash] = p_shader_ref
+	INTERNAL.shader_by_hash[shader.hash] = p_shader_ref
 	return true
 }
 
@@ -469,16 +465,31 @@ reload_shader :: proc(p_shader_file_name: string) {
 			return
 		}
 
-		// Find all pipelines referencing this shader
+		// Find all graphics pipelines referencing this shader
 		num_reloaded_pipelines: u32 = 0
-		for j in 0 ..< g_resource_refs.pipelines.alive_count {
-			pipeline_ref := g_resource_refs.pipelines.alive_refs[j]
-			pipeline := &g_resources.pipelines[get_pipeline_idx(pipeline_ref)]
 
-			if pipeline.desc.vert_shader_ref == shader_ref ||
-			   pipeline.desc.frag_shader_ref == shader_ref {
-				reset_pipeline(pipeline_ref)
-				num_reloaded_pipelines += 1
+		if shader.desc.stage == .Compute {
+			for j in 0 ..< g_resource_refs.compute_pipelines.alive_count {
+				pipeline_ref := g_resource_refs.compute_pipelines.alive_refs[j]
+				pipeline := &g_resources.compute_pipelines[get_compute_pipeline_idx(pipeline_ref)]
+
+				if pipeline.desc.compute_shader_ref == shader_ref {
+					compute_pipeline_reset(pipeline_ref)
+					compute_pipeline_create(pipeline_ref)
+					num_reloaded_pipelines += 1
+				}
+			}
+		} else {
+			for j in 0 ..< g_resource_refs.graphics_pipelines.alive_count {
+				pipeline_ref := g_resource_refs.graphics_pipelines.alive_refs[j]
+				pipeline := &g_resources.graphics_pipelines[get_graphics_pipeline_idx(pipeline_ref)]
+
+				if pipeline.desc.vert_shader_ref == shader_ref ||
+				   pipeline.desc.frag_shader_ref == shader_ref {
+					graphics_pipeline_reset(pipeline_ref)
+					graphics_pipeline_create(pipeline_ref)
+					num_reloaded_pipelines += 1
+				}
 			}
 		}
 

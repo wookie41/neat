@@ -1,1 +1,14 @@
-[]
+[
+    {
+        "name": "blit.comp",
+        "path": "blit.comp.hlsl"
+    },
+    {
+        "name": "fullscreen.vert",
+        "path": "fullscreen.vert.hlsl"
+    },
+    {
+        "name": "blit_to_swapchain.frag",
+        "path": "blit_to_swapchain.frag.hlsl"
+    }
+]

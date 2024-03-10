@@ -22,22 +22,6 @@ InvalidBindGroupRef := BindGroupRef {
 
 //---------------------------------------------------------------------------//
 
-BindGroupBindingType :: enum u8 {
-	SampledImage,
-	StorageImage,
-	StructuredBuffer,
-}
-
-//---------------------------------------------------------------------------//
-
-BindGroupBinding :: struct {
-	type:        BindGroupBindingType,
-	usage_flags: BindGroupBindingType,
-	count:       u32,
-}
-
-//---------------------------------------------------------------------------//
-
 BindGroupImageBinding :: struct {
 	image_ref: ImageRef,
 	mip:       u16,
@@ -60,7 +44,7 @@ BindGroupDesc :: struct {
 //---------------------------------------------------------------------------//
 
 BindGroupResource :: struct {
-	desc:                     BindGroupDesc,
+	desc: BindGroupDesc,
 }
 
 //---------------------------------------------------------------------------//
@@ -68,6 +52,14 @@ BindGroupResource :: struct {
 BindGroupUpdate :: struct {
 	images:  []BindGroupImageBinding,
 	buffers: []BindGroupBufferBinding,
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
+BindGroupsWithOffsets :: struct {
+	bind_group_ref:  BindGroupRef,
+	dynamic_offsets: []u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -130,14 +122,45 @@ destroy_bind_group :: proc(p_ref: BindGroupRef) {
 
 //---------------------------------------------------------------------------//
 
-bind_bind_group :: proc(
+bind_group_bind :: proc {
+	bind_group_bind_graphics,
+	bind_group_bind_compute,
+}
+
+//---------------------------------------------------------------------------//
+
+bind_group_bind_graphics :: proc(
 	p_cmd_buff_ref: CommandBufferRef,
-	p_pipeline_ref: PipelineRef,
+	p_pipeline_ref: GraphicsPipelineRef,
 	p_bind_group_ref: BindGroupRef,
 	p_target: u32,
 	p_dynamic_offsets: []u32,
 ) {
-	backend_bind_bind_group(p_cmd_buff_ref, p_pipeline_ref, p_bind_group_ref, p_target, p_dynamic_offsets)
+	backend_bind_group_bind_graphics(
+		p_cmd_buff_ref,
+		p_pipeline_ref,
+		p_bind_group_ref,
+		p_target,
+		p_dynamic_offsets,
+	)
+}
+
+//---------------------------------------------------------------------------//
+
+bind_group_bind_compute :: proc(
+	p_cmd_buff_ref: CommandBufferRef,
+	p_pipeline_ref: ComputePipelineRef,
+	p_bind_group_ref: BindGroupRef,
+	p_target: u32,
+	p_dynamic_offsets: []u32,
+) {
+	backend_bind_group_bind_compute(
+		p_cmd_buff_ref,
+		p_pipeline_ref,
+		p_bind_group_ref,
+		p_target,
+		p_dynamic_offsets,
+	)
 }
 
 //---------------------------------------------------------------------------//

@@ -26,7 +26,7 @@ MaterialPassResource :: struct {
 	desc:                MaterialPassDesc,
 	vertex_shader_ref:   ShaderRef,
 	fragment_shader_ref: ShaderRef,
-	pipeline_ref:        PipelineRef,
+	pipeline_ref:        GraphicsPipelineRef,
 }
 
 //---------------------------------------------------------------------------//

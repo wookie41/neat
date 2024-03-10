@@ -80,7 +80,9 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	//Init renderer
 	{
-		renderer_init_options := renderer.InitOptions{}
+		renderer_init_options := renderer.InitOptions {
+			display_resolution = glsl.uvec2{p_options.window_width, p_options.window_height},
+		}
 
 		when USE_VULKAN_BACKEND {
 			renderer_init_options.window = G_ENGINE.window

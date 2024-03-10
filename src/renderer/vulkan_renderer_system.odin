@@ -460,9 +460,15 @@ when USE_VULKAN_BACKEND {
 			device_features := vk.PhysicalDeviceFeatures{}
 			device_features.samplerAnisotropy = true
 
+			robustness2_features := vk.PhysicalDeviceRobustness2FeaturesEXT {
+				sType          = .PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
+				nullDescriptor = true,
+			}
+
 			dynamic_rendering_fratures := vk.PhysicalDeviceDynamicRenderingFeatures {
 				sType            = .PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
 				dynamicRendering = true,
+				pNext            = &robustness2_features,
 			}
 
 			descriptor_indexing_features := vk.PhysicalDeviceDescriptorIndexingFeaturesEXT {
@@ -594,13 +600,17 @@ backend_wait_for_frame_resources :: proc() {
 
 @(private)
 backend_post_render :: proc() {
+
+	swap_image_ref := G_RENDERER.swap_image_refs[G_RENDERER.swap_img_idx]
+	swap_image := &g_resources.backend_images[get_image_idx(swap_image_ref)]
+
 	backend_cmd_buff := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(get_frame_cmd_buffer_ref())]
 
 	// Transition the swapchain to present 
 	to_present_barrier := vk.ImageMemoryBarrier {
 		sType = .IMAGE_MEMORY_BARRIER,
 		srcAccessMask = {.COLOR_ATTACHMENT_WRITE},
-		oldLayout = .ATTACHMENT_OPTIMAL,
+		oldLayout = swap_image.vk_layout_per_mip[0],
 		newLayout = .PRESENT_SRC_KHR,
 		image = G_RENDERER.swapchain_images[G_RENDERER.swap_img_idx],
 		subresourceRange = {

@@ -35,7 +35,8 @@ MAX_IMAGES :: #config(MAX_IMAGES, 256)
 MAX_BUFFERS :: #config(MAX_BUFFERS, 256)
 MAX_RENDER_PASSES :: #config(MAX_RENDER_PASSES, 128)
 MAX_RENDER_PASS_INSTANCES :: #config(MAX_RENDER_PASSES, 128)
-MAX_PIPELINES :: #config(MAX_PIPELINES, 128)
+MAX_GRAPHICS_PIPELINES :: #config(MAX_GRAPHICS_PIPELINES, 128)
+MAX_COMPUTE_PIPELINES :: #config(MAX_COMPUTE_PIPELINES, 128)
 MAX_COMMAND_BUFFERS :: #config(MAX_COMMAND_BUFFERS, 32)
 MAX_BIND_GROUP_LAYOUTS :: #config(MAX_BIND_GROUP_LAYOUTS, 32)
 MAX_BIND_GROUPS :: #config(MAX_BIND_GROUPS, 256)
@@ -45,6 +46,7 @@ MAX_MATERIAL_PASSES :: #config(MAX_MATERIAL_PASSES, 256)
 MAX_MATERIAL_INSTANCES :: #config(MAX_MATERIAL_INSTANCES, 2048)
 MAX_MESHES :: #config(MAX_MESHES, 1024)
 MAX_MESH_INSTANCES :: #config(MAX_MESHES, 4096)
+MAX_COMPUTE_COMMANDS :: #config(MAX_COMPUTE_COMMANDS, 128)
 
 //---------------------------------------------------------------------------//
 
@@ -68,8 +70,10 @@ g_resources: struct {
 	backend_bind_group_layouts: #soa[]BackendBindGroupLayoutResource,
 	cmd_buffers:                #soa[]CommandBufferResource,
 	backend_cmd_buffers:        #soa[]BackendCommandBufferResource,
-	pipelines:                  #soa[]PipelineResource,
-	backend_pipelines:          #soa[]BackendPipelineResource,
+	graphics_pipelines:         #soa[]GraphicsPipelineResource,
+	backend_graphics_pipelines: #soa[]BackendGraphicsPipelineResource,
+	compute_pipelines:          #soa[]ComputePipelineResource,
+	backend_compute_pipelines:  #soa[]BackendComputePipelineResource,
 	render_passes:              #soa[]RenderPassResource,
 	backend_render_passes:      #soa[]BackendRenderPassResource,
 	render_tasks:               []RenderTaskResource,
@@ -80,13 +84,16 @@ g_resources: struct {
 	meshes:                     #soa[]MeshResource,
 	mesh_instances:             #soa[]MeshInstanceResource,
 	material_passes:            #soa[]MaterialPassResource,
+	draw_commands:              #soa[]DrawCommandResource,
+	compute_commands:           #soa[]ComputeCommandResource,
 }
 //---------------------------------------------------------------------------//
 
 g_resource_refs: struct {
-	pipelines:      common.RefArray(PipelineResource),
-	shaders:        common.RefArray(ShaderResource),
-	mesh_instances: common.RefArray(MeshInstanceResource),
+	graphics_pipelines: common.RefArray(GraphicsPipelineResource),
+	compute_pipelines:  common.RefArray(ComputePipelineResource),
+	shaders:            common.RefArray(ShaderResource),
+	mesh_instances:     common.RefArray(MeshInstanceResource),
 }
 
 //---------------------------------------------------------------------------//
@@ -104,7 +111,8 @@ GPUDeviceFlags :: distinct bit_set[GPUDeviceFlagsBits;u8]
 
 @(private)
 RendererConfig :: struct {
-	render_size: glsl.uvec2,
+	display_resolution: glsl.uvec2,
+	render_resolution:  glsl.uvec2,
 }
 
 //---------------------------------------------------------------------------//
@@ -144,6 +152,7 @@ G_RENDERER_ALLOCATORS: struct {
 
 InitOptions :: struct {
 	using backend_options: BackendInitOptions,
+	display_resolution:    glsl.uvec2,
 }
 
 //---------------------------------------------------------------------------//
@@ -218,11 +227,13 @@ init :: proc(p_options: InitOptions) -> bool {
 	context.allocator = G_RENDERER_ALLOCATORS.main_allocator
 	context.logger = INTERNAL.logger
 
+	G_RENDERER.config.display_resolution = p_options.display_resolution
+
 	backend_init(p_options) or_return
 
 	init_shaders() or_return
 	init_render_passes() or_return
-	init_pipelines() or_return
+	pipelines_init() or_return
 	init_bind_group_layouts()
 	init_bind_groups()
 	init_buffers()
@@ -230,6 +241,8 @@ init :: proc(p_options: InitOptions) -> bool {
 	init_images() or_return
 	init_command_buffers(p_options) or_return
 	buffer_management_init() or_return
+	draw_commands_init() or_return
+	compute_commands_init() or_return
 
 	create_swap_images()
 
@@ -394,8 +407,8 @@ init :: proc(p_options: InitOptions) -> bool {
 	init_material_instances() or_return
 	init_mesh_instances() or_return
 
-	load_renderer_config()
 	uniform_buffer_management_init()
+	load_renderer_config()
 
 	// All of the global resources (sampler array and uniform buffers) have been created
 	// So now we can update the global bind group
@@ -463,7 +476,7 @@ update :: proc(p_dt: f32) {
 
 	buffer_upload_finalize_finished_uploads()
 	image_upload_finalize_finished_uploads()
-	
+
 
 	run_last_frame_buffer_upload_requests()
 	batch_update_bindless_array_entries()
@@ -529,7 +542,7 @@ deinit :: proc() {
 
 	ui_shutdown()
 
-	deinit_pipelines()
+	pipelines_deinit()
 	deinit_shaders()
 	deinit_render_tasks()
 	// @TODO deinit_bind_groups()
@@ -589,8 +602,8 @@ load_renderer_config :: proc() -> bool {
 		return false
 	}
 
-	G_RENDERER.config.render_size.x = render_width
-	G_RENDERER.config.render_size.y = render_height
+	G_RENDERER.config.render_resolution.x = render_width
+	G_RENDERER.config.render_resolution.y = render_height
 
 	renderer_config_create_images(doc)
 	renderer_config_load_render_tasks(doc)
@@ -629,6 +642,15 @@ renderer_config_create_images :: proc(p_doc: ^xml.Document) -> bool {
 				continue
 			}
 
+			mip_count, mip_count_found := common.xml_get_u32_attribute(
+				p_doc,
+				element_id,
+				"mip_count",
+			)
+			if mip_count_found == false {
+				mip_count = 1
+			}
+
 			if (image_format_name in G_IMAGE_FORMAT_NAME_MAPPING) == false {
 				log.errorf(
 					"Failed to create image '%s' - unsupported format %s\n",
@@ -649,15 +671,18 @@ renderer_config_create_images :: proc(p_doc: ^xml.Document) -> bool {
 
 			if resolution_found {
 				switch G_RESOLUTION_NAME_MAPPING[image_resolution_name] {
+				case .Display:
+					image_dimensions.x = G_RENDERER.config.display_resolution.x
+					image_dimensions.y = G_RENDERER.config.display_resolution.y
 				case .Full:
-					image_dimensions.x = G_RENDERER.config.render_size.x
-					image_dimensions.y = G_RENDERER.config.render_size.y
+					image_dimensions.x = G_RENDERER.config.render_resolution.x
+					image_dimensions.y = G_RENDERER.config.render_resolution.y
 				case .Half:
-					image_dimensions.x = G_RENDERER.config.render_size.x / 2
-					image_dimensions.y = G_RENDERER.config.render_size.y / 2
+					image_dimensions.x = G_RENDERER.config.render_resolution.x / 2
+					image_dimensions.y = G_RENDERER.config.render_resolution.y / 2
 				case .Quarter:
-					image_dimensions.x = G_RENDERER.config.render_size.x / 4
-					image_dimensions.y = G_RENDERER.config.render_size.y / 4
+					image_dimensions.x = G_RENDERER.config.render_resolution.x / 4
+					image_dimensions.y = G_RENDERER.config.render_resolution.y / 4
 				}
 				image_type = .TwoDimensional
 			} else {
@@ -710,6 +735,7 @@ renderer_config_create_images :: proc(p_doc: ^xml.Document) -> bool {
 			image.desc.flags = image_flags
 			image.desc.type = image_type
 			image.desc.format = G_IMAGE_FORMAT_NAME_MAPPING[image_format_name]
+			image.desc.mip_count = u8(mip_count)
 
 			if create_image(image_ref) == false {
 				log.errorf("Failed to create image '%s'\n", child.ident)
@@ -801,4 +827,23 @@ get_frame_allocator :: proc() -> mem.Allocator {
 get_next_frame_allocator :: proc() -> mem.Allocator {
 	return G_RENDERER_ALLOCATORS.frame_allocators[(get_frame_id() + 1) % 2]
 }
+
+//---------------------------------------------------------------------------//
+
+@(private)
+get_resolution :: #force_inline proc(p_resolution: Resolution) -> glsl.uvec2 {
+	switch p_resolution {
+	case .Display:
+		return glsl.uvec2(G_RENDERER.config.display_resolution)
+
+	case .Full:
+		return glsl.uvec2(G_RENDERER.config.render_resolution)
+	case .Half:
+		return glsl.uvec2(G_RENDERER.config.render_resolution) / 2
+	case .Quarter:
+		return glsl.uvec2(G_RENDERER.config.render_resolution) / 4
+	}
+	return glsl.uvec2(G_RENDERER.config.display_resolution)
+}
+
 //---------------------------------------------------------------------------//

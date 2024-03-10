@@ -1,8 +1,10 @@
 [
     {
-        "name": "TestRenderPass",
+        "name": "GBuffer",
         "renderTargets": [
-            { "format": "BGRA8_SRGB" }
+            { "format": "RGBA8UNorm" },
+            { "format": "RGBA16SNorm" },
+            { "format": "RG8UNorm" }
         ],
         "depthFormat": "Depth32SFloat",
         "resolution": "Full"

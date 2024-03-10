@@ -64,12 +64,12 @@ when USE_VULKAN_BACKEND {
 		p_index_count: u32,
 		p_instance_count: u32,
 		p_first_instance: u32,
-		p_pipeline_ref: PipelineRef,
+		p_pipeline_ref: GraphicsPipelineRef,
 		p_push_constant: []rawptr,
 	) {
-		pipeline_idx := get_pipeline_idx(p_pipeline_ref)
-		pipeline := &g_resources.pipelines[pipeline_idx]
-		backend_pipeline := &g_resources.backend_pipelines[pipeline_idx]
+		pipeline_idx := get_graphics_pipeline_idx(p_pipeline_ref)
+		pipeline := &g_resources.graphics_pipelines[pipeline_idx]
+		backend_pipeline := &g_resources.backend_graphics_pipelines[pipeline_idx]
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
 
 		for push_constant, i in pipeline.desc.push_constants {
@@ -82,10 +82,6 @@ when USE_VULKAN_BACKEND {
 
 			if .Fragment in push_constant.shader_stages {
 				stage_flags += {.FRAGMENT}
-			}
-
-			if .Compute in push_constant.shader_stages {
-				stage_flags += {.COMPUTE}
 			}
 
 			vk.CmdPushConstants(

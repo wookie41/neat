@@ -26,6 +26,7 @@ RenderTaskRef :: common.Ref(RenderTaskResource)
 
 RenderTaskType :: enum {
 	Mesh,
+	FullScreen,
 }
 
 //---------------------------------------------------------------------------//
@@ -40,6 +41,7 @@ INTERNAL: struct {
 @(private = "file")
 G_RENDER_TASK_TYPE_MAPPING := map[string]RenderTaskType {
 	"Mesh" = .Mesh,
+	"FullScreen" = .FullScreen,
 }
 
 //---------------------------------------------------------------------------//
@@ -111,6 +113,13 @@ init_render_tasks :: proc() -> bool {
 		render_task_fn: RenderTaskFunctions
 		mesh_render_task_init(&render_task_fn)
 		INTERNAL.render_task_functions[.Mesh] = render_task_fn
+	}
+
+	// Init fullscreen render task
+	{
+		render_task_fn: RenderTaskFunctions
+		fullscreen_render_task_init(&render_task_fn)
+		INTERNAL.render_task_functions[.FullScreen] = render_task_fn
 	}
 
 	return true
@@ -235,13 +244,13 @@ render_task_setup_render_pass_bindings :: proc(
 		}
 
 		image_ref := find_image(image_name)
+		image := &g_resources.images[get_image_idx(image_ref)]
 		if image_ref == InvalidImageRef {
-			log.errorf("Error when render task targets - unknown image '%s'\n", image_name)
+			log.errorf("Can't start render task - unknown image '%s'\n", image.desc.name)
 			continue
 		}
 
-
-		mip, mip_found := common.xml_get_u32_attribute(
+		mip, mip_found := common.xml_get_u16_attribute(
 			p_render_task_config.doc,
 			input_image_element_id,
 			"mip",
@@ -251,7 +260,6 @@ render_task_setup_render_pass_bindings :: proc(
 			input_image_element_id,
 			"storage",
 		)
-
 
 		input_flags := RenderPassImageInputFlags{}
 
@@ -296,7 +304,7 @@ render_task_setup_render_pass_bindings :: proc(
 
 		image_ref := find_image(image_name)
 		if image_ref == InvalidImageRef {
-			log.errorf("Error when render task targets - unknown image '%s'\n", image_name)
+			log.errorf("Can't start render task - unknown image '%s'\n", image_name)
 			continue
 		}
 
@@ -304,7 +312,7 @@ render_task_setup_render_pass_bindings :: proc(
 			image_ref = image_ref,
 		}
 
-		mip, mip_found := common.xml_get_u32_attribute(
+		mip, mip_found := common.xml_get_u16_attribute(
 			p_render_task_config.doc,
 			output_image_element_id,
 			"mip",

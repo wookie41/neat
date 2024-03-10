@@ -1,20 +1,17 @@
-#include "./bindless.incl.hlsl"
-#include "./constant_buffers.incl.hlsl"
-#include "./materials.incl.hlsl"
-
-struct FSInput {
-    [[vk::location(0)]] float2 uv                   : TEXCOORD0;
-    [[vk::location(1)]] uint materialInstanceIdx    : MATERIAL_INSTANCE_IDX;
-};
+#include "bindless.hlsli"
+#include "constant_buffers.hlsli"
+#include "materials.hlsli"
+#include "base.hlsli"
 
 struct FSOutput {
     [[vk::location(0)]] float4 color : SV_Target0;
+    [[vk::location(1)]] float4 normals : SV_Target1;
+    [[vk::location(2)]] float2 parameters : SV_Target2;
 };
 
-void main(in FSInput pFragmentInput, out FSOutput pFragmentOutput) {
-    pFragmentOutput.color = pow(sampleBindless(
+void main(in FragmentInput pFragmentInput, out FSOutput pFragmentOutput) {
+    pFragmentOutput.color = sampleBindless(
         uLinearRepeatSampler, 
         pFragmentInput.uv, 
-        gMaterialBuffer[pFragmentInput.materialInstanceIdx].albedoTex), 
-        2.2);
+        gMaterialBuffer[pFragmentInput.materialInstanceIdx].albedoTex);
 }
