@@ -116,17 +116,17 @@ G_MATERIAL_TYPE_REF_ARRAY: common.RefArray(MaterialTypeResource)
 
 //16 byte alignment
 DefaultMaterialTypeProperties :: struct #packed {
-	albedo:             glsl.vec3, // 12 = 12
-	albedo_image_id:    u32, // 4 = 16
-	normal:             glsl.vec3, // 12 = 28
-	roughness:          f32, // 4 = 32
-	metalness:          f32, // 4 = 36
-	occlusion:          f32, // 4 = 40
-	normal_image_id:    u32, // 4 = 44
-	roughness_image_id: u32, // 4 = 48
-	metalness_image_id: u32, // 4 = 52
-	occlusion_image_id: u32, // 4 = 56 
-	flags:              u32, // 4 = 60
+	albedo:             glsl.vec3,
+	albedo_image_id:    u32,
+	normal:             glsl.vec3,
+	normal_image_id:    u32,
+	roughness:          f32,
+	metalness:          f32,
+	occlusion:          f32,
+	roughness_image_id: u32,
+	metalness_image_id: u32,
+	occlusion_image_id: u32,
+	flags:              u32,
 	_padding:           [4]byte,
 }
 

@@ -421,7 +421,10 @@ init :: proc(p_options: InitOptions) -> bool {
 			G_RENDERER.global_bind_group_ref,
 			BindGroupUpdate{
 				buffers = {
-					{buffer_ref = InvalidBufferRef, size = 0},
+					{
+						buffer_ref = g_uniform_buffers.per_frame_buffer_ref,
+						size = size_of(g_per_frame_uniform_buffer_data),
+					},
 					{
 						buffer_ref = g_uniform_buffers.per_view_buffer_ref,
 						size = size_of(g_per_view_uniform_buffer_data),

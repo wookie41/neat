@@ -1,5 +1,5 @@
 #include "bindless.hlsli"
-#include "constant_buffers.hlsli"
+#include "uniforms.hlsli"
 #include "base.hlsli"
 
 struct MeshInstancedDrawInfo
@@ -32,10 +32,18 @@ float4 main(
         out FragmentInput pFragmentInput) : SV_Position {
 
     MeshInstancedDrawInfo meshInstancedDrawInfo = gMeshInstancedDrawInfoBuffer[pInstanceId];
+    float3 positionWS = mul(
+        gMeshInstanceInfoBuffer[meshInstancedDrawInfo.meshInstanceIdx].modelMatrix, 
+        float4(pVertexInput.position, 1.0)).xyz;
+    
+    // Write fragment input
+    pFragmentInput.positionWS = positionWS;
+    pFragmentInput.materialInstanceIdx = meshInstancedDrawInfo.materialInstanceIdx;
     pFragmentInput.materialInstanceIdx = meshInstancedDrawInfo.materialInstanceIdx;
     pFragmentInput.uv = pVertexInput.uv;
-    return mul(uPerView.proj, 
-        mul(uPerView.view, 
-        mul(gMeshInstanceInfoBuffer[meshInstancedDrawInfo.meshInstanceIdx].modelMatrix, 
-        float4(pVertexInput.position, 1.0))));
+    pFragmentInput.normal = pVertexInput.normal;
+    pFragmentInput.tangent = pVertexInput.tangent;
+    pFragmentInput.binormal = normalize(cross(pVertexInput.normal, pVertexInput.tangent.xyz));
+
+    return mul(uPerView.ProjectionMatrix, mul(uPerView.ViewMatrix, float4(positionWS.xyz, 1)));
 }
