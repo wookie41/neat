@@ -493,7 +493,7 @@ reload_shader :: proc(p_shader_file_name: string) {
 			}
 		}
 
-		log.warnf(
+		log.infof(
 			"Shader '%s' reloaded, along with %d pipelines\n",
 			p_shader_file_name,
 			num_reloaded_pipelines,

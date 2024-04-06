@@ -72,11 +72,11 @@ when USE_VULKAN_BACKEND {
 				&INTERNAL.immutable_samplers[0],
 			)
 
+			// Nearest clamp to border
 			sampler_create_info.addressModeU = .CLAMP_TO_BORDER
 			sampler_create_info.addressModeV = .CLAMP_TO_BORDER
 			sampler_create_info.addressModeW = .CLAMP_TO_BORDER
 
-			// Nearest clamp to border
 			vk.CreateSampler(
 				G_RENDERER.device,
 				&sampler_create_info,
@@ -84,11 +84,11 @@ when USE_VULKAN_BACKEND {
 				&INTERNAL.immutable_samplers[1],
 			)
 
+			// Nearest, repeat
 			sampler_create_info.addressModeU = .REPEAT
 			sampler_create_info.addressModeV = .REPEAT
 			sampler_create_info.addressModeW = .REPEAT
 
-			// Nearest, repeat
 			vk.CreateSampler(
 				G_RENDERER.device,
 				&sampler_create_info,
@@ -96,6 +96,7 @@ when USE_VULKAN_BACKEND {
 				&INTERNAL.immutable_samplers[2],
 			)
 
+			// Linear clamp to edge
 			sampler_create_info.magFilter = .LINEAR
 			sampler_create_info.minFilter = .LINEAR
 
@@ -103,7 +104,6 @@ when USE_VULKAN_BACKEND {
 			sampler_create_info.addressModeV = .CLAMP_TO_EDGE
 			sampler_create_info.addressModeW = .CLAMP_TO_EDGE
 
-			// Linear clamp to edge
 			vk.CreateSampler(
 				G_RENDERER.device,
 				&sampler_create_info,
@@ -111,11 +111,11 @@ when USE_VULKAN_BACKEND {
 				&INTERNAL.immutable_samplers[3],
 			)
 
+			// Linear clamp to border
 			sampler_create_info.addressModeU = .CLAMP_TO_BORDER
 			sampler_create_info.addressModeV = .CLAMP_TO_BORDER
 			sampler_create_info.addressModeW = .CLAMP_TO_BORDER
 
-			// Linear clamp to border
 			vk.CreateSampler(
 				G_RENDERER.device,
 				&sampler_create_info,

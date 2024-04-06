@@ -14,8 +14,10 @@
             <OutputImage name="DepthBuffer" clear="1"/>
             <MaterialPass name="TestMaterialPass" />
         </Mesh>
-        <FullScreen name="Lighting" shader="blit.comp" resolution="Full">
+        <FullScreen name="Lighting" shader="lighting.comp" resolution="Full">
             <InputImage name="GBufferColor"/>
+            <InputImage name="GBufferNormals"/>
+            <InputImage name="GBufferParameters"/>
             <InputImage name="SceneHDR" storage=""/>
         </FullScreen>
         <FullScreen name="BlitSwapchain" shader="blit_to_swapchain.frag" resolution="Display">

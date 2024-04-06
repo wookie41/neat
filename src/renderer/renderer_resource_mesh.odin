@@ -297,7 +297,7 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 
 		if .Tangent in mesh.desc.features {
 			tangents_size = u32(vertex_count * size_of(glsl.vec3))
-			normals_upload_request := BufferUploadRequest {
+			tangents_upload_request := BufferUploadRequest {
 				dst_buff = INTERNAL.vertex_buffer_ref,
 				dst_buff_offset = vertex_allocation.offset + positions_size + uvs_size + normals_size,
 				dst_queue_usage = .Graphics,
@@ -308,9 +308,10 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 				async_upload_callback_user_data = &mesh.data_upload_context,
 				async_upload_finished_callback = mesh_upload_finished_callback,
 			}
-			request_buffer_upload(normals_upload_request)
+			request_buffer_upload(tangents_upload_request)
 			mesh.data_upload_context.needed_uploads_count += 1
 		}
+		
 	}
 
 	mesh.vertex_buffer_allocation = vertex_allocation

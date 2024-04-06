@@ -383,7 +383,6 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 					mesh_batch.vertex_buffer_offset + tangent_offset,
 				)
 
-
 				draw_stream_set_index_buffer(
 					&draw_stream,
 					mesh_get_global_index_buffer_ref(),

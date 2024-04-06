@@ -143,7 +143,7 @@ update_per_view_uniform_buffer :: proc(p_dt: f32) {
 
 @(private = "file")
 update_per_frame_uniform_buffer :: proc(p_dt: f32) {
-	g_per_frame_uniform_buffer_data.sun.direction = glsl.vec3{0, 0, -1}
+	g_per_frame_uniform_buffer_data.sun.direction = glsl.normalize(glsl.vec3{0, -1, 0})
 	g_per_frame_uniform_buffer_data.sun.color = glsl.vec3(1)
 
 	uniform_buffer := &g_resources.buffers[get_buffer_idx(g_uniform_buffers.per_frame_buffer_ref)]

@@ -212,7 +212,6 @@ ImageDesc :: struct {
 	dimensions:         glsl.uvec3,
 	flags:              ImageDescFlags,
 	sample_count_flags: ImageSampleCountFlags,
-	block_size:         u8, // size in bytes of a single block 4x4 for compressed textures
 	data_per_mip:       [][]byte,
 	file_mapping:       common.FileMemoryMapping,
 	mip_data_allocator: mem.Allocator,
@@ -544,6 +543,7 @@ try_progress_image_copies :: proc(
 		}
 
 		image := &g_resources.images[get_image_idx(image_upload_info.image_ref)]
+		block_size := get_block_size_in_bytes(image.desc.format)
 		mip_region_copies := make([dynamic]ImageMipRegionCopy, temp_arena.allocator)
 
 		// Upload as many blocks of this texture as we can
@@ -552,7 +552,7 @@ try_progress_image_copies :: proc(
 			mip_data := image.desc.data_per_mip[image_upload_info.current_mip]
 
 			upload_size :=
-				u32(image.desc.block_size) *
+				u32(block_size) *
 				image_upload_info.single_upload_size_in_texels.x *
 				image_upload_info.single_upload_size_in_texels.x
 
@@ -603,14 +603,14 @@ try_progress_image_copies :: proc(
 			staging_buffer_ptr := mem.ptr_offset(staging_buffer.mapped_ptr, staging_buffer_offset)
 
 			block_count := int(image_upload_info.single_upload_size_in_texels.y / 4)
-			row_upload_size := block_count * int(image.desc.block_size)
-			mip_row_size := mip_dimensions.x / 4 * u32(image.desc.block_size)
+			row_upload_size := block_count * int(block_size)
+			mip_row_size := mip_dimensions.x / 4 * u32(block_size)
 			base_row := u32(mip_offset_in_texels.y / 4)
 
 			for row in 0 ..< block_count {
 
 				data_offset := mip_row_size * (u32(row) + base_row)
-				data_offset += u32(mip_offset_in_texels.x / 4) * u32(image.desc.block_size)
+				data_offset += u32(mip_offset_in_texels.x / 4) * u32(block_size)
 
 				mem.copy(staging_buffer_ptr, raw_data(mip_data[data_offset:]), row_upload_size)
 
@@ -688,6 +688,27 @@ image_allocate_new_bindless_array_entry :: proc() -> u32 {
 	bindless_idx := INTERNAL.next_bindless_idx
 	INTERNAL.next_bindless_idx += 1
 	return bindless_idx
+}
+
+//--------------------------------------------------------------------------//
+
+@(private = "file")
+get_block_size_in_bytes :: proc(p_format: ImageFormat) -> u32 {
+	#partial switch p_format {
+	case .BC1_RGBA_UNorm:
+		return 8
+	case .BC3_UNorm:
+		return 16
+	case .BC4_UNorm:
+		return 8
+	case .BC5_SNorm:
+		return 16
+	case .BC6H_UFloat:
+		return 16
+	case:
+		assert(false)
+	}
+	return 0
 }
 
 //--------------------------------------------------------------------------//

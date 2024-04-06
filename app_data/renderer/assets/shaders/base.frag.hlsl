@@ -13,22 +13,21 @@ struct FSOutput
 
 void main(in FragmentInput pFragmentInput, out FSOutput pFragmentOutput)
 {
-    float3 albedo = sampleBindless(
+    const float3 albedo = sampleBindless(
                         uLinearRepeatSampler,
                         pFragmentInput.uv,
                         gMaterialBuffer[pFragmentInput.materialInstanceIdx].albedoTex)
                         .rgb;
 
-    float3 normal = sampleBindless(
+    float3 normal = decodeNormalMap(sampleBindless(
                         uLinearRepeatSampler,
                         pFragmentInput.uv,
-                        gMaterialBuffer[pFragmentInput.materialInstanceIdx].normalTex)
-                        .rgb;
+                        gMaterialBuffer[pFragmentInput.materialInstanceIdx].normalTex));
+    
+    const float3x3 TBN = float3x3(pFragmentInput.tangent, pFragmentInput.binormal, pFragmentInput.normal);
+    normal = mul(normal, TBN);
 
-    normal = normalize(normal.x * pFragmentInput.tangent.xyz +
-                       normal.y * pFragmentInput.binormal +
-                       normal.z * pFragmentInput.normal);
-
-    pFragmentOutput.color = float4(albedo * max(dot(pFragmentInput.normal, -uPerFrame.Sun.DirectionWS) * uPerFrame.Sun.Color, 0), 1) ;
+    pFragmentOutput.color = float4(albedo, 1);
     pFragmentOutput.normals = float4(encodeNormal(normal), encodeNormal(pFragmentInput.normal));
 }
+

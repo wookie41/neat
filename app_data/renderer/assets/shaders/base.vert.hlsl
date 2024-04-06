@@ -32,18 +32,21 @@ float4 main(
         out FragmentInput pFragmentInput) : SV_Position {
 
     MeshInstancedDrawInfo meshInstancedDrawInfo = gMeshInstancedDrawInfoBuffer[pInstanceId];
-    float3 positionWS = mul(
-        gMeshInstanceInfoBuffer[meshInstancedDrawInfo.meshInstanceIdx].modelMatrix, 
-        float4(pVertexInput.position, 1.0)).xyz;
     
+    float4x4 modelMatrix = gMeshInstanceInfoBuffer[meshInstancedDrawInfo.meshInstanceIdx].modelMatrix;
+    float3 positionWS = mul(modelMatrix, float4(pVertexInput.position, 1.0)).xyz;
+
+    // @TODO non-uniform scale support
+    float3x3 normalMatrix = (float3x3)modelMatrix;
+
     // Write fragment input
     pFragmentInput.positionWS = positionWS;
     pFragmentInput.materialInstanceIdx = meshInstancedDrawInfo.materialInstanceIdx;
-    pFragmentInput.materialInstanceIdx = meshInstancedDrawInfo.materialInstanceIdx;
     pFragmentInput.uv = pVertexInput.uv;
-    pFragmentInput.normal = pVertexInput.normal;
-    pFragmentInput.tangent = pVertexInput.tangent;
-    pFragmentInput.binormal = normalize(cross(pVertexInput.normal, pVertexInput.tangent.xyz));
+    pFragmentInput.normal = normalize(mul(normalMatrix, pVertexInput.normal));
+    pFragmentInput.tangent = normalize(mul(normalMatrix, pVertexInput.tangent));
+    pFragmentInput.binormal = normalize(cross(pFragmentInput.normal, pFragmentInput.tangent));
 
     return mul(uPerView.ProjectionMatrix, mul(uPerView.ViewMatrix, float4(positionWS.xyz, 1)));
 }
+

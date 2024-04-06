@@ -222,16 +222,15 @@ create_instance :: proc(
 		compute_command := &g_resources.compute_commands[compute_command_get_idx(compute_command_ref)]
 
 		compute_command.desc.bind_group_layout_refs[0] = INTERNAL.fullscreen_bind_group_layout_ref
-		compute_command.desc.bind_group_layout_refs[1] = InvalidBindGroupRefLayout
-		compute_command.desc.bind_group_layout_refs[2] =
-			G_RENDERER.bindless_textures_array_bind_group_layout_ref
+		compute_command.desc.bind_group_layout_refs[1] = G_RENDERER.global_bind_group_layout_ref
+		compute_command.desc.bind_group_layout_refs[2] = G_RENDERER.bindless_textures_array_bind_group_layout_ref
 
 		compute_command.desc.compute_shader_ref = shader_ref
 
 		compute_command_create(compute_command_ref)
 
 		compute_command_set_bind_group(compute_command_ref, 0, bind_group_ref)
-		compute_command_set_bind_group(compute_command_ref, 1, InvalidBindGroupRef)
+		compute_command_set_bind_group(compute_command_ref, 1, G_RENDERER.global_bind_group_ref)
 		compute_command_set_bind_group(
 			compute_command_ref,
 			2,
@@ -245,9 +244,8 @@ create_instance :: proc(
 		draw_command := &g_resources.draw_commands[draw_command_get_idx(draw_command_ref)]
 
 		draw_command.desc.bind_group_layout_refs[0] = INTERNAL.fullscreen_bind_group_layout_ref
-		draw_command.desc.bind_group_layout_refs[1] = InvalidBindGroupRefLayout
-		draw_command.desc.bind_group_layout_refs[2] =
-			G_RENDERER.bindless_textures_array_bind_group_layout_ref
+		draw_command.desc.bind_group_layout_refs[1] = G_RENDERER.global_bind_group_layout_ref
+		draw_command.desc.bind_group_layout_refs[2] = G_RENDERER.bindless_textures_array_bind_group_layout_ref
 
 		draw_command.desc.vert_shader_ref = find_shader_by_name("fullscreen.vert")
 		draw_command.desc.frag_shader_ref = shader_ref
@@ -257,7 +255,7 @@ create_instance :: proc(
 		draw_command_create(draw_command_ref, fullscreen_render_task_data.render_pass_ref)
 
 		draw_command_set_bind_group(draw_command_ref, 0, bind_group_ref)
-		draw_command_set_bind_group(draw_command_ref, 1, InvalidBindGroupRef)
+		draw_command_set_bind_group(draw_command_ref, 1, G_RENDERER.global_bind_group_ref)
 		draw_command_set_bind_group(
 			draw_command_ref,
 			2,
@@ -321,6 +319,12 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 
 	use_compute := fullscreen_render_task_data.compute_command_ref != InvalidComputeCommandRef
 
+	global_uniform_offsets := []u32{
+		uniform_buffer_management_get_per_frame_offset(),
+		uniform_buffer_management_get_per_view_offset(),
+		buffer_management_get_mesh_instanced_info_buffer_offset(),
+	}
+
 	// Perform resource transitions
 	transition_resources(
 		get_frame_cmd_buffer_ref(),
@@ -355,7 +359,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 			fullscreen_render_task_data.compute_command_ref,
 			get_frame_cmd_buffer_ref(),
 			nil,
-			{per_instance_offsets, nil, nil},
+			{per_instance_offsets, global_uniform_offsets, nil},
 			glsl.uvec3{work_group_count.x, work_group_count.y, 1},
 		)
 
@@ -371,7 +375,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 		fullscreen_render_task_data.draw_command_ref,
 		get_frame_cmd_buffer_ref(),
 		nil,
-		nil,
+		{nil, global_uniform_offsets, nil},
 	)
 
 	end_render_pass(fullscreen_render_task_data.render_pass_ref, get_frame_cmd_buffer_ref())

@@ -10,5 +10,9 @@
     {
         "name": "blit_to_swapchain.frag",
         "path": "blit_to_swapchain.frag.hlsl"
+    },
+    {
+        "name": "lighting.comp",
+        "path": "lighting.comp.hlsl"
     }
 ]

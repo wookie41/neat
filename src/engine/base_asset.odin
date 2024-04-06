@@ -146,6 +146,9 @@ asset_database_read :: proc(p_asset_database: ^AssetDatabase) -> bool {
 
 	// Make sure that the database file is created
 	if os.exists(p_asset_database.db_file_path) == false {
+		
+		os.make_directory(filepath.dir(p_asset_database.db_file_path, temp_arena.allocator))
+		
 		f, err := os.open(p_asset_database.db_file_path, os.O_CREATE)
 		assert(err == 0)
 		_, err = os.write_string(f, "[]")

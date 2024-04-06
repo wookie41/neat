@@ -451,20 +451,14 @@ texture_asset_load_by_name :: proc(p_name: common.Name) -> TextureAssetRef {
 	#partial switch texture_asset.format {
 	case .BC1_Unorm:
 		image.desc.format = .BC1_RGBA_UNorm
-		image.desc.block_size = 8
 	case .BC3_UNorm:
 		image.desc.format = .BC3_UNorm
-		image.desc.block_size = 16
 	case .BC4_UNorm:
 		image.desc.format = .BC4_UNorm
-		image.desc.block_size = 8
 	case .BC5_SNorm:
 		image.desc.format = .BC5_SNorm
-		image.desc.block_size = 16
 	case .BC6H_UFloat16:
 		image.desc.format = .BC6H_UFloat
-		image.desc.block_size = 16
-
 	case:
 		texture_asset_unload(texture_ref)
 		renderer.destroy_image(image_ref)

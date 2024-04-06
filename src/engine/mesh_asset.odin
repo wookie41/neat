@@ -207,12 +207,14 @@ mesh_asset_import :: proc(p_import_options: MeshAssetImportOptions) -> AssetImpo
 	scene := assimp.import_file(
 		mesh_file_path,
 		{
-			.OptimizeMeshes,
-			.Triangulate,
-			.FlipUVs,
-			.GenSmoothNormals,
 			.CalcTangentSpace,
+			.FlipUVs,
 			.JoinIdenticalVertices,
+			.Triangulate,
+			.ImproveCacheLocality,
+			.FindDegenerates,
+			.OptimizeMeshes,
+			.GenSmoothNormals,
 		},
 	)
 	if scene == nil ||
@@ -363,6 +365,7 @@ mesh_asset_import :: proc(p_import_options: MeshAssetImportOptions) -> AssetImpo
 			int(num_vertices) * size_of(glsl.vec3),
 		)
 	}
+
 
 	if .UV in mesh_import_ctx.mesh_feature_flags {
 		os.write_ptr(fd, raw_data(mesh_import_ctx.uvs), int(num_vertices) * size_of(glsl.vec2))
@@ -723,11 +726,31 @@ assimp_load_node :: proc(
 			}
 
 			if assimp_mesh.mTangents != nil {
-				p_import_ctx.tangents[p_import_ctx.curr_vtx] = {
+
+				normal := p_import_ctx.normals[p_import_ctx.curr_vtx]
+
+				tangent := glsl.vec3{
 					assimp_mesh.mTangents[j].x,
 					assimp_mesh.mTangents[j].y,
 					assimp_mesh.mTangents[j].z,
 				}
+
+				bitangent := glsl.vec3{
+					assimp_mesh.mBitangents[j].x,
+					assimp_mesh.mBitangents[j].y,
+					assimp_mesh.mBitangents[j].z,
+				}
+
+				// Make sure normal and tangent orthonormal
+				tangent = glsl.normalize(tangent - glsl.dot(tangent, normal) * normal)
+
+				// Make sure the basis is right-handed
+				if glsl.dot(glsl.cross(normal, tangent), bitangent) < 0 {
+					p_import_ctx.tangents[p_import_ctx.curr_vtx] = -tangent
+				} else {
+					p_import_ctx.tangents[p_import_ctx.curr_vtx] = tangent
+				}
+
 			} else {
 				p_import_ctx.tangents[p_import_ctx.curr_vtx] = {0, 0, 0}
 			}
