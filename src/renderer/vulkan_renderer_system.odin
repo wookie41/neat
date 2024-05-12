@@ -73,12 +73,17 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_init :: proc(p_options: InitOptions) -> bool {
 
-		device_extensions := []cstring{
-			vk.KHR_SWAPCHAIN_EXTENSION_NAME,
-			vk.KHR_MAINTENANCE1_EXTENSION_NAME,
-			vk.KHR_MAINTENANCE3_EXTENSION_NAME,
-			vk.EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+		device_extensions := []struct {
+			name:     cstring,
+			required: bool,
+		}{
+			{ name = vk.KHR_SWAPCHAIN_EXTENSION_NAME,required = true, }, 
+			{ name = vk.KHR_MAINTENANCE1_EXTENSION_NAME, required = true }, 
+			{ name = vk.KHR_MAINTENANCE3_EXTENSION_NAME, required = true }, 
+			{ name = vk.EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, required = true}, 
+			{ name = vk.EXT_DEBUG_MARKER_EXTENSION_NAME, required = false},
 		}
+
 
 		G_RENDERER.window = p_options.window
 		G_RENDERER.windowID = sdl.GetWindowID(p_options.window)
@@ -212,6 +217,8 @@ when USE_VULKAN_BACKEND {
 			return false
 		}
 
+		enabled_device_extensions := make([dynamic]cstring, temp_arena.allocator)
+
 		// Create physical device
 		{
 			using G_RENDERER
@@ -239,9 +246,11 @@ when USE_VULKAN_BACKEND {
 			// Find a suitable device
 			for pd in &physical_devices {
 
+				clear(&enabled_device_extensions)
+
 				device_props: vk.PhysicalDeviceProperties
 				vk.GetPhysicalDeviceProperties(pd, &device_props)
-				log.infof("Checking  device: %s...\n ", device_props.deviceName)
+				log.infof("Checking device %s...\n ", device_props.deviceName)
 
 				// Check extension compatibility
 				extension_count: u32
@@ -255,19 +264,34 @@ when USE_VULKAN_BACKEND {
 					raw_data(extensions),
 				)
 
+
 				device_has_all_required_extension := true
 				for re, i in &device_extensions {
 					contains := false
 					for e in &extensions {
 						name := transmute(cstring)&e.extensionName
-						if re == name {
+						if re.name == name {
+
+							if re.name == vk.EXT_DEBUG_MARKER_EXTENSION_NAME {
+								G_RENDERER.debug_mode = true
+							}
+
+							append(&enabled_device_extensions, re.name)
 							contains = true
 							break
 						}
 					}
 					if !contains {
-						device_has_all_required_extension = false
-						break
+						if re.required {
+							log.infof(
+								"Device %s not suitable, missing extension %s\n",
+								device_props.deviceName,
+								re,
+							)
+
+							device_has_all_required_extension = false
+							break
+						}
 					}
 				}
 				if !device_has_all_required_extension {
@@ -485,8 +509,8 @@ when USE_VULKAN_BACKEND {
 				sType                   = .DEVICE_CREATE_INFO,
 				queueCreateInfoCount    = u32(len(queue_create_infos)),
 				pQueueCreateInfos       = raw_data(queue_create_infos),
-				enabledExtensionCount   = u32(len(device_extensions)),
-				ppEnabledExtensionNames = raw_data(device_extensions),
+				enabledExtensionCount   = u32(len(enabled_device_extensions)),
+				ppEnabledExtensionNames = raw_data(enabled_device_extensions),
 				pEnabledFeatures        = &device_features,
 				pNext                   = &descriptor_indexing_features,
 			}

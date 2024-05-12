@@ -48,6 +48,7 @@ IndexType :: enum u8 {
 
 DrawStream :: struct {
 	// Encoded draw stream data: field id and it's values
+	name:                        common.Name,
 	encoded_draw_stream_data:    [dynamic]u32,
 	push_constants:              [dynamic]rawptr,
 	current_index_buffer_ref:    BufferRef,
@@ -74,9 +75,13 @@ DrawStreamDispatch :: struct {
 
 //---------------------------------------------------------------------------//
 
-draw_stream_create :: proc(p_draw_stream_allocator: mem.Allocator) -> DrawStream {
+draw_stream_create :: proc(
+	p_draw_stream_allocator: mem.Allocator,
+	name: common.Name,
+) -> DrawStream {
 	draw_stream := DrawStream {
 		allocator = p_draw_stream_allocator,
+		name = name,
 	}
 
 	draw_stream.encoded_draw_stream_data = make(
@@ -102,6 +107,9 @@ draw_stream_create :: proc(p_draw_stream_allocator: mem.Allocator) -> DrawStream
 //---------------------------------------------------------------------------//
 
 draw_stream_dispatch :: proc(p_cmd_buff_ref: CommandBufferRef, p_draw_stream: ^DrawStream) {
+
+	gpu_debug_region_begin(p_cmd_buff_ref, p_draw_stream.name)
+
 	draw_stream_dispatch := DrawStreamDispatch {
 		draw_stream  = p_draw_stream,
 		cmd_buff_ref = p_cmd_buff_ref,
@@ -116,6 +124,8 @@ draw_stream_dispatch :: proc(p_cmd_buff_ref: CommandBufferRef, p_draw_stream: ^D
 		draw_stream_dispatch.draw_stream_offset += 1
 		g_draw_stream_ops[op](&draw_stream_dispatch)
 	}
+
+	gpu_debug_region_end(p_cmd_buff_ref)
 }
 
 //---------------------------------------------------------------------------//

@@ -131,6 +131,7 @@ G_RENDERER: struct {
 	global_bind_group_ref:                         BindGroupRef,
 	bindless_textures_array_bind_group_ref:        BindGroupRef,
 	default_image_ref:                             ImageRef,
+	debug_mode:                                    bool,
 }
 
 //---------------------------------------------------------------------------//

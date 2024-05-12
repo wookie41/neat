@@ -332,6 +332,9 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 		.Compute if use_compute else .Graphics,
 	)
 
+	gpu_debug_region_begin(get_frame_cmd_buffer_ref(), fullscreen_render_task.desc.name)
+	defer gpu_debug_region_end(get_frame_cmd_buffer_ref())
+
 	if use_compute {
 
 		resolution := get_resolution(fullscreen_render_task_data.resolution)
@@ -365,6 +368,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 
 		return
 	}
+
 
 	render_task_begin_render_pass(
 		fullscreen_render_task_data.render_pass_ref,
