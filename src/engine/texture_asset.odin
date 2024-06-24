@@ -297,7 +297,7 @@ texture_asset_load_texture_data_tiny_dds :: proc(
 
 			// Cleanup on failure
 			if image_data == nil {
-				for k in 0 ..= i {
+				for _ in 0 ..= i {
 					delete(
 						p_texture_asset.texture_datas[i].data_per_mip,
 						G_ALLOCATORS.asset_allocator,

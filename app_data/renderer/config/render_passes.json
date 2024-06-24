@@ -4,7 +4,8 @@
         "renderTargets": [
             { "format": "RGBA8UNorm" },
             { "format": "RGBA16SNorm" },
-            { "format": "RG8UNorm" }
+            { "format": "RGBA8UNorm" },
+            { "format": "RGBA32SFloat" }
         ],
         "depthFormat": "Depth32SFloat",
         "resolution": "Full"

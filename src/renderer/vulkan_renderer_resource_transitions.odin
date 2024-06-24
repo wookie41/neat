@@ -143,25 +143,19 @@ when USE_VULKAN_BACKEND {
 			image_backend := &g_resources.backend_images[image_idx]
 
 			// Prepare the rendering attachment
-			image_view := image_backend.per_mip_vk_view[output.mip]
-
 			load_op := vk.AttachmentLoadOp.DONT_CARE
 			if .Clear in output.flags {
 				load_op = .CLEAR
 			}
 
-			dst_pipeline_flags := vk.PipelineStageFlags{}
-			dst_access_mask := vk.AccessFlags{}
 			new_layout := vk.ImageLayout{}
-			aspect_mask := vk.ImageAspectFlags{}
-
 			if image.desc.format > .DepthFormatsStart && image.desc.format < .DepthFormatsEnd {
 
 				has_stencil_component :=
 					image.desc.format > .DepthStencilFormatsStart &&
 					image.desc.format < .DepthStencilFormatsEnd
 
-				new_layout := vk.ImageLayout.DEPTH_ATTACHMENT_OPTIMAL
+				new_layout = vk.ImageLayout.DEPTH_ATTACHMENT_OPTIMAL
 				if has_stencil_component {
 					new_layout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL
 				}

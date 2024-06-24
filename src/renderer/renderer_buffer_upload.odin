@@ -342,7 +342,7 @@ buffer_upload_process_async_requests :: proc() {
 
 	staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.async_staging_buffer_ref)]
 
-	for async_upload_info in &INTERNAL.async_uploads {
+	for &async_upload_info in INTERNAL.async_uploads {
 
 		if async_upload_info.current_dst_buffer_offset ==
 		   INTERNAL.single_async_staging_region_size {

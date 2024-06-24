@@ -3,7 +3,7 @@ package renderer
 import "core:c"
 import "core:os"
 import "core:strings"
-import "core:runtime"
+import "base:runtime"
 
 @private
 TinyObjLoaderContext :: struct {

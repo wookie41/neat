@@ -25,6 +25,7 @@ G_PER_INSTANCE_UNIFORM_BUFFER_SIZE :: common.KILOBYTE * 8
 g_per_view_uniform_buffer_data: struct #packed {
 	view:          glsl.mat4x4,
 	proj:          glsl.mat4x4,
+	inv_view_proj: glsl.mat4x4,
 	camera_pos_ws: glsl.vec3,
 	_padding:      [52]byte,
 }
@@ -126,6 +127,7 @@ update_per_view_uniform_buffer :: proc(p_dt: f32) {
 
 	g_per_view_uniform_buffer_data.view = view_matrix
 	g_per_view_uniform_buffer_data.proj = projection_matrix
+	g_per_view_uniform_buffer_data.inv_view_proj = glsl.inverse(view_matrix * projection_matrix)
 	g_per_view_uniform_buffer_data.camera_pos_ws = g_render_camera.position
 
 	uniform_buffer := &g_resources.buffers[get_buffer_idx(g_uniform_buffers.per_view_buffer_ref)]
@@ -144,7 +146,7 @@ update_per_view_uniform_buffer :: proc(p_dt: f32) {
 @(private = "file")
 update_per_frame_uniform_buffer :: proc(p_dt: f32) {
 	g_per_frame_uniform_buffer_data.sun.direction = glsl.normalize(glsl.vec3{0, -1, 0})
-	g_per_frame_uniform_buffer_data.sun.color = glsl.vec3(1)
+	g_per_frame_uniform_buffer_data.sun.color = glsl.vec3(3)
 
 	uniform_buffer := &g_resources.buffers[get_buffer_idx(g_uniform_buffers.per_frame_buffer_ref)]
 	mem.copy(

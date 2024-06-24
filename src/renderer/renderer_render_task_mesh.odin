@@ -246,7 +246,6 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 			material_instance_idx := get_material_instance_idx(submesh.material_instance_ref)
 			material_instance := &g_resources.material_instances[material_instance_idx]
 			material_type_idx := get_material_type_idx(material_instance.desc.material_type_ref)
-			material_type := &g_resources.material_types[material_type_idx]
 
 			mesh_batch_key := calculate_mesh_batch_key(
 				material_type_idx,

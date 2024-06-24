@@ -85,6 +85,8 @@ G_IMAGE_FORMAT_NAME_MAPPING := map[string]ImageFormat {
 	"RGB8UNorm"       = .RGB8UNorm,
 	"RGB32UInt"       = .RGB32UInt,
 	"RGB32Int"        = .RGB32Int,
+	"RGB16SFloat"     = .RGB16SFloat,
+	"RGBA16SFloat"    = .RGBA16SFloat,
 	"RGB32SFloat"     = .RGB32SFloat,
 	"RGBA8UNorm"      = .RGBA8UNorm,
 	"RGBA16SNorm"     = .RGBA16SNorm,
@@ -127,6 +129,8 @@ ImageFormat :: enum u16 {
 	RGB8UNorm,
 	RGB32UInt,
 	RGB32Int,
+	RGB16SFloat,
+	RGBA16SFloat,
 	RGB32SFloat,
 	RGBFormatsEnd,
 	RGBAFormatsStart,
@@ -252,7 +256,7 @@ SamplerType :: enum {
 //---------------------------------------------------------------------------//
 
 @(private)
-SamplerNames := []string{
+SamplerNames := []string {
 	"NearestClampToEdge",
 	"NearestClampToBorder",
 	"NearestRepeat",
@@ -397,14 +401,14 @@ create_texture_image :: proc(p_ref: ImageRef) -> bool {
 
 	// Queue data copy for this texture
 	image_upload_info := ImageUploadInfo {
-		image_ref = p_ref,
-		current_mip = image.desc.mip_count - 1,
+		image_ref                    = p_ref,
+		current_mip                  = image.desc.mip_count - 1,
 		single_upload_size_in_texels = calculate_image_upload_size(
 			image.desc.dimensions,
 			image.desc.mip_count - 1,
 		),
-		mip_offset_in_texels = {0, 0},
-		is_initialized = false,
+		mip_offset_in_texels         = {0, 0},
+		is_initialized               = false,
 	}
 	append(&INTERNAL.image_uploads_in_progress, image_upload_info)
 
@@ -576,7 +580,7 @@ try_progress_image_copies :: proc(
 				break
 			}
 
-			mip_dimensions := glsl.uvec2{
+			mip_dimensions := glsl.uvec2 {
 				image.desc.dimensions.x >> u32(image_upload_info.current_mip),
 				image.desc.dimensions.y >> u32(image_upload_info.current_mip),
 			}
@@ -619,7 +623,7 @@ try_progress_image_copies :: proc(
 
 			append(
 				&mip_region_copies,
-				ImageMipRegionCopy{
+				ImageMipRegionCopy {
 					offset = mip_offset_in_texels,
 					staging_buffer_offset = staging_buffer_offset,
 				},

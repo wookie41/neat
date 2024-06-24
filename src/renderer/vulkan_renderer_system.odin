@@ -4,6 +4,7 @@ package renderer
 
 import "core:c"
 import "core:log"
+import "base:runtime"
 
 import vma "../third_party/vma"
 import sdl "vendor:sdl2"
@@ -155,9 +156,9 @@ when USE_VULKAN_BACKEND {
 
 			for required in instance_extensions {
 				contains := false
-				for supported in &supported_extensions {
+				for &supported in supported_extensions {
 					name := transmute(cstring)&supported.extensionName
-					if name == required {
+					if runtime.cstring_eq(name, required){
 						contains = true
 						break
 					}
@@ -170,9 +171,9 @@ when USE_VULKAN_BACKEND {
 
 			for required in required_layers {
 				contains := false
-				for supported in &supported_layers {
+				for &supported in supported_layers {
 					name := transmute(cstring)&supported.layerName
-					if name == required {
+					if runtime.cstring_eq(name, required) {
 						contains = true
 						break
 					}
@@ -264,13 +265,12 @@ when USE_VULKAN_BACKEND {
 					raw_data(extensions),
 				)
 
-
 				device_has_all_required_extension := true
-				for re, i in &device_extensions {
+				for re, _ in &device_extensions {
 					contains := false
-					for e in &extensions {
+					for &e in extensions {
 						name := transmute(cstring)&e.extensionName
-						if re.name == name {
+						if runtime.cstring_eq(re.name, name) {
 
 							if re.name == vk.EXT_DEBUG_MARKER_EXTENSION_NAME {
 								G_RENDERER.debug_mode = true

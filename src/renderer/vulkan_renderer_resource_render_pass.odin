@@ -86,11 +86,7 @@ when USE_VULKAN_BACKEND {
 				load_op = .CLEAR
 			}
 
-			dst_pipeline_flags := vk.PipelineStageFlags{}
-			dst_access_mask := vk.AccessFlags{}
 			new_layout := vk.ImageLayout{}
-			aspect_mask := vk.ImageAspectFlags{}
-
 			if image.desc.format > .DepthFormatsStart && image.desc.format < .DepthFormatsEnd {
 
 				assert(has_depth_attachment == false) // only 1 depth attachment allowed
@@ -100,7 +96,7 @@ when USE_VULKAN_BACKEND {
 					image.desc.format > .DepthStencilFormatsStart &&
 					image.desc.format < .DepthStencilFormatsEnd
 
-				new_layout := vk.ImageLayout.DEPTH_ATTACHMENT_OPTIMAL
+				new_layout = vk.ImageLayout.DEPTH_ATTACHMENT_OPTIMAL
 				if has_stencil_component {
 					new_layout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL
 				}

@@ -7,7 +7,7 @@ import "../common"
 import vma "../third_party/vma"
 import vk "vendor:vulkan"
 
-import "core:intrinsics"
+import "base:intrinsics"
 import "core:log"
 import "core:math/linalg/glsl"
 import "core:strings"
@@ -191,7 +191,6 @@ when USE_VULKAN_BACKEND {
 			return false
 		}
 
-
 		vk_name := strings.clone_to_cstring(
 			common.get_string(image.desc.name),
 			temp_arena.allocator,
@@ -236,19 +235,14 @@ when USE_VULKAN_BACKEND {
 			}
 
 
-			vk_name := strings.clone_to_cstring(
-				common.get_string(image.desc.name),
-				temp_arena.allocator,
-			)
-
-			name_info := vk.DebugUtilsObjectNameInfoEXT {
+			image_view_name_info := vk.DebugUtilsObjectNameInfoEXT {
 				sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
 				objectHandle = u64(backend_image.all_mips_vk_view),
 				objectType   = .IMAGE_VIEW,
 				pObjectName  = vk_name,
 			}
 
-			vk.SetDebugUtilsObjectNameEXT(G_RENDERER.device, &name_info)
+			vk.SetDebugUtilsObjectNameEXT(G_RENDERER.device, &image_view_name_info)
 
 		}
 
@@ -291,19 +285,14 @@ when USE_VULKAN_BACKEND {
 					break
 				}
 
-				vk_name := strings.clone_to_cstring(
-					common.get_string(image.desc.name),
-					temp_arena.allocator,
-				)
-
-				name_info := vk.DebugUtilsObjectNameInfoEXT {
+				image_view_name_info := vk.DebugUtilsObjectNameInfoEXT {
 					sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
 					objectHandle = u64(backend_image.per_mip_vk_view[i]),
 					objectType   = .IMAGE_VIEW,
 					pObjectName  = vk_name,
 				}
 
-				vk.SetDebugUtilsObjectNameEXT(G_RENDERER.device, &name_info)
+				vk.SetDebugUtilsObjectNameEXT(G_RENDERER.device, &image_view_name_info)
 
 				num_image_views_created += 1
 			}
