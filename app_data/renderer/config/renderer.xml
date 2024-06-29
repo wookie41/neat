@@ -1,11 +1,11 @@
 <RendererConfig renderWidth="1920" renderHeight="1080">
     <Images>
-        <GBufferColor format="RGBA8UNorm" resolution="full" sampled="" />
-        <GBufferNormals format="RGBA16SNorm" resolution="full" sampled="" />
-        <GBufferParameters format="RGBA8UNorm" resolution="full" sampled="" />
-        <SceneHDR format="R11G11B10UFloat" resolution="full" sampled="" storage="" />
-        <DepthBuffer format="Depth32SFloat" resolution="full" sampled="" />
-        <GBufferWorldPos format="RGBA16SFloat" resolution="full" sampled="" />
+        <GBufferColor format="RGBA8UNorm" resolution="Full" sampled="" />
+        <GBufferNormals format="RGBA16SNorm" resolution="Full" sampled="" />
+        <GBufferParameters format="RGBA8UNorm" resolution="Full" sampled="" />
+        <SceneHDR format="R11G11B10UFloat" resolution="Full" sampled="" storage="" />
+        <DepthBuffer format="Depth32SFloat" resolution="Full" sampled="" />
+        <GBufferWorldPos format="RGBA16SFloat" resolution="Full" sampled="" />
     </Images>
     <RenderTasks>
         <Mesh name="Mesh" renderPass="GBuffer">

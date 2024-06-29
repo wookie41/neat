@@ -389,7 +389,7 @@ shaders_update :: proc() {
 	}
 
 	temp_arena: common.Arena
-	common.temp_arena_init(&temp_arena)
+	common.temp_arena_init(&temp_arena, common.MEGABYTE)
 	defer common.arena_delete(temp_arena)
 
 	for {

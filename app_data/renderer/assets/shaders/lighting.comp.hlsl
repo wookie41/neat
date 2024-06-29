@@ -53,7 +53,9 @@ void main(uint2 dispatchThreadId: SV_DispatchThreadID)
 
     // Diffuse BRDF
     const float fd = DisneyDiffuseRenormalized(NdotV, NdotL, LdotH, roughness);
-    const float3 diffuse = fd * albedo * (1 - metalness) * occlusion * MATH_PI_RCP * uPerFrame.Sun.Color;
+
+    // @TODO add in the divide by PI once we have physical light units for the directional light
+    const float3 diffuse = fd * albedo * (1 - metalness) * occlusion * uPerFrame.Sun.Color;
 
     // Specular BRDF
     const float3 specularColor = lerp(0.04, albedo, metalness);

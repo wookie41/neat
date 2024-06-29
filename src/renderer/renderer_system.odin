@@ -111,7 +111,6 @@ GPUDeviceFlags :: distinct bit_set[GPUDeviceFlagsBits;u8]
 
 @(private)
 RendererConfig :: struct {
-	display_resolution: glsl.uvec2,
 	render_resolution:  glsl.uvec2,
 }
 
@@ -153,7 +152,6 @@ G_RENDERER_ALLOCATORS: struct {
 
 InitOptions :: struct {
 	using backend_options: BackendInitOptions,
-	display_resolution:    glsl.uvec2,
 }
 
 //---------------------------------------------------------------------------//
@@ -227,8 +225,6 @@ init :: proc(p_options: InitOptions) -> bool {
 	// Setup renderer context
 	context.allocator = G_RENDERER_ALLOCATORS.main_allocator
 	context.logger = INTERNAL.logger
-
-	G_RENDERER.config.display_resolution = p_options.display_resolution
 
 	backend_init(p_options) or_return
 
@@ -674,10 +670,7 @@ renderer_config_create_images :: proc(p_doc: ^xml.Document) -> bool {
 			image_type := ImageType.OneDimensional
 
 			if resolution_found {
-				switch G_RESOLUTION_NAME_MAPPING[image_resolution_name] {
-				case .Display:
-					image_dimensions.x = G_RENDERER.config.display_resolution.x
-					image_dimensions.y = G_RENDERER.config.display_resolution.y
+				#partial switch G_RESOLUTION_NAME_MAPPING[image_resolution_name] {
 				case .Full:
 					image_dimensions.x = G_RENDERER.config.render_resolution.x
 					image_dimensions.y = G_RENDERER.config.render_resolution.y
@@ -687,6 +680,8 @@ renderer_config_create_images :: proc(p_doc: ^xml.Document) -> bool {
 				case .Quarter:
 					image_dimensions.x = G_RENDERER.config.render_resolution.x / 4
 					image_dimensions.y = G_RENDERER.config.render_resolution.y / 4
+				case:
+					assert(false, "unsupported res")
 				}
 				image_type = .TwoDimensional
 			} else {
@@ -838,8 +833,7 @@ get_next_frame_allocator :: proc() -> mem.Allocator {
 get_resolution :: #force_inline proc(p_resolution: Resolution) -> glsl.uvec2 {
 	switch p_resolution {
 	case .Display:
-		return glsl.uvec2(G_RENDERER.config.display_resolution)
-
+		return glsl.uvec2{G_RENDERER.swap_extent.width, G_RENDERER.swap_extent.height}
 	case .Full:
 		return glsl.uvec2(G_RENDERER.config.render_resolution)
 	case .Half:
@@ -847,7 +841,7 @@ get_resolution :: #force_inline proc(p_resolution: Resolution) -> glsl.uvec2 {
 	case .Quarter:
 		return glsl.uvec2(G_RENDERER.config.render_resolution) / 4
 	}
-	return glsl.uvec2(G_RENDERER.config.display_resolution)
+	return glsl.uvec2(G_RENDERER.config.render_resolution)
 }
 
 //---------------------------------------------------------------------------//

@@ -6,8 +6,6 @@ TODO:
 - create a helper function for binding mesh vertex attributes
 - non-uniform scale support for normal matrix
 - get rid of render_passes.json. Instead, create them based on the image formats and reuse based on that
-- fix shader hot reload crashes
-- fix swapchain resizing
 - add an option to initialize an image with color and make the default texture white
 
 INPROGRESS
@@ -17,3 +15,5 @@ DONE:
 - fix normal mapping
 - add debug markers
 - basic pbr brdf setup
+- fix shader hot reload crashes
+- fix swapchain resizing
