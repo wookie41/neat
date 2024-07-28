@@ -1,8 +1,8 @@
 [
     {
         "name": "TestMaterialPass",
-        "vertexShaderPath": "material_base.hlsl",
-        "fragmentShaderPath": "material_base.hlsl",
+        "vertexShaderPath": "material_default.hlsl",
+        "fragmentShaderPath": "material_default.hlsl",
         "renderPass": "GBuffer"
     }
     // {
