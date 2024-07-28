@@ -304,13 +304,13 @@ when USE_VULKAN_BACKEND {
 			sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
 			stage = {.VERTEX},
 			module = backend_vert_shader.vk_module,
-			pName = "main",
+			pName = "VSMain",
 		}
 		fragment_stage_info := vk.PipelineShaderStageCreateInfo {
 			sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
 			stage = {.FRAGMENT},
 			module = backend_frag_shader.vk_module,
-			pName = "main",
+			pName = "FSMain",
 		}
 
 		shader_stages := []vk.PipelineShaderStageCreateInfo{vertex_stage_info, fragment_stage_info}
@@ -683,7 +683,7 @@ when USE_VULKAN_BACKEND {
 			sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
 			stage = {.COMPUTE},
 			module = backend_compute_shader.vk_module,
-			pName = "main",
+			pName = "CSMain",
 		}
 
 		// Pipeline layout 

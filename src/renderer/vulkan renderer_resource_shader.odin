@@ -52,15 +52,21 @@ when USE_VULKAN_BACKEND {
 		common.temp_arena_init(&temp_arena)
 		defer common.arena_delete(temp_arena)
 
-		// Determine compile target
+		// Determine compile target and entry point
 		compile_target: string
+		entry_point: string
 		switch shader.desc.stage {
 		case .Vertex:
 			compile_target = "vs_6_7"
+			entry_point = "VSMain"
 		case .Fragment:
 			compile_target = "ps_6_7"
+			entry_point = "FSMain"
 		case .Compute:
 			compile_target = "cs_6_7"
+			entry_point = "CSMain"
+		case:
+			assert(false, "Unsupported shader type")
 		}
 
 		shader_path := common.get_string(shader.desc.file_path)
@@ -97,15 +103,17 @@ when USE_VULKAN_BACKEND {
 
 			log.infof("Compiling shader %s with features %s\n", shader_path, shader_defines_log)
 
+
 			// @TODO replace with a single command when 
 			// https://github.com/microsoft/DirectXShaderCompiler/issues/4496 is fixed
 			compile_cmd := common.aprintf(
 				temp_arena.allocator,
-				"dxc -spirv -fspv-target-env=vulkan1.3 -HV 2021 -T %s -Fo %s %s %s",
+				"dxc -spirv -fspv-target-env=vulkan1.3 -HV 2021 -T %s -Fo %s %s %s -E %s",
 				compile_target,
 				shader_bin_path,
 				shader_src_path,
 				shader_defines,
+				entry_point,
 			)
 
 			if res := libc.system(strings.clone_to_cstring(compile_cmd, temp_arena.allocator));

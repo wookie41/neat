@@ -25,7 +25,7 @@ Texture2D<float4> depthTex : register(t4, space0);
 RWTexture2D<float4> outputImage : register(u0, space0);
 
 [numthreads(8, 8, 1)]
-void main(uint2 dispatchThreadId: SV_DispatchThreadID)
+void CSMain(uint2 dispatchThreadId: SV_DispatchThreadID)
 {
     FullScreenComputeInput input = CreateFullScreenComputeArgs(dispatchThreadId);
 

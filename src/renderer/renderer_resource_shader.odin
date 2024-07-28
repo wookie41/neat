@@ -120,7 +120,7 @@ init_shaders :: proc() -> bool {
 
 	// Make sure that the bin and reflect dirs exist
 	{
-		dirs := []string{
+		dirs := []string {
 			"app_data/renderer/assets/shaders/bin",
 			"app_data/renderer/assets/shaders/reflect",
 		}
@@ -331,7 +331,7 @@ create_shader_permutation :: proc(
 @(private = "file")
 calculate_hash_for_shader :: proc(p_shader_desc: ^ShaderDesc) -> u32 {
 	h := hash.crc32(transmute([]u8)common.get_string(p_shader_desc.file_path))
-	return h ~ common.hash_string_array(p_shader_desc.features)
+	return h ~ common.hash_string_array(p_shader_desc.features) ~ u32(p_shader_desc.stage)
 }
 
 //--------------------------------------------------------------------------//

@@ -1,11 +1,10 @@
-
 #include "fullscreen.hlsli"
 
-FragmentInput main(uint pVertexId : SV_VertexID)
+FSInput VSMain(uint pVertexId : SV_VertexID)
 {
   uint vertexId = 2 - pVertexId;
 
-  FragmentInput output;
+  FSInput output;
 
   output.pos = float4(
     float(vertexId / 2) * 4.0 - 1.0,
