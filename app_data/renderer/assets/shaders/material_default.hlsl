@@ -1,9 +1,8 @@
 //---------------------------------------------------------------------------//
 
-#include "bindless.hlsli"
-#include "materials.hlsli"
+#include "material_pass.hlsli"
 #include "packing.hlsli"
-#include "uniforms.hlsli"
+#include "resources.hlsli"
 
 //---------------------------------------------------------------------------//
 
@@ -53,21 +52,6 @@ struct FSOutput
 
 //---------------------------------------------------------------------------//
 
-struct MeshInstancedDrawInfo
-{
-    uint meshInstanceIdx;
-    uint materialInstanceIdx;
-};
-
-//---------------------------------------------------------------------------//
-
-struct MeshInstanceInfo
-{
-    float4x4 modelMatrix;
-};
-
-//---------------------------------------------------------------------------//
-
 struct DefaultMaterial
 {
     float3 albedo;
@@ -83,17 +67,6 @@ struct DefaultMaterial
     uint flags;
     uint _padding;
 };
-
-//---------------------------------------------------------------------------//
-
-[[vk::binding(2, 1)]]
-StructuredBuffer<MeshInstanceInfo> gMeshInstanceInfoBuffer;
-
-[[vk::binding(4, 1)]]
-StructuredBuffer<MeshInstancedDrawInfo> gMeshInstancedDrawInfoBuffer;
-
-[[vk::binding(3, 1)]]
-ByteAddressBuffer gMaterialsBuffer;
 
 //---------------------------------------------------------------------------//
 

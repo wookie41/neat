@@ -1,3 +1,6 @@
+#ifndef BRDF_H
+#define BRDF_H
+
 // Based on https://seblagarde.wordpress.com/wp-content/uploads/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf
 // For diffuse, we also use renormalized Disney BRDF and a microfacet model with a Smith correlated visibility function and a GGX NDF for specular
 
@@ -43,3 +46,5 @@ float DisneyDiffuseRenormalized(float NdotV, float NdotL, float LdotH, float lin
     float viewScatter = F_Schlick(f0, fd90, NdotV).r;
     return lightScatter * viewScatter * energyFactor;
 }
+
+#endif // BRDF_H

@@ -1,10 +1,8 @@
-#include "bindless.hlsli"
 #include "brdf.hlsli"
 #include "fullscreen_compute.hlsli"
 #include "math.hlsli"
 #include "packing.hlsli"
-#include "uniforms.hlsli"
-
+#include "resources.hlsli"
 
 [[vk::binding(1, 0)]]
 Texture2D<float4> gBufferColorTex : register(t0, space0);

@@ -27,6 +27,20 @@ MAX_NUM_FRAMES_IN_FLIGHT :: #config(NUM_FRAMES_IN_FLIGHT, 2)
 
 //---------------------------------------------------------------------------//
 
+// Helper enums where all types of global and bindless resources are listed
+// Keep in sync with resources.hlsli
+@(private)
+GlobalResourceSlot :: enum {
+	MeshInstanceInfosBuffer,
+	MaterialsBuffer,
+}
+
+@(private)
+BindlessResourceSlot :: enum {
+	TextureArray2D,
+}
+//---------------------------------------------------------------------------//
+
 // @TODO Move to a config file
 
 @(private)
@@ -111,7 +125,7 @@ GPUDeviceFlags :: distinct bit_set[GPUDeviceFlagsBits;u8]
 
 @(private)
 RendererConfig :: struct {
-	render_resolution:  glsl.uvec2,
+	render_resolution: glsl.uvec2,
 }
 
 //---------------------------------------------------------------------------//
@@ -119,18 +133,20 @@ RendererConfig :: struct {
 
 @(private)
 G_RENDERER: struct {
-	using backend_state:                           BackendRendererState,
-	config:                                        RendererConfig,
-	num_frames_in_flight:                          u32,
-	primary_cmd_buffer_ref:                        []CommandBufferRef,
-	swap_image_refs:                               []ImageRef,
-	gpu_device_flags:                              GPUDeviceFlags,
-	global_bind_group_layout_ref:                  BindGroupLayoutRef,
-	bindless_textures_array_bind_group_layout_ref: BindGroupLayoutRef,
-	global_bind_group_ref:                         BindGroupRef,
-	bindless_textures_array_bind_group_ref:        BindGroupRef,
-	default_image_ref:                             ImageRef,
-	debug_mode:                                    bool,
+	using backend_state:            BackendRendererState,
+	config:                         RendererConfig,
+	num_frames_in_flight:           u32,
+	primary_cmd_buffer_ref:         []CommandBufferRef,
+	swap_image_refs:                []ImageRef,
+	gpu_device_flags:               GPUDeviceFlags,
+	uniforms_bind_group_layout_ref: BindGroupLayoutRef,
+	globals_bind_group_layout_ref:  BindGroupLayoutRef,
+	bindless_bind_group_layout_ref: BindGroupLayoutRef,
+	uniforms_bind_group_ref:        BindGroupRef,
+	globals_bind_group_ref:         BindGroupRef,
+	bindless_bind_group_ref:        BindGroupRef,
+	default_image_ref:              ImageRef,
+	debug_mode:                     bool,
 }
 
 //---------------------------------------------------------------------------//
@@ -267,9 +283,9 @@ init :: proc(p_options: InitOptions) -> bool {
 			}
 			cmd_buffer := &g_resources.cmd_buffers[get_cmd_buffer_idx(cmd_buff_ref)]
 			cmd_buffer.desc = {
-				flags = {.Primary},
+				flags  = {.Primary},
 				thread = 0,
-				frame = u8(i),
+				frame  = u8(i),
 			}
 			if create_command_buffer(cmd_buff_ref) == false {
 				log.error("Failed to create command buffer")
@@ -279,124 +295,149 @@ init :: proc(p_options: InitOptions) -> bool {
 		}
 	}
 
-	// Create the global bind group
+	// Create bind group layout for uniforms
 	{
 		// Bind group layout creation
-		G_RENDERER.global_bind_group_layout_ref = allocate_bind_group_layout_ref(
-			common.create_name("GlobalBuffer"),
-			5, // per frame, per view, mesh instance buffer, material buffer, instanced draw infos
+		G_RENDERER.uniforms_bind_group_layout_ref = allocate_bind_group_layout_ref(
+			common.create_name("Uniforms"),
+			2,
 		)
 
-		bind_group_layout_idx := get_bind_group_layout_idx(G_RENDERER.global_bind_group_layout_ref)
+		bind_group_layout_idx := get_bind_group_layout_idx(
+			G_RENDERER.uniforms_bind_group_layout_ref,
+		)
 		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_idx]
 
 		// Per frame uniform buffer
 		bind_group_layout.desc.bindings[0] = {
-			count = 1,
+			count         = 1,
 			shader_stages = {.Vertex, .Fragment, .Compute},
-			type = .UniformBufferDynamic,
+			type          = .UniformBufferDynamic,
 		}
 
 		// Per view uniform buffer
 		bind_group_layout.desc.bindings[1] = {
-			count = 1,
+			count         = 1,
 			shader_stages = {.Vertex, .Fragment, .Compute},
-			type = .UniformBufferDynamic,
+			type          = .UniformBufferDynamic,
 		}
 
-		// Mesh instance info buffer
-		bind_group_layout.desc.bindings[2] = {
-			count = 1,
-			shader_stages = {.Vertex, .Fragment, .Compute},
-			type = .StorageBuffer,
-		}
-
-		// Material instances buffer
-		bind_group_layout.desc.bindings[3] = {
-			count = 1,
-			shader_stages = {.Vertex, .Fragment, .Compute},
-			type = .StorageBuffer,
-		}
-
-		// Mesh instanced draw infos
-		bind_group_layout.desc.bindings[4] = {
-			count = 1,
-			shader_stages = {.Vertex, .Fragment, .Compute},
-			type = .StorageBufferDynamic,
-		}
-
-		if create_bind_group_layout(G_RENDERER.global_bind_group_layout_ref) == false {
+		if create_bind_group_layout(G_RENDERER.uniforms_bind_group_layout_ref) == false {
 			log.error("Failed to create the global uniforms bind group layout")
 			return false
 		}
 
 		// Now create the bind group based on this layout
-		G_RENDERER.global_bind_group_ref = allocate_bind_group_ref(
-			common.create_name("GlobalUniforms"),
+		G_RENDERER.uniforms_bind_group_ref = allocate_bind_group_ref(
+			common.create_name("Uniforms"),
 		)
 
-		bind_group_idx := get_bind_group_idx(G_RENDERER.global_bind_group_ref)
+		bind_group_idx := get_bind_group_idx(G_RENDERER.uniforms_bind_group_ref)
 		bind_group := &g_resources.bind_groups[bind_group_idx]
-		bind_group.desc.layout_ref = G_RENDERER.global_bind_group_layout_ref
+		bind_group.desc.layout_ref = G_RENDERER.uniforms_bind_group_layout_ref
 
-		if create_bind_group(G_RENDERER.global_bind_group_ref) == false {
-			log.error("Failed to create the global uniforms bind group")
+		if create_bind_group(G_RENDERER.uniforms_bind_group_ref) == false {
+			log.error("Failed to create the uniforms bind group")
 			return false
 		}
 	}
 
-	// Create the bind group layout for per bindless texture array data
+	// Create the bind group layout for global resources
 	{
-		// Layout
-		G_RENDERER.bindless_textures_array_bind_group_layout_ref = allocate_bind_group_layout_ref(
-			common.create_name("BindlessArray"),
-			1 + len(SamplerType), // 2D texture array, sampled
+		G_RENDERER.globals_bind_group_layout_ref = allocate_bind_group_layout_ref(
+			common.create_name("Globals"),
+			len(GlobalResourceSlot),
 		)
 
 		bind_group_layout_idx := get_bind_group_layout_idx(
-			G_RENDERER.bindless_textures_array_bind_group_layout_ref,
+			G_RENDERER.globals_bind_group_layout_ref,
 		)
 		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_idx]
 
-		bind_group_layout.desc.flags = {.BindlessResources}
-
-		// Samplers
-		for i in 0 ..< len(SamplerType) {
-			bind_group_layout.desc.bindings[i] = BindGroupLayoutBinding {
-				count = 1,
-				shader_stages = {.Vertex, .Fragment, .Compute},
-				type = .Sampler,
-				immutable_sampler_idx = u32(i),
-			}
-		}
-
-		// 2D images array
-		bind_group_layout.desc.bindings[len(SamplerType)] = BindGroupLayoutBinding {
-			count = BINDLESS_2D_IMAGES_COUNT,
+		bind_group_layout.desc.bindings[GlobalResourceSlot.MeshInstanceInfosBuffer] = {
+			count         = 1,
 			shader_stages = {.Vertex, .Fragment, .Compute},
-			type = .Image,
-			flags = {.BindlessImageArray},
+			type          = .StorageBuffer,
 		}
 
-		if create_bind_group_layout(G_RENDERER.bindless_textures_array_bind_group_layout_ref) ==
-		   false {
-			log.error("Failed to create the bindless images bind group layout")
+		bind_group_layout.desc.bindings[GlobalResourceSlot.MaterialsBuffer] = {
+			count         = 1,
+			shader_stages = {.Vertex, .Fragment, .Compute},
+			type          = .StorageBuffer,
+		}
+
+		if create_bind_group_layout(G_RENDERER.globals_bind_group_layout_ref) == false {
+			log.error("Failed to create the bindless resources bind group layout")
 			return false
 		}
 
-		G_RENDERER.bindless_textures_array_bind_group_ref = allocate_bind_group_ref(
-			common.create_name("BindlessArray"),
-		)
+		G_RENDERER.globals_bind_group_ref = allocate_bind_group_ref(common.create_name("Globals"))
 
-		bind_group_idx := get_bind_group_idx(G_RENDERER.bindless_textures_array_bind_group_ref)
+		bind_group_idx := get_bind_group_idx(G_RENDERER.globals_bind_group_ref)
 		bind_group := &g_resources.bind_groups[bind_group_idx]
-		bind_group.desc.layout_ref = G_RENDERER.bindless_textures_array_bind_group_layout_ref
+		bind_group.desc.layout_ref = G_RENDERER.globals_bind_group_layout_ref
 
-		if create_bind_group(G_RENDERER.bindless_textures_array_bind_group_ref) == false {
-			log.error("Failed to create the bindless images bind group")
+		if create_bind_group(G_RENDERER.globals_bind_group_ref) == false {
+			log.error("Failed to create the global resources bind group")
 			return false
 		}
 	}
+
+	// Create the bind group layout for bindless resources
+	{
+		G_RENDERER.bindless_bind_group_layout_ref = allocate_bind_group_layout_ref(
+			common.create_name("Bindless"),
+			len(BindlessResourceSlot) + len(SamplerType),
+		)
+
+		bind_group_layout_idx := get_bind_group_layout_idx(
+			G_RENDERER.bindless_bind_group_layout_ref,
+		)
+		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_idx]
+
+		// Give a hint to the backend that this bind group contains bindless resources
+		// Some backends need it to configure the bind group differently, e.g. on Vulkan
+		// we need to add the UPDATE_AFTER_BIND_POOL
+		bind_group_layout.desc.flags = {.BindlessResources}
+
+		bind_group_layout.desc.bindings[BindlessResourceSlot.TextureArray2D] =
+			BindGroupLayoutBinding {
+				count         = BINDLESS_2D_IMAGES_COUNT,
+				shader_stages = {.Vertex, .Fragment, .Compute},
+				type          = .Image,
+				flags         = {.BindlessImageArray},
+			}
+
+		// Add all of the samplers to this bind group
+		for i in 0 ..< len(SamplerType) {
+			bind_group_layout.desc.bindings[len(BindlessResourceSlot) + i] =
+				BindGroupLayoutBinding {
+					count                 = 1,
+					shader_stages         = {.Vertex, .Fragment, .Compute},
+					type                  = .Sampler,
+					immutable_sampler_idx = u32(i),
+				}
+		}
+
+		if create_bind_group_layout(G_RENDERER.bindless_bind_group_layout_ref) == false {
+			log.error("Failed to create the bindless resources bind group layout")
+			return false
+		}
+
+		G_RENDERER.bindless_bind_group_ref = allocate_bind_group_ref(
+			common.create_name("Bindless"),
+		)
+
+		bind_group_idx := get_bind_group_idx(G_RENDERER.bindless_bind_group_ref)
+		bind_group := &g_resources.bind_groups[bind_group_idx]
+		bind_group.desc.layout_ref = G_RENDERER.bindless_bind_group_layout_ref
+
+		if create_bind_group(G_RENDERER.bindless_bind_group_ref) == false {
+			log.error("Failed to create the bindless group")
+			return false
+		}
+	}
+
 
 	init_render_tasks() or_return
 	init_material_passs() or_return
@@ -407,16 +448,15 @@ init :: proc(p_options: InitOptions) -> bool {
 	uniform_buffer_management_init()
 	load_renderer_config()
 
-	// All of the global resources (sampler array and uniform buffers) have been created
-	// So now we can update the global bind group
+	// Update the uniforms and bindless resources bind groups with appropriate resources
 	{
 		using g_renderer_buffers
 
 		mesh_instance_info_buffer := &g_resources.buffers[get_buffer_idx(mesh_instance_info_buffer_ref)]
 
 		bind_group_update(
-			G_RENDERER.global_bind_group_ref,
-			BindGroupUpdate{
+			G_RENDERER.uniforms_bind_group_ref,
+			BindGroupUpdate {
 				buffers = {
 					{
 						buffer_ref = g_uniform_buffers.per_frame_buffer_ref,
@@ -426,6 +466,14 @@ init :: proc(p_options: InitOptions) -> bool {
 						buffer_ref = g_uniform_buffers.per_view_buffer_ref,
 						size = size_of(g_per_view_uniform_buffer_data),
 					},
+				},
+			},
+		)
+
+		bind_group_update(
+			G_RENDERER.globals_bind_group_ref,
+			BindGroupUpdate {
+				buffers = {
 					{
 						buffer_ref = mesh_instance_info_buffer_ref,
 						size = mesh_instance_info_buffer.desc.size,
@@ -433,10 +481,6 @@ init :: proc(p_options: InitOptions) -> bool {
 					{
 						buffer_ref = material_instances_buffer_ref,
 						size = MATERIAL_INSTANCES_BUFFER_SIZE,
-					},
-					{
-						buffer_ref = mesh_instanced_draw_info_buffer_ref,
-						size = MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE,
 					},
 				},
 			},

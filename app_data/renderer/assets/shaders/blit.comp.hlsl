@@ -1,5 +1,5 @@
 #include "fullscreen_compute.hlsli"
-#include "bindless.hlsli"
+#include "resources.hlsli"
 
 [[vk::binding(1, 0)]]
 Texture2D<float4> inputImage : register(t0, space0);

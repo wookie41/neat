@@ -19,6 +19,7 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
+	@(private="file")
 	INTERNAL: struct {
 		immutable_samplers:          []vk.Sampler,
 		descriptor_set_layout_cache: map[u32]DescriptorSetLayoutCacheEntry,

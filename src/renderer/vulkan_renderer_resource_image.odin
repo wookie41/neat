@@ -599,7 +599,7 @@ when USE_VULKAN_BACKEND {
 		}
 
 		bindless_bind_group_idx := get_bind_group_idx(
-			G_RENDERER.bindless_textures_array_bind_group_ref,
+			G_RENDERER.bindless_bind_group_ref,
 		)
 		bindless_bind_group := &g_resources.backend_bind_groups[bindless_bind_group_idx]
 
@@ -636,7 +636,7 @@ when USE_VULKAN_BACKEND {
 				dstSet          = bindless_bind_group.vk_descriptor_set,
 				pImageInfo      = &image_infos[i],
 				dstArrayElement = image.bindless_idx,
-				dstBinding      = 6,
+				dstBinding      = u32(BindlessResourceSlot.TextureArray2D),
 			}
 		}
 
@@ -916,7 +916,7 @@ when USE_VULKAN_BACKEND {
 
 		// Update the bindless array
 		bindless_bind_group_idx := get_bind_group_idx(
-			G_RENDERER.bindless_textures_array_bind_group_ref,
+			G_RENDERER.bindless_bind_group_ref,
 		)
 		bindless_bind_group := &g_resources.backend_bind_groups[bindless_bind_group_idx]
 
@@ -955,7 +955,7 @@ when USE_VULKAN_BACKEND {
 					dstSet          = bindless_bind_group.vk_descriptor_set,
 					pImageInfo      = &image_infos[num_bindless_updates],
 					dstArrayElement = image.bindless_idx,
-					dstBinding      = 6,
+					dstBinding      = u32(BindlessResourceSlot.TextureArray2D),
 				}
 
 				num_bindless_updates += 1

@@ -1,3 +1,5 @@
+#ifndef PACKING_H
+#define PACKING_H
 // Octahedron normal vector encoding (http://jcgt.org/published/0003/02/01/)
 float2 signNotZero(float2 v)
 {
@@ -28,3 +30,5 @@ float3 decodeNormalMap(in float4 normalSample)
   normal.z = sqrt(1.0 - ((normal.x * normal.x) - (normal.y * normal.y)));
   return normal.xyz;
 }
+
+#endif // PACKING_H

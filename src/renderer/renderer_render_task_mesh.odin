@@ -14,9 +14,10 @@ import "core:slice"
 
 @(private = "file")
 MeshRenderTaskData :: struct {
-	render_pass_ref:       RenderPassRef,
-	material_pass_refs:    []MaterialPassRef,
+	render_pass_ref:      RenderPassRef,
+	material_pass_refs:   []MaterialPassRef,
 	render_pass_bindings: RenderPassBindings,
+	bind_group_ref:       BindGroupRef,
 }
 
 //---------------------------------------------------------------------------//
@@ -45,6 +46,7 @@ MeshInstancedDrawInfo :: struct #packed {
 }
 
 //---------------------------------------------------------------------------//
+
 
 @(private = "file")
 calculate_mesh_batch_key :: proc(
@@ -102,6 +104,22 @@ create_instance :: proc(
 	if render_pass_ref == InvalidRenderPassRef {
 		return false
 	}
+
+	// Create the bind group
+	task_bind_group_ref := allocate_bind_group_ref(common.create_name("Globals"))
+	{
+		bind_group := &g_resources.bind_groups[get_bind_group_idx(task_bind_group_ref)]
+		bind_group.desc.layout_ref = g_material_pass_bing_group_layout_ref
+
+		if create_bind_group(task_bind_group_ref) == false {
+			return false
+		}
+	}
+
+	defer if res == false {
+		destroy_bind_group(task_bind_group_ref)
+	}
+
 
 	// Gather material passes
 	material_pass_refs := make([dynamic]MaterialPassRef, temp_arena.allocator)
@@ -170,6 +188,7 @@ create_instance :: proc(
 
 	mesh_render_task.data_ptr = rawptr(mesh_render_task_data)
 	mesh_render_task_data.render_pass_bindings = render_pass_bindings
+	mesh_render_task_data.bind_group_ref = task_bind_group_ref
 
 	return true
 }
@@ -281,7 +300,6 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 		}
 	}
 
-
 	// Gather all of the batches for each material type
 	mesh_batches_per_material_type := make(
 		map[MaterialTypeRef][dynamic]MeshBatch,
@@ -302,11 +320,24 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 		mesh_batches_per_material_type[mesh_batch.material_type_ref] = batches
 	}
 
-	uniform_offsets := []u32{
+	material_pass_offsets := []u32{buffer_management_get_mesh_instanced_info_buffer_offset()}
+
+	uniform_offsets := []u32 {
 		uniform_buffer_management_get_per_frame_offset(),
 		uniform_buffer_management_get_per_view_offset(),
-		buffer_management_get_mesh_instanced_info_buffer_offset(),
 	}
+
+	bind_group_update(
+		mesh_render_task_data.bind_group_ref,
+		{
+			buffers = {
+				{
+					buffer_ref = g_renderer_buffers.mesh_instanced_draw_info_buffer_ref,
+					size = MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE,
+				},
+			},
+		},
+	)
 
 	// Aggregate instanced draw infos so we can issue a single copy and create the draw stream
 	mesh_instanced_draws_infos := make([dynamic]MeshInstancedDrawInfo, temp_arena.allocator)
@@ -333,16 +364,19 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 			draw_stream_set_pipeline(&draw_stream, material_pass.pipeline_ref)
 			draw_stream_set_bind_group(
 				&draw_stream,
-				G_RENDERER.global_bind_group_ref,
-				1,
-				uniform_offsets,
+				mesh_render_task_data.bind_group_ref,
+				0,
+				material_pass_offsets,
 			)
 			draw_stream_set_bind_group(
 				&draw_stream,
-				G_RENDERER.bindless_textures_array_bind_group_ref,
-				2,
-				{},
+				G_RENDERER.uniforms_bind_group_ref,
+				1,
+				uniform_offsets,
 			)
+			draw_stream_set_bind_group(&draw_stream, G_RENDERER.globals_bind_group_ref, 2, nil)
+			draw_stream_set_bind_group(&draw_stream, G_RENDERER.bindless_bind_group_ref, 3, nil)
+
 
 			for mesh_batch in material_mesh_batches {
 
@@ -416,7 +450,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 	)
 
 	upload_response := request_buffer_upload(
-		BufferUploadRequest{
+		BufferUploadRequest {
 			dst_buff = g_renderer_buffers.mesh_instanced_draw_info_buffer_ref,
 			dst_buff_offset = buffer_management_get_mesh_instanced_info_buffer_offset(),
 			dst_queue_usage = .Graphics,

@@ -218,34 +218,39 @@ create_instance :: proc(
 
 	// Create the compute command or draw command for the task
 	if is_using_compute {
-		compute_command_ref := compute_command_allocate_ref(render_task_name, 3, 0)
+
+		// Compute path
+
+		compute_command_ref := compute_command_allocate_ref(render_task_name, 4, 0)
 		compute_command := &g_resources.compute_commands[compute_command_get_idx(compute_command_ref)]
 
 		compute_command.desc.bind_group_layout_refs[0] = INTERNAL.fullscreen_bind_group_layout_ref
-		compute_command.desc.bind_group_layout_refs[1] = G_RENDERER.global_bind_group_layout_ref
-		compute_command.desc.bind_group_layout_refs[2] = G_RENDERER.bindless_textures_array_bind_group_layout_ref
+		compute_command.desc.bind_group_layout_refs[1] = G_RENDERER.uniforms_bind_group_layout_ref
+		compute_command.desc.bind_group_layout_refs[2] = G_RENDERER.globals_bind_group_layout_ref
+		compute_command.desc.bind_group_layout_refs[3] = G_RENDERER.bindless_bind_group_layout_ref
 
 		compute_command.desc.compute_shader_ref = shader_ref
 
 		compute_command_create(compute_command_ref)
 
 		compute_command_set_bind_group(compute_command_ref, 0, bind_group_ref)
-		compute_command_set_bind_group(compute_command_ref, 1, G_RENDERER.global_bind_group_ref)
-		compute_command_set_bind_group(
-			compute_command_ref,
-			2,
-			G_RENDERER.bindless_textures_array_bind_group_ref,
-		)
+		compute_command_set_bind_group(compute_command_ref, 1, G_RENDERER.uniforms_bind_group_ref)
+		compute_command_set_bind_group(compute_command_ref, 2, G_RENDERER.globals_bind_group_ref)
+		compute_command_set_bind_group(compute_command_ref, 3, G_RENDERER.bindless_bind_group_ref)
 
 		fullscreen_render_task_data.compute_command_ref = compute_command_ref
 		fullscreen_render_task_data.draw_command_ref = InvalidDrawCommandRef
 	} else {
-		draw_command_ref := draw_command_allocate_ref(render_task_name, 3, 0)
+
+		// Compute
+
+		draw_command_ref := draw_command_allocate_ref(render_task_name, 4, 0)
 		draw_command := &g_resources.draw_commands[draw_command_get_idx(draw_command_ref)]
 
 		draw_command.desc.bind_group_layout_refs[0] = INTERNAL.fullscreen_bind_group_layout_ref
-		draw_command.desc.bind_group_layout_refs[1] = G_RENDERER.global_bind_group_layout_ref
-		draw_command.desc.bind_group_layout_refs[2] = G_RENDERER.bindless_textures_array_bind_group_layout_ref
+		draw_command.desc.bind_group_layout_refs[1] = G_RENDERER.uniforms_bind_group_layout_ref
+		draw_command.desc.bind_group_layout_refs[2] = G_RENDERER.globals_bind_group_layout_ref
+		draw_command.desc.bind_group_layout_refs[3] = G_RENDERER.bindless_bind_group_layout_ref
 
 		draw_command.desc.vert_shader_ref = find_shader_by_name("fullscreen.vert")
 		draw_command.desc.frag_shader_ref = shader_ref
@@ -255,12 +260,9 @@ create_instance :: proc(
 		draw_command_create(draw_command_ref, fullscreen_render_task_data.render_pass_ref)
 
 		draw_command_set_bind_group(draw_command_ref, 0, bind_group_ref)
-		draw_command_set_bind_group(draw_command_ref, 1, G_RENDERER.global_bind_group_ref)
-		draw_command_set_bind_group(
-			draw_command_ref,
-			2,
-			G_RENDERER.bindless_textures_array_bind_group_ref,
-		)
+		draw_command_set_bind_group(draw_command_ref, 1, G_RENDERER.uniforms_bind_group_ref)
+		draw_command_set_bind_group(draw_command_ref, 2, G_RENDERER.globals_bind_group_ref)
+		draw_command_set_bind_group(draw_command_ref, 3, G_RENDERER.bindless_bind_group_ref)
 
 		fullscreen_render_task_data.draw_command_ref = draw_command_ref
 		fullscreen_render_task_data.compute_command_ref = InvalidComputeCommandRef
@@ -322,7 +324,6 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 	global_uniform_offsets := []u32{
 		uniform_buffer_management_get_per_frame_offset(),
 		uniform_buffer_management_get_per_view_offset(),
-		buffer_management_get_mesh_instanced_info_buffer_offset(),
 	}
 
 	// Perform resource transitions
@@ -362,7 +363,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 			fullscreen_render_task_data.compute_command_ref,
 			get_frame_cmd_buffer_ref(),
 			nil,
-			{per_instance_offsets, global_uniform_offsets, nil},
+			{per_instance_offsets, global_uniform_offsets, nil, nil},
 			glsl.uvec3{work_group_count.x, work_group_count.y, 1},
 		)
 
@@ -379,7 +380,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 		fullscreen_render_task_data.draw_command_ref,
 		get_frame_cmd_buffer_ref(),
 		nil,
-		{nil, global_uniform_offsets, nil},
+		{nil, global_uniform_offsets, nil, nil},
 	)
 
 	end_render_pass(fullscreen_render_task_data.render_pass_ref, get_frame_cmd_buffer_ref())

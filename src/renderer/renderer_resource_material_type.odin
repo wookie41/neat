@@ -114,6 +114,10 @@ G_MATERIAL_TYPE_REF_ARRAY: common.RefArray(MaterialTypeResource)
 
 //---------------------------------------------------------------------------//
 
+g_material_pass_bing_group_layout_ref : BindGroupLayoutRef
+
+//---------------------------------------------------------------------------//
+
 //16 byte alignment
 DefaultMaterialTypeProperties :: struct #packed {
 	albedo:             glsl.vec3,
@@ -133,6 +137,25 @@ DefaultMaterialTypeProperties :: struct #packed {
 //---------------------------------------------------------------------------//
 
 init_material_types :: proc() -> bool {
+
+	// Create a bind group layout for material passes
+	{
+		g_material_pass_bing_group_layout_ref = allocate_bind_group_layout_ref(
+			common.create_name("MaterialPasses"),
+			1,
+		)
+
+		bind_group_layout := &g_resources.bind_group_layouts[get_bind_group_layout_idx(g_material_pass_bing_group_layout_ref)]
+
+		// Instance info data
+		bind_group_layout.desc.bindings[0] = {
+			count         = 1,
+			shader_stages = {.Vertex, .Fragment, .Compute},
+			type          = .StorageBufferDynamic,
+		}
+
+		create_bind_group_layout(g_material_pass_bing_group_layout_ref) or_return
+	}
 
 	// Allocate memory for the material types
 	G_MATERIAL_TYPE_REF_ARRAY = common.ref_array_create(
@@ -241,12 +264,13 @@ create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) 
 		assert(success)
 
 		// Create the PSO
-		material_pass.pipeline_ref = graphics_pipeline_allocate_ref(material_pass.desc.name, 3, 0)
+		material_pass.pipeline_ref = graphics_pipeline_allocate_ref(material_pass.desc.name, 4, 0)
 		pipeline := &g_resources.graphics_pipelines[get_graphics_pipeline_idx(material_pass.pipeline_ref)]
 		pipeline.desc.bind_group_layout_refs = {
-			InvalidBindGroupRefLayout, // Slot 0 not used
-			G_RENDERER.global_bind_group_layout_ref,
-			G_RENDERER.bindless_textures_array_bind_group_layout_ref,
+			g_material_pass_bing_group_layout_ref,
+			G_RENDERER.uniforms_bind_group_layout_ref,
+			G_RENDERER.globals_bind_group_layout_ref,
+			G_RENDERER.bindless_bind_group_layout_ref,
 		}
 
 		pipeline.desc.render_pass_ref = material_pass.desc.render_pass_ref

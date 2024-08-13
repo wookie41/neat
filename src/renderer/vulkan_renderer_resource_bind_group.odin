@@ -28,7 +28,7 @@ when USE_VULKAN_BACKEND {
 	backend_init_bind_groups :: proc() -> bool {
 		// Create descriptor pools
 		{
-			pool_sizes := []vk.DescriptorPoolSize{
+			pool_sizes := []vk.DescriptorPoolSize {
 				{type = .SAMPLER, descriptorCount = len(SamplerType)},
 				{type = .STORAGE_IMAGE, descriptorCount = 1 << 15},
 				{type = .UNIFORM_BUFFER, descriptorCount = 1 << 15},
@@ -38,11 +38,11 @@ when USE_VULKAN_BACKEND {
 			}
 
 			descriptor_pool_create_info := vk.DescriptorPoolCreateInfo {
-				sType = .DESCRIPTOR_POOL_CREATE_INFO,
-				maxSets = 1 << 15,
+				sType         = .DESCRIPTOR_POOL_CREATE_INFO,
+				maxSets       = 1 << 15,
 				poolSizeCount = u32(len(pool_sizes)),
-				pPoolSizes = raw_data(pool_sizes),
-				flags = {.UPDATE_AFTER_BIND}, // @TODO create a separate pool for that 
+				pPoolSizes    = raw_data(pool_sizes),
+				flags         = {.UPDATE_AFTER_BIND}, // @TODO create a separate pool for that 
 			}
 
 			vk.CreateDescriptorPool(
@@ -191,10 +191,7 @@ when USE_VULKAN_BACKEND {
 		num_descriptor_writes: u32 = 0
 		for binding, binding_idx in bind_group_layout.desc.bindings {
 
-			if binding.type == .UniformBuffer ||
-			   binding.type == .UniformBufferDynamic ||
-			   binding.type == .StorageBuffer ||
-			   binding.type == .StorageBufferDynamic {
+			if is_buffer_binding(binding.type) {
 
 				buffer_binding := p_bind_group_update.buffers[buffer_write_idx]
 
@@ -239,7 +236,7 @@ when USE_VULKAN_BACKEND {
 				continue
 			}
 
-			if binding.type == .Image || binding.type == .StorageImage {
+			if is_image_binding(binding.type) {
 
 				image_binding := p_bind_group_update.images[image_write_idx]
 
@@ -289,6 +286,25 @@ when USE_VULKAN_BACKEND {
 			0,
 			nil,
 		)
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private = "file")
+	is_buffer_binding :: #force_inline proc(p_binding_type: BindGroupLayoutBindingType) -> bool{
+		return(
+			p_binding_type == .UniformBuffer ||
+			p_binding_type == .UniformBufferDynamic ||
+			p_binding_type == .StorageBuffer ||
+			p_binding_type == .StorageBufferDynamic \
+		)
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private = "file")
+	is_image_binding :: #force_inline proc(p_binding_type: BindGroupLayoutBindingType) -> bool {
+		return p_binding_type == .Image || p_binding_type == .StorageImage
 	}
 
 	//---------------------------------------------------------------------------//
