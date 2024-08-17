@@ -1,8 +1,13 @@
 //---------------------------------------------------------------------------//
 
-#include "material_pass.hlsli"
 #include "packing.hlsli"
 #include "resources.hlsli"
+#include "scene_types.hlsli"
+
+//---------------------------------------------------------------------------//
+
+[[vk::binding(0, 0)]]
+StructuredBuffer<MeshInstancedDrawInfo> gMeshInstancedDrawInfoBuffer : register(t0, space2);
 
 //---------------------------------------------------------------------------//
 
@@ -52,24 +57,6 @@ struct FSOutput
 
 //---------------------------------------------------------------------------//
 
-struct DefaultMaterial
-{
-    float3 albedo;
-    uint albedoTex;
-    float3 normal;
-    uint normalTex;
-    float roughness;
-    float metalness;
-    float occlusion;
-    uint roughnessTex;
-    uint metalnessTex;
-    uint occlusionTex;
-    uint flags;
-    uint _padding;
-};
-
-//---------------------------------------------------------------------------//
-
 float4 VSMain(
     in VSInput pVertexInput,
     in uint pInstanceId: SV_INSTANCEID,
@@ -99,7 +86,7 @@ float4 VSMain(
 
 void FSMain(in FSInput pFragmentInput, out FSOutput pFragmentOutput)
 {
-    DefaultMaterial material = gMaterialsBuffer.Load<DefaultMaterial>(pFragmentInput.materialInstanceIdx * sizeof(DefaultMaterial));
+    Material material = gMaterialsBuffer[pFragmentInput.materialInstanceIdx];
 
     const float3 albedo = sampleBindless(
                               uLinearRepeatSampler,

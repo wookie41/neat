@@ -4,7 +4,6 @@ package renderer
 
 import "../common"
 import "core:c"
-import "core:mem"
 
 //---------------------------------------------------------------------------//
 
@@ -24,10 +23,8 @@ MaterialInstanceFlags :: distinct bit_set[MaterialInstanceFlagBits;u8]
 //---------------------------------------------------------------------------//
 
 MaterialInstanceResource :: struct {
-	desc:                                 MaterialInstanceDesc,
-	material_properties_data_ptr:         ^byte,
-	material_properties_buffer_entry_idx: u32,
-	flags:                                MaterialInstanceFlags,
+	desc:  MaterialInstanceDesc,
+	flags: MaterialInstanceFlags,
 }
 
 //---------------------------------------------------------------------------//
@@ -47,6 +44,13 @@ G_MATERIAL_INSTANCE_REF_ARRAY: common.RefArray(MaterialInstanceResource)
 
 //---------------------------------------------------------------------------//
 
+@(private = "file")
+INTERNAL: struct {
+	material_properties_array: []MaterialProperties,
+}
+
+//---------------------------------------------------------------------------//
+
 init_material_instances :: proc() -> bool {
 	G_MATERIAL_INSTANCE_REF_ARRAY = common.ref_array_create(
 		MaterialInstanceResource,
@@ -58,6 +62,7 @@ init_material_instances :: proc() -> bool {
 		MAX_MATERIAL_INSTANCES,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
+	INTERNAL.material_properties_array = make([]MaterialProperties, MAX_MATERIAL_INSTANCES)
 
 	return true
 }
@@ -84,23 +89,20 @@ material_instance_update_dirty_materials :: proc() {
 //---------------------------------------------------------------------------//
 
 material_instance_update_dirty_data :: proc(p_material_instance_ref: MaterialInstanceRef) {
-	material_instance := &g_resources.material_instances[get_material_instance_idx(p_material_instance_ref)]
-	material_type := &g_resources.material_types[get_material_type_idx(material_instance.desc.material_type_ref)]
+	material_instance_idx := get_material_instance_idx(p_material_instance_ref)
+	material_instance := &g_resources.material_instances[material_instance_idx]
 
-	material_instance_data_offset :=
-		material_type.properties_buffer_suballocation.offset +
-		material_type.properties_size_in_bytes *
-			material_instance.material_properties_buffer_entry_idx
+	material_instance_data_offset := size_of(MaterialProperties) * material_instance_idx
 
 	// If material instance data is dirty, we need to issue a copy to the GPU
 	request_buffer_upload(
-		BufferUploadRequest{
+		BufferUploadRequest {
 			dst_buff = g_renderer_buffers.material_instances_buffer_ref,
 			dst_buff_offset = material_instance_data_offset,
 			dst_queue_usage = .Graphics,
 			first_usage_stage = .VertexShader,
-			size = material_type.properties_size_in_bytes,
-			data_ptr = material_instance.material_properties_data_ptr,
+			size = size_of(MaterialProperties),
+			data_ptr = material_instance_get_properties_ptr(p_material_instance_ref),
 			flags = {.RunOnNextFrame},
 		},
 	)
@@ -110,19 +112,8 @@ material_instance_update_dirty_data :: proc(p_material_instance_ref: MaterialIns
 
 //---------------------------------------------------------------------------//
 
-create_material_instance :: proc(p_material_instance_ref: MaterialInstanceRef) -> (ret: bool) {
-	material_instance := &g_resources.material_instances[get_material_instance_idx(p_material_instance_ref)]
-	defer if ret == false {
-		common.ref_free(&G_MATERIAL_INSTANCE_REF_ARRAY, p_material_instance_ref)
-	}
-
-	// Request an entry in the material buffer
-	material_instance.material_properties_buffer_entry_idx, material_instance.material_properties_data_ptr =
-		material_type_allocate_properties_entry(material_instance.desc.material_type_ref)
-
-	if material_instance.material_properties_data_ptr == nil {
-		return false
-	}
+create_material_instance :: proc(p_material_instance_ref: MaterialInstanceRef) -> bool {
+	// Noop
 	return true
 }
 
@@ -144,138 +135,15 @@ get_material_instance_idx :: proc(p_ref: MaterialInstanceRef) -> u32 {
 //--------------------------------------------------------------------------//
 
 destroy_material_instance :: proc(p_ref: MaterialInstanceRef) {
-	material_instance := &g_resources.material_instances[get_material_instance_idx(p_ref)]
-	material_type_free_properties_entry(
-		material_instance.desc.material_type_ref,
-		material_instance.material_properties_buffer_entry_idx,
-	)
 	common.ref_free(&G_MATERIAL_INSTANCE_REF_ARRAY, p_ref)
 }
 
 //--------------------------------------------------------------------------//
 
-material_instance_set_flags :: proc(p_material_instance_ref: MaterialInstanceRef, p_flags: u32) {
-	material_instance := &g_resources.material_instances[get_material_instance_idx(p_material_instance_ref)]
-	material_type := &g_resources.material_types[get_material_type_idx(material_instance.desc.material_type_ref)]
-
-	flags_offset := material_type.properties_size_in_bytes - size_of(u32)
-	flags_bitfield := (^u32)(
-		mem.ptr_offset(material_instance.material_properties_data_ptr, flags_offset),
-	)
-	flags_bitfield^ = p_flags
-}
-
-//--------------------------------------------------------------------------//
-
-material_instance_get_flags :: proc(p_material_instance_ref: MaterialInstanceRef) -> u32 {
-	material_instance := &g_resources.material_instances[get_material_instance_idx(p_material_instance_ref)]
-	material_type := &g_resources.material_types[get_material_type_idx(material_instance.desc.material_type_ref)]
-
-	flags_offset := material_type.properties_size_in_bytes - size_of(u32)
-	flags_bitfield := (^u32)(
-		mem.ptr_offset(material_instance.material_properties_data_ptr, flags_offset),
-	)
-
-	return (^u32)(flags_bitfield)^
-}
-
-//--------------------------------------------------------------------------//
-
-material_instance_get_flag :: proc {
-	material_instance_get_flag_str,
-	material_instance_get_flag_name,
-}
-
-//--------------------------------------------------------------------------//
-
-@(private = "file")
-material_instance_get_flag_str :: proc(
+material_instance_get_properties_ptr :: proc(
 	p_material_instance_ref: MaterialInstanceRef,
-	p_flag_name: string,
-) -> bool {
-	return material_instance_get_flag_name(
-		p_material_instance_ref,
-		common.create_name(p_flag_name),
-	)
-}
-
-//--------------------------------------------------------------------------//
-
-@(private = "file")
-material_instance_get_flag_name :: proc(
-	p_material_instance_ref: MaterialInstanceRef,
-	p_flag_name: common.Name,
-) -> bool {
-	material_instance := &g_resources.material_instances[get_material_instance_idx(p_material_instance_ref)]
-	material_type := &g_resources.material_types[get_material_type_idx(material_instance.desc.material_type_ref)]
-
-	// Find flag index 
-	for flag_name, flag_idx in material_type.desc.flag_names {
-		if common.name_equal(p_flag_name, flag_name) {
-			flags := material_instance_get_flags(p_material_instance_ref)
-			return (flags & (1 << u32(flag_idx))) > 0
-		}
-	}
-
-	return false
-}
-//--------------------------------------------------------------------------//
-
-material_instance_set_flag :: proc {
-	material_instance_set_flag_str,
-	material_instance_set_flag_name,
-}
-
-@(private = "file")
-material_instance_set_flag_str :: proc(
-	p_material_instance_ref: MaterialInstanceRef,
-	p_flag_name: string,
-	p_value: bool,
-) {
-	material_instance_set_flag_name(
-		p_material_instance_ref,
-		common.create_name(p_flag_name),
-		p_value,
-	)
-}
-
-//--------------------------------------------------------------------------//
-
-@(private = "file")
-material_instance_set_flag_name :: proc(
-	p_material_instance_ref: MaterialInstanceRef,
-	p_flag_name: common.Name,
-	p_value: bool,
-) {
-	material_instance := &g_resources.material_instances[get_material_instance_idx(p_material_instance_ref)]
-	material_type := &g_resources.material_types[get_material_type_idx(material_instance.desc.material_type_ref)]
-
-	flags_offset := material_type.properties_size_in_bytes - size_of(u32)
-	flags_bitfield := (^u32)(
-		mem.ptr_offset(material_instance.material_properties_data_ptr, flags_offset),
-	)
-	// Find flag index and set it
-	for flag_name, flag_idx in material_type.desc.flag_names {
-		if common.name_equal(p_flag_name, flag_name) {
-			if (p_value) {
-				flags_bitfield^ |= (1 << u32(flag_idx))
-			} else {
-				flags_bitfield^ &= ~(1 << u32(flag_idx))
-			}
-			return
-		}
-	}
-}
-
-//--------------------------------------------------------------------------//
-
-material_instance_get_properties_struct :: proc(
-	p_material_instance_ref: MaterialInstanceRef,
-	$T: typeid,
-) -> ^T {
-	material_instance := &g_resources.material_instances[get_material_instance_idx(p_material_instance_ref)]
-	ptr := (^T)(material_instance.material_properties_data_ptr)
-	return ptr
+) -> ^MaterialProperties {
+	return &INTERNAL.material_properties_array[get_material_instance_idx(p_material_instance_ref)]
 }
 
 //--------------------------------------------------------------------------//

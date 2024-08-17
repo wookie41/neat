@@ -5,8 +5,13 @@ import "../engine"
 import "../renderer"
 import "core:math/linalg/glsl"
 import "core:os"
+import "core:log"
 
 main :: proc() {
+	
+	logg := log.create_console_logger()
+	context.logger = logg
+
 	engine_opts := engine.InitOptions {
 		window_width  = 1920,
 		window_height = 1080,

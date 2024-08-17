@@ -14,7 +14,7 @@
             <OutputImage name="GBufferParameters" clear="0, 0, 0, 0"/>
             <OutputImage name="GBufferWorldPos" clear="0, 0, 0, 0"/>
             <OutputImage name="DepthBuffer" clear="1"/>
-            <MaterialPass name="TestMaterialPass" />
+            <MaterialPass name="OpaquePBR" />
         </Mesh>
         <FullScreen name="Lighting" shader="lighting.comp" resolution="Full">
             <InputImage name="GBufferColor"/>

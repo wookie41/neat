@@ -50,15 +50,8 @@ INTERNAL: struct {
 //---------------------------------------------------------------------------//
 
 @(private)
-BaseMaterialProperties :: struct {
-	flags: u32,
-}
-
-//---------------------------------------------------------------------------//
-
-@(private)
-DefaultMaterialPropertiesAssetJSON :: struct {
-	using base:           BaseMaterialProperties,
+MaterialPropertiesAssetJSON :: struct {
+	flags:                u32,
 	albedo:               glsl.vec3,
 	normal:               glsl.vec3,
 	roughness:            f32,
@@ -158,7 +151,7 @@ material_asset_create :: proc(p_material_asset_ref: MaterialAssetRef) -> bool {
 	material_type_ref := renderer.find_material_type(material_asset.material_type_name)
 	if material_type_ref == renderer.InvalidMaterialTypeRef {
 		log.warn(
-			"Failed to create material '%s' - unsupported material type '%s'",
+			"Failed to create material '%s' - unsupported material type '%s'\n",
 			common.get_string(material_asset.name),
 			common.get_string(material_asset.material_type_name),
 		)
@@ -198,13 +191,6 @@ material_asset_create :: proc(p_material_asset_ref: MaterialAssetRef) -> bool {
 material_asset_save :: proc(p_ref: MaterialAssetRef) -> bool {
 	material_asset := material_asset_get(p_ref)
 
-	material_instance_idx := renderer.get_material_instance_idx(
-		material_asset.material_instance_ref,
-	)
-	material_instance := &renderer.g_resources.material_instances[material_instance_idx]
-	material_type_ref := material_instance.desc.material_type_ref
-	material_type := &renderer.g_resources.material_types[renderer.get_material_type_idx(material_type_ref)]
-
 	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
@@ -213,17 +199,9 @@ material_asset_save :: proc(p_ref: MaterialAssetRef) -> bool {
 	material_asset_data: []byte
 	marshal_error: json.Marshal_Error
 
-	switch material_type.desc.properties_struct_type {
-	case renderer.DefaultMaterialTypeProperties:
-		material_asset_data, marshal_error = material_asset_save_properties_default(
-			material_asset.material_instance_ref,
-			(^renderer.DefaultMaterialTypeProperties)(
-				material_instance.material_properties_data_ptr,
-			),
-		)
-	case:
-		assert(false, "Unsupported material properties type")
-	}
+	material_asset_data, marshal_error = material_asset_save_properties(
+		renderer.material_instance_get_properties_ptr(material_asset.material_instance_ref),
+	)
 
 	if marshal_error != nil {
 		return false
@@ -298,13 +276,9 @@ material_asset_load :: proc(p_name: common.Name) -> MaterialAssetRef {
 		)
 		return InvalidMaterialAssetRef
 	}
-	material_type_idx := renderer.get_material_type_idx(material_type_ref)
-
-	material_type := &renderer.g_resources.material_types[material_type_idx]
 
 	material_asset_ref := allocate_material_asset_ref(p_name)
 	material_asset := material_asset_get(material_asset_ref)
-
 
 	// Create a material instance for this material asset
 	material_asset.material_instance_ref = renderer.allocate_material_instance_ref(p_name)
@@ -336,21 +310,16 @@ material_asset_load :: proc(p_name: common.Name) -> MaterialAssetRef {
 		return InvalidMaterialAssetRef
 	}
 
-	load_success := false
-
-	switch material_type.desc.properties_struct_type {
-	case renderer.DefaultMaterialTypeProperties:
-		load_success = material_asset_load_properties_default(
-			material_asset_ref,
-			material_data,
+	load_success := material_asset_load_properties(
+		material_asset_ref,
+		material_data,
+		material_asset.material_instance_ref,
+		renderer.material_instance_get_properties_ptr(
 			material_asset.material_instance_ref,
-			renderer.material_instance_get_properties_struct(
-				material_asset.material_instance_ref,
-				renderer.DefaultMaterialTypeProperties,
-			),
-		)
-	case:
-		assert(false, "Unsupported material properties type")
+		),
+	)
+	if load_success == false {
+		return InvalidMaterialAssetRef
 	}
 
 	renderer.material_instance_update_dirty_data(material_asset.material_instance_ref)
@@ -364,9 +333,8 @@ material_asset_load :: proc(p_name: common.Name) -> MaterialAssetRef {
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-material_asset_save_properties_default :: proc(
-	p_material_instance_ref: renderer.MaterialInstanceRef,
-	p_material_properties: ^renderer.DefaultMaterialTypeProperties,
+material_asset_save_properties :: proc(
+	p_material_properties: ^renderer.MaterialProperties,
 ) -> (
 	[]byte,
 	json.Marshal_Error,
@@ -376,8 +344,8 @@ material_asset_save_properties_default :: proc(
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
 
-	props_json := DefaultMaterialPropertiesAssetJSON {
-		flags     = renderer.material_instance_get_flags(p_material_instance_ref),
+	props_json := MaterialPropertiesAssetJSON {
+		flags     = transmute(u32)p_material_properties.flags,
 		albedo    = p_material_properties.albedo,
 		normal    = p_material_properties.normal,
 		roughness = p_material_properties.roughness,
@@ -385,31 +353,31 @@ material_asset_save_properties_default :: proc(
 		occlusion = p_material_properties.occlusion,
 	}
 
-	if (renderer.material_instance_get_flag(p_material_instance_ref, "HasAlbedoImage")) {
+	if .HasAlbedoImage in p_material_properties.flags {
 		props_json.albedo_image_name = common.get_string(
 			renderer.g_resources.images[p_material_properties.albedo_image_id].desc.name,
 		)
 	}
 
-	if (renderer.material_instance_get_flag(p_material_instance_ref, "HasNormalImage")) {
+	if .HasNormalImage in p_material_properties.flags {
 		props_json.normal_image_name = common.get_string(
 			renderer.g_resources.images[p_material_properties.normal_image_id].desc.name,
 		)
 	}
 
-	if (renderer.material_instance_get_flag(p_material_instance_ref, "HasRoughnessImage")) {
+	if .HasRoughnessImage in p_material_properties.flags {
 		props_json.roughness_image_name = common.get_string(
 			renderer.g_resources.images[p_material_properties.roughness_image_id].desc.name,
 		)
 	}
 
-	if (renderer.material_instance_get_flag(p_material_instance_ref, "HasMetalnessImage")) {
+	if .HasMetalnessImage in p_material_properties.flags {
 		props_json.metalness_image_name = common.get_string(
 			renderer.g_resources.images[p_material_properties.metalness_image_id].desc.name,
 		)
 	}
 
-	if (renderer.material_instance_get_flag(p_material_instance_ref, "HasOcclusionImage")) {
+	if .HasOcclusionImage in p_material_properties.flags {
 		props_json.occlusion_image_name = common.get_string(
 			renderer.g_resources.images[p_material_properties.occlusion_image_id].desc.name,
 		)
@@ -425,18 +393,18 @@ material_asset_save_properties_default :: proc(
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-material_asset_load_properties_default :: proc(
+material_asset_load_properties :: proc(
 	p_material_asset_ref: MaterialAssetRef,
 	p_material_properties_data: []byte,
 	p_material_instance_ref: renderer.MaterialInstanceRef,
-	p_material_properties: ^renderer.DefaultMaterialTypeProperties,
+	p_material_properties: ^renderer.MaterialProperties,
 ) -> bool {
 
 	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
 
-	material_props: DefaultMaterialPropertiesAssetJSON
+	material_props: MaterialPropertiesAssetJSON
 
 	material_asset := material_asset_get(p_material_asset_ref)
 
@@ -450,44 +418,42 @@ material_asset_load_properties_default :: proc(
 		return false
 	}
 
-	renderer.material_instance_set_flags(p_material_instance_ref, material_props.flags)
-
+	p_material_properties.flags = transmute(renderer.MaterialPropertiesFlags)material_props.flags
 	p_material_properties.albedo = material_props.albedo
 	p_material_properties.normal = material_props.normal
 	p_material_properties.roughness = material_props.roughness
 	p_material_properties.metalness = material_props.metalness
 	p_material_properties.occlusion = material_props.occlusion
 
-
-	if renderer.material_instance_get_flag(p_material_instance_ref, "HasAlbedoImage") {
+	if .HasAlbedoImage in p_material_properties.flags {
 		material_asset_set_image_by_name(
 			&p_material_properties.albedo_image_id,
 			material_props.albedo_image_name,
 			&material_asset.texture_asset_refs,
 		)
 	}
-	if renderer.material_instance_get_flag(p_material_instance_ref, "HasNormalImage") {
+	if .HasNormalImage in p_material_properties.flags {
 		material_asset_set_image_by_name(
 			&p_material_properties.normal_image_id,
 			material_props.normal_image_name,
 			&material_asset.texture_asset_refs,
 		)
 	}
-	if renderer.material_instance_get_flag(p_material_instance_ref, "HasRoughnessImage") {
+	if .HasRoughnessImage in p_material_properties.flags {
 		material_asset_set_image_by_name(
 			&p_material_properties.roughness_image_id,
 			material_props.roughness_image_name,
 			&material_asset.texture_asset_refs,
 		)
 	}
-	if renderer.material_instance_get_flag(p_material_instance_ref, "HasMetalnessImage") {
+	if .HasMetalnessImage in p_material_properties.flags {
 		material_asset_set_image_by_name(
 			&p_material_properties.metalness_image_id,
 			material_props.metalness_image_name,
 			&material_asset.texture_asset_refs,
 		)
 	}
-	if renderer.material_instance_get_flag(p_material_instance_ref, "HasOcclusionImage") {
+	if .HasOcclusionImage in p_material_properties.flags {
 		material_asset_set_image_by_name(
 			&p_material_properties.occlusion_image_id,
 			material_props.occlusion_image_name,
@@ -500,9 +466,9 @@ material_asset_load_properties_default :: proc(
 
 //---------------------------------------------------------------------------//
 
-material_asset_save_new_default :: proc(
+material_asset_save_new :: proc(
 	p_material_asset_ref: MaterialAssetRef,
-	p_material_properties: DefaultMaterialPropertiesAssetJSON,
+	p_material_properties: MaterialPropertiesAssetJSON,
 ) -> bool {
 
 	temp_arena: common.Arena
@@ -552,7 +518,7 @@ material_asset_save_new_default :: proc(
 
 	return common.write_json_file(
 		material_asset_path,
-		DefaultMaterialPropertiesAssetJSON,
+		MaterialPropertiesAssetJSON,
 		p_material_properties,
 		temp_arena.allocator,
 	)

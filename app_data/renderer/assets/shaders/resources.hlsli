@@ -36,7 +36,7 @@ struct PerFrame
 StructuredBuffer<MeshInstanceInfo> gMeshInstanceInfoBuffer : register(t1, space2);
 
 [[vk::binding(1, 2)]]
-ByteAddressBuffer gMaterialsBuffer : register(t2, space2);
+StructuredBuffer<Material> gMaterialsBuffer : register(t2, space2);
 
 //---------------------------------------------------------------------------//
 

@@ -480,7 +480,7 @@ init :: proc(p_options: InitOptions) -> bool {
 					},
 					{
 						buffer_ref = material_instances_buffer_ref,
-						size = MATERIAL_INSTANCES_BUFFER_SIZE,
+						size = MATERIAL_PROPERTIES_BUFFER_SIZE,
 					},
 				},
 			},

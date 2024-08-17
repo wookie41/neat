@@ -1,21 +1,10 @@
 [
     {
-        "name": "Default",
-        "shadingModel": "DefaultLit",
-        "propertiesStructType": "Default",
-        "defines": [
-            "FEAT_MAT_DEFAULT"
-        ],
-        "flags": [
-            "HasAlbedoImage",
-            "HasNormalImage",
-            "HasRoughnessImage",
-            "HasMetalnessImage",
-            "HasOcclusionImage"
-        ],
+        "name": "OpaquePBR",
+        "defines": [],
         "materialPasses": [
-            "TestMaterialPass"
-            // "TestMaterialPassPrePass"
+            "OpaquePBR"
+            // "DepthPrePass"
         ]
     }
 ]

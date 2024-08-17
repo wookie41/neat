@@ -2,5 +2,6 @@
     "files.associations": {
         "cmath": "cpp"
     },
-    "zenMode.hideLineNumbers": false
+    "zenMode.hideLineNumbers": false,
+    "ols.server.path": "C:\\Tools\\ols\\ols"
 }

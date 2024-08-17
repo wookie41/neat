@@ -16,9 +16,6 @@ g_renderer_buffers: struct {
 //---------------------------------------------------------------------------//
 
 @(private)
-MATERIAL_INSTANCES_BUFFER_SIZE :: 8 * common.MEGABYTE
-
-@(private)
 MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE :: 2 * common.MEGABYTE
 
 //---------------------------------------------------------------------------//
@@ -62,7 +59,7 @@ buffer_management_init :: proc() -> bool {
 
 		material_instances_buffer.desc.flags = storage_buffer_flags
 		material_instances_buffer.desc.usage = storage_buffer_usage
-		material_instances_buffer.desc.size = MATERIAL_INSTANCES_BUFFER_SIZE
+		material_instances_buffer.desc.size = MATERIAL_PROPERTIES_BUFFER_SIZE
 
 		create_buffer(material_instances_buffer_ref) or_return
 	}

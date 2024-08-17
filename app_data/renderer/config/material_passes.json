@@ -1,17 +1,8 @@
 [
     {
-        "name": "TestMaterialPass",
-        "vertexShaderPath": "material_default.hlsl",
-        "fragmentShaderPath": "material_default.hlsl",
+        "name": "OpaquePBR",
+        "vertexShaderPath": "mat_opaque_pbr.hlsl",
+        "fragmentShaderPath": "mat_opaque_pbr.hlsl",
         "renderPass": "GBuffer"
     }
-    // {
-    //     "name": "TestMaterialPassPrePass",
-    //     "vertexShaderPath": "base.vert.hlsl",
-    //     "fragmentShaderPath": "prepass.frag.hlsl",
-    //     "renderPass": "TestRenderPass",
-    //     "additionalFeatureNames": [
-    //         "FEAT_PREPASS"
-    //     ]
-    // }
 ]

@@ -106,10 +106,10 @@ create_instance :: proc(
 	}
 
 	// Create the bind group
-	task_bind_group_ref := allocate_bind_group_ref(common.create_name("Globals"))
+	task_bind_group_ref := allocate_bind_group_ref(common.create_name("MeshRenderTask"))
 	{
 		bind_group := &g_resources.bind_groups[get_bind_group_idx(task_bind_group_ref)]
-		bind_group.desc.layout_ref = g_material_pass_bing_group_layout_ref
+		bind_group.desc.layout_ref = g_material_pass_bind_group_layout_ref
 
 		if create_bind_group(task_bind_group_ref) == false {
 			return false

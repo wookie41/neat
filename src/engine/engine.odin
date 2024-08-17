@@ -8,6 +8,7 @@ import sdl "vendor:sdl2"
 import "core:log"
 import "core:math/linalg/glsl"
 import "core:time"
+import "core:os"
 
 import "../common"
 import "../renderer"
@@ -44,6 +45,12 @@ INTERNAL: struct {
 //---------------------------------------------------------------------------//
 
 init :: proc(p_options: InitOptions) -> bool {
+
+	// Make sure all the directories the engine expects exist
+	{
+		os.make_directory("app_data/engine/assets/")
+	}
+
 
 	G_ENGINE_LOG = log.create_console_logger()
 	context.logger = G_ENGINE_LOG
@@ -110,6 +117,8 @@ run :: proc() {
 	accumulated_dt: f32 = 0
 
 	for running {
+
+		context.logger = G_ENGINE_LOG
 
 		current_time := time.now()
 		accumulated_dt += f32(time.duration_seconds(time.diff(last_frame_time, current_time)))

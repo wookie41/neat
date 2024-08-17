@@ -81,6 +81,9 @@ deinit_material_passs :: proc() {
 //---------------------------------------------------------------------------//
 
 create_material_pass :: proc(p_material_pass_ref: MaterialPassRef) -> bool {
+	material_pass := &g_resources.material_passes[get_material_pass_idx(p_material_pass_ref)]
+	material_pass.vertex_shader_ref = InvalidShaderRef
+	material_pass.fragment_shader_ref = InvalidShaderRef
 	return true
 }
 

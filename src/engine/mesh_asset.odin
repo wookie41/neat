@@ -629,13 +629,13 @@ assimp_load_node :: proc(
 		)
 
 		// Create a new material asset for this submesh
-		material_props := DefaultMaterialPropertiesAssetJSON {
+		material_props := MaterialPropertiesAssetJSON {
 			flags = 0,
 		}
 		material_asset_name := common.create_name(material_name)
 		material_asset_ref := allocate_material_asset_ref(material_asset_name)
 		material_asset := material_asset_get(material_asset_ref)
-		material_asset.material_type_name = common.create_name("Default")
+		material_asset.material_type_name = common.create_name("OpaquePBR")
 
 		if (material_asset_create(material_asset_ref) == false) {
 			return
@@ -692,7 +692,7 @@ assimp_load_node :: proc(
 		)
 
 		// Save the newly created material asset
-		material_asset_save_new_default(material_asset_ref, material_props)
+		material_asset_save_new(material_asset_ref, material_props)
 		material_asset_unload(material_asset_ref)
 
 		// Set the material for this submesh
