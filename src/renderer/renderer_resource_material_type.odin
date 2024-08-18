@@ -9,8 +9,6 @@ import "core:encoding/json"
 import "core:log"
 import "core:math/linalg/glsl"
 import "core:os"
-import "core:slice"
-import "core:strings"
 
 //---------------------------------------------------------------------------//
 
@@ -54,7 +52,8 @@ MaterialTypeDesc :: struct {
 //---------------------------------------------------------------------------//
 
 MaterialTypeResource :: struct {
-	desc: MaterialTypeDesc,
+	desc:               MaterialTypeDesc,
+	geometry_pass_psos: []GraphicsPipelineRef,
 }
 
 //---------------------------------------------------------------------------//
@@ -108,31 +107,8 @@ MaterialProperties :: struct #packed {
 
 //---------------------------------------------------------------------------//
 
-@(private)
-g_material_pass_bind_group_layout_ref: BindGroupLayoutRef
-
-//---------------------------------------------------------------------------//
-
 init_material_types :: proc() -> bool {
 
-	// Create a bind group layout for material passes
-	{
-		g_material_pass_bind_group_layout_ref = allocate_bind_group_layout_ref(
-			common.create_name("MaterialPasses"),
-			1,
-		)
-
-		bind_group_layout := &g_resources.bind_group_layouts[get_bind_group_layout_idx(g_material_pass_bind_group_layout_ref)]
-
-		// Instance info data
-		bind_group_layout.desc.bindings[0] = {
-			count         = 1,
-			shader_stages = {.Vertex, .Fragment, .Compute},
-			type          = .StorageBufferDynamic,
-		}
-
-		create_bind_group_layout(g_material_pass_bind_group_layout_ref) or_return
-	}
 
 	// Allocate memory for the material types
 	G_MATERIAL_TYPE_REF_ARRAY = common.ref_array_create(
@@ -159,80 +135,7 @@ deinit_material_types :: proc() {
 
 //---------------------------------------------------------------------------//
 
-create_material_type :: proc(p_material_ref: MaterialTypeRef) -> (result: bool) {
-	temp_arena: common.Arena
-	common.temp_arena_init(&temp_arena)
-	defer common.arena_delete(temp_arena)
-	defer if result == false {
-		common.ref_free(&G_MATERIAL_TYPE_REF_ARRAY, p_material_ref)
-	}
-
-	material_type := &g_resources.material_types[get_material_type_idx(p_material_ref)]
-
-	material_type_defines := make([]string, len(material_type.desc.defines), temp_arena.allocator)
-	for define, i in material_type.desc.defines {
-		material_type_defines[i] = common.get_string(define)
-	}
-
-	// Compile the shaders for each material pass that uses this material
-	for material_pass_ref in material_type.desc.material_passes_refs {
-		material_pass := &g_resources.material_passes[get_material_pass_idx(material_pass_ref)]
-
-		// Combine defines from the material with defines for the material pass
-		shader_defines, _ := slice.concatenate(
-			[][]string{material_type_defines, material_pass.desc.additional_feature_names},
-			G_RENDERER_ALLOCATORS.resource_allocator,
-		)
-
-		vert_shader_path := common.get_string(material_pass.desc.vertex_shader_path)
-		vert_shader_path = strings.trim_suffix(vert_shader_path, ".hlsl")
-
-		frag_shader_path := common.get_string(material_pass.desc.fragment_shader_path)
-		frag_shader_path = strings.trim_suffix(frag_shader_path, ".hlsl")
-
-		assert(material_pass.vertex_shader_ref == InvalidShaderRef)
-		assert(material_pass.fragment_shader_ref == InvalidShaderRef)
-
-		material_pass.vertex_shader_ref = allocate_shader_ref(common.create_name(vert_shader_path))
-		material_pass.fragment_shader_ref = allocate_shader_ref(common.create_name(frag_shader_path))
-
-		vertex_shader := &g_resources.shaders[get_shader_idx(material_pass.vertex_shader_ref)]
-		fragment_shader := &g_resources.shaders[get_shader_idx(material_pass.fragment_shader_ref)]
-
-		vertex_shader.desc.features = shader_defines
-		vertex_shader.desc.file_path = material_pass.desc.vertex_shader_path
-		vertex_shader.desc.stage = .Vertex
-
-		fragment_shader.desc.features = shader_defines
-		fragment_shader.desc.file_path = material_pass.desc.fragment_shader_path
-		fragment_shader.desc.stage = .Fragment
-
-		// @TODO error handling
-		success := create_shader(material_pass.vertex_shader_ref)
-		assert(success)
-
-		success = create_shader(material_pass.fragment_shader_ref)
-		assert(success)
-
-		// Create the PSO
-		material_pass.pipeline_ref = graphics_pipeline_allocate_ref(material_pass.desc.name, 4, 0)
-		pipeline := &g_resources.graphics_pipelines[get_graphics_pipeline_idx(material_pass.pipeline_ref)]
-		pipeline.desc.bind_group_layout_refs = {
-			g_material_pass_bind_group_layout_ref,
-			G_RENDERER.uniforms_bind_group_layout_ref,
-			G_RENDERER.globals_bind_group_layout_ref,
-			G_RENDERER.bindless_bind_group_layout_ref,
-		}
-
-		pipeline.desc.render_pass_ref = material_pass.desc.render_pass_ref
-		pipeline.desc.vert_shader_ref = material_pass.vertex_shader_ref
-		pipeline.desc.frag_shader_ref = material_pass.fragment_shader_ref
-		pipeline.desc.vertex_layout = .Mesh
-
-		success = graphics_pipeline_create(material_pass.pipeline_ref)
-		assert(success)
-	}
-
+create_material_type :: proc(p_material_ref: MaterialTypeRef) -> bool {
 	return true
 }
 

@@ -311,14 +311,14 @@ init :: proc(p_options: InitOptions) -> bool {
 		// Per frame uniform buffer
 		bind_group_layout.desc.bindings[0] = {
 			count         = 1,
-			shader_stages = {.Vertex, .Fragment, .Compute},
+			shader_stages = {.Vertex, .Pixel, .Compute},
 			type          = .UniformBufferDynamic,
 		}
 
 		// Per view uniform buffer
 		bind_group_layout.desc.bindings[1] = {
 			count         = 1,
-			shader_stages = {.Vertex, .Fragment, .Compute},
+			shader_stages = {.Vertex, .Pixel, .Compute},
 			type          = .UniformBufferDynamic,
 		}
 
@@ -356,13 +356,13 @@ init :: proc(p_options: InitOptions) -> bool {
 
 		bind_group_layout.desc.bindings[GlobalResourceSlot.MeshInstanceInfosBuffer] = {
 			count         = 1,
-			shader_stages = {.Vertex, .Fragment, .Compute},
+			shader_stages = {.Vertex, .Pixel, .Compute},
 			type          = .StorageBuffer,
 		}
 
 		bind_group_layout.desc.bindings[GlobalResourceSlot.MaterialsBuffer] = {
 			count         = 1,
-			shader_stages = {.Vertex, .Fragment, .Compute},
+			shader_stages = {.Vertex, .Pixel, .Compute},
 			type          = .StorageBuffer,
 		}
 
@@ -403,7 +403,7 @@ init :: proc(p_options: InitOptions) -> bool {
 		bind_group_layout.desc.bindings[BindlessResourceSlot.TextureArray2D] =
 			BindGroupLayoutBinding {
 				count         = BINDLESS_2D_IMAGES_COUNT,
-				shader_stages = {.Vertex, .Fragment, .Compute},
+				shader_stages = {.Vertex, .Pixel, .Compute},
 				type          = .Image,
 				flags         = {.BindlessImageArray},
 			}
@@ -413,7 +413,7 @@ init :: proc(p_options: InitOptions) -> bool {
 			bind_group_layout.desc.bindings[len(BindlessResourceSlot) + i] =
 				BindGroupLayoutBinding {
 					count                 = 1,
-					shader_stages         = {.Vertex, .Fragment, .Compute},
+					shader_stages         = {.Vertex, .Pixel, .Compute},
 					type                  = .Sampler,
 					immutable_sampler_idx = u32(i),
 				}

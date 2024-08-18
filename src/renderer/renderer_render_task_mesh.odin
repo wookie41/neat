@@ -61,12 +61,39 @@ calculate_mesh_batch_key :: proc(
 
 //---------------------------------------------------------------------------//
 
+@(private="file")
+INTERNAL : struct {
+	task_bind_group_layout: BindGroupLayoutRef,
+}
+
+//---------------------------------------------------------------------------//
+
 mesh_render_task_init :: proc(p_render_task_functions: ^RenderTaskFunctions) {
 	p_render_task_functions.create_instance = create_instance
 	p_render_task_functions.destroy_instance = destroy_instance
 	p_render_task_functions.begin_frame = begin_frame
 	p_render_task_functions.end_frame = end_frame
 	p_render_task_functions.render = render
+
+	
+	// Create a bind group layout for geometry pass
+	{
+		INTERNAL.task_bind_group_layout = allocate_bind_group_layout_ref(
+			common.create_name("InstancedMesh"),
+			1,
+		)
+
+		bind_group_layout := &g_resources.bind_group_layouts[get_bind_group_layout_idx(INTERNAL.task_bind_group_layout)]
+
+		// Instance info data
+		bind_group_layout.desc.bindings[0] = {
+			count         = 1,
+			shader_stages = {.Vertex, .Pixel, .Compute},
+			type          = .StorageBufferDynamic,
+		}
+
+		create_bind_group_layout(INTERNAL.task_bind_group_layout)
+	}
 }
 
 //---------------------------------------------------------------------------//
@@ -82,6 +109,13 @@ create_instance :: proc(
 	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
+
+	geo_pass_desc := GeometryPassDescription {
+		bind_group_layout_ref = INTERNAL.task_bind_group_layout,
+		pass_type = .InstancedMesh,
+		vertex_shader_path = common.create_name("geometry_pass_instanced_mesh.hlsl"),
+		pixel_shader_path = common.create_name("geometry_pass_instanced_mesh.hlsl"),
+	}
 
 	render_pass_bindings: RenderPassBindings
 	render_task_setup_render_pass_bindings(p_render_task_config, &render_pass_bindings)
@@ -109,7 +143,7 @@ create_instance :: proc(
 	task_bind_group_ref := allocate_bind_group_ref(common.create_name("MeshRenderTask"))
 	{
 		bind_group := &g_resources.bind_groups[get_bind_group_idx(task_bind_group_ref)]
-		bind_group.desc.layout_ref = g_material_pass_bind_group_layout_ref
+		bind_group.desc.layout_ref = INTERNAL.task_bind_group_layout
 
 		if create_bind_group(task_bind_group_ref) == false {
 			return false
@@ -154,10 +188,22 @@ create_instance :: proc(
 		}
 
 		material_pass_ref := find_material_pass_by_name(material_pass_name)
+		material_pass := &g_resources.material_passes[get_material_pass_idx(material_pass_ref)]
+
 		if material_pass_ref == InvalidMaterialPassRef {
 			log.errorf(
 				"Error when loading Mesh render task '%s' - unknown material pass '%s'\n",
 				common.get_string(mesh_render_task.desc.name),
+				common.get_string(material_pass.desc.name),
+			)
+			continue
+		}
+
+		if material_pass_compile_geometry_pso(material_pass_ref, geo_pass_desc) == false {
+			log.errorf(
+				"Error when loading Mesh render task '%s' - failed to compile geometry pso for material pass '%s'\n",
+				common.get_string(mesh_render_task.desc.name),
+				common.get_string(material_pass.desc.name),
 			)
 			continue
 		}
@@ -169,7 +215,7 @@ create_instance :: proc(
 
 	if len(material_pass_refs) == 0 {
 		log.errorf(
-			"Failed ot load Mesh render task '%s' - it doesn't have any material passes \n",
+			"Failed to load Mesh render task '%s' - it doesn't have any material passes \n",
 			common.get_string(mesh_render_task.desc.name),
 		)
 		return false
@@ -360,8 +406,9 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 			}
 
 			material_pass := &g_resources.material_passes[get_material_pass_idx(material_pass_ref)]
+			geometry_pipeline_ref := material_pass.geometry_pipeline_refs[transmute(u8)GeometryPassType.InstancedMesh]
 
-			draw_stream_set_pipeline(&draw_stream, material_pass.pipeline_ref)
+			draw_stream_set_pipeline(&draw_stream, geometry_pipeline_ref)
 			draw_stream_set_bind_group(
 				&draw_stream,
 				mesh_render_task_data.bind_group_ref,

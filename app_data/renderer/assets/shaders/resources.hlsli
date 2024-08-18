@@ -1,3 +1,6 @@
+#ifndef RESOURCES_H
+#define RESOURCES_H
+
 //---------------------------------------------------------------------------//
 
 #include "scene_types.hlsli"
@@ -63,3 +66,5 @@ float4 sampleBindless(in SamplerState samplerState, in float2 uv, in uint textur
 }
 
 //---------------------------------------------------------------------------//
+
+#endif // RESOURCES_H

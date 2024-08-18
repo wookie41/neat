@@ -201,7 +201,7 @@ when USE_VULKAN_BACKEND {
 			if .Vertex in bind_group_binding.shader_stages {
 				stage_flags += {.VERTEX}
 			}
-			if .Fragment in bind_group_binding.shader_stages {
+			if .Pixel in bind_group_binding.shader_stages {
 				stage_flags += {.FRAGMENT}
 			}
 			if .Compute in bind_group_binding.shader_stages {

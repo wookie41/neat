@@ -80,7 +80,7 @@ when USE_VULKAN_BACKEND {
 				stage_flags += {.VERTEX}
 			}
 
-			if .Fragment in push_constant.shader_stages {
+			if .Pixel in push_constant.shader_stages {
 				stage_flags += {.FRAGMENT}
 			}
 

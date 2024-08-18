@@ -1,5 +1,6 @@
 #ifndef PACKING_H
 #define PACKING_H
+
 // Octahedron normal vector encoding (http://jcgt.org/published/0003/02/01/)
 float2 signNotZero(float2 v)
 {

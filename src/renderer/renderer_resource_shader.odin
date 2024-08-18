@@ -52,7 +52,7 @@ ShaderDesc :: struct {
 @(private)
 ShaderStage :: enum u8 {
 	Vertex,
-	Fragment,
+	Pixel,
 	Compute,
 }
 
@@ -163,8 +163,8 @@ init_shaders :: proc() -> bool {
 
 		if strings.has_suffix(entry.name, ".vert") {
 			shader.desc.stage = .Vertex
-		} else if strings.has_suffix(entry.name, ".frag") {
-			shader.desc.stage = .Fragment
+		} else if strings.has_suffix(entry.name, ".pix") {
+			shader.desc.stage = .Pixel
 		} else if strings.has_suffix(entry.name, ".comp") {
 			shader.desc.stage = .Compute
 		} else {

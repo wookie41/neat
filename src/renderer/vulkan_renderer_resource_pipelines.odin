@@ -310,7 +310,7 @@ when USE_VULKAN_BACKEND {
 			sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
 			stage = {.FRAGMENT},
 			module = backend_frag_shader.vk_module,
-			pName = "FSMain",
+			pName = "PSMain",
 		}
 
 		shader_stages := []vk.PipelineShaderStageCreateInfo{vertex_stage_info, fragment_stage_info}
@@ -550,7 +550,7 @@ when USE_VULKAN_BACKEND {
 			p_vert_shader_hash ~
 			p_frag_shader_hash ~
 			u32(ShaderStage.Vertex) ~
-			u32(ShaderStage.Fragment) \
+			u32(ShaderStage.Pixel) \
 		)
 	}
 
@@ -624,7 +624,7 @@ when USE_VULKAN_BACKEND {
 				push_constant_ranges[i].stageFlags += {.VERTEX}
 			}
 
-			if .Fragment in push_constant.shader_stages {
+			if .Pixel in push_constant.shader_stages {
 				push_constant_ranges[i].stageFlags += {.FRAGMENT}
 			}
 

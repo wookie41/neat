@@ -1,8 +1,8 @@
 [
     {
         "name": "OpaquePBR",
-        "vertexShaderPath": "mat_opaque_pbr.hlsl",
-        "fragmentShaderPath": "mat_opaque_pbr.hlsl",
+        "vertexShaderPath": "material_opaque_pbr.hlsli",
+        "pixelShaderPath": "material_opaque_pbr.hlsli",
         "renderPass": "GBuffer"
     }
 ]

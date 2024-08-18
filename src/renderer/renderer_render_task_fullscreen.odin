@@ -115,8 +115,8 @@ create_instance :: proc(
 		is_using_compute = true
 		shader_stages += {.Compute}
 		assert(len(render_pass_bindings.image_outputs) == 0)
-	} else if strings.has_suffix(shader_name, ".frag") {
-		shader_stages += {.Fragment}
+	} else if strings.has_suffix(shader_name, ".pix") {
+		shader_stages += {.Pixel}
 
 		// Create a render pass based on output imagess
 		fullscreen_render_task_data.render_pass_ref = allocate_render_pass_ref(

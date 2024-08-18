@@ -8,8 +8,8 @@
         "path": "fullscreen.vert.hlsl"
     },
     {
-        "name": "blit_to_swapchain.frag",
-        "path": "blit_to_swapchain.frag.hlsl"
+        "name": "blit_to_swapchain.pix",
+        "path": "blit_to_swapchain.pix.hlsl"
     },
     {
         "name": "lighting.comp",

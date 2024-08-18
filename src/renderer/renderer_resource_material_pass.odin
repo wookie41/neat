@@ -15,7 +15,7 @@ import "core:slice"
 MaterialPassDesc :: struct {
 	name:                     common.Name,
 	vertex_shader_path:       common.Name,
-	fragment_shader_path:     common.Name,
+	pixel_shader_path:        common.Name,
 	render_pass_ref:          RenderPassRef,
 	additional_feature_names: []string,
 }
@@ -23,10 +23,23 @@ MaterialPassDesc :: struct {
 //---------------------------------------------------------------------------//
 
 MaterialPassResource :: struct {
-	desc:                MaterialPassDesc,
-	vertex_shader_ref:   ShaderRef,
-	fragment_shader_ref: ShaderRef,
-	pipeline_ref:        GraphicsPipelineRef,
+	desc:                   MaterialPassDesc,
+	geometry_pipeline_refs: []GraphicsPipelineRef,
+}
+
+//---------------------------------------------------------------------------//
+
+GeometryPassType :: enum u8 {
+	InstancedMesh,
+}
+
+//---------------------------------------------------------------------------//
+
+GeometryPassDescription :: struct {
+	pass_type:             GeometryPassType,
+	bind_group_layout_ref: BindGroupLayoutRef,
+	vertex_shader_path:    common.Name,
+	pixel_shader_path:     common.Name,
 }
 
 //---------------------------------------------------------------------------//
@@ -49,7 +62,7 @@ G_MATERIAL_PASS_REF_ARRAY: common.RefArray(MaterialPassResource)
 MaterialPassJSONEntry :: struct {
 	name:                     string,
 	vertex_shader_path:       string `json:"vertexShaderPath"`,
-	fragment_shader_path:     string `json:"fragmentShaderPath"`,
+	pixel_shader_path:        string `json:"pixelShaderPath"`,
 	render_pass_name:         string `json:"renderPass"`,
 	additional_feature_names: []string `json:"additionalFeatureNames"`,
 }
@@ -82,8 +95,16 @@ deinit_material_passs :: proc() {
 
 create_material_pass :: proc(p_material_pass_ref: MaterialPassRef) -> bool {
 	material_pass := &g_resources.material_passes[get_material_pass_idx(p_material_pass_ref)]
-	material_pass.vertex_shader_ref = InvalidShaderRef
-	material_pass.fragment_shader_ref = InvalidShaderRef
+	material_pass.geometry_pipeline_refs = make(
+		[]GraphicsPipelineRef,
+		len(GeometryPassType),
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
+
+	for i in 0 ..< len(GeometryPassType) {
+		material_pass.geometry_pipeline_refs[i] = InvalidGraphicsPipelineRef
+	}
+
 	return true
 }
 
@@ -112,8 +133,7 @@ destroy_material_pass :: proc(p_ref: MaterialPassRef) {
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
 	}
-	destroy_shader(material_pass.vertex_shader_ref)
-	destroy_shader(material_pass.fragment_shader_ref)
+	delete(material_pass.geometry_pipeline_refs, G_RENDERER_ALLOCATORS.resource_allocator)
 	common.ref_free(&G_MATERIAL_PASS_REF_ARRAY, p_ref)
 }
 
@@ -152,7 +172,7 @@ load_material_passes_from_config_file :: proc() -> bool {
 		material_pass := &g_resources.material_passes[get_material_pass_idx(material_pass_ref)]
 
 		material_pass.desc.vertex_shader_path = common.create_name(entry.vertex_shader_path)
-		material_pass.desc.fragment_shader_path = common.create_name(entry.fragment_shader_path)
+		material_pass.desc.pixel_shader_path = common.create_name(entry.pixel_shader_path)
 
 		material_pass.desc.render_pass_ref = find_render_pass_by_name(entry.render_pass_name)
 		assert(material_pass.desc.render_pass_ref != InvalidRenderPassRef)
@@ -201,3 +221,93 @@ find_material_pass_by_name_str :: proc(p_name: string) -> MaterialPassRef {
 }
 
 //--------------------------------------------------------------------------//
+
+material_pass_compile_geometry_pso :: proc(
+	p_material_pass_ref: MaterialPassRef,
+	p_geometry_pass_description: GeometryPassDescription,
+) -> (
+	result: bool,
+) {
+
+	geo_pass_idx := transmute(u8)p_geometry_pass_description.pass_type
+	material_pass := &g_resources.material_passes[get_material_pass_idx(p_material_pass_ref)]
+
+	if material_pass.geometry_pipeline_refs[geo_pass_idx] != InvalidGraphicsPipelineRef {
+		return
+	}
+
+	// Inject the material pass includes 
+	material_pass_vertex_shader_path := common.get_string(material_pass.desc.vertex_shader_path)
+	material_pass_pixel_shader_path := common.get_string(material_pass.desc.pixel_shader_path)
+
+	material_pass_vertex_include_def := common.aprintf(
+		G_RENDERER_ALLOCATORS.resource_allocator,
+		"MATERIAL_PASS_VERTEX_H=\\\"%s\\\"",
+		material_pass_vertex_shader_path,
+	)
+	material_pass_pixel_include_def := common.aprintf(
+		G_RENDERER_ALLOCATORS.resource_allocator,
+		"MATERIAL_PASS_PIXEL_H=\\\"%s\\\"",
+		material_pass_pixel_shader_path,
+	)
+
+	shader_defines, _ := slice.concatenate(
+		[][]string {
+			{material_pass_vertex_include_def, material_pass_pixel_include_def},
+			material_pass.desc.additional_feature_names,
+		},
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
+
+	defer if result == false {
+		delete(shader_defines, G_RENDERER_ALLOCATORS.resource_allocator)
+		delete(material_pass_vertex_include_def, G_RENDERER_ALLOCATORS.resource_allocator)
+		delete(material_pass_pixel_include_def, G_RENDERER_ALLOCATORS.resource_allocator)
+	}
+
+	vertex_shader_ref := allocate_shader_ref(p_geometry_pass_description.vertex_shader_path)
+	pixel_shader_ref := allocate_shader_ref(p_geometry_pass_description.pixel_shader_path)
+
+	vertex_shader := &g_resources.shaders[get_shader_idx(vertex_shader_ref)]
+	pixel_shader := &g_resources.shaders[get_shader_idx(pixel_shader_ref)]
+
+	vertex_shader.desc.features = shader_defines
+	vertex_shader.desc.file_path = p_geometry_pass_description.vertex_shader_path
+	vertex_shader.desc.stage = .Vertex
+
+	pixel_shader.desc.features = shader_defines
+	pixel_shader.desc.file_path = p_geometry_pass_description.pixel_shader_path
+	pixel_shader.desc.stage = .Pixel
+
+	create_shader(vertex_shader_ref) or_return
+	defer if result == false {
+		destroy_shader(vertex_shader_ref)
+	}
+
+	create_shader(pixel_shader_ref) or_return
+	defer if result == false {
+		destroy_shader(pixel_shader_ref)
+	}
+
+	pipeline_ref := graphics_pipeline_allocate_ref(material_pass.desc.name, 4, 0)
+	pipeline := &g_resources.graphics_pipelines[get_graphics_pipeline_idx(pipeline_ref)]
+	pipeline.desc.bind_group_layout_refs = {
+		p_geometry_pass_description.bind_group_layout_ref,
+		G_RENDERER.uniforms_bind_group_layout_ref,
+		G_RENDERER.globals_bind_group_layout_ref,
+		G_RENDERER.bindless_bind_group_layout_ref,
+	}
+
+	pipeline.desc.render_pass_ref = material_pass.desc.render_pass_ref
+	pipeline.desc.vert_shader_ref = vertex_shader_ref
+	pipeline.desc.frag_shader_ref = pixel_shader_ref
+	pipeline.desc.vertex_layout = .Mesh
+
+	graphics_pipeline_create(pipeline_ref) or_return
+
+	material_pass.geometry_pipeline_refs[geo_pass_idx] = pipeline_ref
+
+	return true
+}
+
+//---------------------------------------------------------------------------//

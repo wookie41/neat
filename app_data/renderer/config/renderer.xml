@@ -24,7 +24,7 @@
             <InputImage name="DepthBuffer"/>
             <InputImage name="SceneHDR" storage=""/>
         </FullScreen>
-        <FullScreen name="BlitSwapchain" shader="blit_to_swapchain.frag" resolution="Display">
+        <FullScreen name="BlitSwapchain" shader="blit_to_swapchain.pix" resolution="Display">
             <InputImage name="SceneHDR"/>
             <OutputImage name="SwapImage"/>
         </FullScreen>

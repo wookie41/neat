@@ -59,9 +59,9 @@ when USE_VULKAN_BACKEND {
 		case .Vertex:
 			compile_target = "vs_6_7"
 			entry_point = "VSMain"
-		case .Fragment:
+		case .Pixel:
 			compile_target = "ps_6_7"
-			entry_point = "FSMain"
+			entry_point = "PSMain"
 		case .Compute:
 			compile_target = "cs_6_7"
 			entry_point = "CSMain"
