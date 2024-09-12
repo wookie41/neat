@@ -18,7 +18,6 @@ Camera: struct {
 	speed:                f32,
 	rotation_sensitivity: f32,
 	near_plane:           f32,
-	far_plane:            f32,
 	velocity:             glsl.vec3,
 }
 
@@ -29,7 +28,6 @@ camera_init :: proc() {
 	position = {50, 150, 500}
 	speed = 0.5
 	near_plane = 0.1
-	far_plane = 100000.0
 	fov = 45.0
 	rotation_sensitivity = 0.25
 	up = {0, 1, 0}

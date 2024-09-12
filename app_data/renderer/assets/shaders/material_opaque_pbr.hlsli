@@ -1,5 +1,6 @@
 #ifndef MATERIAL_OPAQUE_PBR_H
 #define MATERIAL_OPAQUE_PBR_H
+
 //---------------------------------------------------------------------------//
 
 #include "geometry_pass.hlsli"

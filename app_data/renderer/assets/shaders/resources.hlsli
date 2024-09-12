@@ -13,6 +13,7 @@ struct PerView
     float4x4 ProjectionMatrix;
     float4x4 InvViewProjMatrix;
     float3 CameraPositionWS;
+    float NearPlane;
 };
 
 //---------------------------------------------------------------------------//

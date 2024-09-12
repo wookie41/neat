@@ -5,22 +5,19 @@
         <GBufferParameters format="RGBA8UNorm" resolution="Full" sampled="" />
         <SceneHDR format="R11G11B10UFloat" resolution="Full" sampled="" storage="" />
         <DepthBuffer format="Depth32SFloat" resolution="Full" sampled="" />
-        <GBufferWorldPos format="RGBA16SFloat" resolution="Full" sampled="" />
     </Images>
     <RenderTasks>
         <Mesh name="Mesh" renderPass="GBuffer">
             <OutputImage name="GBufferColor" clear="0, 0, 0, 0"/>
             <OutputImage name="GBufferNormals" clear="0, 0, 0, 0"/>
             <OutputImage name="GBufferParameters" clear="0, 0, 0, 0"/>
-            <OutputImage name="GBufferWorldPos" clear="0, 0, 0, 0"/>
-            <OutputImage name="DepthBuffer" clear="1"/>
+            <OutputImage name="DepthBuffer" clear="0"/>
             <MaterialPass name="OpaquePBR" />
         </Mesh>
         <FullScreen name="Lighting" shader="lighting.comp" resolution="Full">
             <InputImage name="GBufferColor"/>
             <InputImage name="GBufferNormals"/>
             <InputImage name="GBufferParameters"/>
-            <InputImage name="GBufferWorldPos"/>
             <InputImage name="DepthBuffer"/>
             <InputImage name="SceneHDR" storage=""/>
         </FullScreen>

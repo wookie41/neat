@@ -27,7 +27,8 @@ g_per_view_uniform_buffer_data: struct #packed {
 	proj:          glsl.mat4x4,
 	inv_view_proj: glsl.mat4x4,
 	camera_pos_ws: glsl.vec3,
-	_padding:      [52]byte,
+	near_plane:    f32,
+	_padding:      [48]byte,
 }
 
 //---------------------------------------------------------------------------//
@@ -106,7 +107,6 @@ uniform_buffer_management_update :: proc(p_dt: f32) {
 	update_per_view_uniform_buffer(p_dt)
 }
 
-
 //---------------------------------------------------------------------------//
 
 @(private = "file")
@@ -118,17 +118,17 @@ update_per_view_uniform_buffer :: proc(p_dt: f32) {
 		g_render_camera.up,
 	)
 
-	projection_matrix := glsl.mat4Perspective(
+	projection_matrix := common.mat4PerspectiveInfiniteReverse(
 		glsl.radians_f32(g_render_camera.fov_degrees),
 		f32(G_RENDERER.config.render_resolution.x) / f32(G_RENDERER.config.render_resolution.y),
 		g_render_camera.near_plane,
-		g_render_camera.far_plane,
 	)
 
 	g_per_view_uniform_buffer_data.view = view_matrix
 	g_per_view_uniform_buffer_data.proj = projection_matrix
-	g_per_view_uniform_buffer_data.inv_view_proj = glsl.inverse(view_matrix * projection_matrix)
+	g_per_view_uniform_buffer_data.inv_view_proj = glsl.inverse(projection_matrix * view_matrix)
 	g_per_view_uniform_buffer_data.camera_pos_ws = g_render_camera.position
+	g_per_view_uniform_buffer_data.near_plane = g_render_camera.near_plane
 
 	uniform_buffer := &g_resources.buffers[get_buffer_idx(g_uniform_buffers.per_view_buffer_ref)]
 	mem.copy(
