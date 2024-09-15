@@ -482,17 +482,12 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 		}
 	}
 
-	cmd_buff_ref := get_frame_cmd_buffer_ref()
-
-	// @TODO Remove when we stop drawing directly to the swapchain
 	if len(mesh_instanced_draws_infos) == 0 {
-		render_task_begin_render_pass(
-			mesh_render_task_data.render_pass_ref,
-			&mesh_render_task_data.render_pass_bindings,
-		)
-		end_render_pass(mesh_render_task_data.render_pass_ref, cmd_buff_ref)
 		return
 	}
+
+	cmd_buff_ref := get_frame_cmd_buffer_ref()
+	
 	// Copy the mesh instanced draw info to the GPU
 	instanced_draw_infos_size_in_bytes := u32(
 		size_of(MeshInstancedDrawInfo) * len(mesh_instanced_draws_infos),
