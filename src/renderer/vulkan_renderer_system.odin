@@ -441,6 +441,8 @@ when USE_VULKAN_BACKEND {
 			}
 
 			vk.GetPhysicalDeviceProperties(physical_device, &device_properties)
+
+			G_RENDERER.min_uniform_buffer_alignment = u32(device_properties.limits.minUniformBufferOffsetAlignment)
 		}
 
 		// Create logical device for our queues (and the queues themselves)

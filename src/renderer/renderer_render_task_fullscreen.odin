@@ -343,8 +343,8 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 	use_compute := fullscreen_render_task_data.compute_command_ref != InvalidComputeCommandRef
 
 	global_uniform_offsets := []u32 {
-		uniform_buffer_management_get_per_frame_offset(),
-		uniform_buffer_management_get_per_view_offset(),
+		uniform_buffer_get_per_frame_offset(),
+		uniform_buffer_get_per_view_offset(),
 	}
 
 	// Perform resource transitions
@@ -371,7 +371,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 			},
 		}
 
-		fullscreen_task_uniform_data_offset := uniform_buffer_management_request_per_instance_data(
+		fullscreen_task_uniform_data_offset := uniform_buffer_request_per_instance_data(
 			&fullscreen_task_uniform_data,
 			size_of(fullscreen_task_uniform_data),
 		)

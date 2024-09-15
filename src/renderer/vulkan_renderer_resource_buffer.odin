@@ -65,6 +65,11 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
+		if 	.UniformBuffer in  buffer.desc.usage || 
+			.DynamicUniformBuffer in buffer.desc.usage {
+				buffer.desc.size += (buffer.desc.size % u32(G_RENDERER.device_properties.limits.minUniformBufferOffsetAlignment))
+		}
+
 		buffer_create_info := vk.BufferCreateInfo {
 			sType       = .BUFFER_CREATE_INFO,
 			size        = vk.DeviceSize(buffer.desc.size),

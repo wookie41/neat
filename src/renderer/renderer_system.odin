@@ -147,6 +147,7 @@ G_RENDERER: struct {
 	bindless_bind_group_ref:        BindGroupRef,
 	default_image_ref:              ImageRef,
 	debug_mode:                     bool,
+	min_uniform_buffer_alignment: 	u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -444,7 +445,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	init_material_instances() or_return
 	init_mesh_instances() or_return
 
-	uniform_buffer_management_init()
+	uniform_buffer_init()
 	load_renderer_config()
 
 	// Update the uniforms and bindless resources bind groups with appropriate resources
@@ -530,7 +531,7 @@ update :: proc(p_dt: f32) {
 
 	material_instance_update_dirty_materials()
 	mesh_instance_send_transform_data()
-	uniform_buffer_management_update(p_dt)
+	uniform_buffers_update(p_dt)
 
 	render_tasks_update(p_dt)
 

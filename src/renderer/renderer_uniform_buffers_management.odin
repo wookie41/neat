@@ -28,7 +28,6 @@ g_per_view_uniform_buffer_data: struct #packed {
 	inv_view_proj: glsl.mat4x4,
 	camera_pos_ws: glsl.vec3,
 	near_plane:    f32,
-	_padding:      [48]byte,
 }
 
 //---------------------------------------------------------------------------//
@@ -36,7 +35,6 @@ g_per_view_uniform_buffer_data: struct #packed {
 @(private)
 g_per_frame_uniform_buffer_data: struct #packed {
 	sun:      DirectionalLight,
-	_padding: [32]byte,
 }
 
 //---------------------------------------------------------------------------//
@@ -51,35 +49,10 @@ g_uniform_buffers: struct {
 //---------------------------------------------------------------------------//
 
 @(private)
-uniform_buffer_management_init :: proc() {
+uniform_buffer_init :: proc() {
 
-	// Create the per frame uniform buffer
-	{
-		g_uniform_buffers.per_frame_buffer_ref = allocate_buffer_ref(
-			common.create_name("PerFrame"),
-		)
-		per_frame_uniform_buffer := &g_resources.buffers[get_buffer_idx(g_uniform_buffers.per_frame_buffer_ref)]
-
-		per_frame_uniform_buffer.desc.flags = {.HostWrite, .Mapped}
-		per_frame_uniform_buffer.desc.size =
-			size_of(g_per_frame_uniform_buffer_data) * G_RENDERER.num_frames_in_flight
-		per_frame_uniform_buffer.desc.usage = {.DynamicUniformBuffer}
-
-		create_buffer(g_uniform_buffers.per_frame_buffer_ref)
-	}
-
-	// Create the per view uniform buffer
-	{
-		g_uniform_buffers.per_view_buffer_ref = allocate_buffer_ref(common.create_name("PerView"))
-		per_view_uniform_buffer := &g_resources.buffers[get_buffer_idx(g_uniform_buffers.per_view_buffer_ref)]
-
-		per_view_uniform_buffer.desc.flags = {.HostWrite, .Mapped}
-		per_view_uniform_buffer.desc.size =
-			size_of(g_per_view_uniform_buffer_data) * G_RENDERER.num_frames_in_flight
-		per_view_uniform_buffer.desc.usage = {.DynamicUniformBuffer}
-
-		create_buffer(g_uniform_buffers.per_view_buffer_ref)
-	}
+	g_uniform_buffers.per_frame_buffer_ref = uniform_buffer_create(common.create_name("PerFrame"), type_of(g_per_frame_uniform_buffer_data))
+	g_uniform_buffers.per_view_buffer_ref = uniform_buffer_create(common.create_name("PerView"), type_of(g_per_view_uniform_buffer_data))
 
 	// Create the instance view uniform buffer
 	{
@@ -100,7 +73,7 @@ uniform_buffer_management_init :: proc() {
 //---------------------------------------------------------------------------//
 
 @(private)
-uniform_buffer_management_update :: proc(p_dt: f32) {
+uniform_buffers_update :: proc(p_dt: f32) {
 	// Reset the instance buffer
 	INTERNAL.current_instance_buffer_offset = 0
 	update_per_frame_uniform_buffer(p_dt)
@@ -130,53 +103,43 @@ update_per_view_uniform_buffer :: proc(p_dt: f32) {
 	g_per_view_uniform_buffer_data.camera_pos_ws = g_render_camera.position
 	g_per_view_uniform_buffer_data.near_plane = g_render_camera.near_plane
 
-	uniform_buffer := &g_resources.buffers[get_buffer_idx(g_uniform_buffers.per_view_buffer_ref)]
-	mem.copy(
-		mem.ptr_offset(
-			uniform_buffer.mapped_ptr,
-			size_of(g_per_view_uniform_buffer_data) * get_frame_idx(),
-		),
-		&g_per_view_uniform_buffer_data,
-		size_of(g_per_view_uniform_buffer_data),
-	)
+	uniform_buffer_update(
+		g_uniform_buffers.per_view_buffer_ref, 
+		&g_per_view_uniform_buffer_data)
 }
 
 //---------------------------------------------------------------------------//
-
 @(private = "file")
 update_per_frame_uniform_buffer :: proc(p_dt: f32) {
 	g_per_frame_uniform_buffer_data.sun.direction = glsl.normalize(glsl.vec3{0, -1, 0})
 	g_per_frame_uniform_buffer_data.sun.color = glsl.vec3(1)
 
-	uniform_buffer := &g_resources.buffers[get_buffer_idx(g_uniform_buffers.per_frame_buffer_ref)]
-	mem.copy(
-		mem.ptr_offset(
-			uniform_buffer.mapped_ptr,
-			size_of(g_per_frame_uniform_buffer_data) * get_frame_idx(),
-		),
+	uniform_buffer_update(
+		g_uniform_buffers.per_frame_buffer_ref,
 		&g_per_frame_uniform_buffer_data,
-		size_of(g_per_frame_uniform_buffer_data),
 	)
 }
 
 //---------------------------------------------------------------------------//
 
 @(private)
-uniform_buffer_management_get_per_frame_offset :: proc() -> u32 {
-	return size_of(g_per_frame_uniform_buffer_data) * get_frame_idx()
+uniform_buffer_get_per_frame_offset :: proc() -> u32 {
+	data_size := uniform_buffer_ensure_alignment(type_of(g_per_frame_uniform_buffer_data))
+	return u32(data_size) * get_frame_idx()
 }
 
 //---------------------------------------------------------------------------//
 
 @(private)
-uniform_buffer_management_get_per_view_offset :: proc() -> u32 {
-	return size_of(g_per_view_uniform_buffer_data) * get_frame_idx()
+uniform_buffer_get_per_view_offset :: proc() -> u32 {
+	data_size := uniform_buffer_ensure_alignment(type_of(g_per_view_uniform_buffer_data))
+	return u32(data_size) * get_frame_idx()
 }
 
 //---------------------------------------------------------------------------//
 
 @(private)
-uniform_buffer_management_request_per_instance_data :: proc(p_data: rawptr, p_size: u32) -> u32 {
+uniform_buffer_request_per_instance_data :: proc(p_data: rawptr, p_size: u32) -> u32 {
 
 	if INTERNAL.current_instance_buffer_offset + p_size >= G_PER_INSTANCE_UNIFORM_BUFFER_SIZE {
 		return 0
@@ -192,6 +155,53 @@ uniform_buffer_management_request_per_instance_data :: proc(p_data: rawptr, p_si
 	mem.copy(mem.ptr_offset(per_instance_buffer.mapped_ptr, buffer_offset), p_data, int(p_size))
 
 	return buffer_offset
+}
+
+//---------------------------------------------------------------------------//
+
+uniform_buffer_create :: proc(p_name: common.Name, $T: typeid) -> BufferRef {
+
+	buffer_ref	:= allocate_buffer_ref(p_name)
+	buffer := &g_resources.buffers[get_buffer_idx(buffer_ref)]
+
+	data_size := uniform_buffer_ensure_alignment(T)
+
+	buffer.desc.flags = {.HostWrite, .Mapped}
+	buffer.desc.size = u32(data_size) * G_RENDERER.num_frames_in_flight
+	buffer.desc.usage = {.DynamicUniformBuffer}
+
+	if create_buffer(buffer_ref) == false {
+		return InvalidBufferRef
+	}
+
+	return buffer_ref
+}
+
+//---------------------------------------------------------------------------//
+
+uniform_buffer_update :: proc(p_uniform_buffer_ref: BufferRef, p_data: ^$T) {
+
+	data_size := uniform_buffer_ensure_alignment(T)
+	offset := int(get_frame_idx() * data_size)
+
+	uniform_buffer := &g_resources.buffers[get_buffer_idx(p_uniform_buffer_ref)]
+	mem.copy(
+		mem.ptr_offset(
+			uniform_buffer.mapped_ptr,
+			offset,
+		),
+		p_data,
+		int(data_size),
+	)
+}
+
+//---------------------------------------------------------------------------//
+
+@(private="file")
+uniform_buffer_ensure_alignment :: proc($T: typeid) -> u32 {
+	data_size := u32(size_of(T))
+	reminder := data_size % G_RENDERER.min_uniform_buffer_alignment
+	return data_size + G_RENDERER.min_uniform_buffer_alignment - reminder
 }
 
 //---------------------------------------------------------------------------//
