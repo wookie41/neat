@@ -61,8 +61,8 @@ calculate_mesh_batch_key :: proc(
 
 //---------------------------------------------------------------------------//
 
-@(private="file")
-INTERNAL : struct {
+@(private = "file")
+INTERNAL: struct {
 	task_bind_group_layout: BindGroupLayoutRef,
 }
 
@@ -75,7 +75,7 @@ mesh_render_task_init :: proc(p_render_task_functions: ^RenderTaskFunctions) {
 	p_render_task_functions.end_frame = end_frame
 	p_render_task_functions.render = render
 
-	
+
 	// Create a bind group layout for geometry pass
 	{
 		INTERNAL.task_bind_group_layout = allocate_bind_group_layout_ref(
@@ -112,9 +112,9 @@ create_instance :: proc(
 
 	geo_pass_desc := GeometryPassDescription {
 		bind_group_layout_ref = INTERNAL.task_bind_group_layout,
-		pass_type = .InstancedMesh,
-		vertex_shader_path = common.create_name("geometry_pass_instanced_mesh.hlsl"),
-		pixel_shader_path = common.create_name("geometry_pass_instanced_mesh.hlsl"),
+		pass_type             = .InstancedMesh,
+		vertex_shader_path    = common.create_name("geometry_pass_instanced_mesh.hlsl"),
+		pixel_shader_path     = common.create_name("geometry_pass_instanced_mesh.hlsl"),
 	}
 
 	render_pass_bindings: RenderPassBindings
@@ -149,6 +149,19 @@ create_instance :: proc(
 			return false
 		}
 	}
+
+	// Update the bind group
+	bind_group_update(
+		task_bind_group_ref,
+		{
+			buffers = {
+				{
+					buffer_ref = g_renderer_buffers.mesh_instanced_draw_info_buffer_ref,
+					size = MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE,
+				},
+			},
+		},
+	)
 
 	defer if res == false {
 		destroy_bind_group(task_bind_group_ref)
@@ -366,24 +379,12 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 		mesh_batches_per_material_type[mesh_batch.material_type_ref] = batches
 	}
 
-	material_pass_offsets := []u32{buffer_management_get_mesh_instanced_info_buffer_offset()}
+	mesh_task_buffer_offsets := []u32{buffer_management_get_mesh_instanced_info_buffer_offset()}
 
 	uniform_offsets := []u32 {
 		uniform_buffer_management_get_per_frame_offset(),
 		uniform_buffer_management_get_per_view_offset(),
 	}
-
-	bind_group_update(
-		mesh_render_task_data.bind_group_ref,
-		{
-			buffers = {
-				{
-					buffer_ref = g_renderer_buffers.mesh_instanced_draw_info_buffer_ref,
-					size = MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE,
-				},
-			},
-		},
-	)
 
 	// Aggregate instanced draw infos so we can issue a single copy and create the draw stream
 	mesh_instanced_draws_infos := make([dynamic]MeshInstancedDrawInfo, temp_arena.allocator)
@@ -406,14 +407,15 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 			}
 
 			material_pass := &g_resources.material_passes[get_material_pass_idx(material_pass_ref)]
-			geometry_pipeline_ref := material_pass.geometry_pipeline_refs[transmute(u8)GeometryPassType.InstancedMesh]
+			geometry_pipeline_ref :=
+				material_pass.geometry_pipeline_refs[transmute(u8)GeometryPassType.InstancedMesh]
 
 			draw_stream_set_pipeline(&draw_stream, geometry_pipeline_ref)
 			draw_stream_set_bind_group(
 				&draw_stream,
 				mesh_render_task_data.bind_group_ref,
 				0,
-				material_pass_offsets,
+				mesh_task_buffer_offsets,
 			)
 			draw_stream_set_bind_group(
 				&draw_stream,

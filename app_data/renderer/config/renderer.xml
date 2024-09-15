@@ -19,7 +19,7 @@
             <InputImage name="GBufferNormals"/>
             <InputImage name="GBufferParameters"/>
             <InputImage name="DepthBuffer"/>
-            <InputImage name="SceneHDR" storage=""/>
+            <OutputImage name="SceneHDR"/>
         </FullScreen>
         <FullScreen name="BlitSwapchain" shader="blit_to_swapchain.pix" resolution="Display">
             <InputImage name="SceneHDR"/>

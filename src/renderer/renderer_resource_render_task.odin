@@ -255,19 +255,10 @@ render_task_setup_render_pass_bindings :: proc(
 			input_image_element_id,
 			"mip",
 		)
-		_, storage_found := xml.find_attribute_val_by_key(
-			p_render_task_config.doc,
-			input_image_element_id,
-			"storage",
-		)
-
 		input_flags := RenderPassImageInputFlags{}
 
 		if mip_found {
 			input_flags += {.AddressSubresource}
-		}
-		if storage_found {
-			input_flags += {.Storage}
 		}
 
 		append(

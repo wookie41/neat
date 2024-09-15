@@ -114,7 +114,6 @@ create_instance :: proc(
 	if strings.has_suffix(shader_name, ".comp") {
 		is_using_compute = true
 		shader_stages += {.Compute}
-		assert(len(render_pass_bindings.image_outputs) == 0)
 	} else if strings.has_suffix(shader_name, ".pix") {
 		shader_stages += {.Pixel}
 
@@ -147,11 +146,11 @@ create_instance :: proc(
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
 
-
 	// Create a bind group layout for the fullscreen pass based on the input images and buffers
 	INTERNAL.fullscreen_bind_group_layout_ref = allocate_bind_group_layout_ref(
 		common.create_name("FullScreenBindGroupLayout"),
-		u32(len(render_pass_bindings.image_inputs)) + (1 if is_using_compute else 0),
+		u32(len(render_pass_bindings.image_inputs)) +
+		(u32(len(render_pass_bindings.image_outputs)) + 1 if is_using_compute else 0),
 	)
 	bind_group_layout := &g_resources.bind_group_layouts[get_bind_group_layout_idx(INTERNAL.fullscreen_bind_group_layout_ref)]
 
@@ -166,13 +165,24 @@ create_instance :: proc(
 		binding_index += 1
 	}
 
-	for input_image in render_pass_bindings.image_inputs {
+	for _ in render_pass_bindings.image_inputs {
 		bind_group_layout.desc.bindings[binding_index].count = 1
 		bind_group_layout.desc.bindings[binding_index].shader_stages = shader_stages
-		bind_group_layout.desc.bindings[binding_index].type =
-			.StorageImage if .Storage in input_image.flags else .Image
+		bind_group_layout.desc.bindings[binding_index].type = .Image
 
 		binding_index += 1
+	}
+
+	// For non-compute path the output images are handled through attachments
+	if is_using_compute {
+		for _ in render_pass_bindings.image_outputs {
+			bind_group_layout.desc.bindings[binding_index].count = 1
+			bind_group_layout.desc.bindings[binding_index].shader_stages = shader_stages
+			bind_group_layout.desc.bindings[binding_index].type =
+				.StorageImage if is_using_compute else .Image
+	
+			binding_index += 1
+		}	
 	}
 
 	if create_bind_group_layout(INTERNAL.fullscreen_bind_group_layout_ref) == false {
@@ -193,7 +203,8 @@ create_instance :: proc(
 	fullscreen_bind_group_update := BindGroupUpdate {
 		images = make(
 			[]BindGroupImageBinding,
-			len(render_pass_bindings.image_inputs),
+			len(render_pass_bindings.image_inputs) + 
+			(len(render_pass_bindings.image_outputs) if is_using_compute else 0),
 			temp_arena.allocator,
 		),
 	}
@@ -203,6 +214,16 @@ create_instance :: proc(
 			image_ref = input_image.image_ref,
 			mip       = input_image.mip,
 		}
+	}
+
+	if is_using_compute {
+		for output_image, i in render_pass_bindings.image_outputs {
+			fullscreen_bind_group_update.images[len(render_pass_bindings.image_inputs) + i] =
+				BindGroupImageBinding {
+					image_ref = output_image.image_ref,
+					mip       = output_image.mip,
+				}
+		}	
 	}
 
 	if is_using_compute {
@@ -242,7 +263,7 @@ create_instance :: proc(
 		fullscreen_render_task_data.draw_command_ref = InvalidDrawCommandRef
 	} else {
 
-		// Compute
+		// Pixel path
 
 		draw_command_ref := draw_command_allocate_ref(render_task_name, 4, 0)
 		draw_command := &g_resources.draw_commands[draw_command_get_idx(draw_command_ref)]
@@ -321,7 +342,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 
 	use_compute := fullscreen_render_task_data.compute_command_ref != InvalidComputeCommandRef
 
-	global_uniform_offsets := []u32{
+	global_uniform_offsets := []u32 {
 		uniform_buffer_management_get_per_frame_offset(),
 		uniform_buffer_management_get_per_view_offset(),
 	}
@@ -342,7 +363,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 
 		// Upload uniform data
 		fullscreen_task_uniform_data := FullScreenTaskUniformData {
-			input_size = glsl.vec4{
+			input_size = glsl.vec4 {
 				1.0 / f32(resolution.x),
 				1.0 / f32(resolution.y),
 				f32(resolution.x),

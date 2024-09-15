@@ -35,22 +35,19 @@ when USE_VULKAN_BACKEND {
 			image_idx := get_image_idx(input.image_ref)
 			image := &g_resources.images[image_idx]
 
-			input_usage := ImageUsage.SampledImage
 			new_layout := vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL
 			dst_access_mask := vk.AccessFlags{.SHADER_READ}
+			aspect_mask := vk.ImageAspectFlags{.COLOR}
 
-			if .Storage in input.flags {
-				dst_access_mask += {.SHADER_WRITE}
-				new_layout = vk.ImageLayout.GENERAL
-				input_usage = ImageUsage.General
-			} else if image.desc.format > .DepthFormatsStart &&
-			   image.desc.format < .DepthFormatsEnd {
+			if image.desc.format > .DepthFormatsStart && image.desc.format < .DepthFormatsEnd {
 
 				if image.desc.format > .DepthStencilFormatsStart &&
 				   image.desc.format < .DepthStencilFormatsEnd {
-					new_layout = vk.ImageLayout.DEPTH_STENCIL_READ_ONLY_OPTIMAL
+					new_layout = .DEPTH_STENCIL_READ_ONLY_OPTIMAL
 				}
-				new_layout = vk.ImageLayout.DEPTH_READ_ONLY_OPTIMAL
+
+				aspect_mask = {.DEPTH}
+				new_layout = .DEPTH_READ_ONLY_OPTIMAL
 			}
 
 			image_backend := &g_resources.backend_images[image_idx]
@@ -77,7 +74,7 @@ when USE_VULKAN_BACKEND {
 				newLayout = new_layout,
 				image = image_backend.vk_image,
 				subresourceRange = {
-					aspectMask = {.COLOR},
+					aspectMask = aspect_mask,
 					baseArrayLayer = 0,
 					layerCount = 1,
 					baseMipLevel = mip,
@@ -86,11 +83,10 @@ when USE_VULKAN_BACKEND {
 			}
 
 			image_backend.vk_layout_per_mip[mip] = new_layout
-
 			image_input_barriers_count += 1
 		}
 
-        cmd_buffer_idx := get_cmd_buffer_idx(p_cmd_buff_ref)
+		cmd_buffer_idx := get_cmd_buffer_idx(p_cmd_buff_ref)
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[cmd_buffer_idx]
 
 		// Insert barriers for input
@@ -109,15 +105,7 @@ when USE_VULKAN_BACKEND {
 			)
 		}
 
-		if p_pipeline_type == .Compute {
-			assert(
-				len(p_bindings.image_outputs) == 0,
-				"Output bindings are only supported for the graphics pipe",
-			)
-			return
-		}
-
-        // Now prepare output barriers
+		// Now prepare output imagge barriers
 		image_output_barriers_count := 0
 		image_output_barriers := make(
 			[]vk.ImageMemoryBarrier,
@@ -127,7 +115,6 @@ when USE_VULKAN_BACKEND {
 		depth_barrier := vk.ImageMemoryBarrier{}
 		depth_barrier_needed := false
 
-		// Prepare barriers for outputs
 		for output in p_bindings.image_outputs {
 
 			image_idx := get_image_idx(output.image_ref)
@@ -142,14 +129,39 @@ when USE_VULKAN_BACKEND {
 
 			image_backend := &g_resources.backend_images[image_idx]
 
-			// Prepare the rendering attachment
-			load_op := vk.AttachmentLoadOp.DONT_CARE
-			if .Clear in output.flags {
-				load_op = .CLEAR
-			}
-
 			new_layout := vk.ImageLayout{}
-			if image.desc.format > .DepthFormatsStart && image.desc.format < .DepthFormatsEnd {
+
+			if p_pipeline_type == .Compute {
+
+				// Check if this image needs to be transitioned
+				if image_backend.vk_layout_per_mip[output.mip] == .GENERAL {
+					continue
+				}
+
+				is_depth_image := image.desc.format >
+					.DepthFormatsStart && image.desc.format < .DepthFormatsEnd
+
+				aspect_mask : vk.ImageAspectFlags = {.DEPTH} if is_depth_image else {.COLOR}
+
+				image_output_barriers[image_output_barriers_count] = {
+					sType = .IMAGE_MEMORY_BARRIER,
+					dstAccessMask = {.SHADER_WRITE},
+					oldLayout = image_backend.vk_layout_per_mip[output.mip],
+					newLayout = .GENERAL,
+					image = image_backend.vk_image,
+					subresourceRange = {
+						aspectMask = aspect_mask,
+						baseArrayLayer = 0,
+						layerCount = 1,
+						baseMipLevel = u32(output.mip),
+						levelCount = 1,
+					},
+				}
+
+				image_output_barriers_count += 1
+
+			} else if image.desc.format > .DepthFormatsStart &&
+			   image.desc.format < .DepthFormatsEnd {
 
 				has_stencil_component :=
 					image.desc.format > .DepthStencilFormatsStart &&
@@ -209,11 +221,14 @@ when USE_VULKAN_BACKEND {
 						levelCount = 1,
 					},
 				}
-				image_output_barriers_count += 1
 
+				image_output_barriers_count += 1
 			}
+
 			image_backend.vk_layout_per_mip[output.mip] = new_layout
 		}
+
+		// @TODO Buffers
 
 		// Insert depth attachment barrier
 		if depth_barrier_needed {
@@ -236,7 +251,7 @@ when USE_VULKAN_BACKEND {
 			vk.CmdPipelineBarrier(
 				backend_cmd_buffer.vk_cmd_buff,
 				{.TOP_OF_PIPE},
-				{.COLOR_ATTACHMENT_OUTPUT},
+				{.COLOR_ATTACHMENT_OUTPUT} if p_pipeline_type == .Graphics else {.COMPUTE_SHADER},
 				{},
 				0,
 				nil,

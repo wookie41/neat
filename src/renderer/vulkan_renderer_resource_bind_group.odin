@@ -246,6 +246,7 @@ when USE_VULKAN_BACKEND {
 					continue
 				}
 
+				image := &g_resources.images[get_image_idx(image_binding.image_ref)]
 				backend_image := &g_resources.backend_images[get_image_idx(image_binding.image_ref)]
 
 				if image_binding.mip > 0 {
@@ -256,8 +257,15 @@ when USE_VULKAN_BACKEND {
 					image_writes[image_write_idx].imageView = backend_image.all_mips_vk_view
 				}
 
-				image_writes[image_write_idx].imageLayout =
-					.GENERAL if binding.type == .StorageImage else .SHADER_READ_ONLY_OPTIMAL
+				if binding.type == .StorageImage {
+					image_writes[image_write_idx].imageLayout = .GENERAL	
+				} else if image.desc.format > .DepthStencilFormatsStart && image.desc.format < .DepthStencilFormatsEnd {
+					image_writes[image_write_idx].imageLayout = .DEPTH_STENCIL_READ_ONLY_OPTIMAL
+				} else if image.desc.format > .DepthFormatsStart && image.desc.format < .DepthFormatsEnd {
+					image_writes[image_write_idx].imageLayout = .DEPTH_READ_ONLY_OPTIMAL
+				}else {
+					image_writes[image_write_idx].imageLayout = .SHADER_READ_ONLY_OPTIMAL		
+				}
 
 				descriptor_writes[num_descriptor_writes] = vk.WriteDescriptorSet {
 					sType           = .WRITE_DESCRIPTOR_SET,
