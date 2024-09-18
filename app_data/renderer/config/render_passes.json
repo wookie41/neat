@@ -8,5 +8,11 @@
         ],
         "depthFormat": "Depth32SFloat",
         "resolution": "Full"
+    },
+    {
+        "name": "Shadows",
+        "renderTargets": [],
+        "depthFormat": "Depth32SFloat",
+        "resolution": "Full"
     }
 ]

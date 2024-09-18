@@ -4,5 +4,11 @@
         "vertexShaderPath": "material_opaque_pbr.hlsli",
         "pixelShaderPath": "material_opaque_pbr.hlsli",
         "renderPass": "GBuffer"
+    },
+    {
+        "name": "Shadows",
+        "vertexShaderPath": "material_opaque_pbr.hlsli",
+        "pixelShaderPath": "material_opaque_pbr.hlsli",
+        "renderPass": "Shadows"
     }
 ]

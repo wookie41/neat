@@ -310,9 +310,6 @@ load_render_passes_from_config_file :: proc() -> bool {
 		assert(render_pass_entry.resolution in G_RESOLUTION_NAME_MAPPING)
 		render_pass.desc.resolution = G_RESOLUTION_NAME_MAPPING[render_pass_entry.resolution]
 
-		// Parse render targets
-		assert(len(render_pass_entry.render_targets) > 0)
-
 		for render_target_entry, i in render_pass_entry.render_targets {
 			assert(render_target_entry.format in G_IMAGE_FORMAT_NAME_MAPPING)
 

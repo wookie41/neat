@@ -18,6 +18,7 @@ MeshRenderTaskData :: struct {
 	material_pass_refs:   []MaterialPassRef,
 	render_pass_bindings: RenderPassBindings,
 	bind_group_ref:       BindGroupRef,
+	geometry_pass_type: GeometryPassType,
 }
 
 //---------------------------------------------------------------------------//
@@ -79,7 +80,7 @@ mesh_render_task_init :: proc(p_render_task_functions: ^RenderTaskFunctions) {
 	// Create a bind group layout for geometry pass
 	{
 		INTERNAL.task_bind_group_layout = allocate_bind_group_layout_ref(
-			common.create_name("InstancedMesh"),
+			common.create_name("Mesh"),
 			1,
 		)
 
@@ -110,11 +111,18 @@ create_instance :: proc(
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
 
+	// Find the geometry pass name
+	geometry_pass_type_name := xml.find_attribute_val_by_key(
+		p_render_task_config.doc,
+		p_render_task_config.render_task_element_id,
+		"geometryPassType",
+	) or_return
+
+	geometry_pass_type := geometry_pass_parse_type(geometry_pass_type_name) or_return
+
 	geo_pass_desc := GeometryPassDescription {
 		bind_group_layout_ref = INTERNAL.task_bind_group_layout,
-		pass_type             = .InstancedMesh,
-		vertex_shader_path    = common.create_name("geometry_pass_instanced_mesh.hlsl"),
-		pixel_shader_path     = common.create_name("geometry_pass_instanced_mesh.hlsl"),
+		pass_type             = geometry_pass_type,
 	}
 
 	render_pass_bindings: RenderPassBindings
@@ -248,6 +256,7 @@ create_instance :: proc(
 	mesh_render_task.data_ptr = rawptr(mesh_render_task_data)
 	mesh_render_task_data.render_pass_bindings = render_pass_bindings
 	mesh_render_task_data.bind_group_ref = task_bind_group_ref
+	mesh_render_task_data.geometry_pass_type = geometry_pass_type
 
 	return true
 }
@@ -408,7 +417,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 
 			material_pass := &g_resources.material_passes[get_material_pass_idx(material_pass_ref)]
 			geometry_pipeline_ref :=
-				material_pass.geometry_pipeline_refs[transmute(u8)GeometryPassType.InstancedMesh]
+				material_pass.geometry_pipeline_refs[transmute(u8)mesh_render_task_data.geometry_pass_type]
 
 			draw_stream_set_pipeline(&draw_stream, geometry_pipeline_ref)
 			draw_stream_set_bind_group(

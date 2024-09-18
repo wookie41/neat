@@ -1,5 +1,5 @@
-#ifndef MATERIAL_PASS_INSTANCED_MESH_H
-#define MATERIAL_PASS_INSTANCED_MESH_H
+#ifndef GEOMETRY_PASS_GBUFFER_H
+#define GEOMETRY_PASS_GBUFFER_H
 
 //---------------------------------------------------------------------------//
 
@@ -7,6 +7,7 @@
 #include "resources.hlsli"
 #include "geometry_pass.hlsli"
 #include "packing.hlsli"
+#include "instanced_mesh.hlsli"
 
 #include MATERIAL_PASS_VERTEX_H
 #include MATERIAL_PASS_PIXEL_H
@@ -59,16 +60,9 @@ struct PSOutput
 
 //---------------------------------------------------------------------------//
 
-[[vk::binding(0, 0)]]
-StructuredBuffer<MeshInstancedDrawInfo> gMeshInstancedDrawInfoBuffer : register(t0, space0);
-
-//---------------------------------------------------------------------------//
-
-float4 VSMain(
-    in VSInput pVertexInput, in uint pInstanceId: SV_INSTANCEID, out PSInput pPixelInput)
-    : SV_Position
+float4 VSMain(in VSInput pVertexInput, in uint pInstanceId: SV_INSTANCEID, out PSInput pPixelInput) : SV_Position
 {
-    MeshInstancedDrawInfo meshInstancedDrawInfo = gMeshInstancedDrawInfoBuffer[pInstanceId];
+    const MeshInstancedDrawInfo meshInstancedDrawInfo = FetchMeshInstanceInfo(pInstanceId);
 
     float4x4 modelMatrix = gMeshInstanceInfoBuffer[meshInstancedDrawInfo.meshInstanceIdx].modelMatrix;
     float3 positionWS = mul(modelMatrix, float4(pVertexInput.position, 1.0)).xyz;
@@ -110,7 +104,7 @@ void PSMain(in PSInput pPixelInput, out PSOutput pPixelOutput)
 
 //---------------------------------------------------------------------------//
 
-#endif // MATERIAL_PASS_INSTANCED_MESH_H
+#endif // GEOMETRY_PASS_GBUFFER_H
 
 
 

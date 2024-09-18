@@ -30,7 +30,8 @@ MaterialPassResource :: struct {
 //---------------------------------------------------------------------------//
 
 GeometryPassType :: enum u8 {
-	InstancedMesh,
+	GBuffer,
+	Shadows,
 }
 
 //---------------------------------------------------------------------------//
@@ -38,8 +39,6 @@ GeometryPassType :: enum u8 {
 GeometryPassDescription :: struct {
 	pass_type:             GeometryPassType,
 	bind_group_layout_ref: BindGroupLayoutRef,
-	vertex_shader_path:    common.Name,
-	pixel_shader_path:     common.Name,
 }
 
 //---------------------------------------------------------------------------//
@@ -54,11 +53,6 @@ InvalidMaterialPassRef := MaterialPassRef {
 
 //---------------------------------------------------------------------------//
 
-@(private = "file")
-G_MATERIAL_PASS_REF_ARRAY: common.RefArray(MaterialPassResource)
-
-//---------------------------------------------------------------------------//
-
 MaterialPassJSONEntry :: struct {
 	name:                     string,
 	vertex_shader_path:       string `json:"vertexShaderPath"`,
@@ -69,6 +63,25 @@ MaterialPassJSONEntry :: struct {
 
 //---------------------------------------------------------------------------//
 
+@(private = "file")
+G_MATERIAL_PASS_REF_ARRAY: common.RefArray(MaterialPassResource)
+
+//---------------------------------------------------------------------------//
+
+@(private="file")
+G_GEOMETRY_PASS_TYPE_MAPPING := map[string]GeometryPassType {
+	"GBuffer" = .GBuffer,
+	"Shadows" = .Shadows,
+}
+//---------------------------------------------------------------------------//
+
+@(private="file")
+G_GEOMETRY_PASS_SHADERS_MAPPING := map[GeometryPassType]string {
+	.GBuffer = "geometry_pass_gbuffer.hlsl",
+	.Shadows = "geometry_pass_shadows.hlsl",
+}
+
+//---------------------------------------------------------------------------//
 
 init_material_passs :: proc() -> bool {
 	G_MATERIAL_PASS_REF_ARRAY = common.ref_array_create(
@@ -265,18 +278,23 @@ material_pass_compile_geometry_pso :: proc(
 		delete(material_pass_pixel_include_def, G_RENDERER_ALLOCATORS.resource_allocator)
 	}
 
-	vertex_shader_ref := allocate_shader_ref(p_geometry_pass_description.vertex_shader_path)
-	pixel_shader_ref := allocate_shader_ref(p_geometry_pass_description.pixel_shader_path)
+
+	assert(p_geometry_pass_description.pass_type in G_GEOMETRY_PASS_SHADERS_MAPPING)
+
+
+	shader_path := common.create_name(G_GEOMETRY_PASS_SHADERS_MAPPING[p_geometry_pass_description.pass_type])
+	vertex_shader_ref := allocate_shader_ref(shader_path)
+	pixel_shader_ref := allocate_shader_ref(shader_path)
 
 	vertex_shader := &g_resources.shaders[get_shader_idx(vertex_shader_ref)]
 	pixel_shader := &g_resources.shaders[get_shader_idx(pixel_shader_ref)]
 
 	vertex_shader.desc.features = shader_defines
-	vertex_shader.desc.file_path = p_geometry_pass_description.vertex_shader_path
+	vertex_shader.desc.file_path = shader_path
 	vertex_shader.desc.stage = .Vertex
 
 	pixel_shader.desc.features = shader_defines
-	pixel_shader.desc.file_path = p_geometry_pass_description.pixel_shader_path
+	pixel_shader.desc.file_path = shader_path
 	pixel_shader.desc.stage = .Pixel
 
 	create_shader(vertex_shader_ref) or_return
@@ -308,6 +326,18 @@ material_pass_compile_geometry_pso :: proc(
 	material_pass.geometry_pipeline_refs[geo_pass_idx] = pipeline_ref
 
 	return true
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
+geometry_pass_parse_type :: proc(p_name: string) -> (GeometryPassType, bool) {
+
+	if p_name in G_GEOMETRY_PASS_TYPE_MAPPING {
+		return G_GEOMETRY_PASS_TYPE_MAPPING[p_name], true
+	}
+
+	return nil, false
 }
 
 //---------------------------------------------------------------------------//
