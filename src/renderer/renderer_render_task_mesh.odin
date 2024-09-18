@@ -382,8 +382,8 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 	mesh_task_buffer_offsets := []u32{buffer_management_get_mesh_instanced_info_buffer_offset()}
 
 	uniform_offsets := []u32 {
-		uniform_buffer_get_per_frame_offset(),
-		uniform_buffer_get_per_view_offset(),
+		g_uniform_buffers.frame_data_offset,
+		g_uniform_buffers.view_data_offset,
 	}
 
 	// Aggregate instanced draw infos so we can issue a single copy and create the draw stream

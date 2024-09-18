@@ -229,7 +229,7 @@ create_instance :: proc(
 	if is_using_compute {
 		fullscreen_bind_group_update.buffers = {
 			{
-				buffer_ref = g_uniform_buffers.per_instance_buffer_ref,
+				buffer_ref = g_uniform_buffers.transient_buffer.buffer_ref,
 				size = size_of(FullScreenTaskUniformData),
 			},
 		}
@@ -343,8 +343,8 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 	use_compute := fullscreen_render_task_data.compute_command_ref != InvalidComputeCommandRef
 
 	global_uniform_offsets := []u32 {
-		uniform_buffer_get_per_frame_offset(),
-		uniform_buffer_get_per_view_offset(),
+		g_uniform_buffers.frame_data_offset,
+		g_uniform_buffers.view_data_offset,
 	}
 
 	// Perform resource transitions
@@ -371,9 +371,8 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 			},
 		}
 
-		fullscreen_task_uniform_data_offset := uniform_buffer_request_per_instance_data(
+		fullscreen_task_uniform_data_offset := uniform_buffer_create_transient_buffer(
 			&fullscreen_task_uniform_data,
-			size_of(fullscreen_task_uniform_data),
 		)
 
 		// Dispatch the command

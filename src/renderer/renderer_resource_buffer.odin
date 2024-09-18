@@ -50,6 +50,7 @@ BufferResource :: struct {
 	mapped_ptr: ^u8,
 	// Virtual block used to suballocate the buffer using the VMA virtual allocator
 	vma_block:  vma.VirtualBlock,
+	
 }
 
 //---------------------------------------------------------------------------//
