@@ -7,7 +7,7 @@
         <DepthBuffer format="Depth32SFloat" resolution="Full" sampled="" />
     </Images>
     <RenderTasks>
-        <Mesh name="Opaque" renderPass="GBuffer" geometryPassType="GBuffer">
+        <Mesh name="GBufferOpaque" renderPass="GBuffer" geometryPassType="GBuffer">
             <OutputImage name="GBufferColor" clear="0, 0, 0, 0"/>
             <OutputImage name="GBufferNormals" clear="0, 0, 0, 0"/>
             <OutputImage name="GBufferParameters" clear="0, 0, 0, 0"/>

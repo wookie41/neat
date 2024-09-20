@@ -105,6 +105,3 @@ void PSMain(in PSInput pPixelInput, out PSOutput pPixelOutput)
 //---------------------------------------------------------------------------//
 
 #endif // GEOMETRY_PASS_GBUFFER_H
-
-
-

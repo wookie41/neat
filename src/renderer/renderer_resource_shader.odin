@@ -9,9 +9,11 @@ import "core:c"
 import "core:encoding/json"
 import "core:hash"
 import "core:log"
+import "core:mem"
 import "core:os"
 import "core:slice"
 import "core:strings"
+import "core:unicode/utf16"
 import "core:sys/windows"
 
 import "../common"
@@ -196,10 +198,18 @@ create_shader :: proc(p_shader_ref: ShaderRef) -> bool {
 	shader := &g_resources.shaders[get_shader_idx(p_shader_ref)]
 	shader.hash = calculate_hash_for_shader(&shader.desc)
 	assert((shader.hash in INTERNAL.shader_by_hash) == false)
-	if backend_create_shader(p_shader_ref) == false {
+
+	temp_arena: common.Arena
+	common.temp_arena_init(&temp_arena)
+	defer common.arena_delete(temp_arena)
+
+	shader_code := shader_compile(p_shader_ref, temp_arena.allocator) or_return
+
+	if backend_create_shader(p_shader_ref, shader_code) == false {
 		destroy_shader(p_shader_ref)
 		return false
 	}
+
 	INTERNAL.shader_by_hash[shader.hash] = p_shader_ref
 	return true
 }
@@ -440,6 +450,11 @@ shaders_update :: proc() {
 
 @(private = "file")
 reload_shader :: proc(p_shader_file_name: string) {
+
+	temp_arena: common.Arena
+	common.temp_arena_init(&temp_arena)
+	defer common.arena_delete(temp_arena)
+
 	if strings.contains(p_shader_file_name, "incl") {
 		// ignore include files
 		return
@@ -456,12 +471,17 @@ reload_shader :: proc(p_shader_file_name: string) {
 			continue
 		}
 
+		shader_code, ok := shader_compile(shader_ref, temp_arena.allocator)
 
-		if backend_reload_shader(shader_ref) == false {
+		if ok == false {
 			log.warnf(
 				"Failed to hot reload shader '%s' - the source probably contains errors\n",
 				p_shader_file_name,
 			)
+			return
+		}
+
+		if backend_reload_shader(shader_ref, shader_code) == false {
 			return
 		}
 
@@ -501,6 +521,150 @@ reload_shader :: proc(p_shader_file_name: string) {
 
 		return
 	}
+}
+
+//--------------------------------------------------------------------------//
+
+@(private = "file")
+shader_compile :: proc(
+	p_shader_ref: ShaderRef,
+	p_shader_code_allocator: mem.Allocator,
+) -> (
+	[]byte,
+	bool,
+) {
+
+	temp_arena: common.Arena
+	common.temp_arena_init(&temp_arena)
+	defer common.arena_delete(temp_arena)
+
+	shader := &g_resources.shaders[get_shader_idx(p_shader_ref)]
+
+	shader_stage := ""
+	shader_suffix := ""
+	switch shader.desc.stage {
+	case .Vertex:
+		shader_stage = "vert"
+		shader_suffix = "vert.hlsl"
+	case .Pixel:
+		shader_stage = "pix"
+		shader_suffix = "pix.hlsl"
+	case .Compute:
+		shader_stage = "comp"
+		shader_stage = "comp.hlsl"
+	case:
+		assert(false, "Unsupported shader type")
+	}
+
+	shader_path := common.get_string(shader.desc.file_path)
+	shader_bin_path_base := shader_path
+
+	// Vertex and pixel shaders shader the same file, so we add the stage
+	// suffix here to compile the shader with differnt entry points
+	if !strings.contains(shader_path, shader_stage) {
+		shader_bin_path_base, _ = strings.replace(shader_path, "hlsl", shader_suffix, 1, temp_arena.allocator)
+	}
+
+	shader_src_path := common.aprintf(
+		temp_arena.allocator,
+		"app_data/renderer/assets/shaders/%s",
+		shader_path,
+	)
+
+	// Find out the last time the shader was modified. It's used to determine 
+	// if the compiled version is up to date
+	last_shader_write_time := common.get_last_file_write_time(shader_src_path)
+
+	shader_bin_path := common.aprintf(
+		temp_arena.allocator,
+		"app_data/renderer/assets/shaders/%s/%s-%d.%s",
+		BACKEND_COMPILED_SHADERS_FOLDER,
+		shader_bin_path_base,
+		last_shader_write_time._nsec,
+		BACKEND_COMPILED_SHADERS_EXTENSION,
+	)
+
+	if !os.exists(shader_bin_path) {
+
+		// Add defines for macros
+		shader_defines := ""
+		shader_defines_log := ""
+		for feature in shader.desc.features {
+			shader_defines = common.aprintf(
+				temp_arena.allocator,
+				"%s -D %s",
+				shader_defines,
+				feature,
+			)
+			shader_defines_log = common.aprintf(
+				temp_arena.allocator,
+				"%s\n%s\n",
+				shader_defines_log,
+				feature,
+			)
+		}
+
+		log.infof("Compiling shader %s with features %s\n", shader_src_path, shader_defines_log)
+
+		if backend_compile_shader(
+			   shader_src_path,
+			   shader_bin_path,
+			   shader.desc.stage,
+			   shader_defines,
+		   ) ==
+		   false {
+			return nil, false
+		}
+	}
+
+	// Remove old version of the shader binary
+	shader_bins_search_path := common.aprintf(
+		temp_arena.allocator,
+		"app_data/renderer/assets/shaders/%s/%s-*",
+		BACKEND_COMPILED_SHADERS_FOLDER,
+		shader_bin_path_base,
+	)
+	
+	path_w := windows.utf8_to_wstring(shader_bins_search_path, temp_arena.allocator)
+
+	find_file_data := windows.WIN32_FIND_DATAW{}
+	file_handle := windows.FindFirstFileW(path_w, &find_file_data)
+	
+	timestamp_str := common.aprintf(temp_arena.allocator, "%i", last_shader_write_time._nsec)
+
+
+	if file_handle != windows.INVALID_HANDLE_VALUE {
+
+		path_buffer := make([]byte, windows.MAX_PATH, temp_arena.allocator)
+
+		for  {
+
+			// Delete of it's not the latest version
+			path_len := utf16.decode_to_utf8(path_buffer, find_file_data.cFileName[:])
+			path := string(path_buffer[:path_len])
+
+			if !strings.contains( path, timestamp_str) {
+
+				delete_path := common.aprintf(
+					temp_arena.allocator,
+					"app_data/renderer/assets/shaders/%s/%s",
+					BACKEND_COMPILED_SHADERS_FOLDER,
+					path,
+				)
+
+				os.remove(delete_path)
+			}
+
+			
+			if windows.FindNextFileW(file_handle, &find_file_data) == false {
+				break
+			}
+		}
+	
+	}
+
+	// Read the shader binary
+	return os.read_entire_file(shader_bin_path, p_shader_code_allocator)
 }
 
 //--------------------------------------------------------------------------//

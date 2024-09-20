@@ -281,7 +281,6 @@ material_pass_compile_geometry_pso :: proc(
 
 	assert(p_geometry_pass_description.pass_type in G_GEOMETRY_PASS_SHADERS_MAPPING)
 
-
 	shader_path := common.create_name(G_GEOMETRY_PASS_SHADERS_MAPPING[p_geometry_pass_description.pass_type])
 	vertex_shader_ref := allocate_shader_ref(shader_path)
 	pixel_shader_ref := allocate_shader_ref(shader_path)

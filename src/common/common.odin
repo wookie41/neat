@@ -13,7 +13,6 @@ import "base:runtime"
 import "core:slice"
 import "core:strconv"
 import "core:strings"
-import "core:sys/windows"
 
 //---------------------------------------------------------------------------//
 
@@ -246,67 +245,3 @@ into_dynamic :: proc(a: $T/[]$E) -> [dynamic]E {
 
 //---------------------------------------------------------------------------//
 
-FileMemoryMapping :: struct {
-	file_handle:    windows.HANDLE,
-	mapping_handle: windows.HANDLE,
-	mapped_ptr:     rawptr,
-}
-
-//---------------------------------------------------------------------------//
-
-mmap_file :: proc(p_file_path: string) -> (out_mapping: FileMemoryMapping, out_res: bool) {
-
-	temp_arena: Arena
-	temp_arena_init(&temp_arena)
-	defer arena_delete(temp_arena)
-
-	path_w := windows.utf8_to_wstring(p_file_path, temp_arena.allocator)
-
-	file_handle := windows.CreateFileW(
-		path_w,
-		windows.GENERIC_READ,
-		windows.FILE_SHARE_READ,
-		nil,
-		windows.OPEN_EXISTING,
-		windows.FILE_ATTRIBUTE_NORMAL,
-		nil,
-	)
-	if file_handle == windows.INVALID_HANDLE_VALUE {
-		return {}, false
-	}
-	defer if (out_res == false) {
-		windows.CloseHandle(file_handle)
-	}
-
-	mapping_handle := windows.CreateFileMappingW(
-		file_handle,
-		nil,
-		windows.PAGE_READONLY,
-		0,
-		0,
-		nil,
-	)
-	if mapping_handle == windows.INVALID_HANDLE_VALUE {
-		return {}, false
-	}
-
-	file_mapped_ptr := windows.MapViewOfFile(mapping_handle, windows.FILE_MAP_READ, 0, 0, 0)
-
-	return FileMemoryMapping{
-			file_handle = file_handle,
-			mapping_handle = mapping_handle,
-			mapped_ptr = file_mapped_ptr,
-		},
-		true
-}
-
-//---------------------------------------------------------------------------//
-
-unmap_file :: proc(p_mapping: FileMemoryMapping) {
-	windows.UnmapViewOfFile(p_mapping.mapped_ptr)
-	windows.CloseHandle(p_mapping.mapping_handle)
-	windows.CloseHandle(p_mapping.file_handle)
-
-}
-
-//---------------------------------------------------------------------------//

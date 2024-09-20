@@ -29,7 +29,6 @@ MeshBatch :: struct {
 	index_buffer_offset:  u32,
 	index_count:          u32,
 	mesh_vertex_count:    u32,
-	instance_count:       u32,
 	material_type_ref:    MaterialTypeRef,
 	instanced_draw_infos: [dynamic]MeshInstancedDrawInfo,
 }
@@ -347,7 +346,6 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 
 			if mesh_batch_key in mesh_batches {
 				mesh_batch := &mesh_batches[mesh_batch_key]
-				mesh_batch.instance_count += 1
 				append(&mesh_batch.instanced_draw_infos, instanced_draw_info)
 				continue
 			}
@@ -356,7 +354,6 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 				index_buffer_offset  = mesh.index_buffer_allocation.offset + size_of(u32) * submesh.index_offset,
 				index_count          = submesh.index_count,
 				mesh_vertex_count    = mesh.vertex_count,
-				instance_count       = 1,
 				vertex_buffer_offset = mesh.vertex_buffer_allocation.offset,
 				material_type_ref    = material_instance.desc.material_type_ref,
 				instanced_draw_infos = make([dynamic]MeshInstancedDrawInfo, temp_arena.allocator),
@@ -481,12 +478,14 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 					mesh_batch.index_buffer_offset,
 				)
 
+				num_instances := u32(len(mesh_batch.instanced_draw_infos))
+				
 				draw_stream_set_draw_count(&draw_stream, mesh_batch.index_count)
-				draw_stream_set_instance_count(&draw_stream, mesh_batch.instance_count)
+				draw_stream_set_instance_count(&draw_stream, num_instances)
 				draw_stream_set_first_instance(&draw_stream, num_instances_dispatched)
 				draw_stream_submit_draw(&draw_stream)
 
-				num_instances_dispatched += u32(len(mesh_batch.instanced_draw_infos))
+				num_instances_dispatched += num_instances
 			}
 		}
 	}
