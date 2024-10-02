@@ -440,7 +440,7 @@ init :: proc(p_options: InitOptions) -> bool {
 
 
 	init_render_tasks() or_return
-	init_material_passs() or_return
+	init_material_passes() or_return
 	init_material_types() or_return
 	init_material_instances() or_return
 	init_mesh_instances() or_return
@@ -624,6 +624,7 @@ get_frame_cmd_buffer_ref :: proc() -> CommandBufferRef {
 
 @(private = "file")
 load_renderer_config :: proc() -> bool {
+
 	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena, common.MEGABYTE) // The parser is quite memory hungry
 	defer common.arena_delete(temp_arena)
@@ -873,7 +874,7 @@ get_next_frame_allocator :: proc() -> mem.Allocator {
 //---------------------------------------------------------------------------//
 
 @(private)
-get_resolution :: #force_inline proc(p_resolution: Resolution) -> glsl.uvec2 {
+resolve_resolution :: #force_inline proc(p_resolution: Resolution) -> glsl.uvec2 {
 	switch p_resolution {
 	case .Display:
 		return glsl.uvec2{G_RENDERER.swap_extent.width, G_RENDERER.swap_extent.height}

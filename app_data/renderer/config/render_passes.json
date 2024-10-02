@@ -13,6 +13,6 @@
         "name": "Shadows",
         "renderTargets": [],
         "depthFormat": "Depth32SFloat",
-        "resolution": "Full"
+        "resolution": "2048x2048"
     }
 ]

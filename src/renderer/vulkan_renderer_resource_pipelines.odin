@@ -352,15 +352,6 @@ when USE_VULKAN_BACKEND {
 			color_blend_attachments[i] = COLOR_BLEND_PER_TYPE[blend_type]
 		}
 
-		color_blending_state := vk.PipelineColorBlendStateCreateInfo {
-			sType = .PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-			logicOpEnable = false,
-			logicOp = .COPY,
-			attachmentCount = u32(len(color_blend_attachments)),
-			pAttachments = &color_blend_attachments[0],
-			blendConstants = {0.0, 0.0, 0.0, 0.0},
-		}
-
 		// Depth stencil
 		depth_stencil := DEPTH_STENCIL_STATE_PER_TYPE[render_pass.desc.depth_stencil_type]
 
@@ -391,9 +382,23 @@ when USE_VULKAN_BACKEND {
 		// Dynamic rendering 
 		pipeline_rendering_create_info := vk.PipelineRenderingCreateInfo {
 			sType                   = .PIPELINE_RENDERING_CREATE_INFO,
-			colorAttachmentCount    = u32(len(color_attachment_formats)),
-			pColorAttachmentFormats = &color_attachment_formats[0],
 			depthAttachmentFormat   = depth_format,
+		}
+
+		color_blending_state : vk.PipelineColorBlendStateCreateInfo 
+		if len(render_pass.desc.layout.render_target_blend_types) > 0 {
+			
+			color_blending_state = {
+				sType = .PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+				logicOpEnable = false,
+				logicOp = .COPY,
+				attachmentCount = u32(len(color_blend_attachments)),
+				pAttachments = &color_blend_attachments[0],
+				blendConstants = {0.0, 0.0, 0.0, 0.0},
+			}	
+
+			pipeline_rendering_create_info.colorAttachmentCount    = u32(len(color_attachment_formats))
+			pipeline_rendering_create_info.pColorAttachmentFormats = &color_attachment_formats[0]
 		}
 
 		dynamic_states := []vk.DynamicState{.VIEWPORT, .SCISSOR, .LINE_WIDTH}

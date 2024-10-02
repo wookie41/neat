@@ -632,18 +632,18 @@ shader_compile :: proc(
 	
 	timestamp_str := common.aprintf(temp_arena.allocator, "%i", last_shader_write_time._nsec)
 
-
+	// Loop over all of the files in the directory whose name matches the pattern
 	if file_handle != windows.INVALID_HANDLE_VALUE {
 
 		path_buffer := make([]byte, windows.MAX_PATH, temp_arena.allocator)
 
 		for  {
 
-			// Delete of it's not the latest version
 			path_len := utf16.decode_to_utf8(path_buffer, find_file_data.cFileName[:])
 			path := string(path_buffer[:path_len])
-
-			if !strings.contains( path, timestamp_str) {
+			
+			// Delete if it's not the latest version
+			if !strings.contains(path, timestamp_str) {
 
 				delete_path := common.aprintf(
 					temp_arena.allocator,

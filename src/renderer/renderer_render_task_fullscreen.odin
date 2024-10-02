@@ -127,7 +127,7 @@ create_instance :: proc(
 		render_pass.desc.primitive_type = .TriangleList
 		render_pass.desc.resterizer_type = .Fill
 		render_pass.desc.multisampling_type = ._1
-		render_pass.desc.resolution = fullscreen_render_task_data.resolution
+		render_pass.desc.resolution = resolve_resolution(fullscreen_render_task_data.resolution)
 
 		for output_image, i in render_pass_bindings.image_outputs {
 			image := &g_resources.images[get_image_idx(output_image.image_ref)]
@@ -359,7 +359,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 
 	if use_compute {
 
-		resolution := get_resolution(fullscreen_render_task_data.resolution)
+		resolution := resolve_resolution(fullscreen_render_task_data.resolution)
 
 		// Upload uniform data
 		fullscreen_task_uniform_data := FullScreenTaskUniformData {

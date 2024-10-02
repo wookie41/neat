@@ -3,7 +3,8 @@
         "name": "OpaquePBR",
         "defines": [],
         "materialPasses": [
-            "OpaquePBR"
+            "OpaquePBR",
+            "Shadows"
         ]
     }
 ]

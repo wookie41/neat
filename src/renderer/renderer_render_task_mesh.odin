@@ -396,7 +396,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 	mesh_instanced_draws_infos := make([dynamic]MeshInstancedDrawInfo, temp_arena.allocator)
 	num_instances_dispatched: u32 = 0
 
-	draw_stream := draw_stream_create(temp_arena.allocator, common.create_name("GBuffer"))
+	draw_stream := draw_stream_create(temp_arena.allocator, mesh_render_task.desc.name)
 
 	for material_type_ref, material_mesh_batches in mesh_batches_per_material_type {
 		material_type := &g_resources.material_types[get_material_type_idx(material_type_ref)]

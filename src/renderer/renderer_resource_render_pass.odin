@@ -8,6 +8,8 @@ import "core:encoding/json"
 import "core:log"
 import "core:math/linalg/glsl"
 import "core:os"
+import "core:strconv"
+import "core:strings"
 
 //---------------------------------------------------------------------------//
 
@@ -41,7 +43,8 @@ RenderPassDesc :: struct {
 	primitive_type:     PrimitiveType,
 	resterizer_type:    RasterizerType,
 	multisampling_type: MultisamplingType,
-	resolution:         Resolution,
+	resolution:         glsl.uvec2,
+	derived_resolution: Resolution,
 }
 
 //---------------------------------------------------------------------------//
@@ -305,10 +308,22 @@ load_render_passes_from_config_file :: proc() -> bool {
 			render_pass.desc.depth_stencil_type = .None
 		}
 
+		if render_pass_entry.resolution in G_RESOLUTION_NAME_MAPPING {
+			render_pass.desc.derived_resolution = G_RESOLUTION_NAME_MAPPING[render_pass_entry.resolution]			
+		} else {
 
-		// Parse resolution
-		assert(render_pass_entry.resolution in G_RESOLUTION_NAME_MAPPING)
-		render_pass.desc.resolution = G_RESOLUTION_NAME_MAPPING[render_pass_entry.resolution]
+			resolution_parts, error := strings.split(
+				render_pass_entry.resolution,
+				"x",
+				temp_arena.allocator,
+			)
+			if error != nil {
+				return false
+			}
+
+			render_pass.desc.resolution.x = u32(strconv.atoi(resolution_parts[0]))
+			render_pass.desc.resolution.y = u32(strconv.atoi(resolution_parts[1]))
+		}
 
 		for render_target_entry, i in render_pass_entry.render_targets {
 			assert(render_target_entry.format in G_IMAGE_FORMAT_NAME_MAPPING)

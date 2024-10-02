@@ -5,6 +5,7 @@
         <GBufferParameters format="RGBA8UNorm" resolution="Full" sampled="" />
         <SceneHDR format="R11G11B10UFloat" resolution="Full" sampled="" storage="" />
         <DepthBuffer format="Depth32SFloat" resolution="Full" sampled="" />
+        <SunShadows format="Depth32SFloat" width="2048" height="2048" sampled="" />
     </Images>
     <RenderTasks>
         <Mesh name="GBufferOpaque" renderPass="GBuffer" geometryPassType="GBuffer">
@@ -13,6 +14,10 @@
             <OutputImage name="GBufferParameters" clear="0, 0, 0, 0"/>
             <OutputImage name="DepthBuffer" clear="0"/>
             <MaterialPass name="OpaquePBR" />
+        </Mesh>
+        <Mesh name="SunShadows" renderPass="Shadows" geometryPassType="Shadows">
+            <OutputImage name="SunShadows" clear="0"/>
+            <MaterialPass name="Shadows" />
         </Mesh>
         <FullScreen name="Lighting" shader="lighting.comp" resolution="Full">
             <InputImage name="GBufferColor"/>

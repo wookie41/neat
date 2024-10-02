@@ -83,7 +83,7 @@ G_GEOMETRY_PASS_SHADERS_MAPPING := map[GeometryPassType]string {
 
 //---------------------------------------------------------------------------//
 
-init_material_passs :: proc() -> bool {
+init_material_passes :: proc() -> bool {
 	G_MATERIAL_PASS_REF_ARRAY = common.ref_array_create(
 		MaterialPassResource,
 		MAX_MATERIAL_PASSES,
@@ -152,6 +152,7 @@ destroy_material_pass :: proc(p_ref: MaterialPassRef) {
 
 //--------------------------------------------------------------------------//
 
+@(private="file")
 load_material_passes_from_config_file :: proc() -> bool {
 	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)

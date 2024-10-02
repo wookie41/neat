@@ -141,19 +141,15 @@ when USE_VULKAN_BACKEND {
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[cmd_buffer_idx]
 
 		// Prepare the rendering info
-		resolution := get_resolution(render_pass.desc.resolution)
 		render_area := vk.Extent2D {
-			width  = resolution.x,
-			height = resolution.y,
+			width  = render_pass.desc.resolution.x,
+			height = render_pass.desc.resolution.y,
 		}
 
-		#partial switch render_pass.desc.resolution {
-		case .Half:
-			render_area.width /= 2
-			render_area.height /= 2
-		case .Quarter:
-			render_area.width /= 4
-			render_area.height /= 4
+		if render_area.width == 0 || render_area.height == 0 {
+			resolved_resolution := resolve_resolution(render_pass.desc.derived_resolution)
+			render_area.width = resolved_resolution.x
+			render_area.height = resolved_resolution.y
 		}
 
 		rendering_info := vk.RenderingInfo {
