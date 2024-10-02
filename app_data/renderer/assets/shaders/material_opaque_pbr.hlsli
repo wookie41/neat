@@ -3,7 +3,7 @@
 
 //---------------------------------------------------------------------------//
 
-#include "geometry_pass.hlsli"
+#include "material_pass.hlsli"
 #include "resources.hlsli"
 #include "scene_types.hlsli"
 #include "packing.hlsli"

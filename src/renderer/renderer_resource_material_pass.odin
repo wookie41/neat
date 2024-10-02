@@ -13,32 +13,23 @@ import "core:slice"
 //---------------------------------------------------------------------------//
 
 MaterialPassDesc :: struct {
-	name:                     common.Name,
-	vertex_shader_path:       common.Name,
-	pixel_shader_path:        common.Name,
-	render_pass_ref:          RenderPassRef,
-	additional_feature_names: []string,
+	name:         common.Name,
+	include_path: common.Name,
+	defines:      []string,
 }
 
 //---------------------------------------------------------------------------//
 
 MaterialPassResource :: struct {
-	desc:                   MaterialPassDesc,
-	geometry_pipeline_refs: []GraphicsPipelineRef,
+	desc:                    MaterialPassDesc,
+	pass_type_pipeline_refs: []GraphicsPipelineRef,
 }
 
 //---------------------------------------------------------------------------//
 
-GeometryPassType :: enum u8 {
+MaterialPassType :: enum u8 {
 	GBuffer,
 	Shadows,
-}
-
-//---------------------------------------------------------------------------//
-
-GeometryPassDescription :: struct {
-	pass_type:             GeometryPassType,
-	bind_group_layout_ref: BindGroupLayoutRef,
 }
 
 //---------------------------------------------------------------------------//
@@ -54,11 +45,9 @@ InvalidMaterialPassRef := MaterialPassRef {
 //---------------------------------------------------------------------------//
 
 MaterialPassJSONEntry :: struct {
-	name:                     string,
-	vertex_shader_path:       string `json:"vertexShaderPath"`,
-	pixel_shader_path:        string `json:"pixelShaderPath"`,
-	render_pass_name:         string `json:"renderPass"`,
-	additional_feature_names: []string `json:"additionalFeatureNames"`,
+	name:         string,
+	include_path: string `json:"includePath"`,
+	defines:      []string `json:"defines"`,
 }
 
 //---------------------------------------------------------------------------//
@@ -68,17 +57,17 @@ G_MATERIAL_PASS_REF_ARRAY: common.RefArray(MaterialPassResource)
 
 //---------------------------------------------------------------------------//
 
-@(private="file")
-G_GEOMETRY_PASS_TYPE_MAPPING := map[string]GeometryPassType {
+@(private = "file")
+G_MATERIAL_PASS_TYPE_MAPPING := map[string]MaterialPassType {
 	"GBuffer" = .GBuffer,
 	"Shadows" = .Shadows,
 }
 //---------------------------------------------------------------------------//
 
-@(private="file")
-G_GEOMETRY_PASS_SHADERS_MAPPING := map[GeometryPassType]string {
-	.GBuffer = "geometry_pass_gbuffer.hlsl",
-	.Shadows = "geometry_pass_shadows.hlsl",
+@(private = "file")
+G_MATERIAL_PASS_TYPE_SHADERS_MAPPING := map[MaterialPassType]string {
+	.GBuffer = "material_pass_gbuffer.hlsl",
+	.Shadows = "material_pass_shadows.hlsl",
 }
 
 //---------------------------------------------------------------------------//
@@ -108,14 +97,14 @@ deinit_material_passs :: proc() {
 
 create_material_pass :: proc(p_material_pass_ref: MaterialPassRef) -> bool {
 	material_pass := &g_resources.material_passes[get_material_pass_idx(p_material_pass_ref)]
-	material_pass.geometry_pipeline_refs = make(
+	material_pass.pass_type_pipeline_refs = make(
 		[]GraphicsPipelineRef,
-		len(GeometryPassType),
+		len(MaterialPassType),
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
 
-	for i in 0 ..< len(GeometryPassType) {
-		material_pass.geometry_pipeline_refs[i] = InvalidGraphicsPipelineRef
+	for i in 0 ..< len(MaterialPassType) {
+		material_pass.pass_type_pipeline_refs[i] = InvalidGraphicsPipelineRef
 	}
 
 	return true
@@ -140,19 +129,16 @@ get_material_pass_idx :: proc(p_ref: MaterialPassRef) -> u32 {
 
 destroy_material_pass :: proc(p_ref: MaterialPassRef) {
 	material_pass := &g_resources.material_passes[get_material_pass_idx(p_ref)]
-	if len(material_pass.desc.additional_feature_names) > 0 {
-		delete(
-			material_pass.desc.additional_feature_names,
-			G_RENDERER_ALLOCATORS.resource_allocator,
-		)
+	if len(material_pass.desc.defines) > 0 {
+		delete(material_pass.desc.defines, G_RENDERER_ALLOCATORS.resource_allocator)
 	}
-	delete(material_pass.geometry_pipeline_refs, G_RENDERER_ALLOCATORS.resource_allocator)
+	delete(material_pass.pass_type_pipeline_refs, G_RENDERER_ALLOCATORS.resource_allocator)
 	common.ref_free(&G_MATERIAL_PASS_REF_ARRAY, p_ref)
 }
 
 //--------------------------------------------------------------------------//
 
-@(private="file")
+@(private = "file")
 load_material_passes_from_config_file :: proc() -> bool {
 	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
@@ -185,15 +171,11 @@ load_material_passes_from_config_file :: proc() -> bool {
 		material_pass_ref := allocate_material_pass_ref(common.create_name(entry.name))
 		material_pass := &g_resources.material_passes[get_material_pass_idx(material_pass_ref)]
 
-		material_pass.desc.vertex_shader_path = common.create_name(entry.vertex_shader_path)
-		material_pass.desc.pixel_shader_path = common.create_name(entry.pixel_shader_path)
+		material_pass.desc.include_path = common.create_name(entry.include_path)
 
-		material_pass.desc.render_pass_ref = find_render_pass_by_name(entry.render_pass_name)
-		assert(material_pass.desc.render_pass_ref != InvalidRenderPassRef)
-
-		if len(entry.additional_feature_names) > 0 {
-			material_pass.desc.additional_feature_names = slice.clone(
-				entry.additional_feature_names,
+		if len(entry.defines) > 0 {
+			material_pass.desc.defines = slice.clone(
+				entry.defines,
 				G_RENDERER_ALLOCATORS.resource_allocator,
 			)
 		}
@@ -236,53 +218,44 @@ find_material_pass_by_name_str :: proc(p_name: string) -> MaterialPassRef {
 
 //--------------------------------------------------------------------------//
 
-material_pass_compile_geometry_pso :: proc(
+material_pass_compile_for_type :: proc(
 	p_material_pass_ref: MaterialPassRef,
-	p_geometry_pass_description: GeometryPassDescription,
+	p_material_pass_type: MaterialPassType,
+	p_render_pass_ref: RenderPassRef,
+	p_bind_group_layout_ref: BindGroupLayoutRef,
 ) -> (
 	result: bool,
 ) {
 
-	geo_pass_idx := transmute(u8)p_geometry_pass_description.pass_type
+	pass_type_idx := transmute(u8)p_material_pass_type
 	material_pass := &g_resources.material_passes[get_material_pass_idx(p_material_pass_ref)]
 
-	if material_pass.geometry_pipeline_refs[geo_pass_idx] != InvalidGraphicsPipelineRef {
+	if material_pass.pass_type_pipeline_refs[pass_type_idx] != InvalidGraphicsPipelineRef {
 		return
 	}
 
-	// Inject the material pass includes 
-	material_pass_vertex_shader_path := common.get_string(material_pass.desc.vertex_shader_path)
-	material_pass_pixel_shader_path := common.get_string(material_pass.desc.pixel_shader_path)
+	// Inject the material pass include
+	include_path := common.get_string(material_pass.desc.include_path)
 
-	material_pass_vertex_include_def := common.aprintf(
+	material_pass_type_include_def := common.aprintf(
 		G_RENDERER_ALLOCATORS.resource_allocator,
-		"MATERIAL_PASS_VERTEX_H=\\\"%s\\\"",
-		material_pass_vertex_shader_path,
-	)
-	material_pass_pixel_include_def := common.aprintf(
-		G_RENDERER_ALLOCATORS.resource_allocator,
-		"MATERIAL_PASS_PIXEL_H=\\\"%s\\\"",
-		material_pass_pixel_shader_path,
+		"MATERIAL_PASS_INCLUDE=\\\"%s\\\"",
+		include_path,
 	)
 
 	shader_defines, _ := slice.concatenate(
-		[][]string {
-			{material_pass_vertex_include_def, material_pass_pixel_include_def},
-			material_pass.desc.additional_feature_names,
-		},
+		[][]string{{material_pass_type_include_def}, material_pass.desc.defines},
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
 
 	defer if result == false {
 		delete(shader_defines, G_RENDERER_ALLOCATORS.resource_allocator)
-		delete(material_pass_vertex_include_def, G_RENDERER_ALLOCATORS.resource_allocator)
-		delete(material_pass_pixel_include_def, G_RENDERER_ALLOCATORS.resource_allocator)
+		delete(material_pass_type_include_def, G_RENDERER_ALLOCATORS.resource_allocator)
 	}
 
+	assert(p_material_pass_type in G_MATERIAL_PASS_TYPE_SHADERS_MAPPING)
 
-	assert(p_geometry_pass_description.pass_type in G_GEOMETRY_PASS_SHADERS_MAPPING)
-
-	shader_path := common.create_name(G_GEOMETRY_PASS_SHADERS_MAPPING[p_geometry_pass_description.pass_type])
+	shader_path := common.create_name(G_MATERIAL_PASS_TYPE_SHADERS_MAPPING[p_material_pass_type])
 	vertex_shader_ref := allocate_shader_ref(shader_path)
 	pixel_shader_ref := allocate_shader_ref(shader_path)
 
@@ -310,20 +283,20 @@ material_pass_compile_geometry_pso :: proc(
 	pipeline_ref := graphics_pipeline_allocate_ref(material_pass.desc.name, 4, 0)
 	pipeline := &g_resources.graphics_pipelines[get_graphics_pipeline_idx(pipeline_ref)]
 	pipeline.desc.bind_group_layout_refs = {
-		p_geometry_pass_description.bind_group_layout_ref,
+		p_bind_group_layout_ref,
 		G_RENDERER.uniforms_bind_group_layout_ref,
 		G_RENDERER.globals_bind_group_layout_ref,
 		G_RENDERER.bindless_bind_group_layout_ref,
 	}
 
-	pipeline.desc.render_pass_ref = material_pass.desc.render_pass_ref
+	pipeline.desc.render_pass_ref = p_render_pass_ref
 	pipeline.desc.vert_shader_ref = vertex_shader_ref
 	pipeline.desc.frag_shader_ref = pixel_shader_ref
 	pipeline.desc.vertex_layout = .Mesh
 
 	graphics_pipeline_create(pipeline_ref) or_return
 
-	material_pass.geometry_pipeline_refs[geo_pass_idx] = pipeline_ref
+	material_pass.pass_type_pipeline_refs[pass_type_idx] = pipeline_ref
 
 	return true
 }
@@ -331,10 +304,10 @@ material_pass_compile_geometry_pso :: proc(
 //---------------------------------------------------------------------------//
 
 @(private)
-geometry_pass_parse_type :: proc(p_name: string) -> (GeometryPassType, bool) {
+material_pass_parse_type :: proc(p_name: string) -> (MaterialPassType, bool) {
 
-	if p_name in G_GEOMETRY_PASS_TYPE_MAPPING {
-		return G_GEOMETRY_PASS_TYPE_MAPPING[p_name], true
+	if p_name in G_MATERIAL_PASS_TYPE_MAPPING {
+		return G_MATERIAL_PASS_TYPE_MAPPING[p_name], true
 	}
 
 	return nil, false

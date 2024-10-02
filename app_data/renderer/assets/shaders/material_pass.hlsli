@@ -1,5 +1,5 @@
-#ifndef GEOMETRY_PASS_H
-#define GEOMETRY_PASS_H
+#ifndef MATERIAL_PASS_H
+#define MATERIAL_PASS_H
 
 //---------------------------------------------------------------------------//
 
@@ -43,4 +43,4 @@ struct Vertex
 
 //---------------------------------------------------------------------------//
 
-#endif // GEOMETRY_PASS
+#endif // MATERIAL_PASS_H

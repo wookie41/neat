@@ -5,12 +5,11 @@
 
 #include "scene_types.hlsli"
 #include "resources.hlsli"
-#include "geometry_pass.hlsli"
+#include "material_pass.hlsli"
 #include "packing.hlsli"
 #include "instanced_mesh.hlsli"
 
-#include MATERIAL_PASS_VERTEX_H
-#include MATERIAL_PASS_PIXEL_H
+#include MATERIAL_PASS_INCLUDE
 
 //---------------------------------------------------------------------------//
 

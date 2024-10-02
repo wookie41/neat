@@ -8,16 +8,16 @@
         <SunShadows format="Depth32SFloat" width="2048" height="2048" sampled="" />
     </Images>
     <RenderTasks>
-        <Mesh name="GBufferOpaque" renderPass="GBuffer" geometryPassType="GBuffer">
+        <Mesh name="GBufferOpaque" renderPass="GBuffer" materialPassType="GBuffer">
             <OutputImage name="GBufferColor" clear="0, 0, 0, 0"/>
             <OutputImage name="GBufferNormals" clear="0, 0, 0, 0"/>
             <OutputImage name="GBufferParameters" clear="0, 0, 0, 0"/>
             <OutputImage name="DepthBuffer" clear="0"/>
             <MaterialPass name="OpaquePBR" />
         </Mesh>
-        <Mesh name="SunShadows" renderPass="Shadows" geometryPassType="Shadows">
+        <Mesh name="SunShadows" renderPass="Shadows" materialPassType="Shadows">
             <OutputImage name="SunShadows" clear="0"/>
-            <MaterialPass name="Shadows" />
+            <MaterialPass name="OpaquePBR" />
         </Mesh>
         <FullScreen name="Lighting" shader="lighting.comp" resolution="Full">
             <InputImage name="GBufferColor"/>

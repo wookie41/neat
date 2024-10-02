@@ -18,7 +18,7 @@ MeshRenderTaskData :: struct {
 	material_pass_refs:   []MaterialPassRef,
 	render_pass_bindings: RenderPassBindings,
 	bind_group_ref:       BindGroupRef,
-	geometry_pass_type: GeometryPassType,
+	material_pass_type:   MaterialPassType,
 }
 
 //---------------------------------------------------------------------------//
@@ -76,7 +76,7 @@ mesh_render_task_init :: proc(p_render_task_functions: ^RenderTaskFunctions) {
 	p_render_task_functions.render = render
 
 
-	// Create a bind group layout for geometry pass
+	// Create a bind group layout for task
 	{
 		INTERNAL.task_bind_group_layout = allocate_bind_group_layout_ref(
 			common.create_name("Mesh"),
@@ -110,19 +110,14 @@ create_instance :: proc(
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
 
-	// Find the geometry pass name
-	geometry_pass_type_name := xml.find_attribute_val_by_key(
+	// Find the material pass type name
+	material_pass_type_name := xml.find_attribute_val_by_key(
 		p_render_task_config.doc,
 		p_render_task_config.render_task_element_id,
-		"geometryPassType",
+		"materialPassType",
 	) or_return
 
-	geometry_pass_type := geometry_pass_parse_type(geometry_pass_type_name) or_return
-
-	geo_pass_desc := GeometryPassDescription {
-		bind_group_layout_ref = INTERNAL.task_bind_group_layout,
-		pass_type             = geometry_pass_type,
-	}
+	material_pass_type := material_pass_parse_type(material_pass_type_name) or_return
 
 	render_pass_bindings: RenderPassBindings
 	render_task_setup_render_pass_bindings(p_render_task_config, &render_pass_bindings)
@@ -201,7 +196,7 @@ create_instance :: proc(
 		)
 		if name_found == false {
 			log.errorf(
-				"Error when loading Mesh render task '%s' - material pass %d has no name\n",
+				"Error when loading MeshRenderTask '%s' - material pass %d has no name\n",
 				current_material_pass_element,
 			)
 			continue
@@ -212,19 +207,27 @@ create_instance :: proc(
 
 		if material_pass_ref == InvalidMaterialPassRef {
 			log.errorf(
-				"Error when loading Mesh render task '%s' - unknown material pass '%s'\n",
+				"Error when loading MeshRendeTask '%s' - unknown material pass '%s'\n",
 				common.get_string(mesh_render_task.desc.name),
 				common.get_string(material_pass.desc.name),
 			)
 			continue
 		}
 
-		if material_pass_compile_geometry_pso(material_pass_ref, geo_pass_desc) == false {
+		if material_pass_compile_for_type(
+			   material_pass_ref,
+			   material_pass_type,
+			   render_pass_ref,
+			   INTERNAL.task_bind_group_layout,
+		   ) ==
+		   false {
+
 			log.errorf(
-				"Error when loading Mesh render task '%s' - failed to compile geometry pso for material pass '%s'\n",
+				"Error when loading MeshRenderTask '%s' - failed to compile pso for material pass type '%s'\n",
 				common.get_string(mesh_render_task.desc.name),
 				common.get_string(material_pass.desc.name),
 			)
+
 			continue
 		}
 
@@ -255,7 +258,7 @@ create_instance :: proc(
 	mesh_render_task.data_ptr = rawptr(mesh_render_task_data)
 	mesh_render_task_data.render_pass_bindings = render_pass_bindings
 	mesh_render_task_data.bind_group_ref = task_bind_group_ref
-	mesh_render_task_data.geometry_pass_type = geometry_pass_type
+	mesh_render_task_data.material_pass_type = material_pass_type
 
 	return true
 }
@@ -413,10 +416,10 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 			}
 
 			material_pass := &g_resources.material_passes[get_material_pass_idx(material_pass_ref)]
-			geometry_pipeline_ref :=
-				material_pass.geometry_pipeline_refs[transmute(u8)mesh_render_task_data.geometry_pass_type]
+			material_pass_type_idx := transmute(u8)mesh_render_task_data.material_pass_type
+			pipeline_ref := material_pass.pass_type_pipeline_refs[material_pass_type_idx]
 
-			draw_stream_set_pipeline(&draw_stream, geometry_pipeline_ref)
+			draw_stream_set_pipeline(&draw_stream, pipeline_ref)
 			draw_stream_set_bind_group(
 				&draw_stream,
 				mesh_render_task_data.bind_group_ref,
@@ -479,7 +482,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 				)
 
 				num_instances := u32(len(mesh_batch.instanced_draw_infos))
-				
+
 				draw_stream_set_draw_count(&draw_stream, mesh_batch.index_count)
 				draw_stream_set_instance_count(&draw_stream, num_instances)
 				draw_stream_set_first_instance(&draw_stream, num_instances_dispatched)
@@ -495,7 +498,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 	}
 
 	cmd_buff_ref := get_frame_cmd_buffer_ref()
-	
+
 	// Copy the mesh instanced draw info to the GPU
 	instanced_draw_infos_size_in_bytes := u32(
 		size_of(MeshInstancedDrawInfo) * len(mesh_instanced_draws_infos),

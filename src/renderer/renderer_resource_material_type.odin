@@ -2,6 +2,26 @@ package renderer
 
 //---------------------------------------------------------------------------//
 
+
+/*
+
+The material system consist of three parts:
+
+MaterialType - serves as as bridge between a MaterialInstance and a MaterialPass that dictates
+if a mesh with a particular MaterialInstance should be drawn into a MaterialPass. 
+All MaterialTypes share the same paramters set for simplicity (uber-shader approach), but how they use
+and interpert them is dictated by the MaterialPass itself.
+
+MaterialPass - grabs the (vertex/pixel) shader inputs, the material data buffer and resolves the material paramters.
+The MaterialPass is free to use all or none of the material parameters to resolve the material paramters, it 
+can also just use constant data.
+A MaterialPass itself doesn't know anything about the underyling pipeline though, as for gbuffer and shadows we'll
+have different render targets layouts and so on. That's where MaterialPassType comes in. When a MaterialPass has to be 
+renderer for a particular pass type, that's when the PSO for the MaterialPass is compiled.
+
+*/
+
+
 import "../common"
 
 import "core:c"
@@ -53,7 +73,6 @@ MaterialTypeDesc :: struct {
 
 MaterialTypeResource :: struct {
 	desc:               MaterialTypeDesc,
-	geometry_pass_psos: []GraphicsPipelineRef,
 }
 
 //---------------------------------------------------------------------------//
