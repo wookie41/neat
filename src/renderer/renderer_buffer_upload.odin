@@ -186,6 +186,8 @@ dry_request_buffer_upload :: proc(p_buffer_ref: BufferRef, p_size: u32) -> bool 
 
 request_buffer_upload :: proc(p_request: BufferUploadRequest) -> BufferUploadResponse {
 
+	assert(p_request.size > 0)
+
 	// On integrated GPUs we can just copy the data directly to the GPU memory, without any staging buffers
 	if .IntegratedGPU in G_RENDERER.gpu_device_flags {
 		return request_buffer_upload_integrated(p_request)
@@ -245,7 +247,7 @@ run_last_frame_buffer_upload_requests :: proc() {
 
 	last_frame_requests_per_buffer := make_map(
 		map[BufferRef][dynamic]BufferUploadRequest,
-		32,
+		len(INTERNAL.last_frame_requests_per_buffer),
 		get_next_frame_allocator(),
 	)
 

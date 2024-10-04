@@ -446,6 +446,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	init_mesh_instances() or_return
 
 	uniform_buffer_init()
+	init_jobs() or_return
 	load_renderer_config()
 
 	// Update the uniforms and bindless resources bind groups with appropriate resources
@@ -886,6 +887,14 @@ resolve_resolution :: #force_inline proc(p_resolution: Resolution) -> glsl.uvec2
 		return glsl.uvec2(G_RENDERER.config.render_resolution) / 4
 	}
 	return glsl.uvec2(G_RENDERER.config.render_resolution)
+}
+
+//---------------------------------------------------------------------------//
+
+@(private="file")
+init_jobs :: proc() -> bool {
+	render_instanced_mesh_job_init() or_return
+	return true
 }
 
 //---------------------------------------------------------------------------//
