@@ -12,7 +12,7 @@ import "core:mem"
 // Order of these functions has to match the order of DrawStramOp enum, as those functions are indexed
 // by those enum values, this way we can avoid if/else chain
 @(private = "file")
-g_draw_stream_ops := []proc(_: ^DrawStreamDispatch){
+g_draw_stream_ops := []proc(_: ^DrawStreamDispatch) {
 	draw_stream_dispatch_bind_pipeline,
 	draw_stream_dispatch_bind_vertex_buffer,
 	draw_stream_dispatch_bind_index_buffer,
@@ -47,8 +47,8 @@ IndexType :: enum u8 {
 //---------------------------------------------------------------------------//
 
 DrawStream :: struct {
-	// Encoded draw stream data: field id and it's values
 	name:                        common.Name,
+	// Encoded draw stream data: field id and it's values
 	encoded_draw_stream_data:    [dynamic]u32,
 	push_constants:              [dynamic]rawptr,
 	current_index_buffer_ref:    BufferRef,
@@ -71,6 +71,8 @@ DrawStreamDispatch :: struct {
 	instance_count:        u32,
 	first_instance:        u32,
 	index_buffer_ref:      BufferRef,
+	dynamic_offsets:       []u32,
+	dynamic_offsets_used:  u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -81,7 +83,7 @@ draw_stream_create :: proc(
 ) -> DrawStream {
 	draw_stream := DrawStream {
 		allocator = p_draw_stream_allocator,
-		name = name,
+		name      = name,
 	}
 
 	draw_stream.encoded_draw_stream_data = make(
@@ -106,13 +108,18 @@ draw_stream_create :: proc(
 
 //---------------------------------------------------------------------------//
 
-draw_stream_dispatch :: proc(p_cmd_buff_ref: CommandBufferRef, p_draw_stream: ^DrawStream) {
+draw_stream_dispatch :: proc(
+	p_cmd_buff_ref: CommandBufferRef,
+	p_draw_stream: ^DrawStream,
+	p_dynamic_offsets: []u32 = {},
+) {
 
 	gpu_debug_region_begin(p_cmd_buff_ref, p_draw_stream.name)
 
 	draw_stream_dispatch := DrawStreamDispatch {
-		draw_stream  = p_draw_stream,
-		cmd_buff_ref = p_cmd_buff_ref,
+		draw_stream     = p_draw_stream,
+		cmd_buff_ref    = p_cmd_buff_ref,
+		dynamic_offsets = p_dynamic_offsets,
 	}
 
 	draw_stream_dispatch.current_draw = 0
@@ -246,6 +253,11 @@ draw_stream_set_index_buffer :: proc(
 
 //---------------------------------------------------------------------------//
 
+// It's allowed to pass INVALID_OFFSET for p_dynamic_offsets. This means that dynamic offsets for this bind 
+// group will be privoded upon dispatching the draw stream. It's useful when we want to
+// dispatch the same draw stream, but with a different set of constant buffers, e.g.
+// rendering the same set of objects to a different render view
+
 draw_stream_set_bind_group :: proc(
 	p_draw_stream: ^DrawStream,
 	p_bind_group_ref: BindGroupRef,
@@ -360,6 +372,16 @@ draw_stream_dispatch_change_bind_group :: proc(p_draw_stream_dispatch: ^DrawStre
 	bind_group_ref := BindGroupRef{draw_stream_dispatch_read_next(p_draw_stream_dispatch)}
 	binding := draw_stream_dispatch_read_next(p_draw_stream_dispatch)
 	dynamic_offsets := draw_stream_dispatch_read_slice(p_draw_stream_dispatch)
+
+	// Patch placeholder dynamic offset
+	for i in 0 ..< len(dynamic_offsets) {
+		if dynamic_offsets[i] == common.INVALID_OFFSET {
+			assert(p_draw_stream_dispatch.dynamic_offsets_used < u32(len(p_draw_stream_dispatch.dynamic_offsets)))
+			dynamic_offsets[i] = p_draw_stream_dispatch.dynamic_offsets[p_draw_stream_dispatch.dynamic_offsets_used]
+			p_draw_stream_dispatch.dynamic_offsets_used += 1
+		}
+	}
+
 	bind_group_bind(
 		p_draw_stream_dispatch.cmd_buff_ref,
 		p_draw_stream_dispatch.pipeline_ref,

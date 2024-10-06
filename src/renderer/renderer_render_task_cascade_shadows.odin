@@ -3,14 +3,15 @@ package renderer
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-MeshRenderTaskData :: struct {
+CascadeShadowsRenderTaskData :: struct {
 	using render_task_common: RenderTaskCommon,
 	render_mesh_job:          RenderInstancedMeshJob,
+	num_cascades:              u32,
 }
 
 //---------------------------------------------------------------------------//
 
-mesh_render_task_init :: proc(p_render_task_functions: ^RenderTaskFunctions) {
+cascade_render_task_init :: proc(p_render_task_functions: ^RenderTaskFunctions) {
 	p_render_task_functions.create_instance = create_instance
 	p_render_task_functions.destroy_instance = destroy_instance
 	p_render_task_functions.begin_frame = begin_frame
@@ -27,46 +28,52 @@ create_instance :: proc(
 ) -> (
 	res: bool,
 ) {
-	mesh_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+
+	cascade_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
 
 	render_mesh_job := render_instanced_mesh_job_create() or_return
 
-	mesh_render_task_data := new(MeshRenderTaskData, G_RENDERER_ALLOCATORS.resource_allocator)
-	mesh_render_task.data_ptr = rawptr(mesh_render_task_data)
-	mesh_render_task_data.render_mesh_job = render_mesh_job
+	cascade_render_task_data := new(
+		CascadeShadowsRenderTaskData,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
+	cascade_render_task_data.num_cascades = 5
+	cascade_render_task.data_ptr = rawptr(cascade_render_task_data)
+	cascade_render_task_data.render_mesh_job = render_mesh_job
 
 	defer if res == false {
-		free(mesh_render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
+		free(cascade_render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
 	}
 
 	return render_task_common_init(
-		p_render_task_config, 
-		render_mesh_job.bind_group_ref, 
-		&mesh_render_task_data.render_task_common)
+		p_render_task_config,
+		render_mesh_job.bind_group_ref,
+		&cascade_render_task_data.render_task_common,
+	)
 }
 
 //---------------------------------------------------------------------------//
 
 @(private = "file")
 destroy_instance :: proc(p_render_task_ref: RenderTaskRef) {
-	mesh_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
-	mesh_render_task_data := (^MeshRenderTaskData)(mesh_render_task.data_ptr)
-	if mesh_render_task_data != nil {
-		delete(mesh_render_task_data.material_pass_refs, G_RENDERER_ALLOCATORS.resource_allocator)
+	cascade_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	cascade_render_task_data := (^CascadeShadowsRenderTaskData)(cascade_render_task.data_ptr)
+	if cascade_render_task_data != nil {
+		delete(cascade_render_task_data.material_pass_refs, G_RENDERER_ALLOCATORS.resource_allocator)
 	}
-	if mesh_render_task_data.render_pass_bindings.image_inputs != nil {
+	if cascade_render_task_data.render_pass_bindings.image_inputs != nil {
 		delete(
-			mesh_render_task_data.render_pass_bindings.image_inputs,
+			cascade_render_task_data.render_pass_bindings.image_inputs,
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
 	}
-	if mesh_render_task_data.render_pass_bindings.image_outputs != nil {
+	if cascade_render_task_data.render_pass_bindings.image_outputs != nil {
 		delete(
-			mesh_render_task_data.render_pass_bindings.image_outputs,
+			cascade_render_task_data.render_pass_bindings.image_outputs,
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
 	}
-	free(mesh_render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
+	free(cascade_render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
 }
 
 //---------------------------------------------------------------------------//
@@ -86,19 +93,19 @@ end_frame :: proc(p_render_task_ref: RenderTaskRef) {
 @(private = "file")
 render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 
-	mesh_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
-	mesh_render_task_data := (^MeshRenderTaskData)(mesh_render_task.data_ptr)
+	cascade_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	cascade_render_task_data := (^CascadeShadowsRenderTaskData)(cascade_render_task.data_ptr)
 
 	camera_render_view := render_camera_create_render_view(g_render_camera)
 
 	render_instanced_mesh_job_run(
-		mesh_render_task.desc.name,
-		mesh_render_task_data.render_mesh_job,
-		mesh_render_task_data.render_pass_ref,
+		cascade_render_task.desc.name,
+		cascade_render_task_data.render_mesh_job,
+		cascade_render_task_data.render_pass_ref,
 		{camera_render_view},
-		{mesh_render_task_data.render_pass_bindings},
-		mesh_render_task_data.material_pass_refs,
-		mesh_render_task_data.material_pass_type,
+		{cascade_render_task_data.render_pass_bindings},
+		cascade_render_task_data.material_pass_refs,
+		cascade_render_task_data.material_pass_type,
 	)
 }
 

@@ -163,9 +163,13 @@ render_instanced_mesh_job_run :: proc(
 	p_debug_name: common.Name, 
 	p_job_data: RenderInstancedMeshJob,
 	p_render_pass_ref: RenderPassRef,
-	p_render_pass_bindings: ^RenderPassBindings,
+	p_render_views: []RenderView,
+	p_render_pass_bindings: []RenderPassBindings,
 	p_material_pass_refs: []MaterialPassRef, 
 	p_material_pass_type: MaterialPassType) {
+
+		assert(len(p_render_pass_bindings) == len(p_render_views))
+
 
 	temp_arena := common.Arena{}
 	common.temp_arena_init(&temp_arena, common.MEGABYTE * 16)
@@ -250,16 +254,12 @@ render_instanced_mesh_job_run :: proc(
 
 	mesh_task_buffer_offsets := []u32{MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE * get_frame_idx()}
 
-	uniform_offsets := []u32 {
-		g_uniform_buffers.frame_data_offset,
-		g_uniform_buffers.view_data_offset,
-	}
-
 	// Aggregate instanced draw infos so we can issue a single copy and create the draw stream
 	mesh_instanced_draws_infos := make([dynamic]MeshInstancedDrawInfo, temp_arena.allocator)
 	num_instances_dispatched: u32 = 0
 
 	draw_stream := draw_stream_create(temp_arena.allocator, p_debug_name)
+	material_pass_type_idx := transmute(u8)p_material_pass_type
 
 	for material_type_ref, material_mesh_batches in mesh_batches_per_material_type {
 		material_type := &g_resources.material_types[get_material_type_idx(material_type_ref)]
@@ -276,7 +276,6 @@ render_instanced_mesh_job_run :: proc(
 			}
 
 			material_pass := &g_resources.material_passes[get_material_pass_idx(material_pass_ref)]
-			material_pass_type_idx := transmute(u8)p_material_pass_type
 			pipeline_ref := material_pass.pass_type_pipeline_refs[material_pass_type_idx]
 
 			draw_stream_set_pipeline(&draw_stream, pipeline_ref)
@@ -286,12 +285,15 @@ render_instanced_mesh_job_run :: proc(
 				0,
 				mesh_task_buffer_offsets,
 			)
+
+			// Technically, these bind groups can be bound only once, as all material passes of the same material pass type share the same layout
 			draw_stream_set_bind_group(
 				&draw_stream,
 				G_RENDERER.uniforms_bind_group_ref,
 				1,
-				uniform_offsets,
+				{common.INVALID_OFFSET, common.INVALID_OFFSET},
 			)
+
 			draw_stream_set_bind_group(&draw_stream, G_RENDERER.globals_bind_group_ref, 2, nil)
 			draw_stream_set_bind_group(&draw_stream, G_RENDERER.bindless_bind_group_ref, 3, nil)
 
@@ -379,13 +381,25 @@ render_instanced_mesh_job_run :: proc(
 		return
 	}
 
-	// Dispatch the draw stream
-	render_task_begin_render_pass(
-		p_render_pass_ref,
-		p_render_pass_bindings,
-	)
+	// Dispatch the draw stream for each view
+	for i in 0 ..< len(p_render_views) {
 
-	draw_stream_dispatch(cmd_buff_ref, &draw_stream)
+		render_view := p_render_views[i]
+		bindings := p_render_pass_bindings[i]
 
-	end_render_pass(p_render_pass_ref, cmd_buff_ref)
+		uniform_offsets := []u32 {
+			g_uniform_buffers.frame_data_offset,
+			uniform_buffer_create_view_data(render_view),
+		}
+
+		render_task_begin_render_pass(
+			p_render_pass_ref,
+			bindings,
+		)
+	
+		draw_stream_dispatch(cmd_buff_ref, &draw_stream, uniform_offsets)
+		draw_stream_reset(&draw_stream)
+	
+		end_render_pass(p_render_pass_ref, cmd_buff_ref)
+	}
 }

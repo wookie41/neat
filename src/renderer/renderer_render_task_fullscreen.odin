@@ -335,22 +335,24 @@ end_frame :: proc(p_render_task_ref: RenderTaskRef) {
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
+render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 
 	fullscreen_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
 	fullscreen_render_task_data := (^FullScreenRenderTaskData)(fullscreen_render_task.data_ptr)
 
 	use_compute := fullscreen_render_task_data.compute_command_ref != InvalidComputeCommandRef
 
+	render_view := render_camera_create_render_view(g_render_camera)
+
 	global_uniform_offsets := []u32 {
 		g_uniform_buffers.frame_data_offset,
-		g_uniform_buffers.view_data_offset,
+		uniform_buffer_create_view_data(render_view),
 	}
 
 	// Perform resource transitions
 	transition_resources(
 		get_frame_cmd_buffer_ref(),
-		&fullscreen_render_task_data.render_pass_bindings,
+		fullscreen_render_task_data.render_pass_bindings,
 		.Compute if use_compute else .Graphics,
 	)
 
@@ -393,7 +395,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 
 	render_task_begin_render_pass(
 		fullscreen_render_task_data.render_pass_ref,
-		&fullscreen_render_task_data.render_pass_bindings,
+		fullscreen_render_task_data.render_pass_bindings,
 	)
 
 	draw_command_execute(

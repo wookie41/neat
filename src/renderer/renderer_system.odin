@@ -192,13 +192,7 @@ RenderTaskEntry :: struct {
 
 //---------------------------------------------------------------------------//
 
-g_render_camera: struct {
-	position:    glsl.vec3,
-	forward:     glsl.vec3,
-	up:          glsl.vec3,
-	fov_degrees: f32,
-	near_plane:  f32,
-}
+g_render_camera := RenderCamera {}
 
 //---------------------------------------------------------------------------//
 
@@ -465,7 +459,7 @@ init :: proc(p_options: InitOptions) -> bool {
 					},
 					{
 						buffer_ref = g_uniform_buffers.transient_buffer.buffer_ref,
-						size = size_of(g_per_view_data),
+						size = size_of(PerViewData),
 					},
 				},
 			},

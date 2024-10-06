@@ -22,7 +22,7 @@ TRANSIENT_UNIFORM_BUFFER_SIZE :: common.KILOBYTE * 8
 //---------------------------------------------------------------------------//
 
 @(private)
-g_per_view_data: struct #packed {
+PerViewData :: struct #packed {
 	view:          glsl.mat4x4,
 	proj:          glsl.mat4x4,
 	inv_view_proj: glsl.mat4x4,
@@ -43,7 +43,6 @@ g_per_frame_data: struct #packed {
 g_uniform_buffers: struct {
 	transient_buffer: DynamicUniformBuffer,
 	frame_data_offset: u32,
-	view_data_offset: u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -77,7 +76,6 @@ uniform_buffers_update :: proc(p_dt: f32) {
 	INTERNAL.current_transient_buffer_offset = 0
 	
 	update_per_frame_data(p_dt)
-	update_per_view_data(p_dt)
 }
 
 //---------------------------------------------------------------------------//
@@ -85,6 +83,7 @@ uniform_buffers_update :: proc(p_dt: f32) {
 
 // Creates a transient buffer that can be used to send constant data to a render task
 // Transient buffer are valid only within the frame boundary
+
 uniform_buffer_create_transient_buffer :: proc(p_data: ^$T) -> u32 {
 
 	data_size := size_of(p_data^)
@@ -143,23 +142,18 @@ update_per_frame_data :: proc(p_dt: f32) {
 
 //---------------------------------------------------------------------------//
 
-@(private = "file")
-update_per_view_data :: proc(p_dt: f32) {
-	g_per_view_data.view = glsl.mat4LookAt(
-		g_render_camera.position,
-		g_render_camera.position + g_render_camera.forward,
-		g_render_camera.up,
-	)
-	g_per_view_data.proj = common.mat4PerspectiveInfiniteReverse(
-		glsl.radians_f32(g_render_camera.fov_degrees),
-		f32(G_RENDERER.config.render_resolution.x) / f32(G_RENDERER.config.render_resolution.y),
-		g_render_camera.near_plane,
-	)
-	g_per_view_data.inv_view_proj = glsl.inverse(g_per_view_data.view * g_per_view_data.proj)
-	g_per_view_data.camera_pos_ws = g_render_camera.position
-	g_per_view_data.near_plane = g_render_camera.near_plane
+@(private)
+uniform_buffer_create_view_data :: proc(p_view: RenderView) -> u32 {
 
-	g_uniform_buffers.view_data_offset = uniform_buffer_create_transient_buffer(&g_per_view_data)
+	view_data := PerViewData{}
+
+	view_data.view = p_view.view
+	view_data.proj = p_view.projection
+	view_data.inv_view_proj = glsl.inverse(view_data.view * view_data.proj)
+	view_data.camera_pos_ws = p_view.position
+	view_data.near_plane = p_view.near_plane
+
+	return uniform_buffer_create_transient_buffer(&view_data)
 }
 
 //---------------------------------------------------------------------------//

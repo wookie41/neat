@@ -348,7 +348,7 @@ render_task_setup_render_pass_bindings :: proc(
 
 render_task_begin_render_pass :: proc(
 	p_render_pass_ref: RenderPassRef,
-	p_render_pass_bindings: ^RenderPassBindings,
+	p_render_pass_bindings: RenderPassBindings,
 ) {
 
 	render_pass_begin_info := RenderPassBeginInfo {

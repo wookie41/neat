@@ -121,7 +121,7 @@ RenderPassBindings :: struct {
 //---------------------------------------------------------------------------//
 
 RenderPassBeginInfo :: struct {
-	bindings: ^RenderPassBindings,
+	bindings: RenderPassBindings,
 }
 
 //---------------------------------------------------------------------------//

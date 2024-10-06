@@ -1,4 +1,15 @@
-TODO:
+BIG GOALS:
+- task based threading system for MT command recording
+- atmospheric scattering (and direct sun light from the scattering LUT)
+- autoexposure
+- meshlets
+- raytraced GI
+- TAA
+- volumetrics
+- hair
+
+
+BACKLOGS:
 - anisotrophy
 - use smaller presision for vertex attributes
 - create a helper function for binding mesh vertex attributes
