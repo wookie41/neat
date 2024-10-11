@@ -2,6 +2,7 @@ package common
 
 //---------------------------------------------------------------------------//
 
+import "base:runtime"
 import "core:container/bit_array"
 import "core:encoding/json"
 import "core:encoding/xml"
@@ -9,14 +10,13 @@ import "core:fmt"
 import "core:hash"
 import "core:mem"
 import "core:os"
-import "base:runtime"
 import "core:slice"
 import "core:strconv"
 import "core:strings"
 
 //---------------------------------------------------------------------------//
 
-INVALID_OFFSET : u32 : max(u32)
+INVALID_OFFSET: u32 : max(u32)
 
 //---------------------------------------------------------------------------//
 
@@ -234,6 +234,24 @@ xml_get_u16_attribute :: proc(
 
 //---------------------------------------------------------------------------//
 
+xml_get_f32_attribute :: proc(
+	p_doc: ^xml.Document,
+	p_element_id: u32,
+	p_attr_name: string,
+) -> (
+	f32,
+	bool,
+) {
+	str, found := xml.find_attribute_val_by_key(p_doc, p_element_id, p_attr_name)
+	if found == false {
+		return 0, false
+	}
+
+	return strconv.parse_f32(str)
+}
+
+//---------------------------------------------------------------------------//
+
 // Converts slice into a dynamic array without cloning or allocating memory
 @(require_results)
 into_dynamic :: proc(a: $T/[]$E) -> [dynamic]E {
@@ -248,4 +266,3 @@ into_dynamic :: proc(a: $T/[]$E) -> [dynamic]E {
 }
 
 //---------------------------------------------------------------------------//
-

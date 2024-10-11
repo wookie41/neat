@@ -16,7 +16,7 @@ INTERNAL: struct {
 
 //---------------------------------------------------------------------------//
 
-@(private="file")
+@(private = "file")
 TRANSIENT_UNIFORM_BUFFER_SIZE :: common.KILOBYTE * 8
 
 //---------------------------------------------------------------------------//
@@ -27,28 +27,28 @@ PerViewData :: struct #packed {
 	proj:          glsl.mat4x4,
 	inv_view_proj: glsl.mat4x4,
 	camera_pos_ws: glsl.vec3,
-	near_plane:    f32,
+	_padding:      f32,
 }
 
 //---------------------------------------------------------------------------//
 
 @(private)
 g_per_frame_data: struct #packed {
-	sun:      DirectionalLight,
+	sun: DirectionalLight,
 }
 
 //---------------------------------------------------------------------------//
 
 @(private)
 g_uniform_buffers: struct {
-	transient_buffer: DynamicUniformBuffer,
+	transient_buffer:  DynamicUniformBuffer,
 	frame_data_offset: u32,
 }
 
 //---------------------------------------------------------------------------//
 
 DynamicUniformBuffer :: struct {
-	buffer_ref: BufferRef,
+	buffer_ref:   BufferRef,
 	aligned_size: u32,
 }
 
@@ -57,8 +57,9 @@ DynamicUniformBuffer :: struct {
 @(private)
 uniform_buffer_init :: proc() {
 	g_uniform_buffers.transient_buffer = uniform_buffer_create_dynamic(
-		common.create_name("TransientBuffer"), 
-		TRANSIENT_UNIFORM_BUFFER_SIZE)
+		common.create_name("TransientBuffer"),
+		TRANSIENT_UNIFORM_BUFFER_SIZE,
+	)
 }
 
 //---------------------------------------------------------------------------//
@@ -74,7 +75,7 @@ uniform_buffer_create_dynamic :: proc {
 uniform_buffers_update :: proc(p_dt: f32) {
 	// Reset the transient buffer
 	INTERNAL.current_transient_buffer_offset = 0
-	
+
 	update_per_frame_data(p_dt)
 }
 
@@ -115,14 +116,14 @@ uniform_buffer_ensure_alignment :: proc {
 
 //---------------------------------------------------------------------------//
 
-@(private="file")
+@(private = "file")
 uniform_buffer_ensure_alignment_by_type :: proc($T: typeid) -> u32 {
 	return uniform_buffer_ensure_alignment_by_size(size_of(T))
 }
 
 //---------------------------------------------------------------------------//
 
-@(private="file")
+@(private = "file")
 uniform_buffer_ensure_alignment_by_size :: proc(p_size: u32) -> u32 {
 	reminder := p_size % G_RENDERER.min_uniform_buffer_alignment
 	return p_size + G_RENDERER.min_uniform_buffer_alignment - reminder
@@ -133,7 +134,7 @@ uniform_buffer_ensure_alignment_by_size :: proc(p_size: u32) -> u32 {
 @(private = "file")
 update_per_frame_data :: proc(p_dt: f32) {
 	g_per_frame_data.sun = DirectionalLight {
-		color = {1, 1, 1},
+		color     = {1, 1, 1},
 		direction = {0, -1, 0},
 	}
 
@@ -151,15 +152,17 @@ uniform_buffer_create_view_data :: proc(p_view: RenderView) -> u32 {
 	view_data.proj = p_view.projection
 	view_data.inv_view_proj = glsl.inverse(view_data.view * view_data.proj)
 	view_data.camera_pos_ws = p_view.position
-	view_data.near_plane = p_view.near_plane
 
 	return uniform_buffer_create_transient_buffer(&view_data)
 }
 
 //---------------------------------------------------------------------------//
 
-@(private="file")
-uniform_buffer_create_dynamic_by_size :: proc(p_name: common.Name, p_size: u32) -> DynamicUniformBuffer {
+@(private = "file")
+uniform_buffer_create_dynamic_by_size :: proc(
+	p_name: common.Name,
+	p_size: u32,
+) -> DynamicUniformBuffer {
 	buffer_ref := allocate_buffer_ref(p_name)
 	buffer := &g_resources.buffers[get_buffer_idx(buffer_ref)]
 
@@ -170,22 +173,19 @@ uniform_buffer_create_dynamic_by_size :: proc(p_name: common.Name, p_size: u32) 
 	buffer.desc.usage = {.DynamicUniformBuffer}
 
 	if create_buffer(buffer_ref) == false {
-		return DynamicUniformBuffer {
-			buffer_ref = InvalidBufferRef,
-			aligned_size = 0,
-		}
+		return DynamicUniformBuffer{buffer_ref = InvalidBufferRef, aligned_size = 0}
 	}
 
-	return DynamicUniformBuffer {
-		buffer_ref = buffer_ref,
-		aligned_size = aligned_size,
-	}
+	return DynamicUniformBuffer{buffer_ref = buffer_ref, aligned_size = aligned_size}
 }
 
 //---------------------------------------------------------------------------//
 
-@(private="file")
-uniform_buffer_create_dynamic_by_type :: proc(p_name: common.Name, $T: typeid) -> DynamicUniformBuffer {
+@(private = "file")
+uniform_buffer_create_dynamic_by_type :: proc(
+	p_name: common.Name,
+	$T: typeid,
+) -> DynamicUniformBuffer {
 	return uniform_buffer_create_dynamic(p_name, size_of(T))
 }
 

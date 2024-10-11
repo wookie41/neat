@@ -3,14 +3,14 @@ package renderer
 //---------------------------------------------------------------------------//
 
 import "../common"
-import "core:slice"
-import "core:log"
 import "core:hash"
+import "core:log"
 import "core:math/linalg/glsl"
+import "core:slice"
 
 //---------------------------------------------------------------------------//
 
-@(private="file")
+@(private = "file")
 MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE :: 2 * common.MEGABYTE
 
 //---------------------------------------------------------------------------//
@@ -160,16 +160,16 @@ render_instanced_mesh_job_create :: proc() -> (mesh_job: RenderInstancedMeshJob,
 
 @(private)
 render_instanced_mesh_job_run :: proc(
-	p_debug_name: common.Name, 
+	p_debug_name: common.Name,
 	p_job_data: RenderInstancedMeshJob,
 	p_render_pass_ref: RenderPassRef,
 	p_render_views: []RenderView,
-	p_render_pass_bindings: []RenderPassBindings,
-	p_material_pass_refs: []MaterialPassRef, 
-	p_material_pass_type: MaterialPassType) {
+	p_render_pass_bindings_per_view: []RenderPassBindings,
+	p_material_pass_refs: []MaterialPassRef,
+	p_material_pass_type: MaterialPassType,
+) {
 
-		assert(len(p_render_pass_bindings) == len(p_render_views))
-
+	assert(len(p_render_pass_bindings_per_view) == len(p_render_views))
 
 	temp_arena := common.Arena{}
 	common.temp_arena_init(&temp_arena, common.MEGABYTE * 16)
@@ -385,21 +385,18 @@ render_instanced_mesh_job_run :: proc(
 	for i in 0 ..< len(p_render_views) {
 
 		render_view := p_render_views[i]
-		bindings := p_render_pass_bindings[i]
+		bindings := p_render_pass_bindings_per_view[i]
 
 		uniform_offsets := []u32 {
 			g_uniform_buffers.frame_data_offset,
 			uniform_buffer_create_view_data(render_view),
 		}
 
-		render_task_begin_render_pass(
-			p_render_pass_ref,
-			bindings,
-		)
-	
+		render_task_begin_render_pass(p_render_pass_ref, bindings)
+
 		draw_stream_dispatch(cmd_buff_ref, &draw_stream, uniform_offsets)
 		draw_stream_reset(&draw_stream)
-	
+
 		end_render_pass(p_render_pass_ref, cmd_buff_ref)
 	}
 }

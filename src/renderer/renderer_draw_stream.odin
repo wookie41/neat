@@ -4,6 +4,7 @@ package renderer
 
 import "../common"
 import "core:mem"
+import "core:slice"
 
 //---------------------------------------------------------------------------//
 
@@ -73,6 +74,7 @@ DrawStreamDispatch :: struct {
 	index_buffer_ref:      BufferRef,
 	dynamic_offsets:       []u32,
 	dynamic_offsets_used:  u32,
+	temp_allocator:        mem.Allocator,
 }
 
 //---------------------------------------------------------------------------//
@@ -116,10 +118,15 @@ draw_stream_dispatch :: proc(
 
 	gpu_debug_region_begin(p_cmd_buff_ref, p_draw_stream.name)
 
+	temp_arena := common.Arena{}
+	common.temp_arena_init(&temp_arena)
+	defer common.arena_delete(temp_arena)
+
 	draw_stream_dispatch := DrawStreamDispatch {
 		draw_stream     = p_draw_stream,
 		cmd_buff_ref    = p_cmd_buff_ref,
 		dynamic_offsets = p_dynamic_offsets,
+		temp_allocator  = temp_arena.allocator,
 	}
 
 	draw_stream_dispatch.current_draw = 0
@@ -369,15 +376,25 @@ draw_stream_dispatch_set_first_instance :: proc(p_draw_stream_dispatch: ^DrawStr
 
 @(private = "file")
 draw_stream_dispatch_change_bind_group :: proc(p_draw_stream_dispatch: ^DrawStreamDispatch) {
+
 	bind_group_ref := BindGroupRef{draw_stream_dispatch_read_next(p_draw_stream_dispatch)}
 	binding := draw_stream_dispatch_read_next(p_draw_stream_dispatch)
-	dynamic_offsets := draw_stream_dispatch_read_slice(p_draw_stream_dispatch)
+
+	// Make a copy of this slice for patching of the dynamic offsets
+	dynamic_offsets := slice.clone(
+		draw_stream_dispatch_read_slice(p_draw_stream_dispatch),
+		p_draw_stream_dispatch.temp_allocator,
+	)
 
 	// Patch placeholder dynamic offset
 	for i in 0 ..< len(dynamic_offsets) {
 		if dynamic_offsets[i] == common.INVALID_OFFSET {
-			assert(p_draw_stream_dispatch.dynamic_offsets_used < u32(len(p_draw_stream_dispatch.dynamic_offsets)))
-			dynamic_offsets[i] = p_draw_stream_dispatch.dynamic_offsets[p_draw_stream_dispatch.dynamic_offsets_used]
+			assert(
+				p_draw_stream_dispatch.dynamic_offsets_used <
+				u32(len(p_draw_stream_dispatch.dynamic_offsets)),
+			)
+			dynamic_offsets[i] =
+				p_draw_stream_dispatch.dynamic_offsets[p_draw_stream_dispatch.dynamic_offsets_used]
 			p_draw_stream_dispatch.dynamic_offsets_used += 1
 		}
 	}

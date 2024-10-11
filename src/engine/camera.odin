@@ -3,6 +3,7 @@ package engine
 //---------------------------------------------------------------------------//
 
 import "core:math/linalg/glsl"
+import "../common"
 
 //---------------------------------------------------------------------------//
 
@@ -14,7 +15,7 @@ Camera: struct {
 	forward:              glsl.vec3,
 	up:                   glsl.vec3,
 	right:                glsl.vec3,
-	fov:                  f32,
+	fov:                  common.deg,
 	speed:                f32,
 	rotation_sensitivity: f32,
 	near_plane:           f32,

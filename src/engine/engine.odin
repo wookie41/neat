@@ -184,7 +184,7 @@ run :: proc() {
 		renderer.g_render_camera.position = Camera.position
 		renderer.g_render_camera.forward = Camera.forward
 		renderer.g_render_camera.up = Camera.up
-		renderer.g_render_camera.fov_degrees = Camera.fov
+		renderer.g_render_camera.fov = Camera.fov
 		renderer.g_render_camera.near_plane = Camera.near_plane
 
 		renderer.update(target_dt)

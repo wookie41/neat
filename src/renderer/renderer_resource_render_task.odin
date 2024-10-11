@@ -27,6 +27,7 @@ RenderTaskRef :: common.Ref(RenderTaskResource)
 RenderTaskType :: enum {
 	Mesh,
 	FullScreen,
+	CascadeShadows,
 }
 
 //---------------------------------------------------------------------------//
@@ -40,8 +41,9 @@ INTERNAL: struct {
 
 @(private = "file")
 G_RENDER_TASK_TYPE_MAPPING := map[string]RenderTaskType {
-	"Mesh" = .Mesh,
-	"FullScreen" = .FullScreen,
+	"Mesh"           = .Mesh,
+	"CascadeShadows" = .CascadeShadows,
+	"FullScreen"     = .FullScreen,
 }
 
 //---------------------------------------------------------------------------//
@@ -120,6 +122,13 @@ init_render_tasks :: proc() -> bool {
 		render_task_fn: RenderTaskFunctions
 		fullscreen_render_task_init(&render_task_fn)
 		INTERNAL.render_task_functions[.FullScreen] = render_task_fn
+	}
+
+	// Init cascade shadows render task
+	{
+		render_task_fn: RenderTaskFunctions
+		cascade_shadows_render_task_init(&render_task_fn)
+		INTERNAL.render_task_functions[.CascadeShadows] = render_task_fn
 	}
 
 	return true
@@ -263,7 +272,7 @@ render_task_setup_render_pass_bindings :: proc(
 
 		append(
 			&input_images,
-			RenderPassImageInput{
+			RenderPassImageInput {
 				flags = input_flags,
 				image_ref = image_ref,
 				mip = mip if mip_found else 0,
@@ -291,7 +300,7 @@ render_task_setup_render_pass_bindings :: proc(
 		if name_found == false {
 			continue
 		}
-		
+
 
 		image_ref := find_image(image_name)
 		if image_ref == InvalidImageRef {

@@ -15,10 +15,10 @@
             <OutputImage name="DepthBuffer" clear="0"/>
             <MaterialPass name="OpaquePBR" />
         </Mesh>
-        <Mesh name="SunShadows" renderPass="Shadows" materialPassType="Shadows">
+        <CascadeShadows name="SunShadows" renderPass="Shadows" materialPassType="Shadows" numCascades="5" resolution="2048" maxShadowsDistance="10000">
             <OutputImage name="SunShadows" clear="0"/>
             <MaterialPass name="OpaquePBR" />
-        </Mesh>
+        </CascadeShadows>
         <FullScreen name="Lighting" shader="lighting.comp" resolution="Full">
             <InputImage name="GBufferColor"/>
             <InputImage name="GBufferNormals"/>

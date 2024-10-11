@@ -91,12 +91,15 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 
 	camera_render_view := render_camera_create_render_view(g_render_camera)
 
+	render_views := []RenderView {camera_render_view}
+	bindings_per_view := []RenderPassBindings{mesh_render_task_data.render_pass_bindings}
+
 	render_instanced_mesh_job_run(
 		mesh_render_task.desc.name,
 		mesh_render_task_data.render_mesh_job,
 		mesh_render_task_data.render_pass_ref,
-		{camera_render_view},
-		{mesh_render_task_data.render_pass_bindings},
+		render_views,
+		bindings_per_view,
 		mesh_render_task_data.material_pass_refs,
 		mesh_render_task_data.material_pass_type,
 	)

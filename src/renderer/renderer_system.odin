@@ -486,7 +486,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	g_render_camera.forward = {0, 0, -1}
 	g_render_camera.up = {0, 1, 0}
 	g_render_camera.near_plane = 0.1
-	g_render_camera.fov_degrees = 45.0
+	g_render_camera.fov = 45.0
 
 	ui_init() or_return
 

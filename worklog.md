@@ -10,6 +10,7 @@ BIG GOALS:
 
 
 BACKLOGS:
+- take include files into account when reloading shaders
 - anisotrophy
 - use smaller presision for vertex attributes
 - create a helper function for binding mesh vertex attributes
