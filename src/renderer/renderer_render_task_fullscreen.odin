@@ -117,7 +117,7 @@ create_instance :: proc(
 	} else if strings.has_suffix(shader_name, ".pix") {
 		shader_stages += {.Pixel}
 
-		// Create a render pass based on output imagess
+		// Create a render pass based on output images
 		fullscreen_render_task_data.render_pass_ref = allocate_render_pass_ref(
 			render_task_name,
 			len(render_pass_bindings.image_outputs),
@@ -125,7 +125,7 @@ create_instance :: proc(
 		render_pass := &g_resources.render_passes[get_render_pass_idx(fullscreen_render_task_data.render_pass_ref)]
 		render_pass.desc.depth_stencil_type = .None
 		render_pass.desc.primitive_type = .TriangleList
-		render_pass.desc.resterizer_type = .Fill
+		render_pass.desc.resterizer_type = .Default
 		render_pass.desc.multisampling_type = ._1
 		render_pass.desc.resolution = resolve_resolution(fullscreen_render_task_data.resolution)
 
@@ -180,9 +180,9 @@ create_instance :: proc(
 			bind_group_layout.desc.bindings[binding_index].shader_stages = shader_stages
 			bind_group_layout.desc.bindings[binding_index].type =
 				.StorageImage if is_using_compute else .Image
-	
+
 			binding_index += 1
-		}	
+		}
 	}
 
 	if create_bind_group_layout(INTERNAL.fullscreen_bind_group_layout_ref) == false {
@@ -203,35 +203,49 @@ create_instance :: proc(
 	fullscreen_bind_group_update := BindGroupUpdate {
 		images = make(
 			[]BindGroupImageBinding,
-			len(render_pass_bindings.image_inputs) + 
+			len(render_pass_bindings.image_inputs) +
 			(len(render_pass_bindings.image_outputs) if is_using_compute else 0),
 			temp_arena.allocator,
 		),
 	}
 
-	for input_image, i in render_pass_bindings.image_inputs {
-		fullscreen_bind_group_update.images[i] = BindGroupImageBinding {
-			image_ref = input_image.image_ref,
-			mip       = input_image.mip,
-		}
-	}
-
-	if is_using_compute {
-		for output_image, i in render_pass_bindings.image_outputs {
-			fullscreen_bind_group_update.images[len(render_pass_bindings.image_inputs) + i] =
-				BindGroupImageBinding {
-					image_ref = output_image.image_ref,
-					mip       = output_image.mip,
-				}
-		}	
-	}
-
 	if is_using_compute {
 		fullscreen_bind_group_update.buffers = {
 			{
+				binding = 0,
 				buffer_ref = g_uniform_buffers.transient_buffer.buffer_ref,
 				size = size_of(FullScreenTaskUniformData),
 			},
+		}
+	}
+
+	for input_image, i in render_pass_bindings.image_inputs {
+		fullscreen_bind_group_update.images[i] = BindGroupImageBinding {
+			binding     = u32(i + 1 if is_using_compute else i),
+			image_ref   = input_image.image_ref,
+			base_mip    = input_image.base_mip,
+			base_array  = input_image.base_array_layer,
+			mip_count   = input_image.mip_count,
+			layer_count = input_image.array_layer_count,
+		}
+
+		if input_image.base_mip > 0 || input_image.base_array_layer > 0 {
+			fullscreen_bind_group_update.images[i].flags += {.AddressSubresource}
+		}
+	}
+
+	num_input_images := len(render_pass_bindings.image_inputs)
+
+	if is_using_compute {
+		for output_image, i in render_pass_bindings.image_outputs {
+			fullscreen_bind_group_update.images[num_input_images + i] = BindGroupImageBinding {
+				binding   = u32(num_input_images + i + 1),
+				image_ref = output_image.image_ref,
+				base_mip    = output_image.mip,
+				base_array  = output_image.array_layer,
+				mip_count   = 1,
+				layer_count = 1,
+			}
 		}
 	}
 
@@ -350,8 +364,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 	}
 
 	// Perform resource transitions
-	transition_resources(
-		get_frame_cmd_buffer_ref(),
+	transition_render_pass_resources(
 		fullscreen_render_task_data.render_pass_bindings,
 		.Compute if use_compute else .Graphics,
 	)

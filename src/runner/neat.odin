@@ -48,7 +48,7 @@ main :: proc() {
 
 	mesh_assets := []^engine.MeshAsset{mesh_asset1, mesh_asset2, mesh_asset3}
 
-	mesh_scales := []f32{20, 10, 0.025}
+	mesh_scales := []f32{20, 10, 0.05}
 
 	for i in 0 ..< 5 {
 		for j in 0 ..< 5 {

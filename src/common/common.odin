@@ -192,18 +192,19 @@ xml_get_u32_attribute :: proc(
 	p_doc: ^xml.Document,
 	p_element_id: u32,
 	p_attr_name: string,
+	p_default: u32 = 0,
 ) -> (
 	u32,
 	bool,
 ) {
 	str, found := xml.find_attribute_val_by_key(p_doc, p_element_id, p_attr_name)
 	if found == false {
-		return 0, false
+		return p_default, false
 	}
 
 	val, success := strconv.parse_uint(str, 10)
 	if success == false {
-		return 0, false
+		return p_default, false
 	}
 
 	return u32(val), true

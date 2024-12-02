@@ -22,16 +22,32 @@ InvalidBindGroupRef := BindGroupRef {
 
 //---------------------------------------------------------------------------//
 
+BindGroupImageBindingFlagBits :: enum u8 {
+	AddressSubresource,
+}
+
+BindGroupImageBindingFlags :: distinct bit_set[BindGroupImageBindingFlagBits;u8]
+
+//---------------------------------------------------------------------------//
+
 BindGroupImageBinding :: struct {
-	image_ref: ImageRef,
-	mip:       u16,
+	binding:     u32,
+	image_ref:   ImageRef,
+	base_mip:    u32,
+	base_array:  u32,
+	mip_count:   u32,
+	layer_count: u32,
+	array_element: u32,
+	flags:       BindGroupImageBindingFlags,
 }
 //---------------------------------------------------------------------------//
 
 BindGroupBufferBinding :: struct {
-	buffer_ref: BufferRef,
-	offset:     u32,
-	size:       u32,
+	binding:     u32,
+	buffer_ref:  BufferRef,
+	offset:      u32,
+	size:        u32,
+	array_index: u32,
 }
 
 //---------------------------------------------------------------------------//

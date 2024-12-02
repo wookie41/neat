@@ -9,12 +9,12 @@ import "core:math/linalg/glsl"
 //--------------------------------------------------------------------------//
 
 RenderCamera :: struct {
-	position:    glsl.vec3,
-	forward:     glsl.vec3,
-	up:          glsl.vec3,
-	fov: common.deg,
-	near_plane:  f32,
-    far_plane: f32,
+	position:   glsl.vec3,
+	forward:    glsl.vec3,
+	up:         glsl.vec3,
+	fov:        common.deg,
+	near_plane: f32,
+	far_plane:  f32,
 }
 
 //--------------------------------------------------------------------------//
@@ -22,7 +22,8 @@ RenderCamera :: struct {
 RenderView :: struct {
 	view:       glsl.mat4,
 	projection: glsl.mat4,
-	position: glsl.vec3,
+	position:   glsl.vec3,
+	forward:    glsl.vec3,
 }
 
 //--------------------------------------------------------------------------//
@@ -44,6 +45,7 @@ render_camera_create_render_view :: proc(
 		g_render_camera.near_plane,
 	)
 	render_view.position = p_render_camera.position
+	render_view.forward = p_render_camera.forward
 
 	return
 }

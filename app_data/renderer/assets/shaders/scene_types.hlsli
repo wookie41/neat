@@ -6,7 +6,9 @@
 struct DirectionalLight
 {
     float3 DirectionWS;
+    float _padding0;
     float3 Color;
+    float _padding1;
 };
 
 //---------------------------------------------------------------------------//
@@ -22,6 +24,15 @@ struct MeshInstancedDrawInfo
 struct MeshInstanceInfo
 {
     float4x4 modelMatrix;
+};
+
+//---------------------------------------------------------------------------//
+
+struct ShadowCascade
+{
+    float4x4 LightMatrix;
+    float Split;
+    float3 _padding;
 };
 
 //---------------------------------------------------------------------------//

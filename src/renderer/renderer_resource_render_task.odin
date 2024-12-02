@@ -193,18 +193,25 @@ render_task_map_name_to_type :: proc(p_type_name: string) -> (RenderTaskType, bo
 
 @(private)
 render_tasks_update :: proc(p_dt: f32) {
+	
+	// Fill per frame uniform data
 	for i in 0 ..< G_RENDER_TASK_REF_ARRAY.alive_count {
 		render_task_ref := G_RENDER_TASK_REF_ARRAY.alive_refs[i]
 		render_task := &g_resources.render_tasks[get_render_task_idx(render_task_ref)]
 		INTERNAL.render_task_functions[render_task.desc.type].begin_frame(render_task_ref)
 	}
 
+	// Upload uniform data
+	uniform_buffers_update(p_dt)
+
+	// Render
 	for i in 0 ..< G_RENDER_TASK_REF_ARRAY.alive_count {
 		render_task_ref := G_RENDER_TASK_REF_ARRAY.alive_refs[i]
 		render_task := &g_resources.render_tasks[get_render_task_idx(render_task_ref)]
 		INTERNAL.render_task_functions[render_task.desc.type].render(render_task_ref, p_dt)
 	}
 
+	// Cleanup
 	for i in 0 ..< G_RENDER_TASK_REF_ARRAY.alive_count {
 		render_task_ref := G_RENDER_TASK_REF_ARRAY.alive_refs[i]
 		render_task := &g_resources.render_tasks[get_render_task_idx(render_task_ref)]
@@ -225,60 +232,15 @@ render_task_setup_render_pass_bindings :: proc(
 	defer common.arena_delete(temp_arena)
 
 	input_images := make([dynamic]RenderPassImageInput, temp_arena.allocator)
+	global_input_images := make([dynamic]RenderPassImageInput, temp_arena.allocator)
 	output_images := make([dynamic]RenderPassImageOutput, temp_arena.allocator)
 
 	defer delete(input_images)
 	defer delete(output_images)
 
 	// Load inputs 
-	for {
-		input_image_element_id, found := xml.find_child_by_ident(
-			p_render_task_config.doc,
-			p_render_task_config.render_task_element_id,
-			"InputImage",
-			len(input_images),
-		)
-
-		if found == false {
-			break
-		}
-
-		image_name, name_found := xml.find_attribute_val_by_key(
-			p_render_task_config.doc,
-			input_image_element_id,
-			"name",
-		)
-		if name_found == false {
-			continue
-		}
-
-		image_ref := find_image(image_name)
-		image := &g_resources.images[get_image_idx(image_ref)]
-		if image_ref == InvalidImageRef {
-			log.errorf("Can't start render task - unknown image '%s'\n", image.desc.name)
-			continue
-		}
-
-		mip, mip_found := common.xml_get_u16_attribute(
-			p_render_task_config.doc,
-			input_image_element_id,
-			"mip",
-		)
-		input_flags := RenderPassImageInputFlags{}
-
-		if mip_found {
-			input_flags += {.AddressSubresource}
-		}
-
-		append(
-			&input_images,
-			RenderPassImageInput {
-				flags = input_flags,
-				image_ref = image_ref,
-				mip = mip if mip_found else 0,
-			},
-		)
-	}
+	load_image_inputs(p_render_task_config, "InputImage", &input_images)
+	load_image_inputs(p_render_task_config, "GlobalImage", &global_input_images)
 
 	// Load outputs
 	for {
@@ -301,7 +263,6 @@ render_task_setup_render_pass_bindings :: proc(
 			continue
 		}
 
-
 		image_ref := find_image(image_name)
 		if image_ref == InvalidImageRef {
 			log.errorf("Can't start render task - unknown image '%s'\n", image_name)
@@ -312,7 +273,7 @@ render_task_setup_render_pass_bindings :: proc(
 			image_ref = image_ref,
 		}
 
-		mip, mip_found := common.xml_get_u16_attribute(
+		mip, mip_found := common.xml_get_u32_attribute(
 			p_render_task_config.doc,
 			output_image_element_id,
 			"mip",
@@ -345,10 +306,15 @@ render_task_setup_render_pass_bindings :: proc(
 		input_images,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
+	p_out_bindings.global_image_inputs = common.to_static_slice(
+		global_input_images,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
 	p_out_bindings.image_outputs = common.to_static_slice(
 		output_images,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
+	
 
 	return true
 }
@@ -368,3 +334,61 @@ render_task_begin_render_pass :: proc(
 }
 
 //---------------------------------------------------------------------------//
+
+@(private = "file")
+load_image_inputs :: proc(
+	p_render_task_config: ^RenderTaskConfig,
+	p_image_element_name: string,
+	p_input_images: ^[dynamic]RenderPassImageInput,
+) {
+	for {
+		input_image_element_id, found := xml.find_child_by_ident(
+			p_render_task_config.doc,
+			p_render_task_config.render_task_element_id,
+			p_image_element_name,
+			len(p_input_images),
+		)
+
+		if found == false {
+			break
+		}
+
+		image_name, name_found := xml.find_attribute_val_by_key(
+			p_render_task_config.doc,
+			input_image_element_id,
+			"name",
+		)
+		if name_found == false {
+			continue
+		}
+
+		image_ref := find_image(image_name)
+		image := &g_resources.images[get_image_idx(image_ref)]
+		if image_ref == InvalidImageRef {
+			log.errorf("Can't start render task - unknown image '%s'\n", image.desc.name)
+			continue
+		}
+
+		mip, mip_found := common.xml_get_u32_attribute(
+			p_render_task_config.doc,
+			input_image_element_id,
+			"mip",
+		)
+		array_layer, array_layer_found := common.xml_get_u32_attribute(
+			p_render_task_config.doc,
+			input_image_element_id,
+			"arrayLayer",
+		)
+
+		append(
+			p_input_images,
+			RenderPassImageInput {
+				image_ref = image_ref,
+				base_mip = mip,
+				mip_count = 1 if mip_found else image.desc.mip_count,
+				base_array_layer = array_layer,
+				array_layer_count = 1 if array_layer_found else image.desc.array_size,
+			},
+		)
+	}
+}

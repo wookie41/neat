@@ -23,18 +23,23 @@ TRANSIENT_UNIFORM_BUFFER_SIZE :: common.KILOBYTE * 8
 
 @(private)
 PerViewData :: struct #packed {
-	view:          glsl.mat4x4,
-	proj:          glsl.mat4x4,
-	inv_view_proj: glsl.mat4x4,
-	camera_pos_ws: glsl.vec3,
-	_padding:      f32,
+	view:              glsl.mat4x4,
+	proj:              glsl.mat4x4,
+	inv_view_proj:     glsl.mat4x4,
+	inv_proj:          glsl.mat4x4,
+	camera_pos_ws:     glsl.vec3,
+	_padding0:         f32,
+	camera_forward_ws: glsl.vec3,
+	_padding1:         f32,
 }
 
 //---------------------------------------------------------------------------//
 
 @(private)
 g_per_frame_data: struct #packed {
-	sun: DirectionalLight,
+	sun:                 DirectionalLight,
+	shadow_cascades:     [MAX_SHADOW_CASCADES]ShadowCascade,
+	num_shadow_cascades: u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -75,12 +80,10 @@ uniform_buffer_create_dynamic :: proc {
 uniform_buffers_update :: proc(p_dt: f32) {
 	// Reset the transient buffer
 	INTERNAL.current_transient_buffer_offset = 0
-
 	update_per_frame_data(p_dt)
 }
 
 //---------------------------------------------------------------------------//
-
 
 // Creates a transient buffer that can be used to send constant data to a render task
 // Transient buffer are valid only within the frame boundary
@@ -137,7 +140,6 @@ update_per_frame_data :: proc(p_dt: f32) {
 		color     = {1, 1, 1},
 		direction = {0, -1, 0},
 	}
-
 	g_uniform_buffers.frame_data_offset = uniform_buffer_create_transient_buffer(&g_per_frame_data)
 }
 
@@ -150,8 +152,10 @@ uniform_buffer_create_view_data :: proc(p_view: RenderView) -> u32 {
 
 	view_data.view = p_view.view
 	view_data.proj = p_view.projection
-	view_data.inv_view_proj = glsl.inverse(view_data.view * view_data.proj)
+	view_data.inv_view_proj = glsl.inverse(view_data.proj * view_data.view)
+	view_data.inv_proj = glsl.inverse(view_data.proj)
 	view_data.camera_pos_ws = p_view.position
+	view_data.camera_forward_ws = p_view.forward
 
 	return uniform_buffer_create_transient_buffer(&view_data)
 }

@@ -98,7 +98,6 @@ void PSMain(in PSInput pPixelInput, out PSOutput pPixelOutput)
     pPixelOutput.color = float4(materialPixelOutput.albedo, 1);
     pPixelOutput.normals = float4(encodeNormal(materialPixelOutput.normal), encodeNormal(pPixelInput.normal));
     pPixelOutput.parameters = float4(materialPixelOutput.roughness, materialPixelOutput.metalness, materialPixelOutput.occlusion, 0);
-    pPixelOutput.positionWS = float4(pPixelInput.positionWS, 1);
 }
 
 //---------------------------------------------------------------------------//

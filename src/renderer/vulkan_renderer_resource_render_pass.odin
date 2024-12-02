@@ -79,7 +79,7 @@ when USE_VULKAN_BACKEND {
 			image_backend := &g_resources.backend_images[image_idx]
 
 			// Prepare the rendering attachment
-			image_view := image_backend.per_mip_vk_view[output.mip]
+			image_view := image_backend.vk_views[output.array_layer][output.mip]
 
 			load_op := vk.AttachmentLoadOp.DONT_CARE
 			if .Clear in output.flags {
@@ -134,7 +134,7 @@ when USE_VULKAN_BACKEND {
 
 			color_attachments_count += 1
 
-			image_backend.vk_layout_per_mip[output.mip] = new_layout
+			image_backend.vk_layouts[output.array_layer][output.mip] = new_layout
 		}
 
 		cmd_buffer_idx := get_cmd_buffer_idx(p_cmd_buff_ref)

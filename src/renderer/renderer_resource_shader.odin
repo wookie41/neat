@@ -574,6 +574,9 @@ shader_compile :: proc(
 	// Find out the last time the shader was modified. It's used to determine 
 	// if the compiled version is up to date
 	last_shader_write_time := common.get_last_file_write_time(shader_src_path)
+	
+	// @TODO disable once we also keep track of the changes to include files
+	shader_cache_enabled := false
 
 	shader_bin_path := common.aprintf(
 		temp_arena.allocator,
@@ -584,7 +587,7 @@ shader_compile :: proc(
 		BACKEND_COMPILED_SHADERS_EXTENSION,
 	)
 
-	if !os.exists(shader_bin_path) {
+	if !os.exists(shader_bin_path) || !shader_cache_enabled {
 
 		// Add defines for macros
 		shader_defines := ""

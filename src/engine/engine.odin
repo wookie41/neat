@@ -142,9 +142,9 @@ run :: proc() {
 				}
 			case .MOUSEWHEEL:
 				if sdl_event.wheel.y > 0 {
-					camera_add_speed(1)
+					camera_add_speed(10)
 				} else if sdl_event.wheel.y < 0 {
-					camera_add_speed(-1)
+					camera_add_speed(-10)
 				}
 			}
 
@@ -156,18 +156,6 @@ run :: proc() {
 			continue
 		}
 
-		if active_keys[sdl.SCANCODE_W] > 0 {
-			camera_add_forward_velocity(1)
-		}
-		if active_keys[sdl.SCANCODE_S] > 0 {
-			camera_add_forward_velocity(-1)
-		}
-		if active_keys[sdl.SCANCODE_D] > 0 {
-			camera_add_right_velocity(1)
-		}
-		if active_keys[sdl.SCANCODE_A] > 0 {
-			camera_add_right_velocity(-1)
-		}
 
 		if (pressed_mouse_buttons & u32(sdl.BUTTON(3))) > 0 {
 			x_delta := mouse_pos.x - INTERNAL.last_frame_mouse_pos.x
@@ -177,6 +165,18 @@ run :: proc() {
 
 		for accumulated_dt > target_dt {
 			camera_update(target_dt)
+			if active_keys[sdl.SCANCODE_W] > 0 {
+				camera_move_forward(target_dt)
+			}
+			if active_keys[sdl.SCANCODE_S] > 0 {
+				camera_move_back(target_dt)
+			}
+			if active_keys[sdl.SCANCODE_D] > 0 {
+				camera_move_right(target_dt)
+			}
+			if active_keys[sdl.SCANCODE_A] > 0 {
+				camera_move_left(target_dt)
+			}
 			accumulated_dt -= target_dt
 		}
 

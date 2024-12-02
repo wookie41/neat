@@ -12,6 +12,7 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	G_IMAGE_FORMAT_MAPPING := map[ImageFormat]vk.Format {
+		.Depth16         = .D16_UNORM,
 		.Depth32SFloat   = .D32_SFLOAT,
 		.R8UNorm         = .R8_UNORM,
 		.R32UInt         = .R32_UINT,
@@ -55,6 +56,7 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	G_IMAGE_FORMAT_MAPPING_VK := map[vk.Format]ImageFormat {
+		.D16_UNORM               = .Depth16,
 		.D32_SFLOAT              = .Depth32SFloat,
 		.R32_UINT                = .R32UInt,
 		.R32_SINT                = .R32Int,

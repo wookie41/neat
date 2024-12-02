@@ -33,6 +33,7 @@ MAX_NUM_FRAMES_IN_FLIGHT :: #config(NUM_FRAMES_IN_FLIGHT, 2)
 GlobalResourceSlot :: enum {
 	MeshInstanceInfosBuffer,
 	MaterialsBuffer,
+	CascadeShadowTextureArray,
 }
 
 @(private)
@@ -147,7 +148,7 @@ G_RENDERER: struct {
 	bindless_bind_group_ref:        BindGroupRef,
 	default_image_ref:              ImageRef,
 	debug_mode:                     bool,
-	min_uniform_buffer_alignment: 	u32,
+	min_uniform_buffer_alignment:   u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -192,7 +193,7 @@ RenderTaskEntry :: struct {
 
 //---------------------------------------------------------------------------//
 
-g_render_camera := RenderCamera {}
+g_render_camera := RenderCamera{}
 
 //---------------------------------------------------------------------------//
 
@@ -359,6 +360,11 @@ init :: proc(p_options: InitOptions) -> bool {
 			shader_stages = {.Vertex, .Pixel, .Compute},
 			type          = .StorageBuffer,
 		}
+		bind_group_layout.desc.bindings[GlobalResourceSlot.CascadeShadowTextureArray] = {
+			count         = MAX_SHADOW_CASCADES,
+			shader_stages = {.Vertex, .Pixel, .Compute},
+			type          = .Image,
+		}
 
 		if create_bind_group_layout(G_RENDERER.globals_bind_group_layout_ref) == false {
 			log.error("Failed to create the bindless resources bind group layout")
@@ -454,10 +460,12 @@ init :: proc(p_options: InitOptions) -> bool {
 			BindGroupUpdate {
 				buffers = {
 					{
+						binding = 0,
 						buffer_ref = g_uniform_buffers.transient_buffer.buffer_ref,
 						size = size_of(g_per_frame_data),
 					},
 					{
+						binding = 1,
 						buffer_ref = g_uniform_buffers.transient_buffer.buffer_ref,
 						size = size_of(PerViewData),
 					},
@@ -465,21 +473,22 @@ init :: proc(p_options: InitOptions) -> bool {
 			},
 		)
 
-		bind_group_update(
-			G_RENDERER.globals_bind_group_ref,
-			BindGroupUpdate {
-				buffers = {
-					{
-						buffer_ref = mesh_instance_info_buffer_ref,
-						size = mesh_instance_info_buffer.desc.size,
-					},
-					{
-						buffer_ref = material_instances_buffer_ref,
-						size = MATERIAL_PROPERTIES_BUFFER_SIZE,
-					},
+		global_bind_group_update := BindGroupUpdate {
+			buffers = {
+				{
+					binding = u32(GlobalResourceSlot.MeshInstanceInfosBuffer),
+					buffer_ref = mesh_instance_info_buffer_ref,
+					size = mesh_instance_info_buffer.desc.size,
+				},
+				{
+					binding = u32(GlobalResourceSlot.MaterialsBuffer),
+					buffer_ref = material_instances_buffer_ref,
+					size = MATERIAL_PROPERTIES_BUFFER_SIZE,
 				},
 			},
-		)
+		}
+
+		bind_group_update(G_RENDERER.globals_bind_group_ref, global_bind_group_update)
 	}
 
 	g_render_camera.position = {0, 0, 0}
@@ -515,7 +524,6 @@ update :: proc(p_dt: f32) {
 	buffer_upload_finalize_finished_uploads()
 	image_upload_finalize_finished_uploads()
 
-
 	run_last_frame_buffer_upload_requests()
 	batch_update_bindless_array_entries()
 	buffer_upload_process_async_requests()
@@ -526,7 +534,6 @@ update :: proc(p_dt: f32) {
 
 	material_instance_update_dirty_materials()
 	mesh_instance_send_transform_data()
-	uniform_buffers_update(p_dt)
 
 	render_tasks_update(p_dt)
 
@@ -681,15 +688,6 @@ renderer_config_create_images :: proc(p_doc: ^xml.Document) -> bool {
 				continue
 			}
 
-			mip_count, mip_count_found := common.xml_get_u32_attribute(
-				p_doc,
-				element_id,
-				"mip_count",
-			)
-			if mip_count_found == false {
-				mip_count = 1
-			}
-
 			if (image_format_name in G_IMAGE_FORMAT_NAME_MAPPING) == false {
 				log.errorf(
 					"Failed to create image '%s' - unsupported format %s\n",
@@ -738,7 +736,6 @@ renderer_config_create_images :: proc(p_doc: ^xml.Document) -> bool {
 					continue
 				}
 
-
 				if width_found {
 					image_dimensions.x = width
 				}
@@ -773,7 +770,18 @@ renderer_config_create_images :: proc(p_doc: ^xml.Document) -> bool {
 			image.desc.flags = image_flags
 			image.desc.type = image_type
 			image.desc.format = G_IMAGE_FORMAT_NAME_MAPPING[image_format_name]
-			image.desc.mip_count = u8(mip_count)
+			image.desc.mip_count, _ = common.xml_get_u32_attribute(
+				p_doc,
+				element_id,
+				"mip_count",
+				1,
+			)
+			image.desc.array_size, _ = common.xml_get_u32_attribute(
+				p_doc,
+				element_id,
+				"array_size",
+				1,
+			)
 
 			if create_image(image_ref) == false {
 				log.errorf("Failed to create image '%s'\n", child.ident)
@@ -885,7 +893,7 @@ resolve_resolution :: #force_inline proc(p_resolution: Resolution) -> glsl.uvec2
 
 //---------------------------------------------------------------------------//
 
-@(private="file")
+@(private = "file")
 init_jobs :: proc() -> bool {
 	render_instanced_mesh_job_init() or_return
 	return true

@@ -73,6 +73,7 @@ Resolution :: enum u8 {
 
 @(private)
 G_IMAGE_FORMAT_NAME_MAPPING := map[string]ImageFormat {
+	"Depth16"         = .Depth16,
 	"Depth32SFloat"   = .Depth32SFloat,
 	"R8UNorm"         = .R8UNorm,
 	"R32UInt"         = .R32UInt,
@@ -108,6 +109,7 @@ ImageFormat :: enum u16 {
 	DepthStencilFormatsStart,
 	DepthStencilFormatsEnd,
 	//---------------------//
+	Depth16,
 	Depth32SFloat,
 	DepthFormatsEnd,
 
@@ -212,7 +214,8 @@ ImageDesc :: struct {
 	name:               common.Name,
 	type:               ImageType,
 	format:             ImageFormat,
-	mip_count:          u8,
+	mip_count:          u32,
+	array_size:         u32,
 	dimensions:         glsl.uvec3,
 	flags:              ImageDescFlags,
 	sample_count_flags: ImageSampleCountFlags,
@@ -228,6 +231,7 @@ ImageResource :: struct {
 	flags:            ImageFlags,
 	bindless_idx:     u32,
 	loaded_mips_mask: u16, // mip 0 is the first bit
+	queue:            DeviceQueueType,
 }
 
 //---------------------------------------------------------------------------//
@@ -270,7 +274,7 @@ SamplerNames := []string {
 @(private)
 ImageUploadInfo :: struct {
 	image_ref:                    ImageRef,
-	current_mip:                  u8,
+	current_mip:                  u32,
 	single_upload_size_in_texels: glsl.uvec2,
 	mip_offset_in_texels:         glsl.uvec2,
 	is_initialized:               bool,
@@ -336,6 +340,8 @@ init_images :: proc() -> bool {
 		default_image.desc.sample_count_flags = {._1}
 		default_image.desc.format = .BC1_RGB_UNorm
 		default_image.desc.mip_count = 1
+		default_image.desc.array_size = 1
+
 
 		create_image(G_RENDERER.default_image_ref)
 	}
@@ -398,6 +404,8 @@ create_texture_image :: proc(p_ref: ImageRef) -> bool {
 		common.ref_free(&G_IMAGE_REF_ARRAY, p_ref)
 		return false
 	}
+
+	image.desc.array_size = 1
 
 	// Queue data copy for this texture
 	image_upload_info := ImageUploadInfo {
@@ -668,7 +676,7 @@ try_progress_image_copies :: proc(
 //--------------------------------------------------------------------------//
 
 @(private = "file")
-calculate_image_upload_size :: proc(p_image_dimensions: glsl.uvec3, p_mip: u8) -> glsl.uvec2 {
+calculate_image_upload_size :: proc(p_image_dimensions: glsl.uvec3, p_mip: u32) -> glsl.uvec2 {
 	size_x := min(128, p_image_dimensions.x >> u32(p_mip))
 	size_y := min(128, p_image_dimensions.y >> u32(p_mip))
 	return glsl.uvec2{size_x, size_y}

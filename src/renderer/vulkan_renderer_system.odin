@@ -2,9 +2,9 @@ package renderer
 
 //---------------------------------------------------------------------------//
 
+import "base:runtime"
 import "core:c"
 import "core:log"
-import "base:runtime"
 
 import vma "../third_party/vma"
 import sdl "vendor:sdl2"
@@ -77,12 +77,12 @@ when USE_VULKAN_BACKEND {
 		device_extensions := []struct {
 			name:     cstring,
 			required: bool,
-		}{
-			{ name = vk.KHR_SWAPCHAIN_EXTENSION_NAME,required = true, }, 
-			{ name = vk.KHR_MAINTENANCE1_EXTENSION_NAME, required = true }, 
-			{ name = vk.KHR_MAINTENANCE3_EXTENSION_NAME, required = true }, 
-			{ name = vk.EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, required = true}, 
-			{ name = vk.EXT_DEBUG_MARKER_EXTENSION_NAME, required = false},
+		} {
+			{name = vk.KHR_SWAPCHAIN_EXTENSION_NAME, required = true},
+			{name = vk.KHR_MAINTENANCE1_EXTENSION_NAME, required = true},
+			{name = vk.KHR_MAINTENANCE3_EXTENSION_NAME, required = true},
+			{name = vk.EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, required = true},
+			{name = vk.EXT_DEBUG_MARKER_EXTENSION_NAME, required = false},
 		}
 
 
@@ -158,7 +158,7 @@ when USE_VULKAN_BACKEND {
 				contains := false
 				for &supported in supported_extensions {
 					name := transmute(cstring)&supported.extensionName
-					if runtime.cstring_eq(name, required){
+					if runtime.cstring_eq(name, required) {
 						contains = true
 						break
 					}
@@ -442,7 +442,9 @@ when USE_VULKAN_BACKEND {
 
 			vk.GetPhysicalDeviceProperties(physical_device, &device_properties)
 
-			G_RENDERER.min_uniform_buffer_alignment = u32(device_properties.limits.minUniformBufferOffsetAlignment)
+			G_RENDERER.min_uniform_buffer_alignment = u32(
+				device_properties.limits.minUniformBufferOffsetAlignment,
+			)
 		}
 
 		// Create logical device for our queues (and the queues themselves)
@@ -485,6 +487,7 @@ when USE_VULKAN_BACKEND {
 
 			device_features := vk.PhysicalDeviceFeatures{}
 			device_features.samplerAnisotropy = true
+			device_features.depthClamp = true
 
 			robustness2_features := vk.PhysicalDeviceRobustness2FeaturesEXT {
 				sType          = .PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
@@ -636,7 +639,7 @@ backend_post_render :: proc() {
 	to_present_barrier := vk.ImageMemoryBarrier {
 		sType = .IMAGE_MEMORY_BARRIER,
 		srcAccessMask = {.COLOR_ATTACHMENT_WRITE},
-		oldLayout = swap_image.vk_layout_per_mip[0],
+		oldLayout = swap_image.vk_layouts[0][0],
 		newLayout = .PRESENT_SRC_KHR,
 		image = G_RENDERER.swapchain_images[G_RENDERER.swap_img_idx],
 		subresourceRange = {
@@ -779,26 +782,26 @@ create_swapchain :: proc(p_is_recreating: bool = false) -> bool {
 	// Create the swapchain
 	{
 		// handle different queue families
-		queue_families := []u32{
+		queue_families := []u32 {
 			u32(G_RENDERER.queue_family_graphics_index),
 			u32(G_RENDERER.queue_family_present_index),
 		}
 		create_info := vk.SwapchainCreateInfoKHR {
-			sType = .SWAPCHAIN_CREATE_INFO_KHR,
-			surface = G_RENDERER.surface,
-			minImageCount = u32(len(G_RENDERER.swapchain_images)),
-			imageFormat = G_RENDERER.swapchain_format.format,
-			imageColorSpace = G_RENDERER.swapchain_format.colorSpace,
-			imageExtent = G_RENDERER.swap_extent,
-			imageArrayLayers = 1,
-			imageUsage = {.COLOR_ATTACHMENT},
-			imageSharingMode = .EXCLUSIVE,
-			preTransform = G_RENDERER.surface_capabilities.currentTransform,
-			compositeAlpha = {.OPAQUE},
-			presentMode = G_RENDERER.present_mode,
-			clipped = true,
+			sType                 = .SWAPCHAIN_CREATE_INFO_KHR,
+			surface               = G_RENDERER.surface,
+			minImageCount         = u32(len(G_RENDERER.swapchain_images)),
+			imageFormat           = G_RENDERER.swapchain_format.format,
+			imageColorSpace       = G_RENDERER.swapchain_format.colorSpace,
+			imageExtent           = G_RENDERER.swap_extent,
+			imageArrayLayers      = 1,
+			imageUsage            = {.COLOR_ATTACHMENT},
+			imageSharingMode      = .EXCLUSIVE,
+			preTransform          = G_RENDERER.surface_capabilities.currentTransform,
+			compositeAlpha        = {.OPAQUE},
+			presentMode           = G_RENDERER.present_mode,
+			clipped               = true,
 			queueFamilyIndexCount = 1,
-			pQueueFamilyIndices = raw_data(queue_families),
+			pQueueFamilyIndices   = raw_data(queue_families),
 		}
 		if G_RENDERER.queue_family_graphics_index != G_RENDERER.queue_family_present_index {
 			create_info.imageSharingMode = .CONCURRENT
@@ -1004,7 +1007,7 @@ backend_begin_frame :: proc() {
 	{
 		swap_image_ref := G_RENDERER.swap_image_refs[G_RENDERER.swap_img_idx]
 		image_backend := &g_resources.backend_images[get_image_idx(swap_image_ref)]
-		image_backend.vk_layout_per_mip[0] = .UNDEFINED
+		image_backend.vk_layouts[0][0] = .UNDEFINED
 	}
 
 
@@ -1012,6 +1015,25 @@ backend_begin_frame :: proc() {
 		backend_buffer_upload_start_async_cmd_buffer_pre_graphics()
 		backend_buffer_upload_start_async_cmd_buffer_post_graphics()
 	}
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
+get_queue_family_index :: proc(p_device_queue_type: DeviceQueueType) -> (queue_family_index: u32) {
+
+	switch p_device_queue_type {
+	case .Graphics:
+		queue_family_index = G_RENDERER.queue_family_graphics_index
+	case .Compute:
+		queue_family_index = G_RENDERER.queue_family_compute_index
+	case .Transfer:
+		queue_family_index = G_RENDERER.queue_family_transfer_index
+	case:
+		assert(false)
+	}
+
+	return
 }
 
 //---------------------------------------------------------------------------//

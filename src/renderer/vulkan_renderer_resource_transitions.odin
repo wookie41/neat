@@ -11,88 +11,53 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//	
 
-	backend_transition_resources :: proc(
-		p_cmd_buff_ref: CommandBufferRef,
+	backend_transition_render_pass_resources :: proc(
 		p_bindings: RenderPassBindings,
 		p_pipeline_type: PipelineType,
+		p_async_compute: bool,
 	) {
 
 		temp_arena: common.Arena
 		common.temp_arena_init(&temp_arena)
 		defer common.arena_delete(temp_arena)
 
-		image_input_barriers := make(
-			[]vk.ImageMemoryBarrier,
-			len(p_bindings.image_inputs),
-			temp_arena.allocator,
-		)
+		graphics_input_barriers := make([dynamic]vk.ImageMemoryBarrier, temp_arena.allocator)
+		compute_input_barriers := make([dynamic]vk.ImageMemoryBarrier, temp_arena.allocator)
 
-		image_input_barriers_count := 0
+		dst_queue: DeviceQueueType = .Compute if p_async_compute else .Graphics
 
 		// Prepare barriers for image inputs
 		for input in p_bindings.image_inputs {
-
-			image_idx := get_image_idx(input.image_ref)
-			image := &g_resources.images[image_idx]
-
-			new_layout := vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL
-			dst_access_mask := vk.AccessFlags{.SHADER_READ}
-			aspect_mask := vk.ImageAspectFlags{.COLOR}
-
-			if image.desc.format > .DepthFormatsStart && image.desc.format < .DepthFormatsEnd {
-
-				if image.desc.format > .DepthStencilFormatsStart &&
-				   image.desc.format < .DepthStencilFormatsEnd {
-					new_layout = .DEPTH_STENCIL_READ_ONLY_OPTIMAL
-				}
-
-				aspect_mask = {.DEPTH}
-				new_layout = .DEPTH_READ_ONLY_OPTIMAL
-			}
-
-			image_backend := &g_resources.backend_images[image_idx]
-
-			old_layout := image_backend.vk_layout_per_mip[0]
-			mip_count := image.desc.mip_count
-			mip: u32 = 0
-
-			if .AddressSubresource in input.flags {
-				mip = u32(input.mip)
-				old_layout = image_backend.vk_layout_per_mip[mip]
-				mip_count = 1
-			}
-
-			// Check if this image needs to be transitioned
-			if old_layout == new_layout {
-				continue
-			}
-
-			image_input_barriers[image_input_barriers_count] = vk.ImageMemoryBarrier {
-				sType = .IMAGE_MEMORY_BARRIER,
-				dstAccessMask = dst_access_mask,
-				oldLayout = old_layout,
-				newLayout = new_layout,
-				image = image_backend.vk_image,
-				subresourceRange = {
-					aspectMask = aspect_mask,
-					baseArrayLayer = 0,
-					layerCount = 1,
-					baseMipLevel = mip,
-					levelCount = u32(mip_count),
-				},
-			}
-
-			image_backend.vk_layout_per_mip[mip] = new_layout
-			image_input_barriers_count += 1
+			create_barrier_for_input_image(
+				input,
+				p_pipeline_type,
+				p_async_compute,
+				dst_queue,
+				&graphics_input_barriers,
+				&compute_input_barriers,
+			)
+		}
+		for input in p_bindings.global_image_inputs {
+			create_barrier_for_input_image(
+				input,
+				p_pipeline_type,
+				p_async_compute,
+				dst_queue,
+				&graphics_input_barriers,
+				&compute_input_barriers,
+			)
 		}
 
-		cmd_buffer_idx := get_cmd_buffer_idx(p_cmd_buff_ref)
-		backend_cmd_buffer := &g_resources.backend_cmd_buffers[cmd_buffer_idx]
+		graphics_cmd_buff_ref := get_frame_cmd_buffer_ref()
+		compute_cmd_buff := get_frame_compute_cmd_buffer()
+
+		graphics_cmd_buffer_idx := get_cmd_buffer_idx(graphics_cmd_buff_ref)
+		backend_graphics_cmd_buffer := &g_resources.backend_cmd_buffers[graphics_cmd_buffer_idx]
 
 		// Insert barriers for input
-		if image_input_barriers_count > 0 {
+		if len(graphics_input_barriers) > 0 {
 			vk.CmdPipelineBarrier(
-				backend_cmd_buffer.vk_cmd_buff,
+				backend_graphics_cmd_buffer.vk_cmd_buff,
 				{.BOTTOM_OF_PIPE},
 				{.VERTEX_SHADER, .FRAGMENT_SHADER, .COMPUTE_SHADER},
 				{},
@@ -100,20 +65,32 @@ when USE_VULKAN_BACKEND {
 				nil,
 				0,
 				nil,
-				u32(image_input_barriers_count),
-				&image_input_barriers[0],
+				u32(len(graphics_input_barriers)),
+				&graphics_input_barriers[0],
 			)
 		}
 
-		// Now prepare output imagge barriers
-		image_output_barriers_count := 0
-		image_output_barriers := make(
-			[]vk.ImageMemoryBarrier,
-			len(p_bindings.image_outputs),
-			temp_arena.allocator,
-		)
+		if len(compute_input_barriers) > 0 {
+			vk.CmdPipelineBarrier(
+				compute_cmd_buff,
+				{.COMPUTE_SHADER},
+				{.BOTTOM_OF_PIPE},
+				{},
+				0,
+				nil,
+				0,
+				nil,
+				u32(len(compute_input_barriers)),
+				&compute_input_barriers[0],
+			)
+		}
+
+		// Now prepare output image barriers
+		graphics_output_barriers := make([dynamic]vk.ImageMemoryBarrier, temp_arena.allocator)
+		compute_output_barriers := make([dynamic]vk.ImageMemoryBarrier, temp_arena.allocator)
 		depth_barrier := vk.ImageMemoryBarrier{}
-		depth_barrier_needed := false
+		graphics_depth_barrier_needed := false
+		compute_depth_barrier_needed := false
 
 		for output in p_bindings.image_outputs {
 
@@ -134,31 +111,42 @@ when USE_VULKAN_BACKEND {
 			if p_pipeline_type == .Compute {
 
 				// Check if this image needs to be transitioned
-				if image_backend.vk_layout_per_mip[output.mip] == .GENERAL {
+				if image_backend.vk_layouts[output.array_layer][output.mip] == .GENERAL {
 					continue
 				}
 
-				is_depth_image := image.desc.format >
-					.DepthFormatsStart && image.desc.format < .DepthFormatsEnd
+				is_depth_image :=
+					image.desc.format > .DepthFormatsStart && image.desc.format < .DepthFormatsEnd
 
-				aspect_mask : vk.ImageAspectFlags = {.DEPTH} if is_depth_image else {.COLOR}
+				aspect_mask: vk.ImageAspectFlags = {.DEPTH} if is_depth_image else {.COLOR}
 
-				image_output_barriers[image_output_barriers_count] = {
+				image_barrier := vk.ImageMemoryBarrier {
 					sType = .IMAGE_MEMORY_BARRIER,
 					dstAccessMask = {.SHADER_WRITE},
-					oldLayout = image_backend.vk_layout_per_mip[output.mip],
+					oldLayout = image_backend.vk_layouts[output.array_layer][output.mip],
 					newLayout = .GENERAL,
 					image = image_backend.vk_image,
 					subresourceRange = {
 						aspectMask = aspect_mask,
-						baseArrayLayer = 0,
+						baseArrayLayer = u32(output.array_layer),
 						layerCount = 1,
 						baseMipLevel = u32(output.mip),
 						levelCount = 1,
 					},
+					srcQueueFamilyIndex = get_queue_family_index(image.queue),
+					dstQueueFamilyIndex = get_queue_family_index(dst_queue),
 				}
 
-				image_output_barriers_count += 1
+
+				insert_async_compute_barriers(
+					image_barrier,
+					p_pipeline_type,
+					p_async_compute,
+					&graphics_output_barriers,
+					&compute_output_barriers,
+				)
+
+				image.queue = .Compute
 
 			} else if image.desc.format > .DepthFormatsStart &&
 			   image.desc.format < .DepthFormatsEnd {
@@ -173,11 +161,11 @@ when USE_VULKAN_BACKEND {
 				}
 
 				// Check if this image needs to be transitioned
-				if image_backend.vk_layout_per_mip[output.mip] == new_layout {
+				if image_backend.vk_layouts[output.array_layer][output.mip] == new_layout {
 					continue
 				}
 
-				depth_barrier_needed = true
+				graphics_depth_barrier_needed = true
 
 				// Transition the depth buffer to the expected layout
 				depth_barrier = {
@@ -186,54 +174,66 @@ when USE_VULKAN_BACKEND {
 						.DEPTH_STENCIL_ATTACHMENT_READ,
 						.DEPTH_STENCIL_ATTACHMENT_WRITE,
 					},
-					oldLayout = image_backend.vk_layout_per_mip[output.mip],
+					oldLayout = image_backend.vk_layouts[output.array_layer][output.mip],
 					newLayout = new_layout,
 					image = image_backend.vk_image,
 					subresourceRange = {
 						aspectMask = {.DEPTH},
-						baseArrayLayer = 0,
+						baseArrayLayer = u32(output.array_layer),
 						layerCount = 1,
 						baseMipLevel = u32(output.mip),
 						levelCount = 1,
 					},
+					srcQueueFamilyIndex = get_queue_family_index(image.queue),
+					dstQueueFamilyIndex = get_queue_family_index(.Graphics),
 				}
+
+				compute_depth_barrier_needed = image.queue != .Graphics
+				image.queue = .Graphics
 			} else {
 
 				new_layout = .ATTACHMENT_OPTIMAL
 
 				// Check if this image needs to be transitioned
-				if image_backend.vk_layout_per_mip[output.mip] == new_layout {
+				if image_backend.vk_layouts[output.array_layer][output.mip] == new_layout {
 					continue
 				}
 
 				// Transition the image to the expected layout
-				image_output_barriers[image_output_barriers_count] = {
+				image_barrier := vk.ImageMemoryBarrier {
 					sType = .IMAGE_MEMORY_BARRIER,
 					dstAccessMask = {.COLOR_ATTACHMENT_WRITE},
-					oldLayout = image_backend.vk_layout_per_mip[output.mip],
+					oldLayout = image_backend.vk_layouts[output.array_layer][output.mip],
 					newLayout = new_layout,
 					image = image_backend.vk_image,
 					subresourceRange = {
 						aspectMask = {.COLOR},
-						baseArrayLayer = 0,
+						baseArrayLayer = u32(output.array_layer),
 						layerCount = 1,
 						baseMipLevel = u32(output.mip),
 						levelCount = 1,
 					},
+					srcQueueFamilyIndex = get_queue_family_index(image.queue),
+					dstQueueFamilyIndex = get_queue_family_index(.Graphics),
 				}
 
-				image_output_barriers_count += 1
+				append(&graphics_output_barriers, image_barrier)
+				if image.queue != .Graphics {
+					append(&compute_output_barriers, image_barrier)
+				}
+
+				image.queue = .Graphics
 			}
 
-			image_backend.vk_layout_per_mip[output.mip] = new_layout
+			image_backend.vk_layouts[output.array_layer][output.mip] = new_layout
 		}
 
 		// @TODO Buffers
 
 		// Insert depth attachment barrier
-		if depth_barrier_needed {
+		if graphics_depth_barrier_needed {
 			vk.CmdPipelineBarrier(
-				backend_cmd_buffer.vk_cmd_buff,
+				backend_graphics_cmd_buffer.vk_cmd_buff,
 				{.TOP_OF_PIPE},
 				{.EARLY_FRAGMENT_TESTS},
 				{},
@@ -246,10 +246,25 @@ when USE_VULKAN_BACKEND {
 			)
 		}
 
-		// Insert output barriers
-		if image_output_barriers_count > 0 {
+		if compute_depth_barrier_needed {
 			vk.CmdPipelineBarrier(
-				backend_cmd_buffer.vk_cmd_buff,
+				compute_cmd_buff,
+				{.BOTTOM_OF_PIPE},
+				{.EARLY_FRAGMENT_TESTS},
+				{},
+				0,
+				nil,
+				0,
+				nil,
+				1,
+				&depth_barrier,
+			)
+		}
+
+		// Insert output barriers
+		if len(graphics_output_barriers) > 0 {
+			vk.CmdPipelineBarrier(
+				backend_graphics_cmd_buffer.vk_cmd_buff,
 				{.TOP_OF_PIPE},
 				{.COLOR_ATTACHMENT_OUTPUT} if p_pipeline_type == .Graphics else {.COMPUTE_SHADER},
 				{},
@@ -257,11 +272,143 @@ when USE_VULKAN_BACKEND {
 				nil,
 				0,
 				nil,
-				u32(image_output_barriers_count),
-				&image_output_barriers[0],
+				u32(len(graphics_output_barriers)),
+				&graphics_output_barriers[0],
+			)
+		}
+
+		if len(compute_output_barriers) > 0 {
+			vk.CmdPipelineBarrier(
+				compute_cmd_buff,
+				{.COMPUTE_SHADER},
+				{.TOP_OF_PIPE},
+				{},
+				0,
+				nil,
+				0,
+				nil,
+				u32(len(compute_output_barriers)),
+				&compute_output_barriers[0],
 			)
 		}
 	}
 
+	//---------------------------------------------------------------------------//	
+
+	backend_insert_barriers :: proc(
+		p_cmd_buff_ref: CommandBufferRef,
+		p_image_barriers: []ImageBarrier,
+	) {
+
+		temp_arena: common.Arena
+		common.temp_arena_init(&temp_arena)
+		defer common.arena_delete(temp_arena)
+
+		// TODO
+
+		assert(false)
+	}
+
+
 	//---------------------------------------------------------------------------//	    
+
+	@(private = "file")
+	insert_async_compute_barriers :: proc(
+		p_image_barrier: vk.ImageMemoryBarrier,
+		p_pipeline_type: PipelineType,
+		p_async_compute: bool,
+		p_graphics_barriers: ^[dynamic]vk.ImageMemoryBarrier,
+		p_compute_barriers: ^[dynamic]vk.ImageMemoryBarrier,
+	) {
+
+		if p_async_compute {
+
+			assert(p_pipeline_type == .Compute)
+			append(p_compute_barriers, p_image_barrier)
+
+			if p_image_barrier.srcAccessMask != p_image_barrier.dstAccessMask {
+				append(p_graphics_barriers, p_image_barrier)
+			}
+
+			return
+		}
+
+		append(p_graphics_barriers, p_image_barrier)
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private = "file")
+	create_barrier_for_input_image :: proc(
+		p_input_image: RenderPassImageInput,
+		p_pipeline_type: PipelineType,
+		p_async_compute: bool,
+		p_dst_queue: DeviceQueueType,
+		p_graphics_barriers: ^[dynamic]vk.ImageMemoryBarrier,
+		p_compute_barriers: ^[dynamic]vk.ImageMemoryBarrier,
+	) {
+		image_idx := get_image_idx(p_input_image.image_ref)
+		image := &g_resources.images[image_idx]
+
+		new_layout := vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL
+		dst_access_mask := vk.AccessFlags{.SHADER_READ}
+		aspect_mask := vk.ImageAspectFlags{.COLOR}
+
+		if image.desc.format > .DepthFormatsStart && image.desc.format < .DepthFormatsEnd {
+
+			aspect_mask = {.DEPTH}
+			new_layout = .DEPTH_READ_ONLY_OPTIMAL
+
+			if image.desc.format > .DepthStencilFormatsStart &&
+			   image.desc.format < .DepthStencilFormatsEnd {
+				new_layout = .DEPTH_STENCIL_READ_ONLY_OPTIMAL
+			}
+		}
+
+		image_backend := &g_resources.backend_images[image_idx]
+
+		for array_layer in 0 ..< p_input_image.array_layer_count {
+			for mip in 0 ..< p_input_image.mip_count {
+
+				old_layout := image_backend.vk_layouts[array_layer][mip]
+	
+				if old_layout == new_layout {
+					continue
+				}
+	
+				image_input_barrier := vk.ImageMemoryBarrier {
+					sType = .IMAGE_MEMORY_BARRIER,
+					dstAccessMask = dst_access_mask,
+					oldLayout = old_layout,
+					newLayout = new_layout,
+					image = image_backend.vk_image,
+					subresourceRange = {
+						aspectMask = aspect_mask,
+						baseArrayLayer = array_layer,
+						layerCount = 1,
+						baseMipLevel = mip,
+						levelCount = 1,
+					},
+				}
+
+				if p_async_compute {
+					image_input_barrier.srcQueueFamilyIndex = get_queue_family_index(image.queue)
+					image_input_barrier.dstQueueFamilyIndex = get_queue_family_index(p_dst_queue)
+				}
+	
+				image.queue = p_dst_queue
+	
+				insert_async_compute_barriers(
+					image_input_barrier,
+					p_pipeline_type,
+					p_async_compute,
+					p_graphics_barriers,
+					p_compute_barriers,
+				)
+	
+				image_backend.vk_layouts[array_layer][mip] = new_layout
+			}
+		}
+	}
+
 }

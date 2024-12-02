@@ -14,7 +14,8 @@ import "core:strings"
 //---------------------------------------------------------------------------//
 
 G_RASTERIZER_NAME_MAPPING := map[string]RasterizerType {
-	"Fill" = .Fill,
+	"Default" = .Default,
+	"Shadows" = .Shadows,
 }
 
 //---------------------------------------------------------------------------//
@@ -80,7 +81,6 @@ G_RENDER_PASS_REF_ARRAY: common.RefArray(RenderPassResource)
 //---------------------------------------------------------------------------//
 
 RenderPassImageInputFlagBits :: enum u8 {
-	AddressSubresource,
 	Storage,
 }
 
@@ -89,9 +89,12 @@ RenderPassImageInputFlags :: distinct bit_set[RenderPassImageInputFlagBits;u8]
 //---------------------------------------------------------------------------//
 
 RenderPassImageInput :: struct {
-	image_ref: ImageRef,
-	flags:     RenderPassImageInputFlags,
-	mip:       u16,
+	image_ref:         ImageRef,
+	flags:             RenderPassImageInputFlags,
+	base_mip:          u32,
+	mip_count:         u32,
+	base_array_layer:  u32,
+	array_layer_count: u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -107,15 +110,17 @@ RenderPassImageOutputFlags :: distinct bit_set[RenderPassImageOutputFlagBits;u8]
 RenderPassImageOutput :: struct {
 	image_ref:   ImageRef,
 	flags:       RenderPassImageOutputFlags,
-	mip:         u16,
+	mip:         u32,
+	array_layer: u32,
 	clear_color: glsl.vec4,
 }
 
 //---------------------------------------------------------------------------//
 
 RenderPassBindings :: struct {
-	image_inputs:  []RenderPassImageInput,
-	image_outputs: []RenderPassImageOutput,
+	image_inputs:        []RenderPassImageInput,
+	image_outputs:       []RenderPassImageOutput,
+	global_image_inputs: []RenderPassImageInput,
 }
 
 //---------------------------------------------------------------------------//
@@ -138,6 +143,7 @@ RenderPassJSONEntry :: struct {
 	render_targets:       []RenderTargetJSONEntry `json:"renderTargets"`,
 	depth_format:         string `json:"depthFormat"`,
 	resolution:           string,
+	raster_type:          string `json:"rasterType"`,
 	depth_test_read_only: bool `json:"depthTestReadOnly"`,
 }
 
@@ -238,7 +244,7 @@ begin_render_pass :: proc(
 	p_begin_info: ^RenderPassBeginInfo,
 ) {
 
-	transition_resources(p_cmd_buff_ref, p_begin_info.bindings, .Graphics)
+	transition_render_pass_resources(p_begin_info.bindings, .Graphics)
 	backend_begin_render_pass(p_render_pass_ref, p_cmd_buff_ref, p_begin_info)
 }
 
@@ -309,7 +315,8 @@ load_render_passes_from_config_file :: proc() -> bool {
 		}
 
 		if render_pass_entry.resolution in G_RESOLUTION_NAME_MAPPING {
-			render_pass.desc.derived_resolution = G_RESOLUTION_NAME_MAPPING[render_pass_entry.resolution]			
+			render_pass.desc.derived_resolution =
+				G_RESOLUTION_NAME_MAPPING[render_pass_entry.resolution]
 		} else {
 
 			resolution_parts, error := strings.split(
@@ -338,7 +345,13 @@ load_render_passes_from_config_file :: proc() -> bool {
 				G_IMAGE_FORMAT_NAME_MAPPING[render_target_entry.format]
 		}
 
-		// @TODO primitive typ, rasterizer overrides
+		if len(render_pass_entry.raster_type) == 0 {
+			render_pass.desc.resterizer_type = .Default
+		} else {
+			assert(render_pass_entry.raster_type in G_RASTERIZER_NAME_MAPPING)
+			render_pass.desc.resterizer_type =
+				G_RASTERIZER_NAME_MAPPING[render_pass_entry.raster_type]
+		}
 
 		assert(create_render_pass(render_pass_ref))
 	}

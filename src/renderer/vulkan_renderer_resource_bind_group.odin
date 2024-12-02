@@ -182,114 +182,100 @@ when USE_VULKAN_BACKEND {
 		image_writes := make([]vk.DescriptorImageInfo, images_infos_count, temp_arena.allocator)
 		buffer_writes := make([]vk.DescriptorBufferInfo, buffer_infos_count, temp_arena.allocator)
 
-		image_write_idx := 0
-		buffer_write_idx := 0
-
 		bind_group_layout_idx := get_bind_group_layout_idx(bind_group.desc.layout_ref)
 		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_idx]
 
-		num_descriptor_writes: u32 = 0
-		for binding, binding_idx in bind_group_layout.desc.bindings {
+		for image_binding, i in p_bind_group_update.images {
 
-			if is_buffer_binding(binding.type) {
+			binding := bind_group_layout.desc.bindings[image_binding.binding]
+			assert(binding.type == .Image || binding.type == .StorageImage, "Image binding required")
 
-				buffer_binding := p_bind_group_update.buffers[buffer_write_idx]
+			image := &g_resources.images[get_image_idx(image_binding.image_ref)]
+			backend_image := &g_resources.backend_images[get_image_idx(image_binding.image_ref)]
 
-				if buffer_binding.buffer_ref == InvalidBufferRef {
-					// Write null descriptor 
-					buffer_write_idx += 1
-					continue
-				}
+			if .AddressSubresource in image_binding.flags {
 
-				binding_buffer_idx := get_buffer_idx(buffer_binding.buffer_ref)
-				buffer := &g_resources.buffers[binding_buffer_idx]
-				backend_buffer := &g_resources.backend_buffers[binding_buffer_idx]
-
-				buffer_writes[buffer_write_idx].buffer = backend_buffer.vk_buffer
-				buffer_writes[buffer_write_idx].offset = vk.DeviceSize(buffer_binding.offset)
-				buffer_writes[buffer_write_idx].range = vk.DeviceSize(buffer_binding.size)
-
-				descriptor_writes[num_descriptor_writes] = vk.WriteDescriptorSet {
-					sType           = .WRITE_DESCRIPTOR_SET,
-					descriptorCount = 1,
-					dstBinding      = u32(binding_idx),
-					dstSet          = backend_bind_group.vk_descriptor_set,
-					pBufferInfo     = &buffer_writes[buffer_write_idx],
-				}
-
-				if .UniformBuffer in buffer.desc.usage {
-					descriptor_writes[num_descriptor_writes].descriptorType = .UNIFORM_BUFFER
-				} else if .DynamicUniformBuffer in buffer.desc.usage {
-					descriptor_writes[num_descriptor_writes].descriptorType =
-					.UNIFORM_BUFFER_DYNAMIC
-				} else if .StorageBuffer in buffer.desc.usage {
-					descriptor_writes[num_descriptor_writes].descriptorType = .STORAGE_BUFFER
-				} else if .DynamicStorageBuffer in buffer.desc.usage {
-					descriptor_writes[num_descriptor_writes].descriptorType =
-					.STORAGE_BUFFER_DYNAMIC
+				if image_binding.mip_count > 1 {
+					assert(image_binding.mip_count == image.desc.mip_count) // We don't support binding sub-ranges of mips as of now
+					image_writes[i].imageView = backend_image.vk_all_mips_views[image_binding.base_array]
 				} else {
-					assert(false) // Unsupported descriptor type
+					image_writes[i].imageView = backend_image.vk_views[image_binding.base_array][image_binding.base_mip]
 				}
 
-				num_descriptor_writes += 1
-				buffer_write_idx += 1
-				continue
+			} else {
+				image_writes[i].imageView = backend_image.vk_image_view
 			}
 
-			if is_image_binding(binding.type) {
+			if binding.type == .StorageImage {
+				image_writes[i].imageLayout = .GENERAL	
+			} else if image.desc.format > .DepthStencilFormatsStart && image.desc.format < .DepthStencilFormatsEnd {
+				image_writes[i].imageLayout = .DEPTH_STENCIL_READ_ONLY_OPTIMAL
+			} else if image.desc.format > .DepthFormatsStart && image.desc.format < .DepthFormatsEnd {
+				image_writes[i].imageLayout = .DEPTH_READ_ONLY_OPTIMAL
+			}else {
+				image_writes[i].imageLayout = .SHADER_READ_ONLY_OPTIMAL		
+			}			
 
-				image_binding := p_bind_group_update.images[image_write_idx]
+			descriptor_writes[i] = vk.WriteDescriptorSet {
+				sType           = .WRITE_DESCRIPTOR_SET,
+				descriptorCount = 1,
+				dstBinding      = image_binding.binding,
+				dstSet          = backend_bind_group.vk_descriptor_set,
+				pImageInfo      = &image_writes[i],
+				dstArrayElement = image_binding.array_element,
+			}
 
-				if image_binding.image_ref == InvalidImageRef {
-					// Write null descriptor
-					image_write_idx += 1
-					continue
-				}
+			if binding.type == .Image {
+				descriptor_writes[i].descriptorType = .SAMPLED_IMAGE
+			} else {
+				descriptor_writes[i].descriptorType = .STORAGE_IMAGE
+			}
+		}
 
-				image := &g_resources.images[get_image_idx(image_binding.image_ref)]
-				backend_image := &g_resources.backend_images[get_image_idx(image_binding.image_ref)]
+		for buffer_binding, i in p_bind_group_update.buffers {
 
-				if image_binding.mip > 0 {
-					image_writes[image_write_idx].imageView =
-						backend_image.per_mip_vk_view[image_binding.mip]
+			binding := bind_group_layout.desc.bindings[buffer_binding.binding]
+			assert(
+				binding.type == .StorageBuffer || 
+				binding.type == .StorageBufferDynamic || 
+				binding.type == .UniformBuffer ||
+				binding.type == .UniformBufferDynamic, "Image binding required")
 
-				} else {
-					image_writes[image_write_idx].imageView = backend_image.all_mips_vk_view
-				}
+			binding_buffer_idx := get_buffer_idx(buffer_binding.buffer_ref)
+			buffer := &g_resources.buffers[binding_buffer_idx]
+			backend_buffer := &g_resources.backend_buffers[binding_buffer_idx]
 
-				if binding.type == .StorageImage {
-					image_writes[image_write_idx].imageLayout = .GENERAL	
-				} else if image.desc.format > .DepthStencilFormatsStart && image.desc.format < .DepthStencilFormatsEnd {
-					image_writes[image_write_idx].imageLayout = .DEPTH_STENCIL_READ_ONLY_OPTIMAL
-				} else if image.desc.format > .DepthFormatsStart && image.desc.format < .DepthFormatsEnd {
-					image_writes[image_write_idx].imageLayout = .DEPTH_READ_ONLY_OPTIMAL
-				}else {
-					image_writes[image_write_idx].imageLayout = .SHADER_READ_ONLY_OPTIMAL		
-				}
+			buffer_writes[i].buffer = backend_buffer.vk_buffer
+			buffer_writes[i].offset = vk.DeviceSize(buffer_binding.offset)
+			buffer_writes[i].range = vk.DeviceSize(buffer_binding.size)
 
-				descriptor_writes[num_descriptor_writes] = vk.WriteDescriptorSet {
-					sType           = .WRITE_DESCRIPTOR_SET,
-					descriptorCount = 1,
-					dstBinding      = u32(binding_idx),
-					dstSet          = backend_bind_group.vk_descriptor_set,
-					pImageInfo      = &image_writes[image_write_idx],
-				}
+			descriptor_writes[images_infos_count + i] = vk.WriteDescriptorSet {
+				sType           = .WRITE_DESCRIPTOR_SET,
+				descriptorCount = 1,
+				dstBinding      = buffer_binding.binding,
+				dstSet          = backend_bind_group.vk_descriptor_set,
+				pBufferInfo     = &buffer_writes[i],
+				dstArrayElement = buffer_binding.array_index,
+			}
 
-				if binding.type == .Image {
-					descriptor_writes[num_descriptor_writes].descriptorType = .SAMPLED_IMAGE
-				} else {
-					descriptor_writes[num_descriptor_writes].descriptorType = .STORAGE_IMAGE
-				}
-
-				image_write_idx += 1
-				num_descriptor_writes += 1
-				continue
+			if .UniformBuffer in buffer.desc.usage {
+				descriptor_writes[images_infos_count + i].descriptorType = .UNIFORM_BUFFER
+			} else if .DynamicUniformBuffer in buffer.desc.usage {
+				descriptor_writes[images_infos_count + i].descriptorType =
+				.UNIFORM_BUFFER_DYNAMIC
+			} else if .StorageBuffer in buffer.desc.usage {
+				descriptor_writes[images_infos_count + i].descriptorType = .STORAGE_BUFFER
+			} else if .DynamicStorageBuffer in buffer.desc.usage {
+				descriptor_writes[images_infos_count + i].descriptorType =
+				.STORAGE_BUFFER_DYNAMIC
+			} else {
+				assert(false, "Buffer binding required") 
 			}
 		}
 
 		vk.UpdateDescriptorSets(
 			G_RENDERER.device,
-			u32(num_descriptor_writes),
+			u32(len(descriptor_writes)),
 			raw_data(descriptor_writes),
 			0,
 			nil,

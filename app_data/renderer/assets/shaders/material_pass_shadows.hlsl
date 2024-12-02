@@ -43,11 +43,8 @@ float4 VSMain(in VSInput pVertexInput, in uint pInstanceId: SV_INSTANCEID, out P
 {
     const MeshInstancedDrawInfo meshInstancedDrawInfo = FetchMeshInstanceInfo(pInstanceId);
 
-    float4x4 modelMatrix = gMeshInstanceInfoBuffer[meshInstancedDrawInfo.meshInstanceIdx].modelMatrix;
-    float3 positionWS = mul(modelMatrix, float4(pVertexInput.position, 1.0)).xyz;
-
-    // @TODO non-uniform scale support
-    float3x3 normalMatrix = (float3x3)modelMatrix;
+    const float4x4 modelMatrix = gMeshInstanceInfoBuffer[meshInstancedDrawInfo.meshInstanceIdx].modelMatrix;
+    const float3 positionWS = mul(modelMatrix, float4(pVertexInput.position, 1.0)).xyz;
 
     return mul(uPerView.ProjectionMatrix, mul(uPerView.ViewMatrix, float4(positionWS.xyz, 1)));
 }

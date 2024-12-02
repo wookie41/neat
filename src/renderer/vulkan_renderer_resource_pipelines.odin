@@ -90,6 +90,7 @@ when USE_VULKAN_BACKEND {
 				sType = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
 				topology = .TRIANGLE_LIST,
 				primitiveRestartEnable = false,
+			
 			},
 		}
 
@@ -97,11 +98,18 @@ when USE_VULKAN_BACKEND {
 
 	@(private = "file")
 	RASTERIZER_STATE_PER_TYPE := map[RasterizerType]vk.PipelineRasterizationStateCreateInfo {
-			.Fill = {
+			.Default = {
 				sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
 				polygonMode = .FILL,
 				lineWidth = 1.0,
 				cullMode = {.BACK},
+			},
+			.Shadows = {
+				sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+				polygonMode = .FILL,
+				lineWidth = 1.0,
+				cullMode = {.FRONT},
+				depthClampEnable = true,
 			},
 		}
 
@@ -128,7 +136,7 @@ when USE_VULKAN_BACKEND {
 				sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
 				depthTestEnable = true,
 				depthWriteEnable = true,
-				depthCompareOp = .GREATER,
+				depthCompareOp = .GREATER_OR_EQUAL,
 				minDepthBounds = 0,
 				maxDepthBounds = 1,
 				stencilTestEnable = false,
@@ -137,7 +145,7 @@ when USE_VULKAN_BACKEND {
 				sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
 				depthTestEnable = true,
 				depthWriteEnable = false,
-				depthCompareOp = .GREATER,
+				depthCompareOp = .GREATER_OR_EQUAL,
 				minDepthBounds = 0,
 				maxDepthBounds = 1,
 				stencilTestEnable = false,

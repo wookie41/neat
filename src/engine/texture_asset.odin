@@ -113,7 +113,7 @@ G_TEXTURE_ASSET_ARRAY: []TextureAsset
 
 TextureAsset :: struct {
 	using metadata: TextureAssetMetadata,
-	num_mips:       u8,
+	num_mips:       u32,
 	width:          u32,
 	height:         u32,
 	depth:          u32,
@@ -405,7 +405,7 @@ texture_asset_load_by_name :: proc(p_name: common.Name) -> TextureAssetRef {
 		return InvalidTextureAssetRef
 	}
 
-	texture_asset.num_mips = u8(tinydds.number_of_mipmaps(tinydds_ctx))
+	texture_asset.num_mips = tinydds.number_of_mipmaps(tinydds_ctx)
 	texture_asset.width = tinydds.width(tinydds_ctx)
 	texture_asset.height = tinydds.height(tinydds_ctx)
 	texture_asset.depth = tinydds.depth(tinydds_ctx)
