@@ -80,14 +80,14 @@ material_instance_update_dirty_materials :: proc() {
 		material_instance_ref := G_MATERIAL_INSTANCE_REF_ARRAY.alive_refs[i]
 		material_instance := &g_resources.material_instances[get_material_instance_idx(material_instance_ref)]
 		if .Dirty in material_instance.flags {
-			continue
+			material_instance_update_dirty_data(material_instance_ref)
 		}
-		material_instance_update_dirty_data(material_instance_ref)
 	}
 }
 
 //---------------------------------------------------------------------------//
 
+@(private="file")
 material_instance_update_dirty_data :: proc(p_material_instance_ref: MaterialInstanceRef) {
 	material_instance_idx := get_material_instance_idx(p_material_instance_ref)
 	material_instance := &g_resources.material_instances[material_instance_idx]
@@ -113,7 +113,8 @@ material_instance_update_dirty_data :: proc(p_material_instance_ref: MaterialIns
 //---------------------------------------------------------------------------//
 
 create_material_instance :: proc(p_material_instance_ref: MaterialInstanceRef) -> bool {
-	// Noop
+	material_instance := &g_resources.material_instances[get_material_instance_idx(p_material_instance_ref)]
+	material_instance.flags += {.Dirty}
 	return true
 }
 
@@ -144,6 +145,14 @@ material_instance_get_properties_ptr :: proc(
 	p_material_instance_ref: MaterialInstanceRef,
 ) -> ^MaterialProperties {
 	return &INTERNAL.material_properties_array[get_material_instance_idx(p_material_instance_ref)]
+}
+
+//--------------------------------------------------------------------------//
+
+material_instance_mark_dirty :: proc(p_material_instance_ref: MaterialInstanceRef) {
+	material_instance_idx := get_material_instance_idx(p_material_instance_ref)
+	material_instance := &g_resources.material_instances[material_instance_idx]
+	material_instance.flags += {.Dirty}
 }
 
 //--------------------------------------------------------------------------//

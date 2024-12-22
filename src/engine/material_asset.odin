@@ -322,8 +322,6 @@ material_asset_load :: proc(p_name: common.Name) -> MaterialAssetRef {
 		return InvalidMaterialAssetRef
 	}
 
-	renderer.material_instance_update_dirty_data(material_asset.material_instance_ref)
-
 	material_asset.ref_count = 1
 
 	return material_asset_ref

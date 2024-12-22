@@ -101,7 +101,6 @@ destroy_mesh_instance :: proc(p_ref: MeshInstanceRef) {
 	common.ref_free(&g_resource_refs.mesh_instances, p_ref)
 }
 
-
 //--------------------------------------------------------------------------//
 
 @(private)
@@ -126,11 +125,9 @@ mesh_instance_send_transform_data :: proc() {
 			}
 
 			buffer_upload_response := request_buffer_upload(buffer_upload_request)
-			if buffer_upload_response.status == .Failed {
-				continue
+			if buffer_upload_response.status == .Uploaded {
+				mesh_instance.flags -= {.MeshInstanceDataDirty}
 			}
-
-			mesh_instance.flags -= {.MeshInstanceDataDirty}
 		}
 	}
 }
@@ -144,6 +141,31 @@ mesh_instance_set_model_matrix :: proc(
 	mesh_instance := &g_resources.mesh_instances[get_mesh_instance_idx(p_mesh_instance_ref)]
 	mesh_instance.model_matrix = p_model_matrix
 	mesh_instance.flags += {.MeshInstanceDataDirty}
+}
+
+//--------------------------------------------------------------------------//
+
+mesh_instance_spawn :: proc(
+	p_name: common.Name,
+	p_mesh_ref: MeshRef,
+	p_position: glsl.vec3 = glsl.vec3(0),
+	p_scale: glsl.vec3 = glsl.vec3(1),
+) -> MeshInstanceRef {
+
+	mesh_instance_ref := allocate_mesh_instance_ref(p_name)
+
+	mesh_instance := &g_resources.mesh_instances[get_mesh_instance_idx(mesh_instance_ref)]
+	mesh_instance.desc.mesh_ref = p_mesh_ref
+
+	if create_mesh_instance(mesh_instance_ref) == false {
+		return InvalidMeshInstanceRef
+	}
+
+	model_matrix := glsl.mat4Translate(p_position) * glsl.mat4Scale(p_scale)
+
+	mesh_instance_set_model_matrix(mesh_instance_ref, model_matrix)
+
+	return mesh_instance_ref
 }
 
 //--------------------------------------------------------------------------//

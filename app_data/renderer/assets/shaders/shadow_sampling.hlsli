@@ -22,7 +22,7 @@ float SampleSimpleDirectionalLightShadow(in float3 positionWS, in float3 positio
     
     return depthPixel >= depthShadowMap ? 1 : 0;
 }
-
+    
 //---------------------------------------------------------------------------//
 
 float3 GetCascadeDebugColor(in int cascadeIndex)
@@ -38,3 +38,5 @@ float3 GetCascadeDebugColor(in int cascadeIndex)
 
     return cascadeColors[cascadeIndex];
 }
+
+    //---------------------------------------------------------------------------//

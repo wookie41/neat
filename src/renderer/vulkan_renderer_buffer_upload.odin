@@ -134,12 +134,12 @@ when USE_VULKAN_BACKEND {
 	backend_init_buffer_upload :: proc(p_options: BufferUploadInitOptions) -> bool {
 		G_RENDERER.transfer_fences_pre_graphics = make(
 			[]vk.Fence,
-			int(p_options.num_staging_regions),
+			G_RENDERER.num_frames_in_flight,
 			G_RENDERER_ALLOCATORS.main_allocator,
 		)
 		G_RENDERER.transfer_fences_post_graphics = make(
 			[]vk.Fence,
-			int(p_options.num_staging_regions),
+			G_RENDERER.num_frames_in_flight,
 			G_RENDERER_ALLOCATORS.main_allocator,
 		)
 
@@ -156,7 +156,7 @@ when USE_VULKAN_BACKEND {
 				pNext = nil,
 			}
 
-			for i in 0 ..< p_options.num_staging_regions {
+			for i in 0 ..< G_RENDERER.num_frames_in_flight {
 				if vk.CreateFence(
 					   G_RENDERER.device,
 					   &fence_create_info,
@@ -216,7 +216,6 @@ when USE_VULKAN_BACKEND {
 		p_dst_buffer_ref: BufferRef,
 		p_pending_requests: [dynamic]PendingBufferUploadRequest,
 	) {
-
 		temp_arena := common.Arena{}
 		common.temp_arena_init(&temp_arena)
 		defer common.arena_delete(temp_arena)

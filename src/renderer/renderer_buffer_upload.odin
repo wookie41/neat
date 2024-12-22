@@ -79,7 +79,6 @@ INTERNAL: struct {
 BufferUploadInitOptions :: struct {
 	staging_buffer_size:       u32,
 	staging_async_buffer_size: u32,
-	num_staging_regions:       u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -112,24 +111,25 @@ init_buffer_upload :: proc(p_options: BufferUploadInitOptions) -> bool {
 		return true
 	}
 
+	INTERNAL.staging_buffer_offset = 0
 	INTERNAL.last_frame_requests_per_buffer = make_map(
 		map[BufferRef][dynamic]BufferUploadRequest,
 		32,
-		get_frame_allocator(),
+		get_next_frame_allocator(),
 	)
+
+	INTERNAL.single_staging_region_size = p_options.staging_buffer_size
+	INTERNAL.single_async_staging_region_size = p_options.staging_async_buffer_size
 
 	// Create the staging buffer used as upload src
 	{
-		INTERNAL.single_staging_region_size = p_options.staging_buffer_size
-		INTERNAL.single_async_staging_region_size = p_options.staging_async_buffer_size
-
 		INTERNAL.staging_buffer_ref = allocate_buffer_ref(
 			common.create_name("UploadStagingBuffer"),
 		)
 		staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer_ref)]
 		// make the buffer n-times large, so we can upload data from the CPU while the GPU is still doing the transfer
 		staging_buffer.desc.size =
-			p_options.staging_buffer_size * p_options.num_staging_regions * 10
+			p_options.staging_buffer_size * G_RENDERER.num_frames_in_flight
 		staging_buffer.desc.flags = {.HostWrite, .Mapped}
 		staging_buffer.desc.usage = {.TransferSrc}
 
@@ -148,7 +148,7 @@ init_buffer_upload :: proc(p_options: BufferUploadInitOptions) -> bool {
 		)
 		staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.async_staging_buffer_ref)]
 		staging_buffer.desc.size =
-			p_options.staging_async_buffer_size * p_options.num_staging_regions
+			p_options.staging_async_buffer_size * G_RENDERER.num_frames_in_flight
 		staging_buffer.desc.flags = {.HostWrite, .Mapped}
 		staging_buffer.desc.usage = {.TransferSrc}
 
@@ -179,7 +179,7 @@ dry_request_buffer_upload :: proc(p_buffer_ref: BufferRef, p_size: u32) -> bool 
 		buffer := &g_resources.buffers[get_buffer_idx(p_buffer_ref)]
 		return p_size <= buffer.desc.size
 	}
-	return INTERNAL.staging_buffer_offset + p_size <= INTERNAL.single_staging_region_size
+	return (INTERNAL.staging_buffer_offset + p_size) <= INTERNAL.single_staging_region_size
 }
 
 //---------------------------------------------------------------------------//
@@ -213,24 +213,24 @@ request_buffer_upload :: proc(p_request: BufferUploadRequest) -> BufferUploadRes
 		return BufferUploadResponse{status = .Started}
 	}
 
-	// When this request has to run synchronously,  make sure we have 
-	// enough space in the staging buffer to run it at once
-	if dry_request_buffer_upload(p_request.dst_buff, p_request.size) == false {
-		return BufferUploadResponse{status = .Failed}
-	}
-
 	if .RunOnNextFrame in p_request.flags {
 
 		// Create a new entry if there were no upload requests for this buffer yet
 		if (p_request.dst_buff in INTERNAL.last_frame_requests_per_buffer) == false {
 			INTERNAL.last_frame_requests_per_buffer[p_request.dst_buff] = make(
 				[dynamic]BufferUploadRequest,
-				get_frame_allocator(),
+				get_next_frame_allocator(),
 			)
 		}
 		append(&INTERNAL.last_frame_requests_per_buffer[p_request.dst_buff], p_request)
 
 		return BufferUploadResponse{status = .Uploaded}
+	}
+	
+	// When this request has to run synchronously,  make sure we have 
+	// enough space in the staging buffer to run it at once
+	if dry_request_buffer_upload(p_request.dst_buff, p_request.size) == false {
+		return BufferUploadResponse{status = .Failed}
 	}
 
 	pending_request := buffer_upload_send_data(p_request)
@@ -262,29 +262,46 @@ run_last_frame_buffer_upload_requests :: proc() {
 		not_satisfied_requests := make([dynamic]BufferUploadRequest, get_next_frame_allocator())
 		requests_to_run := make([dynamic]PendingBufferUploadRequest, temp_arena.allocator)
 
+		buffer := &g_resources.buffers[get_buffer_idx(buffer_ref)]
+
 		for request in pending_requests {
 
 			// Delay the request to the next frame if the staging buffer is full
-			if dry_request_buffer_upload(buffer_ref, request.size) == false {
+			if dry_request_buffer_upload(request.dst_buff, request.size) == false {
 				append(&not_satisfied_requests, request)
 				continue
 			}
 
-			append(&requests_to_run, buffer_upload_send_data(request))
+			pending_request := buffer_upload_send_data(request)
+			log.infof("Uploaded data at offset %d\n", pending_request.staging_buffer_offset)
+			append(&requests_to_run, pending_request)
 		}
 
-		backend_run_buffer_upload_requests(
-			INTERNAL.staging_buffer_ref,
-			buffer_ref,
-			requests_to_run,
+		if len(requests_to_run) > 0 {
+
+			backend_run_buffer_upload_requests(
+				INTERNAL.staging_buffer_ref,
+				buffer_ref,
+				requests_to_run,
+			)
+
+			for request in requests_to_run {
+				staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer_ref)]
+				upload_ptr := mem.ptr_offset(staging_buffer.mapped_ptr, request.staging_buffer_offset)
+				
+				res := mem.compare_ptrs(upload_ptr, request.data_ptr, int(request.size))
+				assert(res == 0)
+			}
+		}
+
+		if len(not_satisfied_requests) > 0 {
+			last_frame_requests_per_buffer[buffer_ref] = not_satisfied_requests
+		}
+
+		log.infof(
+			"%d/%d uploads to buffer %s satisfied in frame %d\n", 
+			len(requests_to_run), len(pending_requests), common.get_string(buffer.desc.name), get_frame_id(),
 		)
-
-		if len(not_satisfied_requests) == 0 {
-			delete(not_satisfied_requests)
-			continue
-		}
-
-		last_frame_requests_per_buffer[buffer_ref] = not_satisfied_requests
 	}
 
 	INTERNAL.last_frame_requests_per_buffer = last_frame_requests_per_buffer
@@ -345,13 +362,6 @@ buffer_upload_process_async_requests :: proc() {
 	staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.async_staging_buffer_ref)]
 
 	for &async_upload_info in INTERNAL.async_uploads {
-
-		if async_upload_info.current_dst_buffer_offset ==
-		   INTERNAL.single_async_staging_region_size {
-			append(&async_uploads, async_upload_info)
-			continue
-		}
-
 
 		// Check if this is the initial upload info
 		if async_upload_info.is_initial_part {

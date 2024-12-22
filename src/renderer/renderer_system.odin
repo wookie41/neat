@@ -258,7 +258,6 @@ init :: proc(p_options: InitOptions) -> bool {
 		buffer_upload_options := BufferUploadInitOptions {
 			staging_buffer_size       = 8 * common.MEGABYTE,
 			staging_async_buffer_size = 8 * common.MEGABYTE,
-			num_staging_regions       = G_RENDERER.num_frames_in_flight,
 		}
 		init_buffer_upload(buffer_upload_options) or_return
 	}
@@ -524,13 +523,13 @@ update :: proc(p_dt: f32) {
 	buffer_upload_finalize_finished_uploads()
 	image_upload_finalize_finished_uploads()
 
+	image_upload_begin_frame()
+	buffer_upload_begin_frame()
+
 	run_last_frame_buffer_upload_requests()
 	batch_update_bindless_array_entries()
 	buffer_upload_process_async_requests()
 	image_upload_progress_copies()
-
-	image_upload_begin_frame()
-	buffer_upload_begin_frame()
 
 	material_instance_update_dirty_materials()
 	mesh_instance_send_transform_data()
@@ -566,7 +565,7 @@ get_frame_id :: #force_inline proc() -> u32 {
 @(private = "file")
 advance_frame_idx :: proc() {
 	INTERNAL.frame_id += 1
-	INTERNAL.frame_idx = (INTERNAL.frame_idx + 1) % G_RENDERER.num_frames_in_flight
+	INTERNAL.frame_idx = INTERNAL.frame_id % G_RENDERER.num_frames_in_flight
 }
 
 //---------------------------------------------------------------------------//

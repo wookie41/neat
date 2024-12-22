@@ -377,7 +377,6 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
-
 		for vk_swap_image, i in G_RENDERER.swapchain_images {
 			ref := G_RENDERER.swap_image_refs[i]
 			image_idx := get_image_idx(ref)
