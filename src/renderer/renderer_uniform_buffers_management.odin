@@ -40,6 +40,11 @@ g_per_frame_data: struct #packed {
 	sun:                 DirectionalLight,
 	shadow_cascades:     [MAX_SHADOW_CASCADES]ShadowCascade,
 	num_shadow_cascades: u32,
+	frame_id_mod_2:      u32,
+	frame_id_mod_4:      u32,
+	frame_id_mod_16:     u32,
+	frame_id_mod_64:     u32,
+	debug_draw_cascades: b32,
 }
 
 //---------------------------------------------------------------------------//
@@ -136,10 +141,14 @@ uniform_buffer_ensure_alignment_by_size :: proc(p_size: u32) -> u32 {
 
 @(private = "file")
 update_per_frame_data :: proc(p_dt: f32) {
-	g_per_frame_data.sun = DirectionalLight {
-		color     = {1, 1, 1},
-		direction = {0, -1, 0},
-	}
+	g_per_frame_data.sun.color     = {1, 1, 1}
+	g_per_frame_data.sun.direction = {0, -1, 0}
+
+	g_per_frame_data.frame_id_mod_2 = get_frame_id() % 2
+	g_per_frame_data.frame_id_mod_4 = get_frame_id() % 4
+	g_per_frame_data.frame_id_mod_16 = get_frame_id() % 16
+	g_per_frame_data.frame_id_mod_64 = get_frame_id() % 64
+
 	g_uniform_buffers.frame_data_offset = uniform_buffer_create_transient_buffer(&g_per_frame_data)
 }
 

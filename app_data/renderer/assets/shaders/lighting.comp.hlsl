@@ -38,7 +38,8 @@ void CSMain(uint2 dispatchThreadId: SV_DispatchThreadID)
     const float3 posWS = UnprojectDepthToWorldPos(input.uv, depth, uPerView.InvViewProjMatrix);
     const float3 posVS = UnprojectDepthToWorldPos(input.uv, depth, uPerView.InvProjMatrix);
 
-    const float directionalLightShadow = SampleSimpleDirectionalLightShadow(posWS, posVS, normalWS);
+    int cascadeIndex;
+    const float directionalLightShadow = SampleSimpleDirectionalLightShadow(posWS, posVS, normalWS, input.cellCoord, cascadeIndex);
 
     const float3 V = normalize(uPerView.CameraPositionWS - posWS);
     const float3 L = -uPerFrame.Sun.DirectionWS;
@@ -65,5 +66,11 @@ void CSMain(uint2 dispatchThreadId: SV_DispatchThreadID)
 
     const float3 ambientTerm = 0.1 * albedo;
 
-    outputImage[input.cellCoord] = float4(((diffuse + specular) * directionalLightShadow + ambientTerm) * NdotL, 1);
+    float3 pixelColor = ((diffuse + specular) * directionalLightShadow) * NdotL + ambientTerm;
+    if (uPerFrame.Sun.DebugDrawCascades > 0)
+    {
+        pixelColor *= GetCascadeDebugColor(cascadeIndex);
+    }
+
+    outputImage[input.cellCoord] = float4(pixelColor, 1);
 }

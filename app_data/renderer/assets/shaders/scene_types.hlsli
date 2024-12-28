@@ -6,9 +6,9 @@
 struct DirectionalLight
 {
     float3 DirectionWS;
-    float _padding0;
+    float ShadowSamplingRadius;
     float3 Color;
-    float _padding1;
+    uint DebugDrawCascades;
 };
 
 //---------------------------------------------------------------------------//
@@ -32,7 +32,8 @@ struct ShadowCascade
 {
     float4x4 LightMatrix;
     float Split;
-    float3 _padding;
+    float OffsetScale;
+    float2 _padding;
 };
 
 //---------------------------------------------------------------------------//

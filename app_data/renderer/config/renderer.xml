@@ -5,7 +5,7 @@
         <GBufferParameters format="RGBA8UNorm" resolution="Full" sampled="" />
         <SceneHDR format="R11G11B10UFloat" resolution="Full" sampled="" storage="" />
         <DepthBuffer format="Depth32SFloat" resolution="Full" sampled="" />
-        <CascadeShadows format="Depth16" width="2048" height="2048" sampled="" array_size="5"/>
+        <CascadeShadows format="Depth16" width="2048" height="2048" sampled="" array_size="6"/>
     </Images>
     <RenderTasks>
         <Mesh name="GBufferOpaque" renderPass="GBuffer" materialPassType="GBuffer">
@@ -15,7 +15,7 @@
             <OutputImage name="DepthBuffer" clear="0"/>
             <MaterialPass name="OpaquePBR" />
         </Mesh>
-        <CascadeShadows name="CascadeShadows" cascadesImage="CascadeShadows" renderPass="Shadows" materialPassType="Shadows" numCascades="5" maxShadowsDistance="1500">
+        <CascadeShadows name="CascadeShadows" cascadesImage="CascadeShadows" renderPass="Shadows" materialPassType="Shadows" numCascades="3" maxShadowsDistance="15000">
             <OutputImage name="CascadeShadows" clear="0"/>
             <MaterialPass name="OpaquePBR" />
         </CascadeShadows>

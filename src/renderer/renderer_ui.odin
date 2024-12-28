@@ -105,12 +105,15 @@ ui_begin_frame :: proc() {
 	imgui_vk.NewFrame()
 	imgui.NewFrame()
 	imgui.SetCurrentContext(INTERNAL.imgui_context)
+	imgui.Begin("Renderer", nil, {})
 }
 
 //---------------------------------------------------------------------------//
 
 @(private)
 ui_submit :: proc() {
+
+	imgui.End()
 
 	cmd_buff_ref := get_frame_cmd_buffer_ref()
 	backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buff_ref)]

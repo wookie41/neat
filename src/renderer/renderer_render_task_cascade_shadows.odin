@@ -6,6 +6,7 @@ import "../common"
 import "core:encoding/xml"
 import "core:math/linalg/glsl"
 import "core:mem"
+import imgui "../third_party/odin-imgui"
 
 //---------------------------------------------------------------------------//
 
@@ -15,13 +16,17 @@ MAX_SHADOW_CASCADES :: 6 // Keep in sync with resources.hlsli
 @(private = "file")
 CASCADE_SPLIT_LOG_FACTOR :: 0.90
 
+@(private="file")
+SHADOW_SAMPLING_RADIUS :: 0.03 // world space
+
 //---------------------------------------------------------------------------//
 
 @(private)
 ShadowCascade :: struct #packed {
 	light_matrix: glsl.mat4,
 	split:        f32,
-	_padding:     glsl.vec3,
+	offset_scale: glsl.vec2,
+	_padding:     f32,
 }
 
 //---------------------------------------------------------------------------//
@@ -173,17 +178,26 @@ destroy_instance :: proc(p_render_task_ref: RenderTaskRef) {
 @(private = "file")
 begin_frame :: proc(p_render_task_ref: RenderTaskRef) {
 
-	// Calculation of the cascade planes based on
-	// https://developer.download.nvidia.com/SDK/10.5/opengl/src/cascaded_shadow_maps/doc/cascaded_shadow_maps.pdf
-
 	cascade_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
 	cascade_render_task_data := (^CascadeShadowsRenderTaskData)(cascade_render_task.data_ptr)
 
 	using cascade_render_task_data
 
+	// Debug UI
+	imgui.InputFloat("Shadow rendering distance", &max_shadows_distance)
+	imgui.InputInt("Cascade count", (^i32)(&num_cascades))
+	imgui.Checkbox("Draw cascades", (^bool)(&g_per_frame_data.sun.debug_draw_cascades))
+
+	num_cascades = max(0, num_cascades)
+	num_cascades = min(num_cascades, MAX_SHADOW_CASCADES)
+
+	// Calculation of the cascade planes based on
+	// https://developer.download.nvidia.com/SDK/10.5/opengl/src/cascaded_shadow_maps/doc/cascaded_shadow_maps.pdf
+
 	camera_near := g_render_camera.near_plane
 
 	g_per_frame_data.num_shadow_cascades = num_cascades
+	g_per_frame_data.sun.shadow_sampling_radius = SHADOW_SAMPLING_RADIUS
 
 	// First, calculate the far splits
 	for i in 0 ..< num_cascades {
@@ -255,6 +269,10 @@ begin_frame :: proc(p_render_task_ref: RenderTaskRef) {
 			max_p = glsl.max(max_p, p)
 		}
 
+		// Grow the area to make sure we don't sample outside of the shadow map
+		min_p -= SHADOW_SAMPLING_RADIUS * 2
+		max_p += SHADOW_SAMPLING_RADIUS * 2
+
 		scale := glsl.vec3(2) / (max_p - min_p)
 		offset := -0.5 * (max_p + min_p) * scale
 
@@ -269,6 +287,7 @@ begin_frame :: proc(p_render_task_ref: RenderTaskRef) {
 		// This is used to sample the shadow maps
 		g_per_frame_data.shadow_cascades[i].light_matrix =
 			texture_space_conversion * ndc_z_correction * proj * view
+		g_per_frame_data.shadow_cascades[i].offset_scale = scale.xy
 
 		// These are used during rendering
 		INTERNAL.cascade_matrices[i].view = view

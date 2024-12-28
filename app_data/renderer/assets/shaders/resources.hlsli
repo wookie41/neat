@@ -30,6 +30,10 @@ struct PerFrame
     DirectionalLight Sun;
     ShadowCascade ShadowCascades[MAX_SHADOW_CASCADES];
     int NumShadowCascades;
+    int FrameIdMod2;
+    int FrameIdMod4;
+    int FrameIdMod16;
+    int FrameIdMod64;
 };
 
 //---------------------------------------------------------------------------//
