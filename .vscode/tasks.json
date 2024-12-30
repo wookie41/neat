@@ -18,11 +18,21 @@
             "dependsOn": "MakeBinDir",
         },
         {
-            "label": "(Debug) Build",
+            "label": "(Debug) Init & Build",
             "type": "shell",
             "command": "odin build src/runner/neat.odin -file --debug -o:minimal --vet-shadowing --vet-unused --vet-style  -out:bin/neat.exe",
             "problemMatcher": [],
             "dependsOn": "CopyDlls",
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            }
+        },
+        {
+            "label": "(Debug) Build",
+            "type": "shell",
+            "command": "odin build src/runner/neat.odin -file --debug -o:minimal --vet-shadowing --vet-unused --vet-style  -out:bin/neat.exe",
+            "problemMatcher": [],
             "group": {
                 "kind": "build",
                 "isDefault": true

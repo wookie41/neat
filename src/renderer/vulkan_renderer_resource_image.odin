@@ -645,8 +645,8 @@ when USE_VULKAN_BACKEND {
 				format = G_IMAGE_FORMAT_MAPPING[image.desc.format],
 				subresourceRange = {
 					aspectMask = aspect_mask,
-					levelCount = 1,
-					layerCount = image.desc.mip_count,
+					levelCount = image.desc.mip_count,
+					layerCount = 1,
 					baseArrayLayer = array_level,
 				},
 			}

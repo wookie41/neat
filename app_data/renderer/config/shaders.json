@@ -14,5 +14,9 @@
     {
         "name": "lighting.comp",
         "path": "lighting.comp.hlsl"
+    },
+    {
+        "name": "build_hiz.comp",
+        "path": "build_hiz.comp.hlsl"
     }
 ]

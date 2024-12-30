@@ -176,6 +176,7 @@ init_shaders :: proc() -> bool {
 		}
 
 		if create_shader(shader_ref) == false {
+			log.errorf("Failed to create shader %s\n", entry.name)
 			common.ref_free(&g_resource_refs.shaders, shader_ref)
 			continue
 		}
@@ -200,7 +201,7 @@ create_shader :: proc(p_shader_ref: ShaderRef) -> bool {
 	assert((shader.hash in INTERNAL.shader_by_hash) == false)
 
 	temp_arena: common.Arena
-	common.temp_arena_init(&temp_arena)
+	common.temp_arena_init(&temp_arena, common.MEGABYTE)
 	defer common.arena_delete(temp_arena)
 
 	shader_code := shader_compile(p_shader_ref, temp_arena.allocator) or_return
@@ -261,7 +262,8 @@ find_shader_by_name_name :: proc(p_name: common.Name) -> ShaderRef {
 //--------------------------------------------------------------------------//
 
 find_shader_by_name_str :: proc(p_name: string) -> ShaderRef {
-	ref := common.ref_find_by_name(&g_resource_refs.shaders, common.create_name(p_name))
+	name := common.create_name(p_name)
+	ref := common.ref_find_by_name(&g_resource_refs.shaders, name)
 	if ref == InvalidShaderRef {
 		return InvalidShaderRef
 	}
@@ -452,7 +454,7 @@ shaders_update :: proc() {
 reload_shader :: proc(p_shader_file_name: string) {
 
 	temp_arena: common.Arena
-	common.temp_arena_init(&temp_arena)
+	common.temp_arena_init(&temp_arena, common.MEGABYTE)
 	defer common.arena_delete(temp_arena)
 
 	if strings.contains(p_shader_file_name, "incl") {
@@ -464,6 +466,9 @@ reload_shader :: proc(p_shader_file_name: string) {
 
 	// Find the shader for this file name
 	for i in 0 ..< g_resource_refs.shaders.alive_count {
+
+		common.arena_reset(temp_arena)
+
 		shader_ref := g_resource_refs.shaders.alive_refs[i]
 		shader := &g_resources.shaders[get_shader_idx(shader_ref)]
 
@@ -667,7 +672,12 @@ shader_compile :: proc(
 	}
 
 	// Read the shader binary
-	return os.read_entire_file(shader_bin_path, p_shader_code_allocator)
+	shader_data, read_success := os.read_entire_file(shader_bin_path, p_shader_code_allocator)
+	if read_success == false {
+		log.errorf("Failed to read shader code %s\n", shader_bin_path)
+		return nil, false
+	}
+	return shader_data, true
 }
 
 //--------------------------------------------------------------------------//

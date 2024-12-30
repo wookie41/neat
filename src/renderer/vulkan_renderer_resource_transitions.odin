@@ -60,21 +60,17 @@ when USE_VULKAN_BACKEND {
 
 		for buffer_input in p_bindings.buffer_inputs {
 
+			if buffer_input.usage == .Uniform {
+				continue
+			}
+
 			buffer := &g_resources.buffers[get_buffer_idx(buffer_input.buffer_ref)]
 			backend_buffer := &g_resources.backend_buffers[get_buffer_idx(buffer_input.buffer_ref)]
-
-			access_mask := vk.AccessFlags{}
-			switch buffer_input.usage {
-			case .Uniform:
-				access_mask += {.UNIFORM_READ}
-			case .General:
-				access_mask += {.SHADER_READ}
-			}
 
 			buffer_barrier := vk.BufferMemoryBarrier {
 				sType               = .BUFFER_MEMORY_BARRIER,
 				buffer              = backend_buffer.vk_buffer,
-				dstAccessMask       = access_mask,
+				dstAccessMask       = {.SHADER_READ},
 				offset              = vk.DeviceSize(buffer_input.offset),
 				dstQueueFamilyIndex = get_queue_family_index(dst_queue),
 				size                = vk.DeviceSize(
@@ -197,7 +193,7 @@ when USE_VULKAN_BACKEND {
 					&image_output_barriers_compute,
 				)
 
-				image.queue = .Compute
+				image.queue = dst_queue
 
 			} else if image.desc.format > .DepthFormatsStart &&
 			   image.desc.format < .DepthFormatsEnd {

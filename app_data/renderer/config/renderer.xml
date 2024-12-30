@@ -15,6 +15,12 @@
             <OutputImage name="DepthBuffer" clear="0"/>
             <MaterialPass name="OpaquePBR" />
         </Mesh>
+        <BuildHiZ name="BuildHiZ" shader="build_hiz.comp" hiZBuffer="HiZBuffer" counterBuffer="SPDCounter" resolution="Half">
+            <InputBuffer usage="Uniform"/>
+            <InputImage name="DepthBuffer"/>
+            <OutputBuffer name="SPDCounter"/>
+            <OutputImage name="HiZBuffer"/>
+        </BuildHiZ>
         <CascadeShadows name="CascadeShadows" cascadesImage="CascadeShadows" renderPass="Shadows" materialPassType="Shadows" numCascades="3" maxShadowsDistance="15000">
             <OutputImage name="CascadeShadows" clear="0"/>
             <MaterialPass name="OpaquePBR" />

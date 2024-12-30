@@ -172,7 +172,7 @@ create_bind_group_for_bindings :: proc(
 	BindGroupLayoutRef,
 ) {
 
-	shader_stage : ShaderStageFlags = {.Compute} if p_is_compute else {.Pixel}
+	shader_stage: ShaderStageFlags = {.Compute} if p_is_compute else {.Pixel}
 
 	bindings_count :=
 		u32(len(p_render_pass_bindings.image_inputs)) +
@@ -205,7 +205,7 @@ create_bind_group_for_bindings :: proc(
 
 		switch buffer_input.usage {
 		case .Uniform:
-			bind_group_layout.desc.bindings[binding_index].type = .UniformBuffer
+			bind_group_layout.desc.bindings[binding_index].type = .UniformBufferDynamic
 		case .General:
 			bind_group_layout.desc.bindings[binding_index].type = .StorageBuffer
 		}
@@ -283,7 +283,8 @@ create_bind_group_for_bindings :: proc(
 		bind_group_update_info.buffers[binding_index] = BindGroupBufferBinding {
 			binding    = u32(binding_index),
 			buffer_ref = input_buffer.buffer_ref,
-			offset     = input_buffer.offset,
+			// The offset is expected to be updated dynamically
+			offset     = 0 if input_buffer.usage == .Uniform else input_buffer.offset,
 			size       = input_buffer.size,
 		}
 		binding_index += 1
@@ -327,6 +328,7 @@ create_bind_group_for_bindings :: proc(
 				base_array  = output_image.array_layer,
 				mip_count   = 1,
 				layer_count = 1,
+				flags       = {.AddressSubresource},
 			}
 
 			binding_index += 1
@@ -356,6 +358,21 @@ generic_pixel_job_destroy :: proc(p_job: GenericPixelJob) {
 	destroy_bind_group_layout(p_job.bind_group_layout_ref)
 	draw_command_destroy(p_job.draw_command_ref)
 	destroy_render_pass(p_job.render_pass_ref)
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
+generic_compute_job_update_uniform_data :: proc(p_resolution: Resolution) -> u32 {
+	resolution := resolve_resolution(p_resolution)
+
+	// Upload uniform data
+	uniform_data := GenericComputeJobUniformData {
+		texel_size   = glsl.vec2{1.0 / f32(resolution.x), 1.0 / f32(resolution.y)},
+		texture_size = glsl.ivec2{i32(resolution.x), i32(resolution.y)},
+	}
+
+	return uniform_buffer_create_transient_buffer(&uniform_data)
 }
 
 //---------------------------------------------------------------------------//

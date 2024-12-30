@@ -273,7 +273,6 @@ run_last_frame_buffer_upload_requests :: proc() {
 			}
 
 			pending_request := buffer_upload_send_data(request)
-			log.infof("Uploaded data at offset %d\n", pending_request.staging_buffer_offset)
 			append(&requests_to_run, pending_request)
 		}
 

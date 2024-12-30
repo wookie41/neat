@@ -70,7 +70,7 @@ when USE_VULKAN_BACKEND {
 				nil,
 				&backend_shader.vk_module,
 			); create_res != .SUCCESS {
-				log.warnf("Failed to create module for shader %s: %s", common.get_string(shader.desc.name), create_res)
+				log.warnf("Failed to create module for shader %s: %s\n", common.get_string(shader.desc.name), create_res)
 				return false
 			}
 		}

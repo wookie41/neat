@@ -208,7 +208,6 @@ when USE_VULKAN_BACKEND {
 				stage_flags += {.COMPUTE}
 			}
 
-
 			descriptor_binding^ = vk.DescriptorSetLayoutBinding {
 				binding         = i,
 				descriptorCount = bind_group_binding.count,

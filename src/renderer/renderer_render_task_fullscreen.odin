@@ -17,13 +17,6 @@ THREAD_GROUP_SIZE :: glsl.uvec2{8, 8}
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-INTERNAL: struct {
-	fullscreen_bind_group_layout_ref: BindGroupLayoutRef,
-}
-
-//---------------------------------------------------------------------------//
-
-@(private = "file")
 FullScreenRenderTaskData :: struct {
 	compute_job:          GenericComputeJob,
 	pixel_job:            GenericPixelJob,
@@ -89,11 +82,14 @@ create_instance :: proc(
 	}
 
 	//  Setup render task bindings
-	render_task_setup_render_pass_bindings(p_render_task_config, &fullscreen_render_task_data.render_pass_bindings)
+	render_task_setup_render_pass_bindings(
+		p_render_task_config,
+		&fullscreen_render_task_data.render_pass_bindings,
+	)
 
 	fullscreen_render_task_data.resolution = G_RESOLUTION_NAME_MAPPING[resolution_name]
 	fullscreen_render_task_data.is_using_compute = strings.has_suffix(shader_name, ".comp")
-	
+
 	render_task_name := common.create_name(doc_name)
 
 	temp_arena: common.Arena
@@ -107,7 +103,10 @@ create_instance :: proc(
 			fullscreen_render_task_data.render_pass_bindings,
 		)
 		if success == false {
-			log.errorf("Failed to create render task '%s' - couldn't create compute job\n", doc_name)
+			log.errorf(
+				"Failed to create render task '%s' - couldn't create compute job\n",
+				doc_name,
+			)
 			return false
 		}
 		fullscreen_render_task_data.compute_job = compute_job
@@ -189,14 +188,8 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 
 		resolution := resolve_resolution(fullscreen_render_task_data.resolution)
 
-		// Upload uniform data
-		fullscreen_task_uniform_data := GenericComputeJobUniformData {
-			texel_size   = glsl.vec2{1.0 / f32(resolution.x), 1.0 / f32(resolution.y)},
-			texture_size = glsl.ivec2{i32(resolution.x), i32(resolution.y)},
-		}
-
-		fullscreen_task_uniform_data_offset := uniform_buffer_create_transient_buffer(
-			&fullscreen_task_uniform_data,
+		fullscreen_task_uniform_data_offset := generic_compute_job_update_uniform_data(
+			fullscreen_render_task_data.resolution,
 		)
 
 		// Dispatch the command
@@ -226,7 +219,10 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 		{nil, global_uniform_offsets, nil, nil},
 	)
 
-	end_render_pass(fullscreen_render_task_data.pixel_job.render_pass_ref, get_frame_cmd_buffer_ref())
+	end_render_pass(
+		fullscreen_render_task_data.pixel_job.render_pass_ref,
+		get_frame_cmd_buffer_ref(),
+	)
 }
 
 //---------------------------------------------------------------------------//
