@@ -65,9 +65,10 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
-		if 	.UniformBuffer in  buffer.desc.usage || 
-			.DynamicUniformBuffer in buffer.desc.usage {
-				buffer.desc.size += (buffer.desc.size % u32(G_RENDERER.device_properties.limits.minUniformBufferOffsetAlignment))
+		if .UniformBuffer in buffer.desc.usage || .DynamicUniformBuffer in buffer.desc.usage {
+			buffer.desc.size +=
+				(buffer.desc.size %
+					u32(G_RENDERER.device_properties.limits.minUniformBufferOffsetAlignment))
 		}
 
 		buffer_create_info := vk.BufferCreateInfo {
@@ -137,7 +138,7 @@ when USE_VULKAN_BACKEND {
 			common.get_string(buffer.desc.name),
 			temp_arena.allocator,
 		)
-		
+
 		name_info := vk.DebugUtilsObjectNameInfoEXT {
 			sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
 			objectHandle = u64(backend_buffer.vk_buffer),

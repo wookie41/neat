@@ -50,7 +50,7 @@ BufferResource :: struct {
 	mapped_ptr: ^u8,
 	// Virtual block used to suballocate the buffer using the VMA virtual allocator
 	vma_block:  vma.VirtualBlock,
-	
+	queue:            DeviceQueueType,
 }
 
 //---------------------------------------------------------------------------//
@@ -137,6 +137,8 @@ create_buffer :: proc(p_ref: BufferRef) -> bool {
 		return false
 	}
 
+	buffer.queue = .Graphics
+
 	return true
 }
 
@@ -215,3 +217,26 @@ buffer_free_all :: proc(p_buffer_ref: BufferRef) {
 }
 
 //---------------------------------------------------------------------------//
+
+find_buffer :: proc {
+	find_buffer_by_name,
+	find_buffer_by_str,
+}
+
+//---------------------------------------------------------------------------//
+
+find_buffer_by_name :: proc(p_name: common.Name) -> BufferRef {
+	ref := common.ref_find_by_name(&G_BUFFER_REF_ARRAY, p_name)
+	if ref == InvalidBufferRef {
+		return InvalidBufferRef
+	}
+	return BufferRef(ref)
+}
+
+//--------------------------------------------------------------------------//
+
+find_buffer_by_str :: proc(p_str: string) -> BufferRef {
+	return find_buffer_by_name(common.create_name(p_str))
+}
+
+//--------------------------------------------------------------------------//

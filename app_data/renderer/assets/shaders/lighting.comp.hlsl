@@ -1,9 +1,13 @@
+//---------------------------------------------------------------------------//
+
 #include "brdf.hlsli"
 #include "fullscreen_compute.hlsli"
 #include "math.hlsli"
 #include "packing.hlsli"
 #include "resources.hlsli"
 #include "shadow_sampling.hlsli"
+
+//---------------------------------------------------------------------------//
 
 [[vk::binding(1, 0)]]
 Texture2D<float4> gBufferColorTex : register(t0, space0);
@@ -19,6 +23,8 @@ Texture2D<float> depthTex : register(t4, space0);
 
 [[vk::binding(5, 0)]]
 RWTexture2D<float4> outputImage : register(u0, space0);
+
+//---------------------------------------------------------------------------//
 
 [numthreads(8, 8, 1)]
 void CSMain(uint2 dispatchThreadId: SV_DispatchThreadID)
@@ -74,3 +80,5 @@ void CSMain(uint2 dispatchThreadId: SV_DispatchThreadID)
 
     outputImage[input.cellCoord] = float4(pixelColor, 1);
 }
+
+//---------------------------------------------------------------------------//

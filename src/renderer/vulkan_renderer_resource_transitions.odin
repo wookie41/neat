@@ -21,8 +21,8 @@ when USE_VULKAN_BACKEND {
 		common.temp_arena_init(&temp_arena)
 		defer common.arena_delete(temp_arena)
 
-		graphics_input_barriers := make([dynamic]vk.ImageMemoryBarrier, temp_arena.allocator)
-		compute_input_barriers := make([dynamic]vk.ImageMemoryBarrier, temp_arena.allocator)
+		image_input_barriers_graphics := make([dynamic]vk.ImageMemoryBarrier, temp_arena.allocator)
+		image_input_barriers_compute := make([dynamic]vk.ImageMemoryBarrier, temp_arena.allocator)
 
 		dst_queue: DeviceQueueType = .Compute if p_async_compute else .Graphics
 
@@ -33,8 +33,8 @@ when USE_VULKAN_BACKEND {
 				p_pipeline_type,
 				p_async_compute,
 				dst_queue,
-				&graphics_input_barriers,
-				&compute_input_barriers,
+				&image_input_barriers_graphics,
+				&image_input_barriers_compute,
 			)
 		}
 		for input in p_bindings.global_image_inputs {
@@ -43,9 +43,58 @@ when USE_VULKAN_BACKEND {
 				p_pipeline_type,
 				p_async_compute,
 				dst_queue,
-				&graphics_input_barriers,
-				&compute_input_barriers,
+				&image_input_barriers_graphics,
+				&image_input_barriers_compute,
 			)
+		}
+
+		// Input buffer barriers
+		buffer_input_barriers_graphics := make(
+			[dynamic]vk.BufferMemoryBarrier,
+			temp_arena.allocator,
+		)
+		buffer_input_barriers_compute := make(
+			[dynamic]vk.BufferMemoryBarrier,
+			temp_arena.allocator,
+		)
+
+		for buffer_input in p_bindings.buffer_inputs {
+
+			buffer := &g_resources.buffers[get_buffer_idx(buffer_input.buffer_ref)]
+			backend_buffer := &g_resources.backend_buffers[get_buffer_idx(buffer_input.buffer_ref)]
+
+			access_mask := vk.AccessFlags{}
+			switch buffer_input.usage {
+			case .Uniform:
+				access_mask += {.UNIFORM_READ}
+			case .General:
+				access_mask += {.SHADER_READ}
+			}
+
+			buffer_barrier := vk.BufferMemoryBarrier {
+				sType               = .BUFFER_MEMORY_BARRIER,
+				buffer              = backend_buffer.vk_buffer,
+				dstAccessMask       = access_mask,
+				offset              = vk.DeviceSize(buffer_input.offset),
+				dstQueueFamilyIndex = get_queue_family_index(dst_queue),
+				size                = vk.DeviceSize(
+					buffer.desc.size if buffer_input.size == 0 else buffer_input.size,
+				),
+				srcQueueFamilyIndex = get_queue_family_index(buffer.queue),
+			}
+
+			if p_async_compute {
+				assert(p_pipeline_type == .Compute)
+				append(&buffer_input_barriers_compute, buffer_barrier)
+
+				if buffer_barrier.srcAccessMask != buffer_barrier.dstAccessMask {
+					append(&buffer_input_barriers_graphics, buffer_barrier)
+				}
+			} else {
+				append(&buffer_input_barriers_graphics, buffer_barrier)
+			}
+
+			buffer.queue = dst_queue
 		}
 
 		graphics_cmd_buff_ref := get_frame_cmd_buffer_ref()
@@ -55,7 +104,7 @@ when USE_VULKAN_BACKEND {
 		backend_graphics_cmd_buffer := &g_resources.backend_cmd_buffers[graphics_cmd_buffer_idx]
 
 		// Insert barriers for input
-		if len(graphics_input_barriers) > 0 {
+		if len(image_input_barriers_graphics) > 0 || len(buffer_input_barriers_graphics) > 0{
 			vk.CmdPipelineBarrier(
 				backend_graphics_cmd_buffer.vk_cmd_buff,
 				{.BOTTOM_OF_PIPE},
@@ -63,14 +112,14 @@ when USE_VULKAN_BACKEND {
 				{},
 				0,
 				nil,
-				0,
-				nil,
-				u32(len(graphics_input_barriers)),
-				&graphics_input_barriers[0],
+				u32(len(buffer_input_barriers_graphics)),
+				raw_data(buffer_input_barriers_graphics),
+				u32(len(image_input_barriers_graphics)),
+				raw_data(image_input_barriers_graphics),
 			)
 		}
 
-		if len(compute_input_barriers) > 0 {
+		if len(image_input_barriers_compute) > 0 || len(buffer_input_barriers_compute) > 0{
 			vk.CmdPipelineBarrier(
 				compute_cmd_buff,
 				{.COMPUTE_SHADER},
@@ -78,16 +127,19 @@ when USE_VULKAN_BACKEND {
 				{},
 				0,
 				nil,
-				0,
-				nil,
-				u32(len(compute_input_barriers)),
-				&compute_input_barriers[0],
+				u32(len(buffer_input_barriers_compute)),
+				raw_data(buffer_input_barriers_compute),
+				u32(len(image_input_barriers_compute)),
+				raw_data(image_input_barriers_compute),
 			)
 		}
 
 		// Now prepare output image barriers
-		graphics_output_barriers := make([dynamic]vk.ImageMemoryBarrier, temp_arena.allocator)
-		compute_output_barriers := make([dynamic]vk.ImageMemoryBarrier, temp_arena.allocator)
+		image_output_barriers_graphics := make(
+			[dynamic]vk.ImageMemoryBarrier,
+			temp_arena.allocator,
+		)
+		image_output_barriers_compute := make([dynamic]vk.ImageMemoryBarrier, temp_arena.allocator)
 		depth_barrier := vk.ImageMemoryBarrier{}
 		graphics_depth_barrier_needed := false
 		compute_depth_barrier_needed := false
@@ -137,13 +189,12 @@ when USE_VULKAN_BACKEND {
 					dstQueueFamilyIndex = get_queue_family_index(dst_queue),
 				}
 
-
 				insert_async_compute_barriers(
 					image_barrier,
 					p_pipeline_type,
 					p_async_compute,
-					&graphics_output_barriers,
-					&compute_output_barriers,
+					&image_output_barriers_graphics,
+					&image_output_barriers_compute,
 				)
 
 				image.queue = .Compute
@@ -217,9 +268,9 @@ when USE_VULKAN_BACKEND {
 					dstQueueFamilyIndex = get_queue_family_index(.Graphics),
 				}
 
-				append(&graphics_output_barriers, image_barrier)
+				append(&image_output_barriers_graphics, image_barrier)
 				if image.queue != .Graphics {
-					append(&compute_output_barriers, image_barrier)
+					append(&image_output_barriers_compute, image_barrier)
 				}
 
 				image.queue = .Graphics
@@ -228,7 +279,46 @@ when USE_VULKAN_BACKEND {
 			image_backend.vk_layouts[output.array_layer][output.mip] = new_layout
 		}
 
-		// @TODO Buffers
+		// Input buffer barriers
+		buffer_output_barriers_graphics := make(
+			[dynamic]vk.BufferMemoryBarrier,
+			temp_arena.allocator,
+		)
+		buffer_output_barriers_compute := make(
+			[dynamic]vk.BufferMemoryBarrier,
+			temp_arena.allocator,
+		)
+
+		for buffer_output in p_bindings.buffer_outputs {
+
+			buffer := &g_resources.buffers[get_buffer_idx(buffer_output.buffer_ref)]
+			backend_buffer := &g_resources.backend_buffers[get_buffer_idx(buffer_output.buffer_ref)]
+
+			buffer_barrier := vk.BufferMemoryBarrier {
+				sType               = .BUFFER_MEMORY_BARRIER,
+				buffer              = backend_buffer.vk_buffer,
+				dstAccessMask       = {.SHADER_WRITE},
+				offset              = vk.DeviceSize(buffer_output.offset),
+				dstQueueFamilyIndex = get_queue_family_index(dst_queue),
+				size                = vk.DeviceSize(
+					buffer.desc.size if buffer_output.size == 0 else buffer_output.size,
+				),
+				srcQueueFamilyIndex = get_queue_family_index(buffer.queue),
+			}
+
+			if p_async_compute {
+				assert(p_pipeline_type == .Compute)
+				append(&buffer_output_barriers_compute, buffer_barrier)
+
+				if buffer_barrier.srcAccessMask != buffer_barrier.dstAccessMask {
+					append(&buffer_output_barriers_graphics, buffer_barrier)
+				}
+			} else {
+				append(&buffer_output_barriers_graphics, buffer_barrier)
+			}
+
+			buffer.queue = dst_queue
+		}
 
 		// Insert depth attachment barrier
 		if graphics_depth_barrier_needed {
@@ -262,7 +352,7 @@ when USE_VULKAN_BACKEND {
 		}
 
 		// Insert output barriers
-		if len(graphics_output_barriers) > 0 {
+		if len(image_output_barriers_graphics) > 0 || len(buffer_output_barriers_graphics) > 0 {
 			vk.CmdPipelineBarrier(
 				backend_graphics_cmd_buffer.vk_cmd_buff,
 				{.TOP_OF_PIPE},
@@ -270,14 +360,14 @@ when USE_VULKAN_BACKEND {
 				{},
 				0,
 				nil,
-				0,
-				nil,
-				u32(len(graphics_output_barriers)),
-				&graphics_output_barriers[0],
+				u32(len(buffer_output_barriers_graphics)),
+				raw_data(buffer_output_barriers_graphics),
+				u32(len(image_output_barriers_graphics)),
+				raw_data(image_output_barriers_graphics),
 			)
 		}
 
-		if len(compute_output_barriers) > 0 {
+		if len(image_output_barriers_compute) > 0 || len(buffer_output_barriers_compute) > 0 {
 			vk.CmdPipelineBarrier(
 				compute_cmd_buff,
 				{.COMPUTE_SHADER},
@@ -285,10 +375,10 @@ when USE_VULKAN_BACKEND {
 				{},
 				0,
 				nil,
-				0,
-				nil,
-				u32(len(compute_output_barriers)),
-				&compute_output_barriers[0],
+				u32(len(buffer_output_barriers_compute)),
+				raw_data(buffer_output_barriers_compute),
+				u32(len(image_output_barriers_compute)),
+				raw_data(image_output_barriers_compute),
 			)
 		}
 	}
@@ -371,11 +461,11 @@ when USE_VULKAN_BACKEND {
 			for mip in 0 ..< p_input_image.mip_count {
 
 				old_layout := image_backend.vk_layouts[array_layer][mip]
-	
+
 				if old_layout == new_layout {
 					continue
 				}
-	
+
 				image_input_barrier := vk.ImageMemoryBarrier {
 					sType = .IMAGE_MEMORY_BARRIER,
 					dstAccessMask = dst_access_mask,
@@ -395,9 +485,9 @@ when USE_VULKAN_BACKEND {
 					image_input_barrier.srcQueueFamilyIndex = get_queue_family_index(image.queue)
 					image_input_barrier.dstQueueFamilyIndex = get_queue_family_index(p_dst_queue)
 				}
-	
+
 				image.queue = p_dst_queue
-	
+
 				insert_async_compute_barriers(
 					image_input_barrier,
 					p_pipeline_type,
@@ -405,10 +495,9 @@ when USE_VULKAN_BACKEND {
 					p_graphics_barriers,
 					p_compute_barriers,
 				)
-	
+
 				image_backend.vk_layouts[array_layer][mip] = new_layout
 			}
 		}
 	}
-
 }

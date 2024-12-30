@@ -103,6 +103,8 @@ RenderPassImageOutputFlagBits :: enum u8 {
 	Clear,
 }
 
+//---------------------------------------------------------------------------//
+
 RenderPassImageOutputFlags :: distinct bit_set[RenderPassImageOutputFlagBits;u8]
 
 //---------------------------------------------------------------------------//
@@ -117,10 +119,38 @@ RenderPassImageOutput :: struct {
 
 //---------------------------------------------------------------------------//
 
+RenderPassBufferUsage :: enum u8 {
+	Uniform,
+	General,
+}
+
+//---------------------------------------------------------------------------//
+
+RenderPassBufferInput :: struct {
+	buffer_ref: BufferRef,
+	offset:     u32,
+	size:     u32,
+	usage:      RenderPassBufferUsage,
+}
+
+//---------------------------------------------------------------------------//
+
+RenderPassBufferOutput :: struct {
+	buffer_ref: BufferRef,
+	offset:     u32,
+	size:     u32,
+}
+
+//---------------------------------------------------------------------------//
+
 RenderPassBindings :: struct {
 	image_inputs:        []RenderPassImageInput,
 	image_outputs:       []RenderPassImageOutput,
+	// Global images are the ones declared in resouces.hlsli that are always bound
+	// They're declared as inputs so that we can issue proper barriers 
 	global_image_inputs: []RenderPassImageInput,
+	buffer_inputs:       []RenderPassBufferInput,
+	buffer_outputs:      []RenderPassBufferOutput,
 }
 
 //---------------------------------------------------------------------------//
@@ -384,6 +414,23 @@ find_render_pass_by_name_str :: proc(p_name: string) -> RenderPassRef {
 		return InvalidRenderPassRef
 	}
 	return RenderPassRef(ref)
+}
+
+//--------------------------------------------------------------------------//
+
+render_pass_bindings_destroy :: proc(p_render_pass_bindings: RenderPassBindings) {
+	if p_render_pass_bindings.image_inputs != nil {
+		delete(p_render_pass_bindings.image_inputs, G_RENDERER_ALLOCATORS.resource_allocator)
+	}
+	if p_render_pass_bindings.image_outputs != nil {
+		delete(p_render_pass_bindings.image_outputs, G_RENDERER_ALLOCATORS.resource_allocator)
+	}
+	if p_render_pass_bindings.buffer_inputs != nil {
+		delete(p_render_pass_bindings.buffer_inputs, G_RENDERER_ALLOCATORS.resource_allocator)
+	}
+	if p_render_pass_bindings.buffer_outputs != nil {
+		delete(p_render_pass_bindings.buffer_outputs, G_RENDERER_ALLOCATORS.resource_allocator)
+	}
 }
 
 //--------------------------------------------------------------------------//

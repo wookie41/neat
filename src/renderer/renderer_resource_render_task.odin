@@ -48,6 +48,14 @@ G_RENDER_TASK_TYPE_MAPPING := map[string]RenderTaskType {
 
 //---------------------------------------------------------------------------//
 
+@(private = "file")
+G_RENDER_PASS_BUFFER_USAGE_MAPPING := map[string]RenderPassBufferUsage {
+	"Uniform"  = .Uniform,
+	"General"  = .General,
+}
+
+//---------------------------------------------------------------------------//
+
 RenderTaskResource :: struct {
 	desc:     RenderTaskDesc,
 	data_ptr: rawptr,
@@ -193,7 +201,7 @@ render_task_map_name_to_type :: proc(p_type_name: string) -> (RenderTaskType, bo
 
 @(private)
 render_tasks_update :: proc(p_dt: f32) {
-	
+
 	// Fill per frame uniform data
 	for i in 0 ..< G_RENDER_TASK_REF_ARRAY.alive_count {
 		render_task_ref := G_RENDER_TASK_REF_ARRAY.alive_refs[i]
@@ -235,14 +243,75 @@ render_task_setup_render_pass_bindings :: proc(
 	global_input_images := make([dynamic]RenderPassImageInput, temp_arena.allocator)
 	output_images := make([dynamic]RenderPassImageOutput, temp_arena.allocator)
 
-	defer delete(input_images)
-	defer delete(output_images)
+	input_buffers := make([dynamic]RenderPassBufferInput, temp_arena.allocator)
+	output_buffers := make([dynamic]RenderPassBufferOutput, temp_arena.allocator)
 
-	// Load inputs 
+	// Load image inputs 
 	load_image_inputs(p_render_task_config, "InputImage", &input_images)
 	load_image_inputs(p_render_task_config, "GlobalImage", &global_input_images)
 
-	// Load outputs
+	// Load buffer inputs
+	for {
+		input_buffer_element_id, found := xml.find_child_by_ident(
+			p_render_task_config.doc,
+			p_render_task_config.render_task_element_id,
+			"BufferInput",
+			len(input_buffers),
+		)
+
+		if found == false {
+			break
+		}
+		buffer_name, name_found := xml.find_attribute_val_by_key(
+			p_render_task_config.doc,
+			input_buffer_element_id,
+			"name",
+		)
+		if name_found == false {
+			continue
+		}
+		offset, _ := common.xml_get_u32_attribute(
+			p_render_task_config.doc,
+			input_buffer_element_id,
+			"offset",
+		)
+		size, _ := common.xml_get_u32_attribute(
+			p_render_task_config.doc,
+			input_buffer_element_id,
+			"size",
+		)
+		usage, usage_found := xml.find_attribute_val_by_key(
+			p_render_task_config.doc,
+			input_buffer_element_id,
+			"usage",
+		)
+		if usage_found == false {
+			log.errorf("Can't create render task - no buffer usage '%s'\n", usage)
+			continue
+		}
+
+		if (usage in G_RENDER_PASS_BUFFER_USAGE_MAPPING) == false {
+			log.errorf("Can't create render task - unknown buffer usage '%s'\n", usage)
+			continue
+		}
+
+		buffer_ref := find_buffer(buffer_name)
+		if buffer_ref == InvalidBufferRef {
+			log.errorf("Can't create render task - unknown buffer '%s'\n", buffer_name)
+			continue
+		}
+
+		render_pass_input_buffer := RenderPassBufferInput {
+			buffer_ref = buffer_ref,
+			offset     = offset,
+			usage = G_RENDER_PASS_BUFFER_USAGE_MAPPING[usage],
+			size = size,
+		}
+
+		append(&input_buffers, render_pass_input_buffer)
+	}
+
+	// Load image outputs
 	for {
 		output_image_element_id, found := xml.find_child_by_ident(
 			p_render_task_config.doc,
@@ -302,6 +371,52 @@ render_task_setup_render_pass_bindings :: proc(
 		append(&output_images, render_pass_output_image)
 	}
 
+	// Load buffer outputs
+	for {
+		output_buffer_element_id, found := xml.find_child_by_ident(
+			p_render_task_config.doc,
+			p_render_task_config.render_task_element_id,
+			"BufferOutput",
+			len(output_buffers),
+		)
+
+		if found == false {
+			break
+		}
+		buffer_name, name_found := xml.find_attribute_val_by_key(
+			p_render_task_config.doc,
+			output_buffer_element_id,
+			"name",
+		)
+		if name_found == false {
+			continue
+		}
+		offset, _ := common.xml_get_u32_attribute(
+			p_render_task_config.doc,
+			output_buffer_element_id,
+			"offset",
+		)
+		size, _ := common.xml_get_u32_attribute(
+			p_render_task_config.doc,
+			output_buffer_element_id,
+			"size",
+		)
+
+		buffer_ref := find_buffer(buffer_name)
+		if buffer_ref == InvalidBufferRef {
+			log.errorf("Can't start render task - unknown buffer '%s'\n", buffer_name)
+			continue
+		}
+
+		render_pass_output_buffer := RenderPassBufferOutput {
+			buffer_ref = buffer_ref,
+			offset     = offset,
+			size = size,
+		}
+
+		append(&output_buffers, render_pass_output_buffer)
+	}
+
 	p_out_bindings.image_inputs = common.to_static_slice(
 		input_images,
 		G_RENDERER_ALLOCATORS.resource_allocator,
@@ -314,7 +429,14 @@ render_task_setup_render_pass_bindings :: proc(
 		output_images,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
-	
+	p_out_bindings.buffer_inputs = common.to_static_slice(
+		input_buffers,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
+	p_out_bindings.buffer_outputs = common.to_static_slice(
+		output_buffers,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
 
 	return true
 }

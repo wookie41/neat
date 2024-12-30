@@ -604,7 +604,7 @@ when USE_VULKAN_BACKEND {
 
 		for bind_group_layout_ref, i in p_bind_group_layout_refs {
 
-			if bind_group_layout_ref == InvalidBindGroupRefLayout {
+			if bind_group_layout_ref == InvalidBindGroupLayoutRef {
 				descriptor_set_layouts[i] = INTERNAL.vk_empty_descriptor_set_layout
 				continue
 			}
