@@ -45,12 +45,21 @@ BufferDesc :: struct {
 
 //---------------------------------------------------------------------------//
 
+BufferAccessType :: enum u8 {
+	None,
+	Read,
+	Write,
+}
+
+//---------------------------------------------------------------------------//
+
 BufferResource :: struct {
-	desc:       BufferDesc,
-	mapped_ptr: ^u8,
+	desc:        BufferDesc,
+	mapped_ptr:  ^u8,
 	// Virtual block used to suballocate the buffer using the VMA virtual allocator
-	vma_block:  vma.VirtualBlock,
-	queue:            DeviceQueueType,
+	vma_block:   vma.VirtualBlock,
+	queue:       DeviceQueueType,
+	last_access: BufferAccessType,
 }
 
 //---------------------------------------------------------------------------//
@@ -82,7 +91,9 @@ OffsetBuffer :: struct {
 	offset:     u32,
 }
 
-InvalidOffsetBuffer :: OffsetBuffer {buffer_ref = {ref = c.UINT32_MAX}}
+InvalidOffsetBuffer :: OffsetBuffer {
+	buffer_ref = {ref = c.UINT32_MAX},
+}
 
 //---------------------------------------------------------------------------//
 
@@ -122,7 +133,7 @@ create_buffer :: proc(p_ref: BufferRef) -> bool {
 	// Create the virtual VMA block used for sub-allocations
 	{
 		virtual_block_create_info := vma.VirtualBlockCreateInfo {
-			size = vk.DeviceSize(buffer.desc.size),
+			size  = vk.DeviceSize(buffer.desc.size),
 			flags = {.LINEAR},
 		}
 
@@ -137,6 +148,7 @@ create_buffer :: proc(p_ref: BufferRef) -> bool {
 		return false
 	}
 
+	buffer.last_access = .None
 	buffer.queue = .Graphics
 
 	return true
@@ -175,7 +187,7 @@ buffer_allocate :: proc(p_buffer_ref: BufferRef, p_size: u32) -> (bool, BufferSu
 	buffer := &g_resources.buffers[get_buffer_idx(p_buffer_ref)]
 
 	alloc_info := vma.VirtualAllocationCreateInfo {
-		size = vk.DeviceSize(p_size),
+		size  = vk.DeviceSize(p_size),
 		flags = {.MIN_OFFSET, .MIN_MEMORY},
 	}
 
@@ -208,7 +220,7 @@ buffer_free_all :: proc(p_buffer_ref: BufferRef) {
 
 	vma.destroy_virtual_block(buffer.vma_block)
 	virtual_block_create_info := vma.VirtualBlockCreateInfo {
-		size = vk.DeviceSize(buffer.desc.size),
+		size  = vk.DeviceSize(buffer.desc.size),
 		flags = {.LINEAR},
 	}
 

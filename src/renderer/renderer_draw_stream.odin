@@ -261,7 +261,7 @@ draw_stream_set_index_buffer :: proc(
 //---------------------------------------------------------------------------//
 
 // It's allowed to pass INVALID_OFFSET for p_dynamic_offsets. This means that dynamic offsets for this bind 
-// group will be privoded upon dispatching the draw stream. It's useful when we want to
+// group will be provided upon dispatching the draw stream. It's useful when we want to
 // dispatch the same draw stream, but with a different set of constant buffers, e.g.
 // rendering the same set of objects to a different render view
 

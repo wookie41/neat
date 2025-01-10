@@ -101,6 +101,7 @@ create_instance :: proc(
 			render_task_name,
 			shader_ref,
 			fullscreen_render_task_data.render_pass_bindings,
+			true,
 		)
 		if success == false {
 			log.errorf(

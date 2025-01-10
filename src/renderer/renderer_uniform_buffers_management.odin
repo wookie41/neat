@@ -28,23 +28,23 @@ PerViewData :: struct #packed {
 	inv_view_proj:     glsl.mat4x4,
 	inv_proj:          glsl.mat4x4,
 	camera_pos_ws:     glsl.vec3,
-	_padding0:         f32,
+	camera_near_plane: f32,
 	camera_forward_ws: glsl.vec3,
 	_padding1:         f32,
+	camera_up_ws:      glsl.vec3,
+	_padding2:         f32,
 }
 
 //---------------------------------------------------------------------------//
 
 @(private)
 g_per_frame_data: struct #packed {
-	sun:                 DirectionalLight,
-	shadow_cascades:     [MAX_SHADOW_CASCADES]ShadowCascade,
-	num_shadow_cascades: u32,
-	frame_id_mod_2:      u32,
-	frame_id_mod_4:      u32,
-	frame_id_mod_16:     u32,
-	frame_id_mod_64:     u32,
-	debug_draw_cascades: b32,
+	sun:                        DirectionalLight,
+	num_shadow_cascades:        u32,
+	frame_id_mod_2:             u32,
+	frame_id_mod_4:             u32,
+	frame_id_mod_16:            u32,
+	frame_id_mod_64:            u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -141,13 +141,17 @@ uniform_buffer_ensure_alignment_by_size :: proc(p_size: u32) -> u32 {
 
 @(private = "file")
 update_per_frame_data :: proc(p_dt: f32) {
-	g_per_frame_data.sun.color     = {1, 1, 1}
+	g_per_frame_data.sun.color = {1, 1, 1}
 	g_per_frame_data.sun.direction = {0, -1, 0}
 
 	g_per_frame_data.frame_id_mod_2 = get_frame_id() % 2
 	g_per_frame_data.frame_id_mod_4 = get_frame_id() % 4
 	g_per_frame_data.frame_id_mod_16 = get_frame_id() % 16
 	g_per_frame_data.frame_id_mod_64 = get_frame_id() % 64
+
+	g_per_frame_data.num_shadow_cascades = G_RENDERER_SETTINGS.num_shadow_cascades
+	g_per_frame_data.sun.debug_draw_cascades = 1 if G_RENDERER_SETTINGS.debug_draw_shadow_cascades else 0
+	g_per_frame_data.sun.shadow_sampling_radius = G_RENDERER_SETTINGS.directional_light_shadow_sampling_radius
 
 	g_uniform_buffers.frame_data_offset = uniform_buffer_create_transient_buffer(&g_per_frame_data)
 }
@@ -164,7 +168,9 @@ uniform_buffer_create_view_data :: proc(p_view: RenderView) -> u32 {
 	view_data.inv_view_proj = glsl.inverse(view_data.proj * view_data.view)
 	view_data.inv_proj = glsl.inverse(view_data.proj)
 	view_data.camera_pos_ws = p_view.position
+	view_data.camera_near_plane = p_view.near_plane
 	view_data.camera_forward_ws = p_view.forward
+	view_data.camera_up_ws = p_view.up
 
 	return uniform_buffer_create_transient_buffer(&view_data)
 }

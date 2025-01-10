@@ -3,6 +3,10 @@
 
 //---------------------------------------------------------------------------//
 
+#define MAX_SHADOW_CASCADES 6 // Keep in sync with renderer_render_task_cascade_shadows.odin
+
+//---------------------------------------------------------------------------//
+
 struct DirectionalLight
 {
     float3 DirectionWS;
@@ -31,9 +35,10 @@ struct MeshInstanceInfo
 struct ShadowCascade
 {
     float4x4 LightMatrix;
+    float4x4 RenderMatrix;
     float Split;
-    float OffsetScale;
-    float2 _padding;
+    float2 OffsetScale;
+    float1 _padding;
 };
 
 //---------------------------------------------------------------------------//

@@ -14,3 +14,14 @@ DirectionalLight :: struct #packed {
 }
 
 //---------------------------------------------------------------------------//
+
+@(private)
+ShadowCascade :: struct #packed {
+	light_matrix: glsl.mat4,
+	render_matrix: glsl.mat4,
+	split:        f32,
+	offset_scale: glsl.vec2,
+	_padding:     f32,
+}
+
+//---------------------------------------------------------------------------//

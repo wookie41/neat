@@ -10,6 +10,7 @@ import "core:mem"
 import "../common"
 
 import sdl "vendor:sdl2"
+import imgui "../third_party/odin-imgui"
 
 //---------------------------------------------------------------------------//
 
@@ -34,12 +35,14 @@ GlobalResourceSlot :: enum {
 	MeshInstanceInfosBuffer,
 	MaterialsBuffer,
 	CascadeShadowTextureArray,
+	CascadeShadowInfo,
 }
 
 @(private)
 BindlessResourceSlot :: enum {
 	TextureArray2D,
 }
+
 //---------------------------------------------------------------------------//
 
 // @TODO Move to a config file
@@ -168,6 +171,13 @@ G_RENDERER_ALLOCATORS: struct {
 
 //---------------------------------------------------------------------------//
 
+@(private)
+G_RENDERER_SETTINGS : struct {
+	num_shadow_cascades: u32,
+	debug_draw_shadow_cascades: bool,
+	directional_light_shadow_sampling_radius: f32,
+}
+
 InitOptions :: struct {
 	using backend_options: BackendInitOptions,
 }
@@ -236,6 +246,10 @@ init :: proc(p_options: InitOptions) -> bool {
 	// Setup renderer context
 	context.allocator = G_RENDERER_ALLOCATORS.main_allocator
 	context.logger = INTERNAL.logger
+
+	// Init renderer settings with default values
+	G_RENDERER_SETTINGS.num_shadow_cascades = 3
+	G_RENDERER_SETTINGS.directional_light_shadow_sampling_radius = 0.3
 
 	backend_init(p_options) or_return
 
@@ -363,6 +377,11 @@ init :: proc(p_options: InitOptions) -> bool {
 			count         = MAX_SHADOW_CASCADES,
 			shader_stages = {.Vertex, .Pixel, .Compute},
 			type          = .Image,
+		}
+		bind_group_layout.desc.bindings[GlobalResourceSlot.CascadeShadowInfo] = {
+			count         = 1,
+			shader_stages = {.Vertex, .Pixel, .Compute},
+			type          = .StorageBuffer,
 		}
 
 		if create_bind_group_layout(G_RENDERER.globals_bind_group_layout_ref) == false {
@@ -493,7 +512,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	g_render_camera.position = {0, 0, 0}
 	g_render_camera.forward = {0, 0, -1}
 	g_render_camera.up = {0, 1, 0}
-	g_render_camera.near_plane = 0.1
+	g_render_camera.near_plane = 0.001
 	g_render_camera.fov = 45.0
 
 	ui_init() or_return
@@ -533,6 +552,8 @@ update :: proc(p_dt: f32) {
 
 	material_instance_update_dirty_materials()
 	mesh_instance_send_transform_data()
+
+	draw_debug_ui(p_dt)
 
 	render_tasks_update(p_dt)
 
@@ -896,6 +917,19 @@ resolve_resolution :: #force_inline proc(p_resolution: Resolution) -> glsl.uvec2
 init_jobs :: proc() -> bool {
 	render_instanced_mesh_job_init() or_return
 	return true
+}
+
+//---------------------------------------------------------------------------//
+
+@(private = "file")
+draw_debug_ui :: proc(p_dt: f32) {
+	// Debug UI
+	imgui.InputInt("Shadow cascade count", (^i32)(&G_RENDERER_SETTINGS.num_shadow_cascades))
+	imgui.Checkbox("Draw shadow cascades", (^bool)(&G_RENDERER_SETTINGS.debug_draw_shadow_cascades))
+	imgui.InputFloat("Direcional light shadow sampling radius", (&G_RENDERER_SETTINGS.directional_light_shadow_sampling_radius))
+
+	G_RENDERER_SETTINGS.num_shadow_cascades = max(0, G_RENDERER_SETTINGS.num_shadow_cascades)
+	G_RENDERER_SETTINGS.num_shadow_cascades = min(G_RENDERER_SETTINGS.num_shadow_cascades, MAX_SHADOW_CASCADES)
 }
 
 //---------------------------------------------------------------------------//

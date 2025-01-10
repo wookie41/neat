@@ -8,6 +8,8 @@
 
 #include "ffx/ffx_a.h"
 #include "fullscreen_compute.hlsli"
+#include "math.hlsli"
+
 
 //---------------------------------------------------------------------------//
 
@@ -30,9 +32,12 @@ cbuffer BuildHiZParams : register(b1, space0)
 RWStructuredBuffer<SpdGlobalAtomicBufferData> spdGlobalAtomicBuffer : register(u0, space0);
 
 [[vk::binding(3, 0)]]
-Texture2D depthTex : register(t0, space0);
+RWStructuredBuffer<uint> minMaxDepthBuffer : register(u1, space0);
 
 [[vk::binding(4, 0)]]
+Texture2D depthTex : register(t0, space0);
+
+[[vk::binding(5, 0)]]
 RWTexture2D<float> hiZBufferTex[12] : register(u1, space0);
 
 //---------------------------------------------------------------------------//
@@ -54,25 +59,53 @@ AF4 SpdLoadSourceImage(ASU2 p, AU1 slice)
     bool sampleExtraRow = ((uInputTextureDimensions.y & 1) != 0);
 
     float maxDepth = depthTex[min(p, uInputTextureDimensions - 1)].r;
+    float minDepth = maxDepth == 0 ? 1 : maxDepth;
 
     // if we are reducing an odd-sized texture, we need to fetch additional texels
     if (sampleExtraColumn)
     {
-        maxDepth = max(maxDepth, depthTex[min(p + ASU2(2, 0), uInputTextureDimensions - 1)].r);
-        maxDepth = max(maxDepth, depthTex[min(p + ASU2(2, 1), uInputTextureDimensions - 1)].r);
+        float depth1 = depthTex[min(p + ASU2(2, 0), uInputTextureDimensions - 1)].r;
+        float depth2 = depthTex[min(p + ASU2(2, 1), uInputTextureDimensions - 1)].r;
+
+        maxDepth = max(maxDepth, depth1);
+        maxDepth = max(maxDepth, depth2);
+
+        if (depth1 > 0)
+            minDepth = min(minDepth, depth1);
+
+        if (depth2 > 0)
+            minDepth = min(minDepth, depth2);
     }
 
     if (sampleExtraRow)
     {
-        maxDepth = max(maxDepth, depthTex[min(p + ASU2(0, 2), uInputTextureDimensions - 1)].r);
-        maxDepth = max(maxDepth, depthTex[min(p + ASU2(1, 2), uInputTextureDimensions - 1)].r);
+        float depth1 = depthTex[min(p + ASU2(0, 2), uInputTextureDimensions - 1)].r;
+        float depth2 = depthTex[min(p + ASU2(1, 2), uInputTextureDimensions - 1)].r;
+
+        maxDepth = max(maxDepth, depth1);
+        maxDepth = max(maxDepth, depth2);
+
+        if (depth1 > 0)
+            minDepth = min(minDepth, depth1);
+
+        if (depth2 > 0)
+            minDepth = min(minDepth, depth2);
     }
 
     // if both edges are odd, include the corner texel
     if (sampleExtraColumn && sampleExtraRow)
     {
-        maxDepth = max(maxDepth, depthTex[min(p + ASU2(2, 2), uInputTextureDimensions - 1)].r);
+        float depth = depthTex[min(p + ASU2(2, 2), uInputTextureDimensions - 1)].r;
+
+        maxDepth = max(maxDepth, depth);
+
+        if (depth > 0)
+            minDepth = min(minDepth, depth);
     }
+
+    // bit-wise cast float -> uint preserves the monoticity
+    InterlockedMin(minMaxDepthBuffer[0], asuint(minDepth));
+    InterlockedMax(minMaxDepthBuffer[1], asuint(maxDepth));
 
     return AF4_x(maxDepth);
 }

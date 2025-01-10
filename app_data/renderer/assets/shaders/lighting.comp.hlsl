@@ -45,7 +45,7 @@ void CSMain(uint2 dispatchThreadId: SV_DispatchThreadID)
     const float3 posVS = UnprojectDepthToWorldPos(input.uv, depth, uPerView.InvProjMatrix);
 
     int cascadeIndex;
-    const float directionalLightShadow = SampleSimpleDirectionalLightShadow(posWS, posVS, normalWS, input.cellCoord, cascadeIndex);
+    const float directionalLightShadow = SampleDirectionalLightShadow(posWS, posVS, input.cellCoord, cascadeIndex);
 
     const float3 V = normalize(uPerView.CameraPositionWS - posWS);
     const float3 L = -uPerFrame.Sun.DirectionWS;

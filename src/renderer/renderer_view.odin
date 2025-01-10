@@ -24,6 +24,8 @@ RenderView :: struct {
 	projection: glsl.mat4,
 	position:   glsl.vec3,
 	forward:    glsl.vec3,
+	up:    glsl.vec3,
+	near_plane: f32,
 }
 
 //--------------------------------------------------------------------------//
@@ -46,6 +48,8 @@ render_camera_create_render_view :: proc(
 	)
 	render_view.position = p_render_camera.position
 	render_view.forward = p_render_camera.forward
+	render_view.up = p_render_camera.up
+	render_view.near_plane = p_render_camera.near_plane
 
 	return
 }

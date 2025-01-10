@@ -6,28 +6,11 @@ import "../common"
 import "core:encoding/xml"
 import "core:math/linalg/glsl"
 import "core:mem"
-import imgui "../third_party/odin-imgui"
 
 //---------------------------------------------------------------------------//
 
 @(private)
-MAX_SHADOW_CASCADES :: 6 // Keep in sync with resources.hlsli
-
-@(private = "file")
-CASCADE_SPLIT_LOG_FACTOR :: 0.90
-
-@(private="file")
-SHADOW_SAMPLING_RADIUS :: 0.03 // world space
-
-//---------------------------------------------------------------------------//
-
-@(private)
-ShadowCascade :: struct #packed {
-	light_matrix: glsl.mat4,
-	split:        f32,
-	offset_scale: glsl.vec2,
-	_padding:     f32,
-}
+MAX_SHADOW_CASCADES :: 6 // Keep in sync with scene_types.hlsli
 
 //---------------------------------------------------------------------------//
 
@@ -43,19 +26,12 @@ CascadeShadowsRenderTaskData :: struct {
 //---------------------------------------------------------------------------//
 
 @(private="file")
-CascadeMatrices :: struct {
-	view: 		glsl.mat4,
-	projection: glsl.mat4,
+ShadowPassConstantData :: struct #packed {
+	cascade_index: u32,
+	padding: glsl.uvec3,
 }
 
 //---------------------------------------------------------------------------//
-
-@(private="file")
-INTERNAL : struct {
-	cascade_matrices : [MAX_SHADOW_CASCADES]CascadeMatrices,
-}
-
-//--------------------------------------------------------------------------//
 
 cascade_shadows_render_task_init :: proc(p_render_task_functions: ^RenderTaskFunctions) {
 	p_render_task_functions.create_instance = create_instance
@@ -86,11 +62,6 @@ create_instance :: proc(
 		p_render_task_config.render_task_element_id,
 		"numCascades",
 	) or_return
-	max_shadows_distance := common.xml_get_f32_attribute(
-		p_render_task_config.doc,
-		p_render_task_config.render_task_element_id,
-		"maxShadowsDistance",
-	) or_return
 	cascades_image_name := xml.find_attribute_val_by_key(
 		p_render_task_config.doc,
 		p_render_task_config.render_task_element_id,
@@ -104,12 +75,11 @@ create_instance :: proc(
 
 	cascade_render_task_data.cascade_shadows_image_ref = find_image(cascades_image_name)
 
-	render_mesh_job := render_instanced_mesh_job_create() or_return
+	render_mesh_job := render_instanced_mesh_job_create(size_of(ShadowPassConstantData)) or_return
 
 	cascade_render_task.data_ptr = rawptr(cascade_render_task_data)
 	cascade_render_task_data.render_mesh_job = render_mesh_job
 	cascade_render_task_data.num_cascades = num_cascades
-	cascade_render_task_data.max_shadows_distance = max_shadows_distance
 
 	defer if res == false {
 		free(cascade_render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
@@ -143,6 +113,8 @@ create_instance :: proc(
 		p_render_task_config,
 		render_mesh_job.bind_group_ref,
 		&cascade_render_task_data.render_task_common,
+		{},
+		{size_of(ShadowCascade) * MAX_SHADOW_CASCADES},
 	)
 }
 
@@ -177,124 +149,6 @@ destroy_instance :: proc(p_render_task_ref: RenderTaskRef) {
 
 @(private = "file")
 begin_frame :: proc(p_render_task_ref: RenderTaskRef) {
-
-	cascade_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
-	cascade_render_task_data := (^CascadeShadowsRenderTaskData)(cascade_render_task.data_ptr)
-
-	using cascade_render_task_data
-
-	// Debug UI
-	imgui.InputFloat("Shadow rendering distance", &max_shadows_distance)
-	imgui.InputInt("Cascade count", (^i32)(&num_cascades))
-	imgui.Checkbox("Draw cascades", (^bool)(&g_per_frame_data.sun.debug_draw_cascades))
-
-	num_cascades = max(0, num_cascades)
-	num_cascades = min(num_cascades, MAX_SHADOW_CASCADES)
-
-	// Calculation of the cascade planes based on
-	// https://developer.download.nvidia.com/SDK/10.5/opengl/src/cascaded_shadow_maps/doc/cascaded_shadow_maps.pdf
-
-	camera_near := g_render_camera.near_plane
-
-	g_per_frame_data.num_shadow_cascades = num_cascades
-	g_per_frame_data.sun.shadow_sampling_radius = SHADOW_SAMPLING_RADIUS
-
-	// First, calculate the far splits
-	for i in 0 ..< num_cascades {
-
-		g_per_frame_data.shadow_cascades[i].split = glsl.lerp(
-			camera_near + (f32(i + 1) / f32(num_cascades)) * (max_shadows_distance - camera_near),
-			camera_near *
-			glsl.pow(max_shadows_distance / camera_near, f32(i + 1) / f32(num_cascades)),
-			CASCADE_SPLIT_LOG_FACTOR,
-		)
-
-		// linear
-		// g_per_frame_data.shadow_cascades[i].split = camera_near + ((max_shadows_distance - camera_near) * f32(i + 1) / f32(num_cascades))
-	}
-
-	camera_aspect_ratio :=
-		f32(G_RENDERER.config.render_resolution.x) / f32(G_RENDERER.config.render_resolution.y)
-
-	// Map Z component from [-1; 1] to [0; 1]
-	ndc_z_correction := glsl.mat4 {
-		1.0, 0.0, 0.0, 0.0,
-		0.0, 1.0, 0.0, 0.0,
-		0.0, 0.0, -0.5, 0.0,
-		0.0, 0.0, 0.5, 1.0,
-	}
-	ndc_z_correction = glsl.transpose(ndc_z_correction)
-
-	// Map NDC X and Y coordinates from [-1; 1] to [0;1] for shadow map sampling
-	texture_space_conversion := glsl.mat4 {
-		0.5, 0.0, 0.0, 0.0,
-		0.0, -0.5, 0.0, 0.0,
-		0.0, 0.0, 1.0, 0.0,
-		0.5, 0.5, 0.0, 1.0,
-	}
-	texture_space_conversion = glsl.transpose(texture_space_conversion)
-
-	forward := -g_per_frame_data.sun.direction
-	up := glsl.vec3{0.0, -1.0, 0.0} if glsl.abs(forward.y) < 0.9999 else glsl.vec3{0.0, 0.0, -1.0}
-	cascade_near := g_render_camera.near_plane
-
-	for i in 0 ..< num_cascades {
-
-		cascade_far := g_per_frame_data.shadow_cascades[i].split
-
-		// Calculate points of the view frustum capped to this cascade's near and far planes
-		// @TODO Tightly fit this on the GPU based on depth buffer
-		frustum_points, frustum_center := common.compute_frustum_points(
-			cascade_near,
-			cascade_far,
-			camera_aspect_ratio,
-			g_render_camera.fov,
-			g_render_camera.position,
-			g_render_camera.forward,
-			g_render_camera.up,
-		)
-
-		// Calculate the view matrix for the light
-		view := glsl.mat4LookAt(frustum_center - forward, frustum_center, up)
-
-		// Find the min and max point (bounding box) of this part of the frustum,
-		// transform it to the POV of the light  space and based on the build the projection matrix. 
-		min_p := glsl.vec3(max(f32))
-		max_p := glsl.vec3(min(f32))
-
-		for i in 0 ..< len(frustum_points) {
-			p: glsl.vec3 =
-				(view * glsl.vec4{frustum_points[i].x, frustum_points[i].y, frustum_points[i].z, 1}).xyz
-			min_p = glsl.min(min_p, p)
-			max_p = glsl.max(max_p, p)
-		}
-
-		// Grow the area to make sure we don't sample outside of the shadow map
-		min_p -= SHADOW_SAMPLING_RADIUS * 2
-		max_p += SHADOW_SAMPLING_RADIUS * 2
-
-		scale := glsl.vec3(2) / (max_p - min_p)
-		offset := -0.5 * (max_p + min_p) * scale
-
-		proj := glsl.mat4 {
-			scale.x, 0.0, 0.0, 0.0,
-			0.0, scale.y, 0.0, 0.0,
-			0.0, 0.0, scale.z, 0.0,
-			offset.x, offset.y, offset.z, 1.0,
-		}
-		proj = glsl.transpose(proj)
-
-		// This is used to sample the shadow maps
-		g_per_frame_data.shadow_cascades[i].light_matrix =
-			texture_space_conversion * ndc_z_correction * proj * view
-		g_per_frame_data.shadow_cascades[i].offset_scale = scale.xy
-
-		// These are used during rendering
-		INTERNAL.cascade_matrices[i].view = view
-		INTERNAL.cascade_matrices[i].projection = ndc_z_correction * proj
-		
-		cascade_near = cascade_far
-	}
 }
 
 //---------------------------------------------------------------------------//
@@ -319,12 +173,14 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 
 	render_views := make([]RenderView, num_cascades, temp_arena.allocator)
 	render_pass_bindings_per_view := make([]RenderPassBindings, num_cascades, temp_arena.allocator)
+	shadow_pass_uniform_offsets := make([]u32, num_cascades, temp_arena.allocator)
 
 	for i in 0 ..< num_cascades {
 
+		// Dummy, cascade matrices are calculated by prepare_shadow_cascades
 		render_views[i] = {
-			view       = INTERNAL.cascade_matrices[i].view,
-			projection = INTERNAL.cascade_matrices[i].projection,
+			view       = glsl.mat4(0),
+			projection = glsl.mat4(0),
 		}
 
 		render_pass_bindings_per_view[i] = create_cascade_render_pass_bindings(
@@ -332,6 +188,12 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 			u32(i),
 			temp_arena.allocator,
 		)
+
+		shadow_pass_info := ShadowPassConstantData {
+			cascade_index = i,
+		}
+
+		shadow_pass_uniform_offsets[i] = uniform_buffer_create_transient_buffer(&shadow_pass_info)
 	}
 
 	render_instanced_mesh_job_run(
@@ -342,6 +204,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 		render_pass_bindings_per_view,
 		cascade_render_task_data.material_pass_refs,
 		cascade_render_task_data.material_pass_type,
+		shadow_pass_uniform_offsets,
 	)
 }
 

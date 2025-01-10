@@ -21,11 +21,17 @@ RenderTaskCommon :: struct {
 
 @(private)
 render_task_common_init :: proc(
-    p_render_task_config: ^RenderTaskConfig, 
-    p_bind_group_ref: BindGroupRef,
-    p_render_task_common: ^RenderTaskCommon) -> (res: bool) {
+	p_render_task_config: ^RenderTaskConfig,
+	p_bind_group_ref: BindGroupRef,
+	p_render_task_common: ^RenderTaskCommon,
+	p_uniform_buffer_sizes: []u32 = {},
+	p_input_buffer_sizes: []u32 = {},
+	p_output_buffer_sizes: []u32 = {},
+) -> (
+	res: bool,
+) {
 
-    temp_arena: common.Arena
+	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
 
@@ -39,7 +45,13 @@ render_task_common_init :: proc(
 	material_pass_type := material_pass_parse_type(material_pass_type_name) or_return
 
 	render_pass_bindings: RenderPassBindings
-	render_task_setup_render_pass_bindings(p_render_task_config, &render_pass_bindings)
+	render_task_setup_render_pass_bindings(
+		p_render_task_config,
+		&render_pass_bindings,
+		p_uniform_buffer_sizes,
+		p_input_buffer_sizes,
+		p_output_buffer_sizes,
+	)
 
 	defer if res == false {
 		delete(render_pass_bindings.image_inputs, G_RENDERER_ALLOCATORS.resource_allocator)
@@ -124,9 +136,7 @@ render_task_common_init :: proc(
 	}
 
 	if len(material_pass_refs) == 0 {
-		log.errorf(
-			"Failed to load render task - it doesn't have any material passes \n",
-		)
+		log.errorf("Failed to load render task - it doesn't have any material passes \n")
 		return false
 	}
 
@@ -143,7 +153,7 @@ render_task_common_init :: proc(
 	p_render_task_common.render_pass_bindings = render_pass_bindings
 	p_render_task_common.material_pass_type = material_pass_type
 
-    return true
+	return true
 }
 
 //---------------------------------------------------------------------------//

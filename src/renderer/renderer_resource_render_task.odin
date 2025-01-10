@@ -8,9 +8,9 @@ import "../common"
 import "core:c"
 import "core:encoding/xml"
 import "core:log"
+import "core:math/linalg/glsl"
 import "core:strconv"
 import "core:strings"
-import "core:math/linalg/glsl"
 
 //---------------------------------------------------------------------------//
 
@@ -30,6 +30,7 @@ RenderTaskType :: enum {
 	FullScreen,
 	CascadeShadows,
 	BuildHiZ,
+	PrepareShadowCascades,
 }
 
 //---------------------------------------------------------------------------//
@@ -43,10 +44,11 @@ INTERNAL: struct {
 
 @(private = "file")
 G_RENDER_TASK_TYPE_MAPPING := map[string]RenderTaskType {
-	"Mesh"           = .Mesh,
-	"CascadeShadows" = .CascadeShadows,
-	"FullScreen"     = .FullScreen,
-	"BuildHiZ"       = .BuildHiZ,
+	"Mesh"                  = .Mesh,
+	"CascadeShadows"        = .CascadeShadows,
+	"FullScreen"            = .FullScreen,
+	"BuildHiZ"              = .BuildHiZ,
+	"PrepareShadowCascades" = .PrepareShadowCascades,
 }
 
 //---------------------------------------------------------------------------//
@@ -147,6 +149,13 @@ init_render_tasks :: proc() -> bool {
 		render_task_fn: RenderTaskFunctions
 		build_hiz_render_task_init(&render_task_fn)
 		INTERNAL.render_task_functions[.BuildHiZ] = render_task_fn
+	}
+	
+	// Init prepare shadow cascades render task
+	{
+		render_task_fn: RenderTaskFunctions
+		build_prepare_shadow_cascades_render_task_init(&render_task_fn)
+		INTERNAL.render_task_functions[.PrepareShadowCascades] = render_task_fn
 	}
 
 	return true
@@ -263,105 +272,25 @@ render_task_setup_render_pass_bindings :: proc(
 	load_image_inputs(p_render_task_config, "InputImage", &input_images)
 	load_image_inputs(p_render_task_config, "GlobalImage", &global_input_images)
 
-	uniform_buffer_idx := 0
-	input_buffer_idx := 0
-	output_buffer_idx := 0
-
 	// Load buffer inputs
-	current_element_idx := 0
-	for {
-		input_buffer_element_id, found := xml.find_child_by_ident(
-			p_render_task_config.doc,
-			p_render_task_config.render_task_element_id,
-			"InputBuffer",
-			current_element_idx,
-		)
-
-		if found == false {
-			break
-		}
-		usage, usage_found := xml.find_attribute_val_by_key(
-			p_render_task_config.doc,
-			input_buffer_element_id,
-			"usage",
-		)
-		if usage_found == false {
-			log.errorf("Can't create render task - no buffer usage '%s'\n", usage)
-			current_element_idx += 1
-			continue
-		}
-
-		if (usage in G_RENDER_PASS_BUFFER_USAGE_MAPPING) == false {
-			log.errorf("Can't create render task - unknown buffer usage '%s'\n", usage)
-			current_element_idx += 1
-			continue
-		}
-
-		offset: u32
-		size: u32
-
-		buffer_usage := G_RENDER_PASS_BUFFER_USAGE_MAPPING[usage]
-		buffer_ref: BufferRef
-
-
-		if buffer_usage == .Uniform {
-			buffer_ref = g_uniform_buffers.transient_buffer.buffer_ref
-			offset = common.INVALID_OFFSET
-			size = p_uniform_buffer_sizes[uniform_buffer_idx]
-			uniform_buffer_idx += 1
-		} else {
-
-			buffer_name, name_found := xml.find_attribute_val_by_key(
-				p_render_task_config.doc,
-				input_buffer_element_id,
-				"name",
-			)
-			if name_found == false {
-				log.error("Can't create render task - buffer name missing")
-				current_element_idx += 1
-				continue
-			}
-			buffer_offset, _ := common.xml_get_u32_attribute(
-				p_render_task_config.doc,
-				input_buffer_element_id,
-				"offset",
-			)
-			buffer_size, size_not_found := common.xml_get_u32_attribute(
-				p_render_task_config.doc,
-				input_buffer_element_id,
-				"size",
-			)
-			if size_not_found == false {
-				buffer_size = p_input_buffer_sizes[input_buffer_idx]
-				input_buffer_idx += 1
-			}
-
-			find_buffer(buffer_name)
-
-			if buffer_ref == InvalidBufferRef {
-				log.errorf("Can't create render task - unknown buffer '%s'\n", buffer_name)
-				current_element_idx += 1
-				continue
-			}
-
-			offset = buffer_offset
-			size = buffer_size
-		}
-
-		render_pass_input_buffer := RenderPassBufferInput {
-			buffer_ref = buffer_ref,
-			offset     = offset,
-			usage      = buffer_usage,
-			size       = size,
-		}
-
-		append(&input_buffers, render_pass_input_buffer)
-
-		current_element_idx += 1
-	}
+	load_buffer_inputs(
+		p_render_task_config,
+		p_uniform_buffer_sizes,
+		p_input_buffer_sizes,
+		"InputBuffer",
+		&input_buffers,
+	)
+	load_buffer_inputs(
+		p_render_task_config,
+		p_uniform_buffer_sizes,
+		p_input_buffer_sizes,
+		"GlobalBuffers",
+		&input_buffers,
+	)
 
 	// Load image outputs
-	current_element_idx = 0
+	current_element_idx := 0
+	output_buffer_idx := 0
 	for {
 		output_image_element_id, found := xml.find_child_by_ident(
 			p_render_task_config.doc,
@@ -437,7 +366,7 @@ render_task_setup_render_pass_bindings :: proc(
 			current_element_idx += 1
 			continue
 		}
-		
+
 		// Bind all mips
 		image := &g_resources.images[get_image_idx(image_ref)]
 		for i in 0 ..< image.desc.mip_count {
@@ -486,12 +415,12 @@ render_task_setup_render_pass_bindings :: proc(
 			output_buffer_element_id,
 			"offset",
 		)
-		size, size_not_found := common.xml_get_u32_attribute(
+		size, size_found := common.xml_get_u32_attribute(
 			p_render_task_config.doc,
 			output_buffer_element_id,
 			"size",
 		)
-		if size_not_found == false {
+		if size_found == false {
 			size = p_output_buffer_sizes[output_buffer_idx]
 			output_buffer_idx += 1
 		}
@@ -616,4 +545,112 @@ load_image_inputs :: proc(
 
 		current_element_idx += 1
 	}
+}
+
+//---------------------------------------------------------------------------//
+
+load_buffer_inputs :: proc(
+	p_render_task_config: ^RenderTaskConfig,
+	p_uniform_buffer_sizes: []u32,
+	p_input_buffer_sizes: []u32,
+	p_buffer_element_name: string,
+	p_input_buffers: ^[dynamic]RenderPassBufferInput,
+) {
+	current_element_idx := 0
+	uniform_buffer_idx := 0
+	input_buffer_idx := 0
+
+	for {
+		input_buffer_element_id, found := xml.find_child_by_ident(
+			p_render_task_config.doc,
+			p_render_task_config.render_task_element_id,
+			p_buffer_element_name,
+			current_element_idx,
+		)
+
+		if found == false {
+			break
+		}
+		usage, usage_found := xml.find_attribute_val_by_key(
+			p_render_task_config.doc,
+			input_buffer_element_id,
+			"usage",
+		)
+		if usage_found == false {
+			log.errorf("Can't create render task - no buffer usage '%s'\n")
+			current_element_idx += 1
+			continue
+		}
+
+		if (usage in G_RENDER_PASS_BUFFER_USAGE_MAPPING) == false {
+			log.errorf("Can't create render task - unknown buffer usage '%s'\n", usage)
+			current_element_idx += 1
+			continue
+		}
+
+		offset: u32
+		size: u32
+
+		buffer_usage := G_RENDER_PASS_BUFFER_USAGE_MAPPING[usage]
+		buffer_ref: BufferRef
+
+
+		if buffer_usage == .Uniform {
+			buffer_ref = g_uniform_buffers.transient_buffer.buffer_ref
+			offset = common.INVALID_OFFSET
+			size = p_uniform_buffer_sizes[uniform_buffer_idx]
+			uniform_buffer_idx += 1
+		} else {
+
+			buffer_name, name_found := xml.find_attribute_val_by_key(
+				p_render_task_config.doc,
+				input_buffer_element_id,
+				"name",
+			)
+			if name_found == false {
+				log.error("Can't create render task - buffer name missing")
+				current_element_idx += 1
+				continue
+			}
+			buffer_offset, _ := common.xml_get_u32_attribute(
+				p_render_task_config.doc,
+				input_buffer_element_id,
+				"offset",
+			)
+			buffer_size, size_not_found := common.xml_get_u32_attribute(
+				p_render_task_config.doc,
+				input_buffer_element_id,
+				"size",
+			)
+			if size_not_found == false {
+				buffer_size = p_input_buffer_sizes[input_buffer_idx]
+				input_buffer_idx += 1
+			}
+
+			buffer_ref = find_buffer(buffer_name)
+
+			if buffer_ref == InvalidBufferRef {
+				log.errorf("Can't create render task - unknown buffer '%s'\n", buffer_name)
+				current_element_idx += 1
+				continue
+			}
+
+			offset = buffer_offset
+			size = buffer_size
+		}
+
+		render_pass_input_buffer := RenderPassBufferInput {
+			buffer_ref = buffer_ref,
+			offset     = offset,
+			usage      = buffer_usage,
+			size       = size,
+		}
+
+		append(p_input_buffers, render_pass_input_buffer)
+
+		current_element_idx += 1
+	}
+
+	//---------------------------------------------------------------------------//
+
 }

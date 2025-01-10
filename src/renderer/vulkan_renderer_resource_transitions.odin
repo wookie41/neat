@@ -67,6 +67,10 @@ when USE_VULKAN_BACKEND {
 			buffer := &g_resources.buffers[get_buffer_idx(buffer_input.buffer_ref)]
 			backend_buffer := &g_resources.backend_buffers[get_buffer_idx(buffer_input.buffer_ref)]
 
+			if buffer.last_access == .Read {
+				continue
+			}
+
 			buffer_barrier := vk.BufferMemoryBarrier {
 				sType               = .BUFFER_MEMORY_BARRIER,
 				buffer              = backend_buffer.vk_buffer,
@@ -78,6 +82,8 @@ when USE_VULKAN_BACKEND {
 				),
 				srcQueueFamilyIndex = get_queue_family_index(buffer.queue),
 			}
+
+			buffer.last_access = .Read
 
 			if p_async_compute {
 				assert(p_pipeline_type == .Compute)
@@ -314,6 +320,7 @@ when USE_VULKAN_BACKEND {
 			}
 
 			buffer.queue = dst_queue
+			buffer.last_access = .Write
 		}
 
 		// Insert depth attachment barrier

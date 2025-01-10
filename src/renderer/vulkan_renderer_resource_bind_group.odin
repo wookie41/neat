@@ -239,7 +239,7 @@ when USE_VULKAN_BACKEND {
 				binding.type == .StorageBuffer || 
 				binding.type == .StorageBufferDynamic || 
 				binding.type == .UniformBuffer ||
-				binding.type == .UniformBufferDynamic, "Image binding required")
+				binding.type == .UniformBufferDynamic, "Buffer binding required")
 
 			binding_buffer_idx := get_buffer_idx(buffer_binding.buffer_ref)
 			buffer := &g_resources.buffers[binding_buffer_idx]
@@ -269,7 +269,7 @@ when USE_VULKAN_BACKEND {
 				descriptor_writes[images_infos_count + i].descriptorType =
 				.STORAGE_BUFFER_DYNAMIC
 			} else {
-				assert(false, "Buffer binding required") 
+				assert(false, "Invalid buffer binding") 
 			}
 		}
 

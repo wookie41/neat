@@ -29,7 +29,7 @@ MaterialPassResource :: struct {
 
 MaterialPassType :: enum u8 {
 	GBuffer,
-	Shadows,
+	CascadeShadows,
 }
 
 //---------------------------------------------------------------------------//
@@ -60,14 +60,14 @@ G_MATERIAL_PASS_REF_ARRAY: common.RefArray(MaterialPassResource)
 @(private = "file")
 G_MATERIAL_PASS_TYPE_MAPPING := map[string]MaterialPassType {
 	"GBuffer" = .GBuffer,
-	"Shadows" = .Shadows,
+	"CascadeShadows" = .CascadeShadows,
 }
 //---------------------------------------------------------------------------//
 
 @(private = "file")
 G_MATERIAL_PASS_TYPE_SHADERS_MAPPING := map[MaterialPassType]string {
 	.GBuffer = "material_pass_gbuffer.hlsl",
-	.Shadows = "material_pass_shadows.hlsl",
+	.CascadeShadows = "material_pass_cascade_shadows.hlsl",
 }
 
 //---------------------------------------------------------------------------//

@@ -7,10 +7,6 @@
 
 //---------------------------------------------------------------------------//
 
-#define MAX_SHADOW_CASCADES 6 // Keep in sync with renderer_render_task_cascade_shadows.odin
-
-//---------------------------------------------------------------------------//
-
 struct PerView
 {
     float4x4 ViewMatrix;
@@ -18,9 +14,11 @@ struct PerView
     float4x4 InvViewProjMatrix;
     float4x4 InvProjMatrix;
     float3 CameraPositionWS;
-    float _padding0;
+    float CameraNearPlane;
     float3 CameraForwardWS;
     float _padding1;
+    float3 CameraUpWS;
+    float _padding2;
 };
 
 //---------------------------------------------------------------------------//
@@ -28,7 +26,6 @@ struct PerView
 struct PerFrame
 {
     DirectionalLight Sun;
-    ShadowCascade ShadowCascades[MAX_SHADOW_CASCADES];
     int NumShadowCascades;
     int FrameIdMod2;
     int FrameIdMod4;
@@ -43,9 +40,11 @@ struct PerFrame
 
 //---------------------------------------------------------------------------//
 
-[[vk::binding(0, 1)]] ConstantBuffer<PerFrame> uPerFrame : register(b0, space1);
+[[vk::binding(0, 1)]]
+ConstantBuffer<PerFrame> uPerFrame : register(b0, space1);
 
-[[vk::binding(1, 1)]] ConstantBuffer<PerView> uPerView : register(b1, space1);
+[[vk::binding(1, 1)]]
+ConstantBuffer<PerView> uPerView : register(b1, space1);
 
 //---------------------------------------------------------------------------//
 
@@ -57,6 +56,9 @@ StructuredBuffer<Material> gMaterialsBuffer : register(t1, space2);
 
 [[vk::binding(2, 2)]]
 Texture2D gCascadeShadowTextures[MAX_SHADOW_CASCADES] : register(t2, space2);
+
+[[vk::binding(3, 2)]]
+StructuredBuffer<ShadowCascade> gShadowCascades : register(t3, space2);
 
 //---------------------------------------------------------------------------//
 
@@ -78,7 +80,8 @@ SamplerState uLinearRepeatSampler : register(s6, space3);
 
 //---------------------------------------------------------------------------//
 
-float4 sampleBindless(in SamplerState samplerState, in float2 uv, in uint textureId) {
+float4 sampleBindless(in SamplerState samplerState, in float2 uv, in uint textureId)
+{
     return uTextures2D[textureId].Sample(samplerState, uv);
 }
 

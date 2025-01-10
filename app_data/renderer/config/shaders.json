@@ -18,5 +18,13 @@
     {
         "name": "build_hiz.comp",
         "path": "build_hiz.comp.hlsl"
+    },
+    {
+        "name": "prepare_shadow_cascades.comp",
+        "path": "prepare_shadow_cascades.comp.hlsl"
+    },
+    {
+        "name": "reset_min_max_depth_buffer.comp",
+        "path": "reset_min_max_depth_buffer.comp.hlsl"
     }
 ]

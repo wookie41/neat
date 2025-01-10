@@ -67,15 +67,22 @@ render_instanced_mesh_job_init :: proc() -> bool {
 	{
 		INTERNAL.job_bind_group_layout = allocate_bind_group_layout_ref(
 			common.create_name("RenderInstancedMesh"),
-			1,
+			2,
 		)
 
 		bind_group_layout := &g_resources.bind_group_layouts[get_bind_group_layout_idx(INTERNAL.job_bind_group_layout)]
 
-		// Instance info data
+		// Custom uniform data
 		bind_group_layout.desc.bindings[0] = {
 			count         = 1,
-			shader_stages = {.Vertex, .Pixel, .Compute},
+			shader_stages = {.Vertex, .Pixel},
+			type          = .UniformBufferDynamic,
+		}
+
+		// Instance info data
+		bind_group_layout.desc.bindings[1] = {
+			count         = 1,
+			shader_stages = {.Vertex, .Pixel},
 			type          = .StorageBufferDynamic,
 		}
 
@@ -96,7 +103,12 @@ RenderInstancedMeshJob :: struct {
 //---------------------------------------------------------------------------//
 
 @(private)
-render_instanced_mesh_job_create :: proc() -> (mesh_job: RenderInstancedMeshJob, res: bool) {
+render_instanced_mesh_job_create :: proc(
+	p_custom_data_size: u32 = size_of(u32),
+) -> (
+	mesh_job: RenderInstancedMeshJob,
+	res: bool,
+) {
 
 	{
 		// @TODO Resize this buffer if instance data wouldn't be able to fit it in
@@ -136,8 +148,6 @@ render_instanced_mesh_job_create :: proc() -> (mesh_job: RenderInstancedMeshJob,
 		if create_bind_group(mesh_job.bind_group_ref) == false {
 			return {}, false
 		}
-
-
 	}
 
 	// Update the bind group
@@ -146,8 +156,14 @@ render_instanced_mesh_job_create :: proc() -> (mesh_job: RenderInstancedMeshJob,
 		{
 			buffers = {
 				{
+					buffer_ref = g_uniform_buffers.transient_buffer.buffer_ref,
+					size = p_custom_data_size,
+					binding = 0,
+				},
+				{
 					buffer_ref = mesh_job.instance_info_buffer_ref,
 					size = MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE,
+					binding = 1,
 				},
 			},
 		},
@@ -167,6 +183,7 @@ render_instanced_mesh_job_run :: proc(
 	p_render_pass_bindings_per_view: []RenderPassBindings,
 	p_material_pass_refs: []MaterialPassRef,
 	p_material_pass_type: MaterialPassType,
+	p_custom_uniform_data_offsets: []u32 = {},
 ) {
 
 	assert(len(p_render_pass_bindings_per_view) == len(p_render_views))
@@ -252,14 +269,14 @@ render_instanced_mesh_job_run :: proc(
 		mesh_batches_per_material_type[mesh_batch.material_type_ref] = batches
 	}
 
-	mesh_task_buffer_offsets := []u32{MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE * get_frame_idx()}
-
 	// Aggregate instanced draw infos so we can issue a single copy and create the draw stream
 	mesh_instanced_draws_infos := make([dynamic]MeshInstancedDrawInfo, temp_arena.allocator)
 	num_instances_dispatched: u32 = 0
 
 	draw_stream := draw_stream_create(temp_arena.allocator, p_debug_name)
 	material_pass_type_idx := transmute(u8)p_material_pass_type
+
+	mesh_instance_data_offset := MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE * get_frame_idx()
 
 	for material_type_ref, material_mesh_batches in mesh_batches_per_material_type {
 		material_type := &g_resources.material_types[get_material_type_idx(material_type_ref)]
@@ -283,7 +300,7 @@ render_instanced_mesh_job_run :: proc(
 				&draw_stream,
 				p_job_data.bind_group_ref,
 				0,
-				mesh_task_buffer_offsets,
+				{common.INVALID_OFFSET, common.INVALID_OFFSET},
 			)
 
 			// Technically, these bind groups can be bound only once, as all material passes of the same material pass type share the same layout
@@ -368,7 +385,7 @@ render_instanced_mesh_job_run :: proc(
 	upload_response := request_buffer_upload(
 		BufferUploadRequest {
 			dst_buff = p_job_data.instance_info_buffer_ref,
-			dst_buff_offset = mesh_task_buffer_offsets[0],
+			dst_buff_offset = mesh_instance_data_offset,
 			dst_queue_usage = .Graphics,
 			first_usage_stage = .VertexShader,
 			size = instanced_draw_infos_size_in_bytes,
@@ -387,14 +404,20 @@ render_instanced_mesh_job_run :: proc(
 		render_view := p_render_views[i]
 		bindings := p_render_pass_bindings_per_view[i]
 
-		uniform_offsets := []u32 {
+		// If custom uniform data is not needed, then just set the offset to 0 for user convenience
+		custom_uniform_data_offset :=
+			p_custom_uniform_data_offsets[i] if i < len(p_custom_uniform_data_offsets) else 0
+
+		dynamic_offsets := []u32 {
+			custom_uniform_data_offset,
+			mesh_instance_data_offset,
 			g_uniform_buffers.frame_data_offset,
 			uniform_buffer_create_view_data(render_view),
 		}
 
 		render_task_begin_render_pass(p_render_pass_ref, bindings)
 
-		draw_stream_dispatch(cmd_buff_ref, &draw_stream, uniform_offsets)
+		draw_stream_dispatch(cmd_buff_ref, &draw_stream, dynamic_offsets)
 		draw_stream_reset(&draw_stream)
 
 		end_render_pass(p_render_pass_ref, cmd_buff_ref)

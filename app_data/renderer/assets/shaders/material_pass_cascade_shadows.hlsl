@@ -3,6 +3,16 @@
 
 //---------------------------------------------------------------------------//
 
+struct CascadeShadowsUniformData
+{
+    int CascadeIndex;
+    int3 _padding;
+};
+
+#define INSTANCED_MESH_PASS_CUSTOM_DATA_TYPE CascadeShadowsUniformData
+
+//---------------------------------------------------------------------------//
+
 #include "scene_types.hlsli"
 #include "resources.hlsli"
 #include "material_pass.hlsli"
@@ -46,7 +56,7 @@ float4 VSMain(in VSInput pVertexInput, in uint pInstanceId: SV_INSTANCEID, out P
     const float4x4 modelMatrix = gMeshInstanceInfoBuffer[meshInstancedDrawInfo.meshInstanceIdx].modelMatrix;
     const float3 positionWS = mul(modelMatrix, float4(pVertexInput.position, 1.0)).xyz;
 
-    return mul(uPerView.ProjectionMatrix, mul(uPerView.ViewMatrix, float4(positionWS.xyz, 1)));
+    return mul(gShadowCascades[uPassCustomData.CascadeIndex].RenderMatrix, float4(positionWS.xyz, 1));
 }
 
 //---------------------------------------------------------------------------//

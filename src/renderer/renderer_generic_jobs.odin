@@ -38,6 +38,7 @@ generic_compute_job_create :: proc(
 	p_name: common.Name,
 	p_shader_ref: ShaderRef,
 	p_render_pass_bindings: RenderPassBindings,
+	p_is_compute_render_target_pass: bool,
 ) -> (
 	out_job: GenericComputeJob,
 	out_success: bool,
@@ -52,6 +53,7 @@ generic_compute_job_create :: proc(
 		p_name,
 		p_render_pass_bindings,
 		true,
+		p_is_compute_render_target_pass,
 		temp_arena.allocator,
 	)
 	if bind_group_ref == InvalidBindGroupRef {
@@ -123,6 +125,7 @@ generic_pixel_job_create :: proc(
 		p_name,
 		p_render_pass_bindings,
 		false,
+		false,
 		temp_arena.allocator,
 	)
 	if bind_group_ref == InvalidBindGroupRef {
@@ -166,11 +169,13 @@ create_bind_group_for_bindings :: proc(
 	p_name: common.Name,
 	p_render_pass_bindings: RenderPassBindings,
 	p_is_compute: bool,
+	p_is_compute_render_target_pass: bool,
 	p_allocator: mem.Allocator,
 ) -> (
 	BindGroupRef,
 	BindGroupLayoutRef,
 ) {
+	assert(p_is_compute_render_target_pass == false || (p_is_compute_render_target_pass && p_is_compute))
 
 	shader_stage: ShaderStageFlags = {.Compute} if p_is_compute else {.Pixel}
 
@@ -179,7 +184,7 @@ create_bind_group_for_bindings :: proc(
 		u32(len(p_render_pass_bindings.buffer_inputs)) +
 		u32(len(p_render_pass_bindings.buffer_outputs))
 
-	if p_is_compute {
+	if p_is_compute_render_target_pass {
 		bindings_count += 1 // uniform buffer slot holding input texture size etc.
 		bindings_count += u32(len(p_render_pass_bindings.image_outputs)) // for pixel path, these are handled via attachments
 	}
@@ -191,7 +196,7 @@ create_bind_group_for_bindings :: proc(
 	binding_index := 0
 
 	// First entry for compute path contains the uniform buffer with the output texture size
-	if p_is_compute {
+	if p_is_compute_render_target_pass {
 		bind_group_layout.desc.bindings[0].count = 1
 		bind_group_layout.desc.bindings[0].shader_stages = shader_stage
 		bind_group_layout.desc.bindings[0].type = .UniformBufferDynamic
@@ -256,7 +261,7 @@ create_bind_group_for_bindings :: proc(
 	}
 
 	// Update the bind group
-	buffers_count := 1 if p_is_compute else 0
+	buffers_count := 1 if p_is_compute_render_target_pass else 0
 	buffers_count += len(p_render_pass_bindings.buffer_inputs)
 	buffers_count += (len(p_render_pass_bindings.buffer_outputs))
 
@@ -269,7 +274,7 @@ create_bind_group_for_bindings :: proc(
 	}
 
 	// Update the bind group with the images from the render tasks bindings
-	if p_is_compute {
+	if p_is_compute_render_target_pass {
 		bind_group_update_info.buffers[0] = {
 			binding    = 0,
 			buffer_ref = g_uniform_buffers.transient_buffer.buffer_ref,
@@ -277,7 +282,7 @@ create_bind_group_for_bindings :: proc(
 		}
 	}
 
-	binding_index = 1 if p_is_compute else 0
+	binding_index = 1 if p_is_compute_render_target_pass else 0
 
 	for input_buffer in p_render_pass_bindings.buffer_inputs {
 		bind_group_update_info.buffers[binding_index] = BindGroupBufferBinding {

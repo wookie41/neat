@@ -10,7 +10,7 @@
         "resolution": "Full"
     },
     {
-        "name": "Shadows",
+        "name": "CascadeShadows",
         "renderTargets": [],
         "depthFormat": "Depth16",
         "resolution": "2048x2048",
