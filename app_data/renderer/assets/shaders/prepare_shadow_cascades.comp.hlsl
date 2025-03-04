@@ -3,11 +3,20 @@
 // Calculation of the cascade planes based on
 // https://developer.download.nvidia.com/SDK/10.5/opengl/src/cascaded_shadow_maps/doc/cascaded_shadow_maps.pdf
 
+
+// Stabilization based on
+// https://github.com/TheRealMJP/Shadows/blob/master/Shadows/SetupShadows.hlsl
+
 //---------------------------------------------------------------------------//
 
 #include "math.hlsli"
 #include "resources.hlsli"
 #include "scene_types.hlsli"
+
+//---------------------------------------------------------------------------//
+
+#define FIT_CASCADES 0x01
+#define STABILIZE_CASCADES 0x02
 
 //---------------------------------------------------------------------------//
 
@@ -19,6 +28,9 @@ cbuffer PrepareShadowCascadeParams : register(b0, space0)
     float aspectRatio;
     float tanFovHalf;
     float shadowSamplingRadius;
+    uint flags;
+    float renderingDistance;
+    float shadowMapSize;
 }
 
 [[vk::binding(1, 0)]]
@@ -50,8 +62,8 @@ void CSMain(uint localThreadIndex: SV_GroupIndex)
 {
     if (localThreadIndex < numCascades)
     {
-        const float depthMinLinear = -LinearizeDepth(asfloat(minMaxDepthBuffer[1]), uPerView.CameraNearPlane);
-        const float depthMaxLinear = -LinearizeDepth(asfloat(minMaxDepthBuffer[0]), uPerView.CameraNearPlane);
+        const float depthMinLinear = (flags & FIT_CASCADES) > 0 ? -LinearizeDepth(asfloat(minMaxDepthBuffer[1]), uPerView.CameraNearPlane) : uPerView.CameraNearPlane;
+        const float depthMaxLinear = (flags & FIT_CASCADES) > 0 ? -LinearizeDepth(asfloat(minMaxDepthBuffer[0]), uPerView.CameraNearPlane) : renderingDistance;
 
         const float nearSplit = CalculateCascadeSplit(int(localThreadIndex) - 1, depthMinLinear, depthMaxLinear);
         const float farSplit = CalculateCascadeSplit(localThreadIndex, depthMinLinear, depthMaxLinear);
@@ -124,6 +136,20 @@ void CSMain(uint localThreadIndex: SV_GroupIndex)
         proj[3][2] = offset.z;
         proj[3][3] = 1.f;
         proj = transpose(proj);
+
+        if ((flags & STABILIZE_CASCADES) > 0)
+        {
+            const float4x4 shadowMatrix = mul(proj, view);
+            float3 shadowOrigin = mul(shadowMatrix, float4(0.xxx, 1.0f)).xyz;
+            shadowOrigin *= (shadowMapSize / 2.0f);
+
+            float3 snappedOrigin = round(shadowOrigin);
+            float3 snapOffset = snappedOrigin - shadowOrigin;
+            snapOffset = snapOffset * (2.0f / shadowMapSize);
+
+            proj[0][3] += snapOffset.x;
+            proj[1][3] += snapOffset.y;
+        }
 
         lightMatrices[localThreadIndex].RenderMatrix = mul(ndcCorrectionZ, mul(proj, view));
         lightMatrices[localThreadIndex].LightMatrix = mul(textureSpaceConversion, lightMatrices[localThreadIndex].RenderMatrix);

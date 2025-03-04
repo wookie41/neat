@@ -20,6 +20,11 @@ import "core:math/linalg/glsl"
 @(private = "file")
 CASCADE_SPLIT_LOG_FACTOR :: 0.90
 
+@(private = "file")
+FLAG_FIT_CASCADES :: 0x01
+
+@(private = "file")
+FLAG_STABILIZE_CASCADES :: 0x02
 
 //---------------------------------------------------------------------------//
 
@@ -29,17 +34,21 @@ PrepareShadowCascadesRenderTaskData :: struct {
 	render_pass_bindings:       RenderPassBindings,
 	shadow_cascades_buffer_ref: BufferRef,
 	min_max_depth_buffer_ref:   BufferRef,
+	shadow_map_size:            f32,
 }
 
 //---------------------------------------------------------------------------//
 
 @(private = "file")
 PrepareShadowCascadesUniformData :: struct #packed {
-	num_cascades:           u32,
-	split_factor:           f32,
-	aspect_ratio:           f32,
-	tan_fov_half:           f32,
-	shadow_sampling_radius: f32,
+	num_cascades:               u32,
+	split_factor:               f32,
+	aspect_ratio:               f32,
+	tan_fov_half:               f32,
+	shadow_sampling_radius:     f32,
+	flags:                      u32,
+	shadows_rendering_distance: f32,
+	shadow_map_size:            f32,
 }
 
 //---------------------------------------------------------------------------//
@@ -73,6 +82,12 @@ create_instance :: proc(
 		p_render_task_config.doc,
 		p_render_task_config.render_task_element_id,
 		"shader",
+	) or_return
+
+	shadow_map_size := common.xml_get_f32_attribute(
+		p_render_task_config.doc,
+		p_render_task_config.render_task_element_id,
+		"shadowMapSize",
 	) or_return
 
 	min_max_depth_buffer_name := xml.find_attribute_val_by_key(
@@ -171,6 +186,7 @@ create_instance :: proc(
 	render_task.data_ptr = rawptr(render_task_data)
 
 	render_task_data.min_max_depth_buffer_ref = min_max_depth_buffer_ref
+	render_task_data.shadow_map_size = shadow_map_size
 
 	// @TODO This should happend after the task runs
 	// Update the global bind group with the shadow cascades buffers
@@ -235,14 +251,23 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 	gpu_debug_region_begin(get_frame_cmd_buffer_ref(), render_task.desc.name)
 	defer gpu_debug_region_end(get_frame_cmd_buffer_ref())
 
+	flags : u32 = 0
+	if G_RENDERER_SETTINGS.fit_shadow_cascades {
+		flags |= FLAG_FIT_CASCADES
+	}
+	if G_RENDERER_SETTINGS.stabilize_shadow_cascades {
+		flags |= FLAG_STABILIZE_CASCADES
+	}
+
 	uniform_data := PrepareShadowCascadesUniformData {
-		num_cascades           = G_RENDERER_SETTINGS.num_shadow_cascades,
-		shadow_sampling_radius = G_RENDERER_SETTINGS.directional_light_shadow_sampling_radius,
-		split_factor           = CASCADE_SPLIT_LOG_FACTOR,
-		aspect_ratio           = f32(
-			G_RENDERER.config.render_resolution.x,
-		) / f32(G_RENDERER.config.render_resolution.y),
-		tan_fov_half           = glsl.tan(0.5 * g_render_camera.fov),
+		num_cascades               = G_RENDERER_SETTINGS.num_shadow_cascades,
+		shadow_sampling_radius     = G_RENDERER_SETTINGS.directional_light_shadow_sampling_radius,
+		split_factor               = CASCADE_SPLIT_LOG_FACTOR,
+		aspect_ratio               = f32(G_RENDERER.config.render_resolution.x) / f32(G_RENDERER.config.render_resolution.y),
+		tan_fov_half               = glsl.tan(0.5 * glsl.radians(g_render_camera.fov)),
+		flags                      = flags,
+		shadows_rendering_distance = G_RENDERER_SETTINGS.shadows_rendering_distance,
+		shadow_map_size            = render_task_data.shadow_map_size,
 	}
 
 	task_offsets := []u32{uniform_buffer_create_transient_buffer(&uniform_data)}

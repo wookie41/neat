@@ -11,9 +11,9 @@ RWStructuredBuffer<uint> minMaxDepthBuffer : register(u0, space0);
 
 [numthreads(1, 1, 1)]
 void CSMain()
-{
-    minMaxDepthBuffer[0] = asuint(FLT_MAX);
-    minMaxDepthBuffer[1] = asuint(FLT_MIN);
+{   
+    minMaxDepthBuffer[0] = asuint(1.f);
+    minMaxDepthBuffer[1] = asuint(0.f);
 }
 
 //---------------------------------------------------------------------------//

@@ -22,12 +22,12 @@
             <OutputBuffer name="SceneDepthMinMax"/>
             <OutputImage name="HiZBuffer"/>
         </BuildHiZ>
-        <PrepareShadowCascades name="PrepareShadowCascades" shader="prepare_shadow_cascades.comp" minMaxDepthBuffer="SceneDepthMinMax" shadowCascadesBuffer="ShadowCascades">
+        <PrepareShadowCascades name="PrepareShadowCascades" shader="prepare_shadow_cascades.comp" minMaxDepthBuffer="SceneDepthMinMax" shadowCascadesBuffer="ShadowCascades" shadowMapSize="2048">
             <InputBuffer usage="Uniform"/>
             <InputBuffer usage="General" name="SceneDepthMinMax"/>
             <OutputBuffer name="ShadowCascades"/>
         </PrepareShadowCascades>        
-        <CascadeShadows name="CascadeShadows" cascadesImage="CascadeShadows" renderPass="CascadeShadows" materialPassType="CascadeShadows" numCascades="3" maxShadowsDistance="15000">
+        <CascadeShadows name="CascadeShadows" cascadesImage="CascadeShadows" renderPass="CascadeShadows" materialPassType="CascadeShadows" numCascades="3">
             <InputBuffer usage="General" name="ShadowCascades"/>
             <OutputImage name="CascadeShadows" clear="0"/>
             <MaterialPass name="OpaquePBR" />

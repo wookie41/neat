@@ -59,7 +59,7 @@ AF4 SpdLoadSourceImage(ASU2 p, AU1 slice)
     bool sampleExtraRow = ((uInputTextureDimensions.y & 1) != 0);
 
     float maxDepth = depthTex[min(p, uInputTextureDimensions - 1)].r;
-    float minDepth = maxDepth == 0 ? 1 : maxDepth;
+    float minDepth = maxDepth;
 
     // if we are reducing an odd-sized texture, we need to fetch additional texels
     if (sampleExtraColumn)
@@ -69,12 +69,6 @@ AF4 SpdLoadSourceImage(ASU2 p, AU1 slice)
 
         maxDepth = max(maxDepth, depth1);
         maxDepth = max(maxDepth, depth2);
-
-        if (depth1 > 0)
-            minDepth = min(minDepth, depth1);
-
-        if (depth2 > 0)
-            minDepth = min(minDepth, depth2);
     }
 
     if (sampleExtraRow)
@@ -84,24 +78,15 @@ AF4 SpdLoadSourceImage(ASU2 p, AU1 slice)
 
         maxDepth = max(maxDepth, depth1);
         maxDepth = max(maxDepth, depth2);
-
-        if (depth1 > 0)
-            minDepth = min(minDepth, depth1);
-
-        if (depth2 > 0)
-            minDepth = min(minDepth, depth2);
     }
 
     // if both edges are odd, include the corner texel
     if (sampleExtraColumn && sampleExtraRow)
     {
         float depth = depthTex[min(p + ASU2(2, 2), uInputTextureDimensions - 1)].r;
-
-        maxDepth = max(maxDepth, depth);
-
-        if (depth > 0)
-            minDepth = min(minDepth, depth);
     }
+
+    minDepth = (minDepth == 0) ? 1 : minDepth;
 
     // bit-wise cast float -> uint preserves the monoticity
     InterlockedMin(minMaxDepthBuffer[0], asuint(minDepth));

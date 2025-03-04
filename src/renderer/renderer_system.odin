@@ -175,6 +175,9 @@ G_RENDERER_ALLOCATORS: struct {
 G_RENDERER_SETTINGS : struct {
 	num_shadow_cascades: u32,
 	debug_draw_shadow_cascades: bool,
+	fit_shadow_cascades: bool,
+	stabilize_shadow_cascades: bool,
+	shadows_rendering_distance: f32,
 	directional_light_shadow_sampling_radius: f32,
 }
 
@@ -250,6 +253,9 @@ init :: proc(p_options: InitOptions) -> bool {
 	// Init renderer settings with default values
 	G_RENDERER_SETTINGS.num_shadow_cascades = 3
 	G_RENDERER_SETTINGS.directional_light_shadow_sampling_radius = 0.3
+	G_RENDERER_SETTINGS.fit_shadow_cascades = true
+	G_RENDERER_SETTINGS.stabilize_shadow_cascades = false
+	G_RENDERER_SETTINGS.shadows_rendering_distance = 1500
 
 	backend_init(p_options) or_return
 
@@ -926,6 +932,9 @@ draw_debug_ui :: proc(p_dt: f32) {
 	// Debug UI
 	imgui.InputInt("Shadow cascade count", (^i32)(&G_RENDERER_SETTINGS.num_shadow_cascades))
 	imgui.Checkbox("Draw shadow cascades", (^bool)(&G_RENDERER_SETTINGS.debug_draw_shadow_cascades))
+	imgui.Checkbox("Fit shadow cascades", (^bool)(&G_RENDERER_SETTINGS.fit_shadow_cascades))
+	imgui.Checkbox("Stabilize shadow cascades", (^bool)(&G_RENDERER_SETTINGS.stabilize_shadow_cascades))
+	imgui.InputFloat("Shadows rendering distance", (&G_RENDERER_SETTINGS.shadows_rendering_distance))
 	imgui.InputFloat("Direcional light shadow sampling radius", (&G_RENDERER_SETTINGS.directional_light_shadow_sampling_radius))
 
 	G_RENDERER_SETTINGS.num_shadow_cascades = max(0, G_RENDERER_SETTINGS.num_shadow_cascades)
