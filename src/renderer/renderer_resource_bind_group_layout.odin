@@ -128,7 +128,7 @@ allocate_bind_group_layout_ref :: proc(
 
 create_bind_group_layout :: proc(p_bind_group_layout_ref: BindGroupLayoutRef) -> bool {
 	bind_group_layout := &g_resources.bind_group_layouts[get_bind_group_layout_idx(p_bind_group_layout_ref)]
-	bind_group_layout.hash = hash.adler32(mem.slice_to_bytes(bind_group_layout.desc.bindings))
+	bind_group_layout.hash = hash.crc32(mem.slice_to_bytes(bind_group_layout.desc.bindings))
 
 	backend_create_bind_group_layout(p_bind_group_layout_ref) or_return
 

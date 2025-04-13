@@ -150,7 +150,7 @@ init_render_tasks :: proc() -> bool {
 		build_hiz_render_task_init(&render_task_fn)
 		INTERNAL.render_task_functions[.BuildHiZ] = render_task_fn
 	}
-	
+
 	// Init prepare shadow cascades render task
 	{
 		render_task_fn: RenderTaskFunctions
@@ -425,6 +425,12 @@ render_task_setup_render_pass_bindings :: proc(
 			output_buffer_idx += 1
 		}
 
+		_, needs_read_barrier := xml.find_attribute_val_by_key(
+			p_render_task_config.doc, 
+			output_buffer_element_id, 
+			"needsReadBarrier",
+		)
+
 		buffer_ref := find_buffer(buffer_name)
 		if buffer_ref == InvalidBufferRef {
 			log.errorf("Can't setup render task - unknown buffer '%s'\n", buffer_name)
@@ -433,9 +439,10 @@ render_task_setup_render_pass_bindings :: proc(
 		}
 
 		render_pass_output_buffer := RenderPassBufferOutput {
-			buffer_ref = buffer_ref,
-			offset     = offset,
-			size       = size,
+			buffer_ref         = buffer_ref,
+			offset             = offset,
+			size               = size,
+			needs_read_barrier = needs_read_barrier,
 		}
 
 		append(&output_buffers, render_pass_output_buffer)

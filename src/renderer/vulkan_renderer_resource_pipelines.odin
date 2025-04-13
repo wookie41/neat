@@ -28,7 +28,6 @@ when USE_VULKAN_BACKEND {
 		pipeline_layout_cache:          map[u32]PipelineLayoutCacheEntry,
 		vk_pipeline_cache:              vk.PipelineCache,
 		vk_empty_descriptor_set_layout: vk.DescriptorSetLayout,
-		deferred_pipeline_deletions:    [dynamic]DeferredPipelineDelete,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -221,45 +220,7 @@ when USE_VULKAN_BACKEND {
 
 		vk.CreatePipelineCache(G_RENDERER.device, &create_info, nil, &INTERNAL.vk_pipeline_cache)
 
-		INTERNAL.deferred_pipeline_deletions = make(
-			[dynamic]DeferredPipelineDelete,
-			get_frame_allocator(),
-		)
-
 		return true
-	}
-
-	//---------------------------------------------------------------------------//
-
-	@(private)
-	backend_pipelines_update :: proc() {
-
-		// Process deferred deletes
-		deferred_deletes := make([dynamic]DeferredPipelineDelete, get_next_frame_allocator())
-		for deferred_delete in &INTERNAL.deferred_pipeline_deletions {
-
-			// Command buffer with using this pipeline is still in use
-			if vk.GetFenceStatus(G_RENDERER.device, deferred_delete.wait_fence) == .NOT_READY {
-				append(&deferred_deletes, deferred_delete)
-				continue
-
-			}
-
-			// Safe to delete pipeline
-			cache_entry := &INTERNAL.pipeline_layout_cache[deferred_delete.pipeline_layout_hash]
-			assert(cache_entry.ref_count > 0)
-			cache_entry.ref_count -= 1
-
-			if cache_entry.ref_count == 0 {
-				vk.DestroyPipelineLayout(G_RENDERER.device, cache_entry.vk_pipeline_layout, nil)
-				delete_key(&INTERNAL.pipeline_layout_cache, deferred_delete.pipeline_layout_hash)
-			}
-
-			vk.DestroyPipeline(G_RENDERER.device, deferred_delete.vk_pipeline, nil)
-
-		}
-
-		INTERNAL.deferred_pipeline_deletions = deferred_deletes
 	}
 
 	//---------------------------------------------------------------------------//
@@ -494,20 +455,15 @@ when USE_VULKAN_BACKEND {
 		assert(cache_entry.ref_count > 0)
 		cache_entry.ref_count -= 1
 
-		// Delete the pipeline layout if needed
-		if cache_entry.ref_count == 0 {
-			vk.DestroyPipelineLayout(G_RENDERER.device, cache_entry.vk_pipeline_layout, nil)
+		if cache_entry.ref_count == 0 {		
 			delete_key(&INTERNAL.pipeline_layout_cache, pipeline_layout_hash)
+
+			pipeline_layout_to_delete := defer_resource_delete(safe_destroy_pipeline_layout, vk.PipelineLayout)
+			pipeline_layout_to_delete^ = cache_entry.vk_pipeline_layout	
 		}
 
-		append(
-			&INTERNAL.deferred_pipeline_deletions,
-			DeferredPipelineDelete{
-				pipeline_layout_hash = pipeline_layout_hash,
-				vk_pipeline = backend_pipeline.vk_pipeline,
-				wait_fence = G_RENDERER.frame_fences[get_frame_idx()],
-			},
-		)
+		pipeline_to_delete := defer_resource_delete(safe_destroy_pipeline, vk.Pipeline)
+		pipeline_to_delete^ = backend_pipeline.vk_pipeline
 	}
 
 	//---------------------------------------------------------------------------//
@@ -573,10 +529,7 @@ when USE_VULKAN_BACKEND {
 	hash_compute_pipeline_layout_shaders :: proc(
 		p_compute_hash: u32,
 	) -> u32 {
-		return(
-			p_compute_hash ~
-			u32(ShaderStage.Compute)
-		)
+		return (p_compute_hash ~ u32(ShaderStage.Compute))
 	}
 
 	//---------------------------------------------------------------------------//
@@ -744,18 +697,14 @@ when USE_VULKAN_BACKEND {
 
 		// Delete the pipeline layout if needed
 		if cache_entry.ref_count == 0 {
-			vk.DestroyPipelineLayout(G_RENDERER.device, cache_entry.vk_pipeline_layout, nil)
 			delete_key(&INTERNAL.pipeline_layout_cache, pipeline_layout_hash)
+
+			pipeline_layout_to_delete := defer_resource_delete(safe_destroy_pipeline_layout, vk.PipelineLayout)
+			pipeline_layout_to_delete^ = cache_entry.vk_pipeline_layout	
 		}
 
-		append(
-			&INTERNAL.deferred_pipeline_deletions,
-			DeferredPipelineDelete{
-				pipeline_layout_hash = pipeline_layout_hash,
-				vk_pipeline = backend_pipeline.vk_pipeline,
-				wait_fence = G_RENDERER.frame_fences[get_frame_idx()],
-			},
-		)
+		pipeline_to_delete := defer_resource_delete(safe_destroy_pipeline, vk.Pipeline)
+		pipeline_to_delete^ = backend_pipeline.vk_pipeline
 	}
 
 	//---------------------------------------------------------------------------//
@@ -806,38 +755,18 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	@(private)
-	backend_graphics_pipeline_reset :: proc(p_pipeline_ref: GraphicsPipelineRef) {
-
-		pipeline_idx := get_graphics_pipeline_idx(p_pipeline_ref)
-		backend_pipeline := &g_resources.backend_graphics_pipelines[pipeline_idx]
-
-		append(
-			&INTERNAL.deferred_pipeline_deletions,
-			DeferredPipelineDelete{
-				pipeline_layout_hash = hash_pipeline_layout(p_pipeline_ref),
-				vk_pipeline = backend_pipeline.vk_pipeline,
-				wait_fence = G_RENDERER.frame_fences[get_frame_idx()],
-			},
-		)
+	@(private="file")
+	safe_destroy_pipeline_layout :: proc(p_user_data: rawptr) {
+		vk_pipeline_layout := (^vk.PipelineLayout)(p_user_data)^
+		vk.DestroyPipelineLayout(G_RENDERER.device, vk_pipeline_layout, nil)
 	}
 
 	//---------------------------------------------------------------------------//
 
-	@(private)
-	backend_compute_pipeline_reset :: proc(p_pipeline_ref: ComputePipelineRef) {
-
-		pipeline_idx := get_compute_pipeline_idx(p_pipeline_ref)
-		backend_pipeline := &g_resources.backend_compute_pipelines[pipeline_idx]
-
-		append(
-			&INTERNAL.deferred_pipeline_deletions,
-			DeferredPipelineDelete{
-				pipeline_layout_hash = hash_pipeline_layout(p_pipeline_ref),
-				vk_pipeline = backend_pipeline.vk_pipeline,
-				wait_fence = G_RENDERER.frame_fences[get_frame_idx()],
-			},
-		)
+	@(private="file")
+	safe_destroy_pipeline :: proc(p_user_data: rawptr) {
+		vk_pipeline := (^vk.Pipeline)(p_user_data)^
+		vk.DestroyPipeline(G_RENDERER.device, vk_pipeline, nil)
 	}
 
 	//---------------------------------------------------------------------------//

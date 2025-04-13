@@ -144,12 +144,9 @@ when USE_VULKAN_BACKEND {
 	backend_destroy_bind_group :: proc(p_bind_group_ref: BindGroupRef) {
 		bind_group_idx := get_bind_group_idx(p_bind_group_ref)
 		backend_bind_group := &g_resources.backend_bind_groups[bind_group_idx]
-		vk.FreeDescriptorSets(
-			G_RENDERER.device,
-			INTERNAL.descriptor_pool,
-			1,
-			&backend_bind_group.vk_descriptor_set,
-		)
+
+		descriptor_set_to_delete := defer_resource_delete(safe_destroy_descriptor_set, vk.DescriptorSet)
+		descriptor_set_to_delete^ = backend_bind_group.vk_descriptor_set
 	}
 
 	//---------------------------------------------------------------------------//
@@ -303,4 +300,17 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
+	@(private="file")
+	safe_destroy_descriptor_set :: proc(p_user_data: rawptr) {
+		descriptor_set := (^vk.DescriptorSet)(p_user_data)
+
+		vk.FreeDescriptorSets(
+			G_RENDERER.device,
+			INTERNAL.descriptor_pool,
+			1,
+			descriptor_set,
+		)
+	}
+
+	//---------------------------------------------------------------------------//
 }

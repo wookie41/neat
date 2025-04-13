@@ -209,7 +209,7 @@ create_instance :: proc(
 	render_task_name := common.create_name(doc_name)
 
 	temp_arena: common.Arena
-	common.temp_arena_init(&temp_arena)
+	common.temp_arena_init(&temp_arena)	
 	defer common.arena_delete(temp_arena)
 
 	build_hiz_job, build_hiz_job_created := generic_compute_job_create(

@@ -196,10 +196,6 @@ pipelines_init :: proc() -> bool {
 	return true
 }
 
-@(private)
-pipelines_update :: proc() {
-	backend_pipelines_update()
-}
 //---------------------------------------------------------------------------//
 
 @(private)
@@ -333,18 +329,6 @@ compute_pipeline_bind :: proc(
 	p_cmd_buff_ref: CommandBufferRef,
 ) {
 	backend_compute_pipeline_bind(p_pipeline_ref, p_cmd_buff_ref)
-}
-
-//---------------------------------------------------------------------------//
-
-graphics_pipeline_reset :: proc(p_ref: GraphicsPipelineRef) {
-	backend_graphics_pipeline_reset(p_ref)
-}
-
-//---------------------------------------------------------------------------//
-
-compute_pipeline_reset :: proc(p_ref: ComputePipelineRef) {
-	backend_compute_pipeline_reset(p_ref)
 }
 
 //---------------------------------------------------------------------------//

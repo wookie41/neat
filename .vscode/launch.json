@@ -7,13 +7,24 @@
         {
             "type": "cppvsdbg",
             "request": "launch",
-            "name": "Launch Program",
+            "name": "Launch Neat",
             "program": "bin/neat.exe",
             "cwd": "${workspaceRoot}",
             "valuesFormatting": "parseText",
             "preLaunchTask": "(Debug) Build",
             "symbolSearchPath": "${workspaceRoot}/bin",
             "console": "integratedTerminal"
+        },
+        {
+            "type": "cppvsdbg",
+            "request": "launch",
+            "name": "Launch Plain",
+            "program": "PlainRuntime.exe",
+            "cwd": "C:\\Projects\\PlainRenderer\\build\\Development",
+            "valuesFormatting": "parseText",
+            "symbolSearchPath": "C:\\Projects\\PlainRenderer\build\\Development",
+            "console": "integratedTerminal",
+            "args": ["1920", "1080", "D:\\Sponza\\Sponza.plain"]
         }
     ]
 }

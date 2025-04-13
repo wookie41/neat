@@ -82,7 +82,8 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_destroy_shader :: proc(p_shader_ref: ShaderRef) {
 		shader := &g_resources.backend_shaders[get_shader_idx(p_shader_ref)]
-		vk.DestroyShaderModule(G_RENDERER.device, shader.vk_module, nil)
+		vk_module := defer_resource_delete(safe_destroy_vk_module, vk.ShaderModule)
+		vk_module^ = shader.vk_module
 	}
 
 	//---------------------------------------------------------------------------//
@@ -91,7 +92,10 @@ when USE_VULKAN_BACKEND {
 		shader := &g_resources.backend_shaders[get_shader_idx(p_shader_ref)]
 		old_vk_module := shader.vk_module
 		if backend_create_shader(p_shader_ref, p_shader_code) == true {
-			vk.DestroyShaderModule(G_RENDERER.device, old_vk_module, nil)
+
+			vk_module := defer_resource_delete(safe_destroy_vk_module, vk.ShaderModule)
+			vk_module^ = old_vk_module
+
 			return true
 		}
 		return false
@@ -149,4 +153,13 @@ when USE_VULKAN_BACKEND {
 		return true
 	}
 
+	//---------------------------------------------------------------------------//
+
+	@(private="file")
+	safe_destroy_vk_module :: proc(p_user_data: rawptr) {
+		vk_module := (^vk.ShaderModule)(p_user_data)
+		vk.DestroyShaderModule(G_RENDERER.device, vk_module^, nil)
+	}
+
+	//---------------------------------------------------------------------------//
 }

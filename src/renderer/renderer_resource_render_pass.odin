@@ -129,16 +129,17 @@ RenderPassBufferUsage :: enum u8 {
 RenderPassBufferInput :: struct {
 	buffer_ref: BufferRef,
 	offset:     u32,
-	size:     u32,
+	size:       u32,
 	usage:      RenderPassBufferUsage,
 }
 
 //---------------------------------------------------------------------------//
 
 RenderPassBufferOutput :: struct {
-	buffer_ref: BufferRef,
-	offset:     u32,
-	size:     u32,
+	buffer_ref:         BufferRef,
+	offset:             u32,
+	size:               u32,
+	needs_read_barrier: bool,
 }
 
 //---------------------------------------------------------------------------//

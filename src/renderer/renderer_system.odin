@@ -105,6 +105,7 @@ g_resources: struct {
 	draw_commands:              #soa[]DrawCommandResource,
 	compute_commands:           #soa[]ComputeCommandResource,
 }
+
 //---------------------------------------------------------------------------//
 
 g_resource_refs: struct {
@@ -113,6 +114,10 @@ g_resource_refs: struct {
 	shaders:            common.RefArray(ShaderResource),
 	mesh_instances:     common.RefArray(MeshInstanceResource),
 }
+
+//---------------------------------------------------------------------------//
+
+
 
 //---------------------------------------------------------------------------//
 
@@ -133,7 +138,6 @@ RendererConfig :: struct {
 }
 
 //---------------------------------------------------------------------------//
-
 
 @(private)
 G_RENDERER: struct {
@@ -242,6 +246,7 @@ init :: proc(p_options: InitOptions) -> bool {
 		make([]byte, common.MEGABYTE * 8, G_RENDERER_ALLOCATORS.main_allocator),
 	)
 	G_RENDERER_ALLOCATORS.names_allocator = mem.arena_allocator(&G_RENDERER_ALLOCATORS.names_arena)
+	
 
 	INTERNAL.frame_idx = 0
 	INTERNAL.frame_id = 0
@@ -280,6 +285,25 @@ init :: proc(p_options: InitOptions) -> bool {
 			staging_async_buffer_size = 8 * common.MEGABYTE,
 		}
 		init_buffer_upload(buffer_upload_options) or_return
+	}
+
+	// Init deferred resource deletion
+	{
+		using g_deferred_resource_delete_context
+
+		per_frame_arenas = make([]mem.Arena, G_RENDERER.num_frames_in_flight, G_RENDERER_ALLOCATORS.main_allocator)
+		per_frame_allocators = make([]mem.Allocator, G_RENDERER.num_frames_in_flight, G_RENDERER_ALLOCATORS.main_allocator)
+		per_frame_deletes = make([][dynamic]DeferredResourceDeleteEntry, G_RENDERER.num_frames_in_flight, G_RENDERER_ALLOCATORS.main_allocator)
+
+		for i in 0 ..< G_RENDERER.num_frames_in_flight {
+			
+			mem.arena_init(
+				&per_frame_arenas[i],
+				make([]byte, common.MEGABYTE * 4, G_RENDERER_ALLOCATORS.main_allocator),
+			)
+			per_frame_allocators[i] = mem.arena_allocator(&per_frame_arenas[i])	
+			per_frame_deletes[i] = make([dynamic]DeferredResourceDeleteEntry, per_frame_allocators[i])
+		}
 	}
 
 	// Allocate primary command buffer for each frame
@@ -536,7 +560,8 @@ update :: proc(p_dt: f32) {
 
 	backend_wait_for_frame_resources()
 
-	pipelines_update()
+	process_deferred_resource_deletes()
+
 	shaders_update()
 
 	cmd_buff_ref := get_frame_cmd_buffer_ref()
@@ -939,6 +964,53 @@ draw_debug_ui :: proc(p_dt: f32) {
 
 	G_RENDERER_SETTINGS.num_shadow_cascades = max(0, G_RENDERER_SETTINGS.num_shadow_cascades)
 	G_RENDERER_SETTINGS.num_shadow_cascades = min(G_RENDERER_SETTINGS.num_shadow_cascades, MAX_SHADOW_CASCADES)
+}
+
+//---------------------------------------------------------------------------//
+
+@(private="file")
+DeferredResourceDeleteEntry :: struct {
+	delete_func: proc(p_user_data: rawptr),
+	user_data: rawptr,
+}
+
+@(private="file")
+g_deferred_resource_delete_context : struct {
+	per_frame_allocators: []mem.Allocator,
+	per_frame_arenas: []mem.Arena,
+	per_frame_deletes: [][dynamic]DeferredResourceDeleteEntry,
+}
+
+@(private)
+defer_resource_delete :: proc(p_delete_func: proc(p_user_data: rawptr), $T: typeid) -> ^T {
+
+	using g_deferred_resource_delete_context
+
+	frame_idx := get_frame_idx()
+
+	user_data := new(T, per_frame_allocators[frame_idx])
+	new_entry := DeferredResourceDeleteEntry {
+		delete_func = p_delete_func,
+		user_data = user_data,
+	}
+	append(&per_frame_deletes[frame_idx], new_entry)
+
+	return user_data
+}
+
+@(private="file")
+process_deferred_resource_deletes :: proc() {
+	
+	using g_deferred_resource_delete_context
+
+	frame_idx := get_frame_idx()
+
+	for entry in &per_frame_deletes[frame_idx] {
+		entry.delete_func(entry.user_data)
+	}
+
+	free_all(per_frame_allocators[frame_idx])
+	per_frame_deletes[frame_idx] = make([dynamic]DeferredResourceDeleteEntry, per_frame_allocators[frame_idx])
 }
 
 //---------------------------------------------------------------------------//

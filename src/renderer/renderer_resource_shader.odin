@@ -13,8 +13,8 @@ import "core:mem"
 import "core:os"
 import "core:slice"
 import "core:strings"
-import "core:unicode/utf16"
 import "core:sys/windows"
+import "core:unicode/utf16"
 
 import "../common"
 
@@ -377,15 +377,18 @@ init_shader_files_watcher :: proc() -> bool {
 
 //--------------------------------------------------------------------------//
 
+
 @(private)
 shaders_update :: proc() {
+
+	windows.ResetEvent(INTERNAL.windows_event_handle)
 
 	overlapped := windows.OVERLAPPED {
 		hEvent = INTERNAL.windows_event_handle,
 	}
 
 	// Read directory changes
-	change_buffer: [1024]byte
+	change_buffer: [1024]windows.BYTE
 	success := windows.ReadDirectoryChangesW(
 		INTERNAL.shaders_dir_handle,
 		&change_buffer[0],
@@ -404,23 +407,31 @@ shaders_update :: proc() {
 	common.temp_arena_init(&temp_arena, common.MEGABYTE)
 	defer common.arena_delete(temp_arena)
 
-	for {
-		result := windows.WaitForSingleObject(overlapped.hEvent, 1)
-		if result == windows.WAIT_FAILED {
-			log.warn("Failed to wait for shaders dir changes")
+	result := windows.WaitForSingleObject(overlapped.hEvent, 0)
+	if result == windows.WAIT_FAILED {
+		log.warn("Failed to wait for shaders dir changes")
+		return
+	}
+
+	if result == windows.WAIT_OBJECT_0 {
+
+		bytes_transferred: windows.DWORD
+		windows.GetOverlappedResult(
+			INTERNAL.shaders_dir_handle,
+			&overlapped,
+			&bytes_transferred,
+			false,
+		)
+		if bytes_transferred == 0 {
 			return
 		}
 
-		if result == windows.WAIT_OBJECT_0 {
-			bytes_transferred: windows.DWORD
-			windows.GetOverlappedResult(
-				INTERNAL.shaders_dir_handle,
-				&overlapped,
-				&bytes_transferred,
-				false,
-			)
+		event := (^windows.FILE_NOTIFY_INFORMATION)(&change_buffer[0])
 
-			event := (^windows.FILE_NOTIFY_INFORMATION)(&change_buffer[0])
+		for {
+
+			common.arena_reset(temp_arena)
+
 			file_name_len := int(event.file_name_length)
 			file_name_w := windows.wstring(&event.file_name[0])
 			file_name, err := windows.wstring_to_utf8(
@@ -440,12 +451,10 @@ shaders_update :: proc() {
 			event = (^windows.FILE_NOTIFY_INFORMATION)(
 				uintptr(event) + uintptr(event.next_entry_offset),
 			)
-
-			continue
 		}
-
-		break
 	}
+
+	windows.CancelIo(INTERNAL.shaders_dir_handle)
 }
 
 //--------------------------------------------------------------------------//
@@ -490,7 +499,7 @@ reload_shader :: proc(p_shader_file_name: string) {
 			return
 		}
 
-		// Find all graphics pipelines referencing this shader
+		// Find all pipelines referencing this shader
 		num_reloaded_pipelines: u32 = 0
 
 		if shader.desc.stage == .Compute {
@@ -499,8 +508,8 @@ reload_shader :: proc(p_shader_file_name: string) {
 				pipeline := &g_resources.compute_pipelines[get_compute_pipeline_idx(pipeline_ref)]
 
 				if pipeline.desc.compute_shader_ref == shader_ref {
-					compute_pipeline_reset(pipeline_ref)
-					compute_pipeline_create(pipeline_ref)
+					backend_compute_pipeline_destroy(pipeline_ref)
+					backend_compute_pipeline_create(pipeline_ref)
 					num_reloaded_pipelines += 1
 				}
 			}
@@ -511,8 +520,8 @@ reload_shader :: proc(p_shader_file_name: string) {
 
 				if pipeline.desc.vert_shader_ref == shader_ref ||
 				   pipeline.desc.frag_shader_ref == shader_ref {
-					graphics_pipeline_reset(pipeline_ref)
-					graphics_pipeline_create(pipeline_ref)
+					backend_graphics_pipeline_destroy(pipeline_ref)
+					backend_graphics_pipeline_create(pipeline_ref)
 					num_reloaded_pipelines += 1
 				}
 			}
@@ -567,7 +576,13 @@ shader_compile :: proc(
 	// Vertex and pixel shaders shader the same file, so we add the stage
 	// suffix here to compile the shader with differnt entry points
 	if !strings.contains(shader_path, shader_stage) {
-		shader_bin_path_base, _ = strings.replace(shader_path, "hlsl", shader_suffix, 1, temp_arena.allocator)
+		shader_bin_path_base, _ = strings.replace(
+			shader_path,
+			"hlsl",
+			shader_suffix,
+			1,
+			temp_arena.allocator,
+		)
 	}
 
 	shader_src_path := common.aprintf(
@@ -579,7 +594,7 @@ shader_compile :: proc(
 	// Find out the last time the shader was modified. It's used to determine 
 	// if the compiled version is up to date
 	last_shader_write_time := common.get_last_file_write_time(shader_src_path)
-	
+
 	// @TODO disable once we also keep track of the changes to include files
 	shader_cache_enabled := false
 
@@ -632,12 +647,12 @@ shader_compile :: proc(
 		BACKEND_COMPILED_SHADERS_FOLDER,
 		shader_bin_path_base,
 	)
-	
+
 	path_w := windows.utf8_to_wstring(shader_bins_search_path, temp_arena.allocator)
 
 	find_file_data := windows.WIN32_FIND_DATAW{}
 	file_handle := windows.FindFirstFileW(path_w, &find_file_data)
-	
+
 	timestamp_str := common.aprintf(temp_arena.allocator, "%i", last_shader_write_time._nsec)
 
 	// Loop over all of the files in the directory whose name matches the pattern
@@ -645,11 +660,11 @@ shader_compile :: proc(
 
 		path_buffer := make([]byte, windows.MAX_PATH, temp_arena.allocator)
 
-		for  {
+		for {
 
 			path_len := utf16.decode_to_utf8(path_buffer, find_file_data.cFileName[:])
 			path := string(path_buffer[:path_len])
-			
+
 			// Delete if it's not the latest version
 			if !strings.contains(path, timestamp_str) {
 
@@ -663,12 +678,12 @@ shader_compile :: proc(
 				os.remove(delete_path)
 			}
 
-			
+
 			if windows.FindNextFileW(file_handle, &find_file_data) == false {
 				break
 			}
 		}
-	
+
 	}
 
 	// Read the shader binary

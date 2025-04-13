@@ -18,7 +18,6 @@ float SampleDirectionalLightShadow(in float3 positionWS, in float3 positionVS, i
     
     // Spiral sampling pattern based on
     // https://github.com/playdeadgames/publications/blob/master/INSIDE/rendering_inside_gdc2016.pdf
-
     const float noise = InterleavedGradientNoise(svPosition.x, svPosition.y);
     const float2 offsetScale = gShadowCascades[cascadeIndex].OffsetScale * uPerFrame.Sun.ShadowSamplingRadius;
     const float sampleCount = 12.f;

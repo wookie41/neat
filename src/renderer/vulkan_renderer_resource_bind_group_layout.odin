@@ -278,15 +278,25 @@ when USE_VULKAN_BACKEND {
 		cache_entry.ref_count -= 1
 
 		if cache_entry.ref_count == 0 {
-			vk.DestroyDescriptorSetLayout(
-				G_RENDERER.device,
-				backend_bind_group_layout.vk_descriptor_set_layout,
-				nil,
-			)
 			delete_key(&INTERNAL.descriptor_set_layout_cache, bind_group_layout.hash)
+
+			layout_to_delete := defer_resource_delete(safe_destroy_descriptor_set_layout, vk.DescriptorSetLayout)
+			layout_to_delete^ = backend_bind_group_layout.vk_descriptor_set_layout
 		}
 	}
 
 	//---------------------------------------------------------------------------//
 
+	@(private="file")
+	safe_destroy_descriptor_set_layout :: proc(p_user_data: rawptr) {
+		set_layout := (^vk.DescriptorSetLayout)(p_user_data)
+
+		vk.DestroyDescriptorSetLayout(
+			G_RENDERER.device,
+			set_layout^,
+			nil,
+		)
+	}
+
+	//---------------------------------------------------------------------------//
 }

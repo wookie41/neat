@@ -308,6 +308,11 @@ when USE_VULKAN_BACKEND {
 				srcQueueFamilyIndex = get_queue_family_index(buffer.queue),
 			}
 
+			if buffer_output.needs_read_barrier {
+				buffer_barrier.srcAccessMask = {.SHADER_WRITE}
+				buffer_barrier.dstAccessMask = {.SHADER_READ}
+			}
+
 			if p_async_compute {
 				assert(p_pipeline_type == .Compute)
 				append(&buffer_output_barriers_compute, buffer_barrier)
@@ -327,7 +332,7 @@ when USE_VULKAN_BACKEND {
 		if graphics_depth_barrier_needed {
 			vk.CmdPipelineBarrier(
 				backend_graphics_cmd_buffer.vk_cmd_buff,
-				{.TOP_OF_PIPE},
+				{.TOP_OF_PIPE} if p_pipeline_type == .Graphics else {.COMPUTE_SHADER},
 				{.EARLY_FRAGMENT_TESTS},
 				{},
 				0,
@@ -342,7 +347,7 @@ when USE_VULKAN_BACKEND {
 		if compute_depth_barrier_needed {
 			vk.CmdPipelineBarrier(
 				compute_cmd_buff,
-				{.BOTTOM_OF_PIPE},
+				{.BOTTOM_OF_PIPE} if p_pipeline_type == .Graphics else {.COMPUTE_SHADER},
 				{.EARLY_FRAGMENT_TESTS},
 				{},
 				0,
@@ -358,7 +363,7 @@ when USE_VULKAN_BACKEND {
 		if len(image_output_barriers_graphics) > 0 || len(buffer_output_barriers_graphics) > 0 {
 			vk.CmdPipelineBarrier(
 				backend_graphics_cmd_buffer.vk_cmd_buff,
-				{.TOP_OF_PIPE},
+				{.TOP_OF_PIPE} if p_pipeline_type == .Graphics else {.COMPUTE_SHADER},
 				{.COLOR_ATTACHMENT_OUTPUT} if p_pipeline_type == .Graphics else {.COMPUTE_SHADER},
 				{},
 				0,
