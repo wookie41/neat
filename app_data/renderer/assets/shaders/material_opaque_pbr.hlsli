@@ -3,6 +3,8 @@
 
 //---------------------------------------------------------------------------//
 
+
+#include "common.hlsli"
 #include "material_pass.hlsli"
 #include "resources.hlsli"
 #include "scene_types.hlsli"
@@ -21,12 +23,13 @@ void MaterialPixelShader(in MaterialPixelInput pMaterialInput, out MaterialPixel
     Material material = gMaterialsBuffer[pMaterialInput.materialInstanceIdx];
 
     const float3x3 TBN = float3x3(pMaterialInput.vertexTangent, pMaterialInput.vertexBinormal, pMaterialInput.vertexNormal);
+    const float3 params = sampleBindless(uLinearRepeatSampler, pMaterialInput.uv, material.occlusionTex).rgb;
 
     pMaterialOutput.albedo = sampleBindless(uLinearRepeatSampler, pMaterialInput.uv, material.albedoTex).rgb;
     pMaterialOutput.normal = mul(decodeNormalMap(sampleBindless(uLinearRepeatSampler, pMaterialInput.uv, material.normalTex)), TBN);
-    pMaterialOutput.occlusion = material.occlusionTex == 0 ? 1 : sampleBindless(uLinearRepeatSampler, pMaterialInput.uv, material.occlusionTex).r;
-    pMaterialOutput.roughness = sampleBindless(uLinearRepeatSampler, pMaterialInput.uv, material.roughnessTex).g;
-    pMaterialOutput.metalness = sampleBindless(uLinearRepeatSampler, pMaterialInput.uv, material.metalnessTex).b;
+    pMaterialOutput.occlusion = material.occlusionTex == 0 ? 1 : params.r;
+    pMaterialOutput.roughness = params.g;
+    pMaterialOutput.metalness = params.b;
 }
 
 //---------------------------------------------------------------------------//

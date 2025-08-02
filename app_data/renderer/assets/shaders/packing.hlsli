@@ -27,9 +27,10 @@ float3 decodeNormal(in float2 e)
 float3 decodeNormalMap(in float4 normalSample)
 {
   float3 normal;
-  normal.xy = (normalSample.rg);
+  normal.xy = normalSample.rg;
+  normal.xy = mad(normal.xy, 2, -1);
   normal.z = sqrt(1.0 - ((normal.x * normal.x) - (normal.y * normal.y)));
-  return normal.xyz;
+  return normal;
 }
 
 #endif // PACKING_H

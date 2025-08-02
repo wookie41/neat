@@ -15,6 +15,7 @@ when USE_VULKAN_BACKEND {
 		.Depth16         = .D16_UNORM,
 		.Depth32SFloat   = .D32_SFLOAT,
 		.R8UNorm         = .R8_UNORM,
+		.R16SFloat       = .R16_SFLOAT,
 		.R32UInt         = .R32_UINT,
 		.R32Int          = .R32_SINT,
 		.R32SFloat       = .R32_SFLOAT,

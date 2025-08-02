@@ -584,9 +584,9 @@ update :: proc(p_dt: f32) {
 	material_instance_update_dirty_materials()
 	mesh_instance_send_transform_data()
 
-	draw_debug_ui(p_dt)
-
 	render_tasks_update(p_dt)
+
+	draw_debug_ui(p_dt)
 
 	backend_post_render()
 

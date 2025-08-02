@@ -85,6 +85,8 @@ create_instance :: proc(
 	render_task_setup_render_pass_bindings(
 		p_render_task_config,
 		&fullscreen_render_task_data.render_pass_bindings,
+		nil,
+		{ size_of(f32) * 3},
 	)
 
 	fullscreen_render_task_data.resolution = G_RESOLUTION_NAME_MAPPING[resolution_name]

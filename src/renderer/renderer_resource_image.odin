@@ -78,6 +78,7 @@ G_IMAGE_FORMAT_NAME_MAPPING := map[string]ImageFormat {
 	"R8UNorm"         = .R8UNorm,
 	"R32UInt"         = .R32UInt,
 	"R32Int"          = .R32Int,
+	"R16SFloat"       = .R16SFloat,
 	"R32SFloat"       = .R32SFloat,
 	"RG8UNorm"        = .RG8UNorm,
 	"RG32UInt"        = .RG32UInt,
@@ -118,6 +119,7 @@ ImageFormat :: enum u16 {
 	RFormatsStart,
 	R32UInt,
 	R32Int,
+	R16SFloat,
 	R32SFloat,
 	RFormatsEnd,
 	R8UNorm,
@@ -714,6 +716,8 @@ get_block_size_in_bytes :: proc(p_format: ImageFormat) -> u32 {
 	case .BC4_UNorm:
 		return 8
 	case .BC5_SNorm:
+		return 16
+	case .BC5_UNorm:
 		return 16
 	case .BC6H_UFloat:
 		return 16

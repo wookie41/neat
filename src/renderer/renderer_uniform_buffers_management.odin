@@ -40,7 +40,12 @@ PerViewData :: struct #packed {
 @(private)
 g_per_frame_data: struct #packed {
 	sun:                        DirectionalLight,
+	
+	delta_time: 				f32,
+	time: 						f32,
 	num_shadow_cascades:        u32,
+	padding0: 					glsl.ivec2,
+
 	frame_id_mod_2:             u32,
 	frame_id_mod_4:             u32,
 	frame_id_mod_16:            u32,
@@ -141,7 +146,12 @@ uniform_buffer_ensure_alignment_by_size :: proc(p_size: u32) -> u32 {
 
 @(private = "file")
 update_per_frame_data :: proc(p_dt: f32) {
+
+	g_per_frame_data.time += p_dt
+	g_per_frame_data.delta_time = p_dt
+
 	g_per_frame_data.sun.color = {1, 1, 1}
+	g_per_frame_data.sun.strength = 128000
 	g_per_frame_data.sun.direction = {0, -1, 0}
 
 	g_per_frame_data.frame_id_mod_2 = get_frame_id() % 2

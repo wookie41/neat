@@ -26,7 +26,12 @@ struct PerView
 struct PerFrame
 {
     DirectionalLight Sun;
+
+    float DeltaTime;
+    float Time;
     int NumShadowCascades;
+    int _padding0;
+
     int FrameIdMod2;
     int FrameIdMod4;
     int FrameIdMod16;

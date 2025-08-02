@@ -127,7 +127,6 @@ create_instance :: proc(
 	hiz_render_task_data := new(HiZRenderTaskData, G_RENDERER_ALLOCATORS.resource_allocator)
 	defer if res == false {
 		free(hiz_render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
-		render_pass_bindings_destroy(hiz_render_task_data.build_hiz_bindings)
 	}
 
 	hiz_render_task_data.resolution = G_RESOLUTION_NAME_MAPPING[resolution_name]
@@ -203,6 +202,9 @@ create_instance :: proc(
 		{},
 		{spd_atomic_counter_buffer.desc.size, min_max_depth_buffer.desc.size},
 	)
+	defer if res == false {
+		render_pass_bindings_destroy(hiz_render_task_data.build_hiz_bindings)
+	}
 
 	hiz_render_task_data.mip_count = hiz.desc.mip_count
 

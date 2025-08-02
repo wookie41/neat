@@ -38,7 +38,7 @@ RWStructuredBuffer<uint> minMaxDepthBuffer : register(u1, space0);
 Texture2D depthTex : register(t0, space0);
 
 [[vk::binding(5, 0)]]
-RWTexture2D<float> hiZBufferTex[12] : register(u1, space0);
+RWTexture2D<float> hiZBufferTex[12] : register(u2, space0);
 
 //---------------------------------------------------------------------------//
 

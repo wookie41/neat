@@ -310,7 +310,7 @@ when USE_VULKAN_BACKEND {
 
 			if buffer_output.needs_read_barrier {
 				buffer_barrier.srcAccessMask = {.SHADER_WRITE}
-				buffer_barrier.dstAccessMask = {.SHADER_READ}
+				buffer_barrier.dstAccessMask += {.SHADER_READ}
 			}
 
 			if p_async_compute {
@@ -476,6 +476,7 @@ when USE_VULKAN_BACKEND {
 
 				image_input_barrier := vk.ImageMemoryBarrier {
 					sType = .IMAGE_MEMORY_BARRIER,
+					srcAccessMask = { .SHADER_WRITE },
 					dstAccessMask = dst_access_mask,
 					oldLayout = old_layout,
 					newLayout = new_layout,

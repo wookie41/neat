@@ -33,6 +33,7 @@ G_TEXTURE_ASSETS_DIR :: "app_data/engine/assets/textures/"
 //---------------------------------------------------------------------------//
 
 TextureAssetImportFlagBits :: enum u16 {
+	IsColor,
 	IsHDR,
 	IsNormalMap,
 	IsGrayScale,
@@ -84,6 +85,7 @@ TextureAssetFormat :: enum {
 	BC3_UNorm,
 	BC4_UNorm,
 	BC5_SNorm,
+	BC5_UNorm,
 	BC6H_UFloat16,
 }
 
@@ -209,9 +211,14 @@ texture_asset_import :: proc(p_options: TextureAssetImportOptions) -> AssetImpor
 
 	// Pick compression format
 	// https://learn.microsoft.com/en-us/windows/win32/direct3d11/texture-block-compression-in-direct3d-11#block-compression-formats-supported-in-direct3d-11
+	
+	texconv_options_builder := strings.Builder{}
+	strings.builder_init(&texconv_options_builder, temp_arena.allocator)
+	defer strings.builder_destroy(&texconv_options_builder)
+
 	compression_format := "BC3_UNORM"
 	if .IsNormalMap in p_options.flags {
-		compression_format = "BC5_SNORM"
+		compression_format = "BC5_UNORM"
 	} else if .IsGrayScale in p_options.flags {
 		compression_format = "BC4_UNORM"
 	} else if .IsCutout in p_options.flags {
@@ -219,12 +226,22 @@ texture_asset_import :: proc(p_options: TextureAssetImportOptions) -> AssetImpor
 	} else if .IsHDR in p_options.flags {
 		compression_format = "BC6H_UF16"
 	}
+	
+	// Convert jpg to linear speace, png is expected to be in linear space already
+	if .IsColor in p_options.flags && (
+		strings.ends_with(p_options.file_path, ".jpg") ||  
+		strings.ends_with(p_options.file_path, ".jpeg")) {		
+		strings.write_string(&texconv_options_builder, " -srgbi ")
+	}
+
+	texconv_options := strings.to_string(texconv_options_builder)
 
 	// Convert the texture to dds 
 	texconv_cmd := fmt.tprintf(
-		"app_data\\engine\\tools\\texconv.exe -pow2 -o %s -f %s %s > nul 2>&1",
+		"app_data\\engine\\tools\\texconv.exe -pow2 -o %s -f %s %s %s > nul 2>&1",
 		G_TEXTURE_ASSETS_DIR,
 		compression_format,
+		texconv_options,
 		p_options.file_path,
 	)
 
@@ -421,6 +438,8 @@ texture_asset_load_by_name :: proc(p_name: common.Name) -> TextureAssetRef {
 		texture_asset.format = .BC4_UNorm
 	case .TddsBc5SnormBlock:
 		texture_asset.format = .BC5_SNorm
+	case .TddsBc5UnormBlock:
+		texture_asset.format = .BC5_UNorm
 	case .TddsBc6HUfloatBlock:
 		texture_asset.format = .BC6H_UFloat16
 	case:
@@ -457,6 +476,8 @@ texture_asset_load_by_name :: proc(p_name: common.Name) -> TextureAssetRef {
 		image.desc.format = .BC4_UNorm
 	case .BC5_SNorm:
 		image.desc.format = .BC5_SNorm
+	case .BC5_UNorm:
+		image.desc.format = .BC5_UNorm
 	case .BC6H_UFloat16:
 		image.desc.format = .BC6H_UFloat
 	case:

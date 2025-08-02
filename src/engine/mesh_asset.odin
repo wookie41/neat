@@ -814,6 +814,10 @@ assimp_material_import_texture :: proc(
 		file_path = texture_file_path,
 	}
 
+	if p_assimp_texture_type == .AitexturetypeBaseColor{
+		texture_import_options.flags += {.IsColor}
+	}
+
 	if p_assimp_texture_type == .AitexturetypeNormals {
 		texture_import_options.flags += {.IsNormalMap}
 	}

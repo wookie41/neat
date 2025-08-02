@@ -11,8 +11,12 @@ struct DirectionalLight
 {
     float3 DirectionWS;
     float ShadowSamplingRadius;
+
     float3 Color;
     uint DebugDrawCascades;
+    
+    float Strength;
+    uint3 _padding; 
 };
 
 //---------------------------------------------------------------------------//

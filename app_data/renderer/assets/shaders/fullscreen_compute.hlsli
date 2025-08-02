@@ -4,7 +4,8 @@
 //---------------------------------------------------------------------------//
 
 [[vk::binding(0, 0)]]
-cbuffer FullScreenParams : register(b0, space0) {
+cbuffer FullScreenParams : register(b0, space0) 
+{
     float2 uInputTextureTexelSize;
     int2 uInputTextureDimensions;
 }

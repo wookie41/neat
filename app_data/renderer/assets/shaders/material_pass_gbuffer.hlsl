@@ -3,6 +3,7 @@
 
 //---------------------------------------------------------------------------//
 
+#include "common.hlsli"
 #include "scene_types.hlsli"
 #include "resources.hlsli"
 #include "material_pass.hlsli"

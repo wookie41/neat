@@ -4,10 +4,17 @@
         <GBufferNormals format="RGBA16SNorm" resolution="Full" sampled="" />
         <GBufferParameters format="RGBA8UNorm" resolution="Full" sampled="" />
         <SceneHDR format="R11G11B10UFloat" resolution="Full" sampled="" storage="" />
+        <SceneSDR format="R11G11B10UFloat" resolution="Full" sampled="" storage="" />
         <DepthBuffer format="Depth32SFloat" resolution="Full" sampled="" />
         <CascadeShadows format="Depth16" width="2048" height="2048" sampled="" array_size="6"/>
     </Images>
     <RenderTasks>
+        <ComputeAvgLuminance name="ComputeAvgLuminance" buildShader="luminance_histogram_build.comp" reduceShader="luminance_histogram_reduce.comp" histogramBuffer="LuminanceHistogram" exposureBuffer="ExposureBuffer">
+            <InputBuffer usage="Uniform"/>
+            <InputImage name="SceneHDR"/>
+            <InputBuffer usage="General" name="ExposureBuffer"/>
+            <OutputBuffer name="LuminanceHistogram"/>
+        </ComputeAvgLuminance>
         <Mesh name="GBufferOpaque" renderPass="GBuffer" materialPassType="GBuffer">
             <OutputImage name="GBufferColor" clear="0, 0, 0, 0"/>
             <OutputImage name="GBufferNormals" clear="0, 0, 0, 0"/>
@@ -33,6 +40,7 @@
             <MaterialPass name="OpaquePBR" />
         </CascadeShadows>
         <FullScreen name="Lighting" shader="lighting.comp" resolution="Full">
+            <InputBuffer usage="General" name="ExposureBuffer"/>
             <InputImage name="GBufferColor"/>
             <InputImage name="GBufferNormals"/>
             <InputImage name="GBufferParameters"/>
@@ -40,8 +48,12 @@
             <GlobalImage name="CascadeShadows"/>
             <OutputImage name="SceneHDR"/>
         </FullScreen>
-        <FullScreen name="BlitSwapchain" shader="blit_to_swapchain.pix" resolution="Display">
+        <FullScreen name="Tonemap" shader="tonemap.comp" resolution="Full">
             <InputImage name="SceneHDR"/>
+            <OutputImage name="SceneSDR"/>
+        </FullScreen>
+        <FullScreen name="BlitSwapchain" shader="blit_to_swapchain.pix" resolution="Display">
+            <InputImage name="SceneSDR"/>
             <OutputImage name="SwapImage"/>
         </FullScreen>
     </RenderTasks>
