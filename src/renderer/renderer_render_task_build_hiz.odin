@@ -292,7 +292,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 	hiz_render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	hiz_render_task_data := (^HiZRenderTaskData)(hiz_render_task.data_ptr)
 
-	render_view := render_camera_create_render_view(g_render_camera)
+	render_view := render_view_create_from_camera(g_render_camera)
 
 	global_uniform_offsets := []u32 {
 		g_uniform_buffers.frame_data_offset,

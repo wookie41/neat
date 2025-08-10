@@ -87,7 +87,7 @@ uniform_buffer_create_dynamic :: proc {
 //---------------------------------------------------------------------------//
 
 @(private)
-uniform_buffers_update :: proc(p_dt: f32) {
+uniform_buffer_update :: proc(p_dt: f32) {
 	// Reset the transient buffer
 	INTERNAL.current_transient_buffer_offset = 0
 	update_per_frame_data(p_dt)

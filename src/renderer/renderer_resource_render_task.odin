@@ -238,7 +238,7 @@ render_task_update :: proc(p_dt: f32) {
 	}
 
 	// Upload uniform data
-	uniform_buffers_update(p_dt)
+	uniform_buffer_update(p_dt)
 
 	// Render
 	for i in 0 ..< G_RENDER_TASK_REF_ARRAY.alive_count {

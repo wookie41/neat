@@ -30,7 +30,7 @@ RenderView :: struct {
 
 //--------------------------------------------------------------------------//
 
-render_camera_create_render_view :: proc(
+render_view_create_from_camera :: proc(
 	p_render_camera: RenderCamera,
 ) -> (
 	render_view: RenderView,
