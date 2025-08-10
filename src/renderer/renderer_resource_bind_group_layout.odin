@@ -100,7 +100,7 @@ bind_group_layout_init :: proc() {
 		MAX_BIND_GROUPS,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
-	backend_init_bind_group_layouts()
+	backend_bind_group_layout_init()
 }
 
 //---------------------------------------------------------------------------//
@@ -130,7 +130,7 @@ bind_group_layout_create :: proc(p_bind_group_layout_ref: BindGroupLayoutRef) ->
 	bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_get_idx(p_bind_group_layout_ref)]
 	bind_group_layout.hash = hash.crc32(mem.slice_to_bytes(bind_group_layout.desc.bindings))
 
-	backend_create_bind_group_layout(p_bind_group_layout_ref) or_return
+	backend_bind_group_layout_create(p_bind_group_layout_ref) or_return
 
 	bind_group_layout.num_dynamic_offsets = 0
 	for binding in bind_group_layout.desc.bindings {
@@ -153,7 +153,7 @@ bind_group_layout_destroy :: proc(p_ref: BindGroupLayoutRef) {
 	bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_get_idx(p_ref)]
 	delete(bind_group_layout.desc.bindings, G_RENDERER_ALLOCATORS.resource_allocator)
 
-	backend_destroy_bind_group_layout(p_ref)
+	backend_bind_group_layout_destroy(p_ref)
 
 	common.ref_free(&G_BIND_GROUP_LAYOUT_REF_ARRAY, p_ref)
 

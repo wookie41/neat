@@ -25,7 +25,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_init_bind_groups :: proc() -> bool {
+	backend_bind_group_init :: proc() -> bool {
 		// Create descriptor pools
 		{
 			pool_sizes := []vk.DescriptorPoolSize {
@@ -57,7 +57,7 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	backend_create_bind_group :: proc(p_bind_group_ref: BindGroupRef) -> bool {
+	backend_bind_group_create :: proc(p_bind_group_ref: BindGroupRef) -> bool {
 
 		bind_group_idx := bind_group_get_idx(p_bind_group_ref)
 		bind_group := &g_resources.bind_groups[bind_group_idx]
@@ -141,7 +141,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_destroy_bind_group :: proc(p_bind_group_ref: BindGroupRef) {
+	backend_bind_group_destroy :: proc(p_bind_group_ref: BindGroupRef) {
 		bind_group_idx := bind_group_get_idx(p_bind_group_ref)
 		backend_bind_group := &g_resources.backend_bind_groups[bind_group_idx]
 

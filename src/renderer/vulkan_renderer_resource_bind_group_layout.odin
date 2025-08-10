@@ -32,7 +32,7 @@ when USE_VULKAN_BACKEND {
 	}
 
 	@(private)
-	backend_init_bind_group_layouts :: proc() -> bool {
+	backend_bind_group_layout_init :: proc() -> bool {
 
 		// Init the descriptor layout cache
 		INTERNAL.descriptor_set_layout_cache = make(
@@ -143,7 +143,7 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	backend_create_bind_group_layout :: proc(p_bind_group_layout_ref: BindGroupLayoutRef) -> bool {
+	backend_bind_group_layout_create :: proc(p_bind_group_layout_ref: BindGroupLayoutRef) -> bool {
 
 		temp_arena: common.Arena
 		common.temp_arena_init(&temp_arena)
@@ -269,7 +269,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_destroy_bind_group_layout :: proc(p_bind_group_ref: BindGroupLayoutRef) {
+	backend_bind_group_layout_destroy :: proc(p_bind_group_ref: BindGroupLayoutRef) {
 		bind_group_idx := bind_group_layout_get_idx(p_bind_group_ref)
 		bind_group_layout := &g_resources.bind_group_layouts[bind_group_idx]
 		backend_bind_group_layout := &g_resources.backend_bind_group_layouts[bind_group_idx]

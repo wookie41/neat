@@ -98,7 +98,7 @@ bind_group_init :: proc() {
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
 
-	backend_init_bind_groups()
+	backend_bind_group_init()
 }
 
 //---------------------------------------------------------------------------//
@@ -113,7 +113,7 @@ bind_group_allocate :: proc(p_name: common.Name) -> BindGroupRef {
 //---------------------------------------------------------------------------//
 
 bind_group_create :: proc(p_bind_group_ref: BindGroupRef) -> bool {
-	backend_create_bind_group(p_bind_group_ref) or_return
+	backend_bind_group_create(p_bind_group_ref) or_return
 	return true
 }
 
@@ -132,7 +132,7 @@ bind_group_get_idx :: #force_inline proc(p_ref: BindGroupRef) -> u32 {
 //---------------------------------------------------------------------------//
 
 bind_group_destroy :: proc(p_ref: BindGroupRef) {
-	backend_destroy_bind_group(p_ref)
+	backend_bind_group_destroy(p_ref)
 	common.ref_free(&G_BIND_GROUP_REF_ARRAY, p_ref)
 }
 
