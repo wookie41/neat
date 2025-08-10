@@ -25,12 +25,13 @@ THREAD_GROUP_SIZE :: glsl.uvec2{256, 1}
 HiZRenderTaskData :: struct {
 	reset_buffer_job:              GenericComputeJob,
 	build_hiz_job:                 GenericComputeJob,
-	build_hiz_bindings:            RenderPassBindings,
 	resolution:                    Resolution,
 	hiz_ref:                       ImageRef,
 	spd_atomic_counter_buffer_ref: BufferRef,
 	mip_count:                     u32,
 	min_max_depth_buffer_ref:      BufferRef,
+	reset_hiz_bindings:            []Binding,
+	build_hiz_bindings:            []Binding,
 }
 
 //---------------------------------------------------------------------------//
@@ -79,16 +80,24 @@ create_instance :: proc(
 		"resetBufferShaderName",
 	) or_return
 
+	depth_buffer_name := xml.find_attribute_val_by_key(
+		p_render_task_config.doc,
+		p_render_task_config.render_task_element_id,
+		"depthBuffer",
+	) or_return
+
 	hiz_buffer_name := xml.find_attribute_val_by_key(
 		p_render_task_config.doc,
 		p_render_task_config.render_task_element_id,
 		"hiZBuffer",
 	) or_return
+
 	spd_counter_name := xml.find_attribute_val_by_key(
 		p_render_task_config.doc,
 		p_render_task_config.render_task_element_id,
 		"counterBuffer",
 	) or_return
+
 	min_max_depth_buffer_name := xml.find_attribute_val_by_key(
 		p_render_task_config.doc,
 		p_render_task_config.render_task_element_id,
@@ -100,6 +109,7 @@ create_instance :: proc(
 		p_render_task_config.render_task_element_id,
 		"resolution",
 	) or_return
+
 	if (resolution_name in G_RESOLUTION_NAME_MAPPING) == false {
 		log.errorf("Failed to create render task '%s' - unsupported resolution \n", doc_name)
 		return false
@@ -120,6 +130,16 @@ create_instance :: proc(
 			"Failed to create render task '%s' - invalid shader %s\n",
 			doc_name,
 			shader_name,
+		)
+		return false
+	}
+
+	depth_image_ref := image_find(depth_buffer_name)
+	if depth_image_ref == InvalidImageRef {
+		log.errorf(
+			"Failed to create render task '%s' - %s depth buffer image not found\n",
+			doc_name,
+			depth_buffer_name,
 		)
 		return false
 	}
@@ -194,60 +214,67 @@ create_instance :: proc(
 		buffer_destroy(min_max_depth_buffer_ref)
 	}
 
-	// Setup render task bindings
-	render_task_setup_render_pass_bindings(
-		p_render_task_config,
-		&hiz_render_task_data.build_hiz_bindings,
-		{size_of(HiZUniformData)},
-		{},
-		{spd_atomic_counter_buffer.desc.size, min_max_depth_buffer.desc.size},
-	)
-	defer if res == false {
-		render_pass_destroy_bindings(hiz_render_task_data.build_hiz_bindings)
-	}
-
-	hiz_render_task_data.mip_count = hiz.desc.mip_count
-
 	render_task_name := common.create_name(doc_name)
 
-	temp_arena: common.Arena
-	common.temp_arena_init(&temp_arena)	
-	defer common.arena_delete(temp_arena)
+	// Create the reset job
+	{
+		bindings := render_task_config_parse_bindings(
+			p_render_task_config,
+			true,
+			{min_max_depth_buffer.desc.size},
+			"ResetMinMaxBindings",
+		) or_return
 
-	build_hiz_job, build_hiz_job_created := generic_compute_job_create(
-		render_task_name,
-		shader_ref,
-		hiz_render_task_data.build_hiz_bindings,
-		true,
-	)
-	if build_hiz_job_created == false {
-		log.errorf("Failed to create render task '%s' - couldn't create compute job\n", doc_name)
-		return false
-	}
-
-	reset_buffer_bindings := RenderPassBindings {
-		buffer_outputs = {
-			RenderPassBufferOutput{buffer_ref = min_max_depth_buffer_ref, size = size_of(u32) * 2},
-		},
-	}
-	reset_buffer_job, reset_buffer_compute_job_created := generic_compute_job_create(
-		common.create_name("ResetMinMaxDepthBuffer"),
-		reset_buffer_shader_ref,
-		reset_buffer_bindings,
-		false,
-	)
-	if reset_buffer_compute_job_created == false {
-		log.errorf(
-			"Failed to create render task '%s' - couldn't create the reset buffer job\n",
-			doc_name,
+		reset_buffer_job, reset_buffer_compute_job_created := generic_compute_job_create(
+			common.create_name("ResetMinMaxDepthBuffer"),
+			reset_buffer_shader_ref,
+			bindings,
 		)
-		return false
+		if reset_buffer_compute_job_created == false {
+			log.errorf(
+				"Failed to create render task '%s' - couldn't create reset buffer job\n",
+				doc_name,
+			)
+			return false
+		}
+
+		hiz_render_task_data.reset_hiz_bindings = bindings
+		hiz_render_task_data.reset_buffer_job = reset_buffer_job
 	}
 
-	hiz_render_task_data.build_hiz_job = build_hiz_job
+	// Create build hiz job
+	{
+		bindings := render_task_config_parse_bindings(
+			p_render_task_config,
+			true,
+			{
+				size_of(GenericComputeJobUniformData),
+				size_of(HiZUniformData),
+			},
+			"BuildHiZBindings",
+		) or_return
+
+
+		build_hiz_job, build_hiz_job_created := generic_compute_job_create(
+			render_task_name,
+			shader_ref,
+			bindings,
+		)
+		if build_hiz_job_created == false {
+			log.errorf(
+				"Failed to create render task '%s' - couldn't create build HiZ job\n",
+				doc_name,
+			)
+			return false
+		}
+
+		hiz_render_task_data.build_hiz_bindings = bindings
+		hiz_render_task_data.build_hiz_job = build_hiz_job
+	}
+
 	hiz_render_task_data.hiz_ref = hiz_ref
 	hiz_render_task_data.min_max_depth_buffer_ref = min_max_depth_buffer_ref
-	hiz_render_task_data.reset_buffer_job = reset_buffer_job
+	hiz_render_task_data.mip_count = hiz.desc.mip_count
 
 	hiz_render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	hiz_render_task.data_ptr = rawptr(hiz_render_task_data)
@@ -264,10 +291,14 @@ destroy_instance :: proc(p_render_task_ref: RenderTaskRef) {
 
 	generic_compute_job_destroy(hiz_render_task_data.build_hiz_job)
 	generic_compute_job_destroy(hiz_render_task_data.reset_buffer_job)
-	render_pass_destroy_bindings(hiz_render_task_data.build_hiz_bindings)
+
 	image_destroy(hiz_render_task_data.hiz_ref)
+
 	buffer_destroy(hiz_render_task_data.spd_atomic_counter_buffer_ref)
 	buffer_destroy(hiz_render_task_data.min_max_depth_buffer_ref)
+
+	delete(hiz_render_task_data.reset_hiz_bindings, G_RENDERER_ALLOCATORS.resource_allocator)
+	delete(hiz_render_task_data.build_hiz_bindings, G_RENDERER_ALLOCATORS.resource_allocator)
 
 	free(hiz_render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
 }
@@ -299,51 +330,55 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 		uniform_buffer_create_view_data(render_view),
 	}
 
-	reset_buffer_bindings := RenderPassBindings {
-		buffer_outputs = {
-			{buffer_ref = hiz_render_task_data.min_max_depth_buffer_ref, size = size_of(u32) * 2},
-		},
-	}
-
-	transition_render_pass_resources(reset_buffer_bindings, .Compute)
-
 	// Reset the buffer
-	compute_command_dispatch(
-		hiz_render_task_data.reset_buffer_job.compute_command_ref,
-		get_frame_cmd_buffer_ref(),
-		nil,
-		{nil, global_uniform_offsets, nil, nil},
-		glsl.uvec3{1, 1, 1},
-	)
+	{
+		transition_binding_resources(hiz_render_task_data.reset_hiz_bindings, .Compute)
 
-	transition_render_pass_resources(hiz_render_task_data.build_hiz_bindings, .Compute)
-
-	gpu_debug_region_begin(get_frame_cmd_buffer_ref(), hiz_render_task.desc.name)
-	defer gpu_debug_region_end(get_frame_cmd_buffer_ref())
-
-	hiz_resolution := resolve_resolution(hiz_render_task_data.resolution)
-	depth_resolution := resolve_resolution(.Full)
-
-	work_group_count := glsl.uvec2{(depth_resolution.x + 63) >> 6, (depth_resolution.y + 63) >> 6}
-	hiz_uniform_data := HiZUniformData {
-		hiz_buffer_dimensions = hiz_resolution,
-		mip_count             = hiz_render_task_data.mip_count,
-		work_group_count      = work_group_count.x * work_group_count.y,
+		compute_command_dispatch(
+			hiz_render_task_data.reset_buffer_job.compute_command_ref,
+			get_frame_cmd_buffer_ref(),
+			nil,
+			{nil, global_uniform_offsets, nil, nil},
+			glsl.uvec3{1, 1, 1},
+		)
 	}
-
-	hiz_uniform_data_offset := uniform_buffer_create_transient_buffer(&hiz_uniform_data)
-	generic_compute_job_uniform_data_offset := generic_compute_job_update_uniform_data(.Full)
-
-	per_instance_offsets := []u32{generic_compute_job_uniform_data_offset, hiz_uniform_data_offset}
 
 	// Build HiZ
-	compute_command_dispatch(
-		hiz_render_task_data.build_hiz_job.compute_command_ref,
-		get_frame_cmd_buffer_ref(),
-		nil,
-		{per_instance_offsets, global_uniform_offsets, nil, nil},
-		glsl.uvec3{work_group_count.x, work_group_count.y, 1},
-	)
+	{
+		transition_binding_resources(hiz_render_task_data.build_hiz_bindings, .Compute)
+
+		gpu_debug_region_begin(get_frame_cmd_buffer_ref(), hiz_render_task.desc.name)
+		defer gpu_debug_region_end(get_frame_cmd_buffer_ref())
+
+		hiz_resolution := resolve_resolution(hiz_render_task_data.resolution)
+		depth_resolution := resolve_resolution(.Full)
+
+		work_group_count := glsl.uvec2 {
+			(depth_resolution.x + 63) >> 6,
+			(depth_resolution.y + 63) >> 6,
+		}
+		hiz_uniform_data := HiZUniformData {
+			hiz_buffer_dimensions = hiz_resolution,
+			mip_count             = hiz_render_task_data.mip_count,
+			work_group_count      = work_group_count.x * work_group_count.y,
+		}
+
+		hiz_uniform_data_offset := uniform_buffer_create_transient_buffer(&hiz_uniform_data)
+		generic_compute_job_uniform_data_offset := generic_compute_job_update_uniform_data(.Full)
+
+		per_instance_offsets := []u32 {
+			generic_compute_job_uniform_data_offset,
+			hiz_uniform_data_offset,
+		}
+
+		compute_command_dispatch(
+			hiz_render_task_data.build_hiz_job.compute_command_ref,
+			get_frame_cmd_buffer_ref(),
+			nil,
+			{per_instance_offsets, global_uniform_offsets, nil, nil},
+			glsl.uvec3{work_group_count.x, work_group_count.y, 1},
+		)
+	}
 }
 
 //---------------------------------------------------------------------------//

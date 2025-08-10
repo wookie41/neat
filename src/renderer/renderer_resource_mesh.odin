@@ -15,12 +15,17 @@ VERTEX_BUFFER_SIZE :: 512 * common.MEGABYTE
 @(private = "file")
 INDEX_BUFFER_SIZE :: 128 * common.MEGABYTE
 
-@(private = "file")
+@(private)
 INDEX_DATA_TYPE :: u32
 @(private = "file")
 ZERO_VECTOR := glsl.vec4{0, 0, 0, 0}
-@(private = "file")
-VERTEX_STRIDE :: size_of(glsl.vec3) + size_of(glsl.vec2) + size_of(glsl.vec3) + size_of(glsl.vec3) // Position// UV// Normal// Tangetn
+
+VertexFormat :: struct #packed {
+	position: glsl.vec3,
+	uv:      glsl.vec2,
+	normal:  glsl.vec3,
+	tangent: glsl.vec3,
+}
 
 //---------------------------------------------------------------------------//
 
@@ -184,7 +189,7 @@ mesh_create :: proc(p_mesh_ref: MeshRef) -> bool {
 		(.Indexed in mesh.desc.flags) == false && len(mesh.desc.indices) == 0,
 	)
 
-	vertex_data_size := VERTEX_STRIDE * vertex_count
+	vertex_data_size := size_of(VertexFormat) * vertex_count
 	index_data_size := index_count * size_of(INDEX_DATA_TYPE)
 
 	// @TODO check if we can fit it into index and vertex buffer
@@ -222,15 +227,15 @@ mesh_create :: proc(p_mesh_ref: MeshRef) -> bool {
 		}
 
 		index_buffer_upload_request := BufferUploadRequest {
-			dst_buff = INTERNAL.index_buffer_ref,
-			dst_buff_offset = index_allocation.offset,
-			dst_queue_usage = .Graphics,
-			first_usage_stage = .VertexInput,
-			size = u32(index_data_size),
-			flags = {.RunSliced},
-			data_ptr = raw_data(mesh.desc.indices),
+			dst_buff                        = INTERNAL.index_buffer_ref,
+			dst_buff_offset                 = index_allocation.offset,
+			dst_queue_usage                 = .Graphics,
+			first_usage_stage               = .VertexInput,
+			size                            = u32(index_data_size),
+			flags                           = {.RunSliced},
+			data_ptr                        = raw_data(mesh.desc.indices),
 			async_upload_callback_user_data = &mesh.data_upload_context,
-			async_upload_finished_callback = mesh_upload_finished_callback,
+			async_upload_finished_callback  = mesh_upload_finished_callback,
 		}
 
 		buffer_upload_request_upload(index_buffer_upload_request)
@@ -247,15 +252,15 @@ mesh_create :: proc(p_mesh_ref: MeshRef) -> bool {
 		tangents_size: u32 = 0
 
 		positions_upload_request := BufferUploadRequest {
-			dst_buff = INTERNAL.vertex_buffer_ref,
-			dst_buff_offset = vertex_allocation.offset,
-			dst_queue_usage = .Graphics,
-			first_usage_stage = .VertexInput,
-			size = positions_size,
-			data_ptr = raw_data(mesh.desc.position),
-			flags = {.RunSliced},
+			dst_buff                        = INTERNAL.vertex_buffer_ref,
+			dst_buff_offset                 = vertex_allocation.offset,
+			dst_queue_usage                 = .Graphics,
+			first_usage_stage               = .VertexInput,
+			size                            = positions_size,
+			data_ptr                        = raw_data(mesh.desc.position),
+			flags                           = {.RunSliced},
 			async_upload_callback_user_data = &mesh.data_upload_context,
-			async_upload_finished_callback = mesh_upload_finished_callback,
+			async_upload_finished_callback  = mesh_upload_finished_callback,
 		}
 
 		buffer_upload_request_upload(positions_upload_request)
@@ -264,15 +269,15 @@ mesh_create :: proc(p_mesh_ref: MeshRef) -> bool {
 		if .UV in mesh.desc.features {
 			uvs_size = u32(vertex_count * size_of(glsl.vec2))
 			uvs_upload_request := BufferUploadRequest {
-				dst_buff = INTERNAL.vertex_buffer_ref,
-				dst_buff_offset = vertex_allocation.offset + positions_size,
-				dst_queue_usage = .Graphics,
-				first_usage_stage = .VertexInput,
-				size = uvs_size,
-				data_ptr = raw_data(mesh.desc.uv),
-				flags = {.RunSliced},
+				dst_buff                        = INTERNAL.vertex_buffer_ref,
+				dst_buff_offset                 = vertex_allocation.offset + positions_size,
+				dst_queue_usage                 = .Graphics,
+				first_usage_stage               = .VertexInput,
+				size                            = uvs_size,
+				data_ptr                        = raw_data(mesh.desc.uv),
+				flags                           = {.RunSliced},
 				async_upload_callback_user_data = &mesh.data_upload_context,
-				async_upload_finished_callback = mesh_upload_finished_callback,
+				async_upload_finished_callback  = mesh_upload_finished_callback,
 			}
 			buffer_upload_request_upload(uvs_upload_request)
 			mesh.data_upload_context.needed_uploads_count += 1
@@ -281,15 +286,15 @@ mesh_create :: proc(p_mesh_ref: MeshRef) -> bool {
 		if .Normal in mesh.desc.features {
 			normals_size = u32(vertex_count * size_of(glsl.vec3))
 			normals_upload_request := BufferUploadRequest {
-				dst_buff = INTERNAL.vertex_buffer_ref,
-				dst_buff_offset = vertex_allocation.offset + positions_size + uvs_size,
-				dst_queue_usage = .Graphics,
-				first_usage_stage = .VertexInput,
-				size = normals_size,
-				data_ptr = raw_data(mesh.desc.normal),
-				flags = {.RunSliced},
+				dst_buff                        = INTERNAL.vertex_buffer_ref,
+				dst_buff_offset                 = vertex_allocation.offset + positions_size + uvs_size,
+				dst_queue_usage                 = .Graphics,
+				first_usage_stage               = .VertexInput,
+				size                            = normals_size,
+				data_ptr                        = raw_data(mesh.desc.normal),
+				flags                           = {.RunSliced},
 				async_upload_callback_user_data = &mesh.data_upload_context,
-				async_upload_finished_callback = mesh_upload_finished_callback,
+				async_upload_finished_callback  = mesh_upload_finished_callback,
 			}
 			buffer_upload_request_upload(normals_upload_request)
 			mesh.data_upload_context.needed_uploads_count += 1
@@ -298,20 +303,20 @@ mesh_create :: proc(p_mesh_ref: MeshRef) -> bool {
 		if .Tangent in mesh.desc.features {
 			tangents_size = u32(vertex_count * size_of(glsl.vec3))
 			tangents_upload_request := BufferUploadRequest {
-				dst_buff = INTERNAL.vertex_buffer_ref,
-				dst_buff_offset = vertex_allocation.offset + positions_size + uvs_size + normals_size,
-				dst_queue_usage = .Graphics,
-				first_usage_stage = .VertexInput,
-				size = tangents_size,
-				data_ptr = raw_data(mesh.desc.tangent),
-				flags = {.RunSliced},
+				dst_buff                        = INTERNAL.vertex_buffer_ref,
+				dst_buff_offset                 = vertex_allocation.offset + positions_size + uvs_size + normals_size,
+				dst_queue_usage                 = .Graphics,
+				first_usage_stage               = .VertexInput,
+				size                            = tangents_size,
+				data_ptr                        = raw_data(mesh.desc.tangent),
+				flags                           = {.RunSliced},
 				async_upload_callback_user_data = &mesh.data_upload_context,
-				async_upload_finished_callback = mesh_upload_finished_callback,
+				async_upload_finished_callback  = mesh_upload_finished_callback,
 			}
 			buffer_upload_request_upload(tangents_upload_request)
 			mesh.data_upload_context.needed_uploads_count += 1
 		}
-		
+
 	}
 
 	mesh.vertex_buffer_allocation = vertex_allocation

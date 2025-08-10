@@ -1,3 +1,5 @@
+#+feature dynamic-literals
+
 package renderer
 
 //---------------------------------------------------------------------------//
@@ -50,8 +52,8 @@ when USE_VULKAN_BACKEND {
 
 	@(private = "file")
 	G_IMAGE_VIEW_TYPE_MAPPING_ARRAY := map[ImageType]vk.ImageViewType {
-		.OneDimensional   = vk.ImageViewType.D1_ARRAY,
-		.TwoDimensional   = vk.ImageViewType.D2_ARRAY,
+		.OneDimensional = vk.ImageViewType.D1_ARRAY,
+		.TwoDimensional = vk.ImageViewType.D2_ARRAY,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -129,7 +131,7 @@ when USE_VULKAN_BACKEND {
 
 		// Map vk image view type
 		vk_image_view_type, view_type_found := G_IMAGE_VIEW_TYPE_MAPPING[image.desc.type]
-		if  image.desc.array_size > 1 {
+		if image.desc.array_size > 1 {
 			vk_image_view_type, view_type_found = G_IMAGE_VIEW_TYPE_MAPPING_ARRAY[image.desc.type]
 		}
 
@@ -818,6 +820,10 @@ when USE_VULKAN_BACKEND {
 		image := &g_resources.images[image_idx]
 		backend_image := &g_resources.backend_images[image_idx]
 
+		for i in 0 ..< image.desc.mip_count {
+			backend_image.vk_layouts[0][i] = .TRANSFER_DST_OPTIMAL
+		}
+
 		// If we have a dedicated transfer queue, then hand off ownership
 		// to the transfer queue for the data uploads
 		to_transfer_barrier := vk.ImageMemoryBarrier {
@@ -835,12 +841,16 @@ when USE_VULKAN_BACKEND {
 			dstAccessMask = {.TRANSFER_WRITE},
 		}
 
+		cmd_buffer_ref := get_frame_cmd_buffer_ref()
+		cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(cmd_buffer_ref)]
+
 		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 			transfer_cmd_buff := frame_transfer_cmd_buffer_post_graphics_get()
 
+			// Acquire
 			vk.CmdPipelineBarrier(
 				transfer_cmd_buff,
-				{.TOP_OF_PIPE},
+				{.BOTTOM_OF_PIPE},
 				{.TRANSFER},
 				nil,
 				0,
@@ -853,9 +863,6 @@ when USE_VULKAN_BACKEND {
 
 			return
 		}
-
-		cmd_buffer_ref := get_frame_cmd_buffer_ref()
-		cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(cmd_buffer_ref)]
 
 		// Otherwise just prepare it to copy
 		vk.CmdPipelineBarrier(
@@ -958,22 +965,29 @@ when USE_VULKAN_BACKEND {
 		defer common.arena_delete(temp_arena)
 
 		finished_image_uploads := make([dynamic]FinishedImageUpload, get_next_frame_allocator())
-		unique_image_refs := make_map(
+		unique_image_refs := make(
 			map[ImageRef]u8,
 			len(INTERNAL.finished_image_uploads),
 			temp_arena.allocator,
 		)
 
+		upload_fences := G_RENDERER.frame_fences[:]
+		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+			upload_fences = G_RENDERER.transfer_fences_post_graphics[:]
+		}
+
+		fence_statuses := make(
+			[]vk.Result,
+			len(G_RENDERER.transfer_fences_post_graphics),
+			temp_arena.allocator,
+		)
+		for fence, i in upload_fences {
+			fence_statuses[i] = vk.GetFenceStatus(G_RENDERER.device, fence)
+		}
+
 		for finished_upload in &INTERNAL.finished_image_uploads {
 
-			upload_done_fence := G_RENDERER.frame_fences[finished_upload.fence_idx]
-			if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
-				upload_done_fence =
-					G_RENDERER.transfer_fences_post_graphics[finished_upload.fence_idx]
-			}
-
-
-			if vk.GetFenceStatus(G_RENDERER.device, upload_done_fence) != .SUCCESS {
+			if fence_statuses[finished_upload.fence_idx] != .SUCCESS {
 				append(&finished_image_uploads, finished_upload)
 				continue
 			}
@@ -996,6 +1010,8 @@ when USE_VULKAN_BACKEND {
 			cmd_buffer_ref := get_frame_cmd_buffer_ref()
 			cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(cmd_buffer_ref)]
 
+			backend_image.vk_layouts[0][finished_upload.mip] = .SHADER_READ_ONLY_OPTIMAL
+
 			to_sample_barrier := vk.ImageMemoryBarrier {
 				sType = .IMAGE_MEMORY_BARRIER,
 				oldLayout = .TRANSFER_DST_OPTIMAL,
@@ -1017,11 +1033,11 @@ when USE_VULKAN_BACKEND {
 				to_sample_barrier.srcQueueFamilyIndex = G_RENDERER.queue_family_transfer_index
 				to_sample_barrier.dstQueueFamilyIndex = G_RENDERER.queue_family_graphics_index
 
-				// Release
+				// Relase the resource on transfer queue
 				vk.CmdPipelineBarrier(
 					transfer_cmd_buff,
 					{.TRANSFER},
-					{.TOP_OF_PIPE},
+					{.BOTTOM_OF_PIPE},
 					nil,
 					0,
 					nil,
@@ -1031,11 +1047,18 @@ when USE_VULKAN_BACKEND {
 					&to_sample_barrier,
 				)
 
-				// Acquire
+				// Clear access mask, the image hasn't been used on graphics queue yet
+				to_sample_barrier.srcAccessMask = {} 
+				// Layout was changed by transfer queue already, so adjust accordingly
+				to_sample_barrier.oldLayout = .SHADER_READ_ONLY_OPTIMAL
+				// Update stages where it's going to be used
+				to_sample_barrier.dstAccessMask = {.SHADER_READ}
+
+				// Acquire barrier on graphics queue
 				vk.CmdPipelineBarrier(
 					cmd_buffer.vk_cmd_buff,
-					{.TRANSFER},
 					{.TOP_OF_PIPE},
+					{.VERTEX_SHADER, .FRAGMENT_SHADER, .COMPUTE_SHADER},
 					nil,
 					0,
 					nil,
@@ -1089,15 +1112,10 @@ when USE_VULKAN_BACKEND {
 			image := &g_resources.images[image_idx]
 			backend_image := &g_resources.backend_images[image_idx]
 
-			mip_count := image.desc.mip_count
-			loaded_mips_mask := ~image.loaded_mips_mask
-			loaded_mips_mask = loaded_mips_mask << (16 - mip_count)
-			highest_loaded_mip :=
-				mip_count - min(u32(intrinsics.count_leading_zeros(loaded_mips_mask)), mip_count)
+			highest_loaded_mip := image_get_highest_loaded_mip(image_ref)
 
 			if highest_loaded_mip < image.desc.mip_count {
-				// Update the descriptor in the bindless array 
-				// if we have any  consecutive mip chain loaded
+				// Update the descriptor in the bindless array  if we have any consecutive mip chain loaded
 				image_infos[num_bindless_updates] = vk.DescriptorImageInfo {
 					imageLayout = .SHADER_READ_ONLY_OPTIMAL,
 					imageView   = backend_image.vk_views[0][highest_loaded_mip],

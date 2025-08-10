@@ -145,7 +145,10 @@ when USE_VULKAN_BACKEND {
 		bind_group_idx := bind_group_get_idx(p_bind_group_ref)
 		backend_bind_group := &g_resources.backend_bind_groups[bind_group_idx]
 
-		descriptor_set_to_delete := defer_resource_delete(safe_destroy_descriptor_set, vk.DescriptorSet)
+		descriptor_set_to_delete := defer_resource_delete(
+			safe_destroy_descriptor_set,
+			vk.DescriptorSet,
+		)
 		descriptor_set_to_delete^ = backend_bind_group.vk_descriptor_set
 	}
 
@@ -162,70 +165,93 @@ when USE_VULKAN_BACKEND {
 		backend_bind_group := &g_resources.backend_bind_groups[bind_group_idx]
 
 		// Allocate descriptor write array (for now we just write the entire bind group, no dirty bindings checking)
-		images_infos_count := len(p_bind_group_update.images)
 		buffer_infos_count := len(p_bind_group_update.buffers)
-		total_writes_count := buffer_infos_count + images_infos_count
 
 		temp_arena: common.Arena
 		common.temp_arena_init(&temp_arena)
 		defer common.arena_delete(temp_arena)
 
 		descriptor_writes := make(
-			[]vk.WriteDescriptorSet,
-			total_writes_count,
+			[dynamic]vk.WriteDescriptorSet,
 			temp_arena.allocator,
 		)
 
-		image_writes := make([]vk.DescriptorImageInfo, images_infos_count, temp_arena.allocator)
+		image_writes := make(
+			[dynamic]vk.DescriptorImageInfo,
+			temp_arena.allocator,
+		)
 		buffer_writes := make([]vk.DescriptorBufferInfo, buffer_infos_count, temp_arena.allocator)
 
 		bind_group_layout_idx := bind_group_layout_get_idx(bind_group.desc.layout_ref)
 		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_idx]
 
-		for image_binding, i in p_bind_group_update.images {
+		for image_binding in p_bind_group_update.images {
 
 			binding := bind_group_layout.desc.bindings[image_binding.binding]
-			assert(binding.type == .Image || binding.type == .StorageImage, "Image binding required")
+			assert(
+				binding.type == .Image || binding.type == .StorageImage,
+				"Image binding required",
+			)
 
 			image := &g_resources.images[image_get_idx(image_binding.image_ref)]
 			backend_image := &g_resources.backend_images[image_get_idx(image_binding.image_ref)]
 
-			if .AddressSubresource in image_binding.flags {
-
-				if image_binding.mip_count > 1 {
-					assert(image_binding.mip_count == image.desc.mip_count) // We don't support binding sub-ranges of mips as of now
-					image_writes[i].imageView = backend_image.vk_all_mips_views[image_binding.base_array]
-				} else {
-					image_writes[i].imageView = backend_image.vk_views[image_binding.base_array][image_binding.base_mip]
-				}
-
-			} else {
-				image_writes[i].imageView = backend_image.vk_image_view
-			}
+			image_info := vk.DescriptorImageInfo{}
 
 			if binding.type == .StorageImage {
-				image_writes[i].imageLayout = .GENERAL	
-			} else if image.desc.format > .DepthStencilFormatsStart && image.desc.format < .DepthStencilFormatsEnd {
-				image_writes[i].imageLayout = .DEPTH_STENCIL_READ_ONLY_OPTIMAL
-			} else if image.desc.format > .DepthFormatsStart && image.desc.format < .DepthFormatsEnd {
-				image_writes[i].imageLayout = .DEPTH_READ_ONLY_OPTIMAL
-			}else {
-				image_writes[i].imageLayout = .SHADER_READ_ONLY_OPTIMAL		
-			}			
-
-			descriptor_writes[i] = vk.WriteDescriptorSet {
-				sType           = .WRITE_DESCRIPTOR_SET,
-				descriptorCount = 1,
-				dstBinding      = image_binding.binding,
-				dstSet          = backend_bind_group.vk_descriptor_set,
-				pImageInfo      = &image_writes[i],
-				dstArrayElement = image_binding.array_element,
+				image_info.imageLayout = .GENERAL
+			} else if image.desc.format > .DepthStencilFormatsStart &&
+			   image.desc.format < .DepthStencilFormatsEnd {
+				image_info.imageLayout = .DEPTH_STENCIL_READ_ONLY_OPTIMAL
+			} else if image.desc.format > .DepthFormatsStart &&
+			   image.desc.format < .DepthFormatsEnd {
+				image_info.imageLayout = .DEPTH_READ_ONLY_OPTIMAL
+			} else {
+				image_info.imageLayout = .SHADER_READ_ONLY_OPTIMAL
 			}
 
-			if binding.type == .Image {
-				descriptor_writes[i].descriptorType = .SAMPLED_IMAGE
-			} else {
-				descriptor_writes[i].descriptorType = .STORAGE_IMAGE
+
+			if binding.type == .StorageImage {
+
+				base_image_write_idx := len(image_writes)
+
+				for mip in image_binding.base_mip ..< image_binding.mip_count {
+					image_info.imageView = backend_image.vk_views[image_binding.base_array][mip]
+					append(&image_writes, image_info)
+				}
+
+				// Bind each mip as a seperate storage image
+				descriptor_write := vk.WriteDescriptorSet {
+					sType           = .WRITE_DESCRIPTOR_SET,
+					descriptorCount = image_binding.mip_count,
+					dstBinding      = image_binding.binding,
+					dstSet          = backend_bind_group.vk_descriptor_set,
+					pImageInfo      = &image_writes[base_image_write_idx],
+					descriptorType  = .STORAGE_IMAGE,
+				}
+
+				append(&descriptor_writes, descriptor_write)
+
+				continue
+			}
+
+			for array_layer in image_binding.base_array ..< image_binding.layer_count {
+
+				image_write_idx := len(image_writes)
+				image_info.imageView = backend_image.vk_all_mips_views[array_layer]
+				append(&image_writes, image_info)
+
+				descriptor_write := vk.WriteDescriptorSet {
+					sType           = .WRITE_DESCRIPTOR_SET,
+					descriptorCount = 1,
+					dstBinding      = image_binding.binding,
+					dstSet          = backend_bind_group.vk_descriptor_set,
+					pImageInfo      = &image_writes[image_write_idx],
+					dstArrayElement = array_layer,
+					descriptorType  = .SAMPLED_IMAGE,
+				}
+
+				append(&descriptor_writes, descriptor_write)
 			}
 		}
 
@@ -233,10 +259,12 @@ when USE_VULKAN_BACKEND {
 
 			binding := bind_group_layout.desc.bindings[buffer_binding.binding]
 			assert(
-				binding.type == .StorageBuffer || 
-				binding.type == .StorageBufferDynamic || 
+				binding.type == .StorageBuffer ||
+				binding.type == .StorageBufferDynamic ||
 				binding.type == .UniformBuffer ||
-				binding.type == .UniformBufferDynamic, "Buffer binding required")
+				binding.type == .UniformBufferDynamic,
+				"Buffer binding required",
+			)
 
 			binding_buffer_idx := buffer_get_idx(buffer_binding.buffer_ref)
 			buffer := &g_resources.buffers[binding_buffer_idx]
@@ -246,7 +274,7 @@ when USE_VULKAN_BACKEND {
 			buffer_writes[i].offset = vk.DeviceSize(buffer_binding.offset)
 			buffer_writes[i].range = vk.DeviceSize(buffer_binding.size)
 
-			descriptor_writes[images_infos_count + i] = vk.WriteDescriptorSet {
+			descriptor_write := vk.WriteDescriptorSet {
 				sType           = .WRITE_DESCRIPTOR_SET,
 				descriptorCount = 1,
 				dstBinding      = buffer_binding.binding,
@@ -256,18 +284,19 @@ when USE_VULKAN_BACKEND {
 			}
 
 			if .UniformBuffer in buffer.desc.usage {
-				descriptor_writes[images_infos_count + i].descriptorType = .UNIFORM_BUFFER
+				descriptor_write.descriptorType = .UNIFORM_BUFFER
 			} else if .DynamicUniformBuffer in buffer.desc.usage {
-				descriptor_writes[images_infos_count + i].descriptorType =
-				.UNIFORM_BUFFER_DYNAMIC
+				descriptor_write.descriptorType = .UNIFORM_BUFFER_DYNAMIC
 			} else if .StorageBuffer in buffer.desc.usage {
-				descriptor_writes[images_infos_count + i].descriptorType = .STORAGE_BUFFER
+				descriptor_write.descriptorType = .STORAGE_BUFFER
 			} else if .DynamicStorageBuffer in buffer.desc.usage {
-				descriptor_writes[images_infos_count + i].descriptorType =
-				.STORAGE_BUFFER_DYNAMIC
+				descriptor_write.descriptorType = .STORAGE_BUFFER_DYNAMIC
 			} else {
-				assert(false, "Invalid buffer binding") 
+				assert(false, "Invalid buffer binding")
 			}
+
+			append(&descriptor_writes, descriptor_write)
+
 		}
 
 		vk.UpdateDescriptorSets(
@@ -282,7 +311,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	is_buffer_binding :: #force_inline proc(p_binding_type: BindGroupLayoutBindingType) -> bool{
+	is_buffer_binding :: #force_inline proc(p_binding_type: BindGroupLayoutBindingType) -> bool {
 		return(
 			p_binding_type == .UniformBuffer ||
 			p_binding_type == .UniformBufferDynamic ||
@@ -300,16 +329,11 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	@(private="file")
+	@(private = "file")
 	safe_destroy_descriptor_set :: proc(p_user_data: rawptr) {
 		descriptor_set := (^vk.DescriptorSet)(p_user_data)
 
-		vk.FreeDescriptorSets(
-			G_RENDERER.device,
-			INTERNAL.descriptor_pool,
-			1,
-			descriptor_set,
-		)
+		vk.FreeDescriptorSets(G_RENDERER.device, INTERNAL.descriptor_pool, 1, descriptor_set)
 	}
 
 	//---------------------------------------------------------------------------//

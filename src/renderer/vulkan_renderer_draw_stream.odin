@@ -21,17 +21,21 @@ when USE_VULKAN_BACKEND {
 		p_vertex_buffer_ref: BufferRef,
 		p_bind_point: u32,
 		p_offset: u32,
+		p_size: u32,
 	) {
 		cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(p_cmd_buff_ref)]
 		vertex_buffer := &g_resources.backend_buffers[buffer_get_idx(p_vertex_buffer_ref)]
 		vertex_buffer_offset := vk.DeviceSize(p_offset)
+		vertex_buffer_size := vk.DeviceSize(p_size)
 
-		vk.CmdBindVertexBuffers(
+		vk.CmdBindVertexBuffers2(
 			cmd_buffer.vk_cmd_buff,
 			p_bind_point,
 			1,
 			&vertex_buffer.vk_buffer,
 			&vertex_buffer_offset,
+			&vertex_buffer_size,
+			nil,
 		)
 	}
 
@@ -42,16 +46,19 @@ when USE_VULKAN_BACKEND {
 		p_cmd_buff_ref: CommandBufferRef,
 		p_index_buffer_ref: BufferRef,
 		p_offset: u32,
+		p_size: u32,
 		p_index_type: IndexType,
 	) {
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(p_cmd_buff_ref)]
 		index_buffer := &g_resources.backend_buffers[buffer_get_idx(p_index_buffer_ref)]
 		index_buffer_offset := vk.DeviceSize(p_offset)
+		index_buffer_size := vk.DeviceSize(p_size)
 
-		vk.CmdBindIndexBuffer(
+		vk.CmdBindIndexBuffer2KHR(
 			backend_cmd_buffer.vk_cmd_buff,
 			index_buffer.vk_buffer,
 			index_buffer_offset,
+			index_buffer_size,
 			INDEX_TYPE_MAPPING[u32(p_index_type)],
 		)
 	}

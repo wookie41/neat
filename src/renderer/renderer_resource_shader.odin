@@ -93,7 +93,7 @@ shader_init :: proc() -> bool {
 		MAX_SHADERS,
 		G_RENDERER_ALLOCATORS.main_allocator,
 	)
-	g_resources.shaders = make_soa(
+	g_resources.shaders = make(
 		#soa[]ShaderResource,
 		MAX_SHADERS,
 		G_RENDERER_ALLOCATORS.resource_allocator,

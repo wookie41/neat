@@ -31,10 +31,10 @@ FLAG_STABILIZE_CASCADES :: 0x02
 @(private = "file")
 PrepareShadowCascadesRenderTaskData :: struct {
 	compute_job:                GenericComputeJob,
-	render_pass_bindings:       RenderPassBindings,
 	shadow_cascades_buffer_ref: BufferRef,
 	min_max_depth_buffer_ref:   BufferRef,
 	shadow_map_size:            f32,
+	bindings:                   []Binding,
 }
 
 //---------------------------------------------------------------------------//
@@ -90,11 +90,6 @@ create_instance :: proc(
 		"shadowMapSize",
 	) or_return
 
-	min_max_depth_buffer_name := xml.find_attribute_val_by_key(
-		p_render_task_config.doc,
-		p_render_task_config.render_task_element_id,
-		"minMaxDepthBuffer",
-	) or_return
 
 	shadow_cascades_buffer_name := xml.find_attribute_val_by_key(
 		p_render_task_config.doc,
@@ -112,30 +107,8 @@ create_instance :: proc(
 		return false
 	}
 
-	// Find the min-max depth buffer
-	min_max_depth_buffer_ref := buffer_find(min_max_depth_buffer_name)
-	if min_max_depth_buffer_ref == InvalidBufferRef {
-		log.errorf(
-			"Failed to create render task '%s' - can't find buffer named %s\n",
-			doc_name,
-			min_max_depth_buffer_name,
-		)
-		return false
-	}
-
-	render_task_data := new(
-		PrepareShadowCascadesRenderTaskData,
-		G_RENDERER_ALLOCATORS.resource_allocator,
-	)
-	defer if res == false {
-		free(render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
-		render_pass_destroy_bindings(render_task_data.render_pass_bindings)
-	}
-
 	// Create the shadow cascades buffer
-	shadow_cascades_buffer_ref := buffer_allocate(
-		common.create_name(shadow_cascades_buffer_name),
-	)
+	shadow_cascades_buffer_ref := buffer_allocate(common.create_name(shadow_cascades_buffer_name))
 	shadow_cascades_buffer := &g_resources.buffers[buffer_get_idx(shadow_cascades_buffer_ref)]
 	shadow_cascades_buffer.desc.flags = {.Dedicated}
 	shadow_cascades_buffer.desc.size = size_of(ShadowCascade) * MAX_SHADOW_CASCADES
@@ -153,27 +126,23 @@ create_instance :: proc(
 		buffer_destroy(shadow_cascades_buffer_ref)
 	}
 
-	// Setup render task bindings
-	render_task_setup_render_pass_bindings(
+	bindings := render_task_config_parse_bindings(
 		p_render_task_config,
-		&render_task_data.render_pass_bindings,
-		{size_of(PrepareShadowCascadesRenderTaskData)},
-		{size_of(u32) * 2},
-		{shadow_cascades_buffer.desc.size},
+		true,
+		{size_of(PrepareShadowCascadesUniformData)},
+	) or_return
+
+	render_task_data := new(
+		PrepareShadowCascadesRenderTaskData,
+		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
+	defer if res == false {
+		free(render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
+	}
 
 	render_task_name := common.create_name(doc_name)
 
-	temp_arena: common.Arena
-	common.temp_arena_init(&temp_arena)
-	defer common.arena_delete(temp_arena)
-
-	compute_job, success := generic_compute_job_create(
-		render_task_name,
-		shader_ref,
-		render_task_data.render_pass_bindings,
-		false,
-	)
+	compute_job, success := generic_compute_job_create(render_task_name, shader_ref, bindings)
 	if success == false {
 		log.errorf("Failed to create render task '%s' - couldn't create compute job\n", doc_name)
 		return false
@@ -185,22 +154,8 @@ create_instance :: proc(
 	render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	render_task.data_ptr = rawptr(render_task_data)
 
-	render_task_data.min_max_depth_buffer_ref = min_max_depth_buffer_ref
 	render_task_data.shadow_map_size = shadow_map_size
-
-	// @TODO This should happend after the task runs
-	// Update the global bind group with the shadow cascades buffers
-	cascade_shadows_update := BindGroupUpdate {
-		buffers = {
-			BindGroupBufferBinding {
-				binding = u32(GlobalResourceSlot.CascadeShadowInfo),
-				buffer_ref = shadow_cascades_buffer_ref,
-				size = shadow_cascades_buffer.desc.size,
-			},
-		},
-	}
-
-	bind_group_update(G_RENDERER.globals_bind_group_ref, cascade_shadows_update)
+	render_task_data.bindings = bindings
 
 	return true
 }
@@ -213,8 +168,9 @@ destroy_instance :: proc(p_render_task_ref: RenderTaskRef) {
 	render_task_data := (^PrepareShadowCascadesRenderTaskData)(render_task.data_ptr)
 
 	generic_compute_job_destroy(render_task_data.compute_job)
-	render_pass_destroy_bindings(render_task_data.render_pass_bindings)
+	delete(render_task_data.bindings, G_RENDERER_ALLOCATORS.resource_allocator)
 	buffer_destroy(render_task_data.shadow_cascades_buffer_ref)
+	delete(render_task_data.bindings, G_RENDERER_ALLOCATORS.resource_allocator)
 
 	free(render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
 }
@@ -246,12 +202,12 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 		uniform_buffer_create_view_data(render_view),
 	}
 
-	transition_render_pass_resources(render_task_data.render_pass_bindings, .Compute)
+	transition_binding_resources(render_task_data.bindings, .Compute)
 
 	gpu_debug_region_begin(get_frame_cmd_buffer_ref(), render_task.desc.name)
 	defer gpu_debug_region_end(get_frame_cmd_buffer_ref())
 
-	flags : u32 = 0
+	flags: u32 = 0
 	if G_RENDERER_SETTINGS.fit_shadow_cascades {
 		flags |= FLAG_FIT_CASCADES
 	}
@@ -263,7 +219,9 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 		num_cascades               = G_RENDERER_SETTINGS.num_shadow_cascades,
 		shadow_sampling_radius     = G_RENDERER_SETTINGS.directional_light_shadow_sampling_radius,
 		split_factor               = CASCADE_SPLIT_LOG_FACTOR,
-		aspect_ratio               = f32(G_RENDERER.config.render_resolution.x) / f32(G_RENDERER.config.render_resolution.y),
+		aspect_ratio               = f32(
+			G_RENDERER.config.render_resolution.x,
+		) / f32(G_RENDERER.config.render_resolution.y),
 		tan_fov_half               = glsl.tan(0.5 * glsl.radians(g_render_camera.fov)),
 		flags                      = flags,
 		shadows_rendering_distance = G_RENDERER_SETTINGS.shadows_rendering_distance,

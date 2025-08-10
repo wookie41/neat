@@ -78,7 +78,7 @@ BindGroupLayoutDesc :: struct {
 BindGroupLayoutResource :: struct {
 	desc:                BindGroupLayoutDesc,
 	hash:                u32,
-	num_dynamic_offsets: u8,
+	num_dynamic_offsets: u32,
 }
 
 //---------------------------------------------------------------------------//

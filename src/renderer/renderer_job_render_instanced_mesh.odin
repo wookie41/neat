@@ -5,7 +5,6 @@ package renderer
 import "../common"
 import "core:hash"
 import "core:log"
-import "core:math/linalg/glsl"
 import "core:slice"
 
 //---------------------------------------------------------------------------//
@@ -19,6 +18,7 @@ MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE :: 2 * common.MEGABYTE
 MeshBatch :: struct {
 	vertex_buffer_offset: u32,
 	index_buffer_offset:  u32,
+	index_buffer_size:    u32,
 	index_count:          u32,
 	mesh_vertex_count:    u32,
 	material_type_ref:    MaterialTypeRef,
@@ -53,62 +53,29 @@ calculate_mesh_batch_key :: proc(
 
 //---------------------------------------------------------------------------//
 
-@(private = "file")
-INTERNAL: struct {
-	job_bind_group_layout: BindGroupLayoutRef,
-}
-
-//---------------------------------------------------------------------------//
-
-@(private)
-render_instanced_mesh_job_init :: proc() -> bool {
-
-	// Create a bind group layout for task
-	{
-		INTERNAL.job_bind_group_layout = bind_group_layout_allocate(
-			common.create_name("RenderInstancedMesh"),
-			2,
-		)
-
-		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_get_idx(INTERNAL.job_bind_group_layout)]
-
-		// Custom uniform data
-		bind_group_layout.desc.bindings[0] = {
-			count         = 1,
-			shader_stages = {.Vertex, .Pixel},
-			type          = .UniformBufferDynamic,
-		}
-
-		// Instance info data
-		bind_group_layout.desc.bindings[1] = {
-			count         = 1,
-			shader_stages = {.Vertex, .Pixel},
-			type          = .StorageBufferDynamic,
-		}
-
-		bind_group_layout_create(INTERNAL.job_bind_group_layout) or_return
-	}
-
-	return true
-}
-
-//---------------------------------------------------------------------------//
-
 @(private)
 RenderInstancedMeshJob :: struct {
-	bind_group_ref:           BindGroupRef,
-	instance_info_buffer_ref: BufferRef,
+	bind_group_ref:             BindGroupRef,
+	bind_group_layout_ref:      BindGroupLayoutRef,
+	bindings:                   []Binding,
+	instance_info_buffer_ref:   BufferRef,
+	num_dynamic_offset_buffers: u32,
 }
 
 //---------------------------------------------------------------------------//
 
 @(private)
 render_instanced_mesh_job_create :: proc(
-	p_custom_data_size: u32 = size_of(u32),
+	p_name: common.Name,
+	p_bindings: []Binding = nil,
 ) -> (
 	mesh_job: RenderInstancedMeshJob,
 	res: bool,
 ) {
+
+	temp_arena := common.Arena{}
+	common.temp_arena_init(&temp_arena)
+	common.arena_delete(temp_arena)
 
 	{
 		// @TODO Resize this buffer if instance data wouldn't be able to fit it in
@@ -139,35 +106,34 @@ render_instanced_mesh_job_create :: proc(
 		buffer_destroy(mesh_job.instance_info_buffer_ref)
 	}
 
-	// Create the bind group
-	mesh_job.bind_group_ref = bind_group_allocate(common.create_name("RenderInstancedMesh"))
-	{
-		bind_group := &g_resources.bind_groups[bind_group_get_idx(mesh_job.bind_group_ref)]
-		bind_group.desc.layout_ref = INTERNAL.job_bind_group_layout
-
-		if bind_group_create(mesh_job.bind_group_ref) == false {
-			return {}, false
-		}
+	shared_bindings := []Binding {
+		InputBufferBinding {
+			usage = .StorageDynamic,
+			buffer_ref = mesh_job.instance_info_buffer_ref,
+			size = MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE,
+		},
 	}
 
-	// Update the bind group
-	bind_group_update(
-		mesh_job.bind_group_ref,
-		{
-			buffers = {
-				{
-					buffer_ref = g_uniform_buffers.transient_buffer.buffer_ref,
-					size = p_custom_data_size,
-					binding = 0,
-				},
-				{
-					buffer_ref = mesh_job.instance_info_buffer_ref,
-					size = MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE,
-					binding = 1,
-				},
-			},
-		},
+	bindings :=
+		shared_bindings if p_bindings == nil else slice.concatenate([][]Binding{shared_bindings, p_bindings}, G_RENDERER_ALLOCATORS.resource_allocator)
+
+
+	// Create the bind group
+	bind_group_ref, bind_group_layout_ref := bind_group_create_for_bindings(
+		p_name,
+		bindings,
+		false,
 	)
+	if bind_group_ref == InvalidBindGroupRef {
+		return {}, false
+	}
+
+	bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_get_idx(bind_group_layout_ref)]
+
+	mesh_job.bind_group_ref = bind_group_ref
+	mesh_job.bind_group_layout_ref = bind_group_layout_ref
+	mesh_job.bindings = bindings
+	mesh_job.num_dynamic_offset_buffers = bind_group_layout.num_dynamic_offsets
 
 	return mesh_job, true
 }
@@ -180,13 +146,13 @@ render_instanced_mesh_job_run :: proc(
 	p_job_data: RenderInstancedMeshJob,
 	p_render_pass_ref: RenderPassRef,
 	p_render_views: []RenderView,
-	p_render_pass_bindings_per_view: []RenderPassBindings,
+	p_outputs_per_view: [][]RenderPassOutput,
 	p_material_pass_refs: []MaterialPassRef,
 	p_material_pass_type: MaterialPassType,
-	p_custom_uniform_data_offsets: []u32 = {},
+	p_dynamic_offsets: []u32 = {},
 ) {
 
-	assert(len(p_render_pass_bindings_per_view) == len(p_render_views))
+	assert(len(p_outputs_per_view) == len(p_render_views))
 
 	temp_arena := common.Arena{}
 	common.temp_arena_init(&temp_arena, common.MEGABYTE * 16)
@@ -194,6 +160,15 @@ render_instanced_mesh_job_run :: proc(
 
 	// Batch meshes that share the same material
 	mesh_batches := make(map[MeshBatchKey]MeshBatch, 16, temp_arena.allocator)
+
+	job_dynamic_offsets := make([]u32, p_job_data.num_dynamic_offset_buffers, temp_arena.allocator)
+	for i in 0 ..< p_job_data.num_dynamic_offset_buffers {
+		job_dynamic_offsets[i] = common.DYNAMIC_OFFSET
+	}
+
+	if len(p_job_data.bindings) > 0 {
+		transition_binding_resources(p_job_data.bindings, .Graphics, false)
+	}
 
 	for i in 0 ..< g_resource_refs.mesh_instances.alive_count {
 
@@ -234,8 +209,10 @@ render_instanced_mesh_job_run :: proc(
 				continue
 			}
 
+			i_size : u32 = size_of(INDEX_DATA_TYPE)
 			mesh_batch := MeshBatch {
-				index_buffer_offset  = mesh.index_buffer_allocation.offset + size_of(u32) * submesh.index_offset,
+				index_buffer_offset  = mesh.index_buffer_allocation.offset + i_size * submesh.index_offset,
+				index_buffer_size    = submesh.index_count * i_size,
 				index_count          = submesh.index_count,
 				mesh_vertex_count    = mesh.vertex_count,
 				vertex_buffer_offset = mesh.vertex_buffer_allocation.offset,
@@ -300,7 +277,7 @@ render_instanced_mesh_job_run :: proc(
 				&draw_stream,
 				p_job_data.bind_group_ref,
 				0,
-				{common.INVALID_OFFSET, common.INVALID_OFFSET},
+				job_dynamic_offsets,
 			)
 
 			// Technically, these bind groups can be bound only once, as all material passes of the same material pass type share the same layout
@@ -308,7 +285,7 @@ render_instanced_mesh_job_run :: proc(
 				&draw_stream,
 				G_RENDERER.uniforms_bind_group_ref,
 				1,
-				{common.INVALID_OFFSET, common.INVALID_OFFSET},
+				{common.DYNAMIC_OFFSET, common.DYNAMIC_OFFSET},
 			)
 
 			draw_stream_set_bind_group(&draw_stream, G_RENDERER.globals_bind_group_ref, 2, nil)
@@ -320,15 +297,16 @@ render_instanced_mesh_job_run :: proc(
 					append(&mesh_instanced_draws_infos, mesh_batch.instanced_draw_infos[i])
 				}
 
-				uv_offset := mesh_batch.mesh_vertex_count * size_of(glsl.vec3)
-				normal_offset := uv_offset + mesh_batch.mesh_vertex_count * size_of(glsl.vec2)
-				tangent_offset := normal_offset + mesh_batch.mesh_vertex_count * size_of(glsl.vec3)
+				uv_offset := mesh_batch.mesh_vertex_count * u32(offset_of(VertexFormat, uv))
+				normal_offset := mesh_batch.mesh_vertex_count * u32(offset_of(VertexFormat, normal))
+				tangent_offset := mesh_batch.mesh_vertex_count * u32(offset_of(VertexFormat, tangent))
 
 				draw_stream_set_vertex_buffer(
 					&draw_stream,
 					mesh_get_global_vertex_buffer_ref(),
 					0,
 					mesh_batch.vertex_buffer_offset,
+					mesh_batch.mesh_vertex_count * size_of(type_of(VertexFormat{}.position)),
 				)
 
 				draw_stream_set_vertex_buffer(
@@ -336,6 +314,7 @@ render_instanced_mesh_job_run :: proc(
 					mesh_get_global_vertex_buffer_ref(),
 					1,
 					mesh_batch.vertex_buffer_offset + uv_offset,
+					mesh_batch.mesh_vertex_count * size_of(type_of(VertexFormat{}.uv)),
 				)
 
 				draw_stream_set_vertex_buffer(
@@ -343,6 +322,7 @@ render_instanced_mesh_job_run :: proc(
 					mesh_get_global_vertex_buffer_ref(),
 					2,
 					mesh_batch.vertex_buffer_offset + normal_offset,
+					mesh_batch.mesh_vertex_count * size_of(type_of(VertexFormat{}.normal)),
 				)
 
 				draw_stream_set_vertex_buffer(
@@ -350,6 +330,7 @@ render_instanced_mesh_job_run :: proc(
 					mesh_get_global_vertex_buffer_ref(),
 					3,
 					mesh_batch.vertex_buffer_offset + tangent_offset,
+					mesh_batch.mesh_vertex_count * size_of(type_of(VertexFormat{}.tangent)),
 				)
 
 				draw_stream_set_index_buffer(
@@ -357,6 +338,7 @@ render_instanced_mesh_job_run :: proc(
 					mesh_get_global_index_buffer_ref(),
 					.UInt32,
 					mesh_batch.index_buffer_offset,
+					mesh_batch.index_buffer_size,
 				)
 
 				num_instances := u32(len(mesh_batch.instanced_draw_infos))
@@ -398,28 +380,46 @@ render_instanced_mesh_job_run :: proc(
 		return
 	}
 
+	resolved_dynamic_offsets := make(
+		[]u32,
+		p_job_data.num_dynamic_offset_buffers + 2, // +1 for per view, +1 for per frame
+		temp_arena.allocator,
+	)
+	resolved_dynamic_offsets[0] = mesh_instance_data_offset
+	resolved_dynamic_offsets[len(resolved_dynamic_offsets) - 2] =
+		g_uniform_buffers.frame_data_offset
+
 	// Dispatch the draw stream for each view
+	num_user_dynamic_offsets := (p_job_data.num_dynamic_offset_buffers - 1)
 	for i in 0 ..< len(p_render_views) {
 
 		render_view := p_render_views[i]
-		bindings := p_render_pass_bindings_per_view[i]
+		outputs := p_outputs_per_view[i]
 
-		// If custom uniform data is not needed, then just set the offset to 0 for user convenience
-		custom_uniform_data_offset :=
-			p_custom_uniform_data_offsets[i] if i < len(p_custom_uniform_data_offsets) else 0
-
-		dynamic_offsets := []u32 {
-			custom_uniform_data_offset,
-			mesh_instance_data_offset,
-			g_uniform_buffers.frame_data_offset,
-			uniform_buffer_create_view_data(render_view),
+		for j in 0 ..< num_user_dynamic_offsets {
+			resolved_dynamic_offsets[j + 1] =
+				p_dynamic_offsets[u32(i) * num_user_dynamic_offsets + j]
 		}
 
-		render_task_render_pass_begin(p_render_pass_ref, bindings)
+		resolved_dynamic_offsets[len(resolved_dynamic_offsets) - 1] =
+			uniform_buffer_create_view_data(render_view)
 
-		draw_stream_dispatch(cmd_buff_ref, &draw_stream, dynamic_offsets)
+		render_task_render_pass_begin(p_render_pass_ref, outputs)
+
+		draw_stream_dispatch(cmd_buff_ref, &draw_stream, resolved_dynamic_offsets)
 		draw_stream_reset(&draw_stream)
 
 		render_pass_end(p_render_pass_ref, cmd_buff_ref)
 	}
 }
+
+//---------------------------------------------------------------------------//
+
+@(private)
+render_instanced_mesh_job_destroy :: proc(p_job: RenderInstancedMeshJob) {
+	buffer_destroy(p_job.instance_info_buffer_ref)
+	bind_group_layout_destroy(p_job.bind_group_layout_ref)
+	bind_group_destroy(p_job.bind_group_ref)
+}
+
+//---------------------------------------------------------------------------//

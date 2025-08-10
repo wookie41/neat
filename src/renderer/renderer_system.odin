@@ -1,3 +1,5 @@
+#+feature dynamic-literals
+
 package renderer
 
 //---------------------------------------------------------------------------//
@@ -9,8 +11,8 @@ import "core:mem"
 
 import "../common"
 
-import sdl "vendor:sdl2"
 import imgui "../third_party/odin-imgui"
+import sdl "vendor:sdl2"
 
 //---------------------------------------------------------------------------//
 
@@ -34,8 +36,6 @@ MAX_NUM_FRAMES_IN_FLIGHT :: #config(NUM_FRAMES_IN_FLIGHT, 2)
 GlobalResourceSlot :: enum {
 	MeshInstanceInfosBuffer,
 	MaterialsBuffer,
-	CascadeShadowTextureArray,
-	CascadeShadowInfo,
 }
 
 @(private)
@@ -118,7 +118,6 @@ g_resource_refs: struct {
 //---------------------------------------------------------------------------//
 
 
-
 //---------------------------------------------------------------------------//
 
 GPUDeviceFlagsBits :: enum u8 {
@@ -176,12 +175,12 @@ G_RENDERER_ALLOCATORS: struct {
 //---------------------------------------------------------------------------//
 
 @(private)
-G_RENDERER_SETTINGS : struct {
-	num_shadow_cascades: u32,
-	debug_draw_shadow_cascades: bool,
-	fit_shadow_cascades: bool,
-	stabilize_shadow_cascades: bool,
-	shadows_rendering_distance: f32,
+G_RENDERER_SETTINGS: struct {
+	num_shadow_cascades:                      u32,
+	debug_draw_shadow_cascades:               bool,
+	fit_shadow_cascades:                      bool,
+	stabilize_shadow_cascades:                bool,
+	shadows_rendering_distance:               f32,
 	directional_light_shadow_sampling_radius: f32,
 }
 
@@ -246,7 +245,7 @@ init :: proc(p_options: InitOptions) -> bool {
 		make([]byte, common.MEGABYTE * 8, G_RENDERER_ALLOCATORS.main_allocator),
 	)
 	G_RENDERER_ALLOCATORS.names_allocator = mem.arena_allocator(&G_RENDERER_ALLOCATORS.names_arena)
-	
+
 
 	INTERNAL.frame_idx = 0
 	INTERNAL.frame_id = 0
@@ -291,18 +290,33 @@ init :: proc(p_options: InitOptions) -> bool {
 	{
 		using g_deferred_resource_delete_context
 
-		per_frame_arenas = make([]mem.Arena, G_RENDERER.num_frames_in_flight, G_RENDERER_ALLOCATORS.main_allocator)
-		per_frame_allocators = make([]mem.Allocator, G_RENDERER.num_frames_in_flight, G_RENDERER_ALLOCATORS.main_allocator)
-		per_frame_deletes = make([][dynamic]DeferredResourceDeleteEntry, G_RENDERER.num_frames_in_flight, G_RENDERER_ALLOCATORS.main_allocator)
+		per_frame_arenas = make(
+			[]mem.Arena,
+			G_RENDERER.num_frames_in_flight,
+			G_RENDERER_ALLOCATORS.main_allocator,
+		)
+		per_frame_allocators = make(
+			[]mem.Allocator,
+			G_RENDERER.num_frames_in_flight,
+			G_RENDERER_ALLOCATORS.main_allocator,
+		)
+		per_frame_deletes = make(
+			[][dynamic]DeferredResourceDeleteEntry,
+			G_RENDERER.num_frames_in_flight,
+			G_RENDERER_ALLOCATORS.main_allocator,
+		)
 
 		for i in 0 ..< G_RENDERER.num_frames_in_flight {
-			
+
 			mem.arena_init(
 				&per_frame_arenas[i],
 				make([]byte, common.MEGABYTE * 4, G_RENDERER_ALLOCATORS.main_allocator),
 			)
-			per_frame_allocators[i] = mem.arena_allocator(&per_frame_arenas[i])	
-			per_frame_deletes[i] = make([dynamic]DeferredResourceDeleteEntry, per_frame_allocators[i])
+			per_frame_allocators[i] = mem.arena_allocator(&per_frame_arenas[i])
+			per_frame_deletes[i] = make(
+				[dynamic]DeferredResourceDeleteEntry,
+				per_frame_allocators[i],
+			)
 		}
 	}
 
@@ -366,9 +380,7 @@ init :: proc(p_options: InitOptions) -> bool {
 		}
 
 		// Now create the bind group based on this layout
-		G_RENDERER.uniforms_bind_group_ref = bind_group_allocate(
-			common.create_name("Uniforms"),
-		)
+		G_RENDERER.uniforms_bind_group_ref = bind_group_allocate(common.create_name("Uniforms"))
 
 		bind_group_idx := bind_group_get_idx(G_RENDERER.uniforms_bind_group_ref)
 		bind_group := &g_resources.bind_groups[bind_group_idx]
@@ -399,16 +411,6 @@ init :: proc(p_options: InitOptions) -> bool {
 		}
 
 		bind_group_layout.desc.bindings[GlobalResourceSlot.MaterialsBuffer] = {
-			count         = 1,
-			shader_stages = {.Vertex, .Pixel, .Compute},
-			type          = .StorageBuffer,
-		}
-		bind_group_layout.desc.bindings[GlobalResourceSlot.CascadeShadowTextureArray] = {
-			count         = MAX_SHADOW_CASCADES,
-			shader_stages = {.Vertex, .Pixel, .Compute},
-			type          = .Image,
-		}
-		bind_group_layout.desc.bindings[GlobalResourceSlot.CascadeShadowInfo] = {
 			count         = 1,
 			shader_stages = {.Vertex, .Pixel, .Compute},
 			type          = .StorageBuffer,
@@ -472,9 +474,7 @@ init :: proc(p_options: InitOptions) -> bool {
 			return false
 		}
 
-		G_RENDERER.bindless_bind_group_ref = bind_group_allocate(
-			common.create_name("Bindless"),
-		)
+		G_RENDERER.bindless_bind_group_ref = bind_group_allocate(common.create_name("Bindless"))
 
 		bind_group_idx := bind_group_get_idx(G_RENDERER.bindless_bind_group_ref)
 		bind_group := &g_resources.bind_groups[bind_group_idx]
@@ -522,19 +522,19 @@ init :: proc(p_options: InitOptions) -> bool {
 		)
 
 		global_bind_group_update := BindGroupUpdate {
-			buffers = {
-				{
-					binding = u32(GlobalResourceSlot.MeshInstanceInfosBuffer),
-					buffer_ref = mesh_instance_info_buffer_ref,
-					size = mesh_instance_info_buffer.desc.size,
+				buffers = {
+					{
+						binding = u32(GlobalResourceSlot.MeshInstanceInfosBuffer),
+						buffer_ref = mesh_instance_info_buffer_ref,
+						size = mesh_instance_info_buffer.desc.size,
+					},
+					{
+						binding = u32(GlobalResourceSlot.MaterialsBuffer),
+						buffer_ref = material_instances_buffer_ref,
+						size = MATERIAL_PROPERTIES_BUFFER_SIZE,
+					},
 				},
-				{
-					binding = u32(GlobalResourceSlot.MaterialsBuffer),
-					buffer_ref = material_instances_buffer_ref,
-					size = MATERIAL_PROPERTIES_BUFFER_SIZE,
-				},
-			},
-		}
+			}
 
 		bind_group_update(G_RENDERER.globals_bind_group_ref, global_bind_group_update)
 	}
@@ -946,7 +946,6 @@ resolve_resolution :: #force_inline proc(p_resolution: Resolution) -> glsl.uvec2
 
 @(private = "file")
 init_jobs :: proc() -> bool {
-	render_instanced_mesh_job_init() or_return
 	return true
 }
 
@@ -956,29 +955,44 @@ init_jobs :: proc() -> bool {
 draw_debug_ui :: proc(p_dt: f32) {
 	// Debug UI
 	imgui.InputInt("Shadow cascade count", (^i32)(&G_RENDERER_SETTINGS.num_shadow_cascades))
-	imgui.Checkbox("Draw shadow cascades", (^bool)(&G_RENDERER_SETTINGS.debug_draw_shadow_cascades))
+	imgui.Checkbox(
+		"Draw shadow cascades",
+		(^bool)(&G_RENDERER_SETTINGS.debug_draw_shadow_cascades),
+	)
 	imgui.Checkbox("Fit shadow cascades", (^bool)(&G_RENDERER_SETTINGS.fit_shadow_cascades))
-	imgui.Checkbox("Stabilize shadow cascades", (^bool)(&G_RENDERER_SETTINGS.stabilize_shadow_cascades))
-	imgui.InputFloat("Shadows rendering distance", (&G_RENDERER_SETTINGS.shadows_rendering_distance))
-	imgui.InputFloat("Direcional light shadow sampling radius", (&G_RENDERER_SETTINGS.directional_light_shadow_sampling_radius))
+	imgui.Checkbox(
+		"Stabilize shadow cascades",
+		(^bool)(&G_RENDERER_SETTINGS.stabilize_shadow_cascades),
+	)
+	imgui.InputFloat(
+		"Shadows rendering distance",
+		(&G_RENDERER_SETTINGS.shadows_rendering_distance),
+	)
+	imgui.InputFloat(
+		"Direcional light shadow sampling radius",
+		(&G_RENDERER_SETTINGS.directional_light_shadow_sampling_radius),
+	)
 
 	G_RENDERER_SETTINGS.num_shadow_cascades = max(0, G_RENDERER_SETTINGS.num_shadow_cascades)
-	G_RENDERER_SETTINGS.num_shadow_cascades = min(G_RENDERER_SETTINGS.num_shadow_cascades, MAX_SHADOW_CASCADES)
+	G_RENDERER_SETTINGS.num_shadow_cascades = min(
+		G_RENDERER_SETTINGS.num_shadow_cascades,
+		MAX_SHADOW_CASCADES,
+	)
 }
 
 //---------------------------------------------------------------------------//
 
-@(private="file")
+@(private = "file")
 DeferredResourceDeleteEntry :: struct {
 	delete_func: proc(p_user_data: rawptr),
-	user_data: rawptr,
+	user_data:   rawptr,
 }
 
-@(private="file")
-g_deferred_resource_delete_context : struct {
+@(private = "file")
+g_deferred_resource_delete_context: struct {
 	per_frame_allocators: []mem.Allocator,
-	per_frame_arenas: []mem.Arena,
-	per_frame_deletes: [][dynamic]DeferredResourceDeleteEntry,
+	per_frame_arenas:     []mem.Arena,
+	per_frame_deletes:    [][dynamic]DeferredResourceDeleteEntry,
 }
 
 @(private)
@@ -991,16 +1005,16 @@ defer_resource_delete :: proc(p_delete_func: proc(p_user_data: rawptr), $T: type
 	user_data := new(T, per_frame_allocators[frame_idx])
 	new_entry := DeferredResourceDeleteEntry {
 		delete_func = p_delete_func,
-		user_data = user_data,
+		user_data   = user_data,
 	}
 	append(&per_frame_deletes[frame_idx], new_entry)
 
 	return user_data
 }
 
-@(private="file")
+@(private = "file")
 process_deferred_resource_deletes :: proc() {
-	
+
 	using g_deferred_resource_delete_context
 
 	frame_idx := get_frame_idx()
@@ -1010,7 +1024,10 @@ process_deferred_resource_deletes :: proc() {
 	}
 
 	free_all(per_frame_allocators[frame_idx])
-	per_frame_deletes[frame_idx] = make([dynamic]DeferredResourceDeleteEntry, per_frame_allocators[frame_idx])
+	per_frame_deletes[frame_idx] = make(
+		[dynamic]DeferredResourceDeleteEntry,
+		per_frame_allocators[frame_idx],
+	)
 }
 
 //---------------------------------------------------------------------------//

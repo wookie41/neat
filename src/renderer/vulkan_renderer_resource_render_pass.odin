@@ -38,7 +38,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backrender_pass_end_begin :: proc(
+	backend_render_pass_begin :: proc(
 		p_render_pass_ref: RenderPassRef,
 		p_cmd_buff_ref: CommandBufferRef,
 		p_begin_info: ^RenderPassBeginInfo,
@@ -57,14 +57,14 @@ when USE_VULKAN_BACKEND {
 		color_attachments_count := 0
 		color_attachments := make(
 			[]vk.RenderingAttachmentInfo,
-			len(p_begin_info.bindings.image_outputs),
+			len(p_begin_info.outputs),
 			temp_arena.allocator,
 		)
 		depth_attachment := vk.RenderingAttachmentInfo{}
 		has_depth_attachment := false
 
 		// Prepare rendering attachments for outputs
-		for output in p_begin_info.bindings.image_outputs {
+		for output in p_begin_info.outputs {
 
 			image_idx := image_get_idx(output.image_ref)
 			image := &g_resources.images[image_idx]

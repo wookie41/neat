@@ -35,7 +35,7 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_wait_for_transfer_resources :: proc() {
 		// Make sure that the GPU is no longer reading the current staging buffer region
-		fences := []vk.Fence{
+		fences := []vk.Fence {
 			G_RENDERER.transfer_fences_pre_graphics[get_frame_idx()],
 			G_RENDERER.transfer_fences_post_graphics[get_frame_idx()],
 		}
@@ -48,6 +48,10 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_buffer_upload_finalize_finished_uploads :: proc() {
 
+		temp_arena: common.Arena
+		common.temp_arena_init(&temp_arena)
+		defer common.arena_delete(temp_arena)
+
 		if len(INTERNAL.finished_transfer_infos) == 0 {
 			return
 		}
@@ -55,12 +59,23 @@ when USE_VULKAN_BACKEND {
 		transfer_cmd_buff := frame_transfer_cmd_buffer_pre_graphics_get()
 		finished_transfer_infos := make([dynamic]FinishedTransferInfo, get_next_frame_allocator())
 
+		upload_fences := G_RENDERER.frame_fences[:]
+		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+			upload_fences = G_RENDERER.transfer_fences_post_graphics[:]
+		}
+
+		fence_statuses := make(
+			[]vk.Result,
+			len(G_RENDERER.transfer_fences_post_graphics),
+			temp_arena.allocator,
+		)
+		for fence, i in upload_fences {
+			fence_statuses[i] = vk.GetFenceStatus(G_RENDERER.device, fence)
+		}
+
 		for finished_transfer_info in &INTERNAL.finished_transfer_infos {
 
-			upload_done_fence :=
-				G_RENDERER.transfer_fences_post_graphics[finished_transfer_info.fence_idx]
-
-			if vk.GetFenceStatus(G_RENDERER.device, upload_done_fence) != .SUCCESS {
+			if fence_statuses[finished_transfer_info.fence_idx] != .SUCCESS {
 				append(&finished_transfer_infos, finished_transfer_info)
 				continue
 			}
@@ -79,12 +94,12 @@ when USE_VULKAN_BACKEND {
 			}
 
 			release_acquire_barrier := vk.BufferMemoryBarrier {
-				sType = .BUFFER_MEMORY_BARRIER,
-				pNext = nil,
-				size = vk.DeviceSize(finished_transfer_info.size),
-				offset = vk.DeviceSize(finished_transfer_info.offset),
-				buffer = backend_dst_buffer.vk_buffer,
-				srcAccessMask = {.TRANSFER_WRITE},
+				sType               = .BUFFER_MEMORY_BARRIER,
+				pNext               = nil,
+				size                = vk.DeviceSize(finished_transfer_info.size),
+				offset              = vk.DeviceSize(finished_transfer_info.offset),
+				buffer              = backend_dst_buffer.vk_buffer,
+				srcAccessMask       = {.TRANSFER_WRITE},
 				srcQueueFamilyIndex = G_RENDERER.queue_family_transfer_index,
 				dstQueueFamilyIndex = finished_transfer_info.post_transfer_queue_family_idx,
 			}
@@ -102,7 +117,6 @@ when USE_VULKAN_BACKEND {
 				0,
 				nil,
 			)
-
 
 			// Acquire
 			vk.CmdPipelineBarrier(
@@ -259,12 +273,12 @@ when USE_VULKAN_BACKEND {
 
 		// Issue pre-copy barrier
 		pre_upload_barrier := vk.BufferMemoryBarrier {
-			sType = .BUFFER_MEMORY_BARRIER,
-			pNext = nil,
-			size = vk.DeviceSize(dst_buffer.desc.size),
-			offset = 0,
-			buffer = backend_dst_buffer.vk_buffer,
-			dstAccessMask = {.TRANSFER_WRITE},
+			sType               = .BUFFER_MEMORY_BARRIER,
+			pNext               = nil,
+			size                = vk.DeviceSize(dst_buffer.desc.size),
+			offset              = 0,
+			buffer              = backend_dst_buffer.vk_buffer,
+			dstAccessMask       = {.TRANSFER_WRITE},
 			srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
 			dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
 		}
@@ -291,13 +305,13 @@ when USE_VULKAN_BACKEND {
 		)
 
 		buffer_barrier := vk.BufferMemoryBarrier {
-			sType = .BUFFER_MEMORY_BARRIER,
-			pNext = nil,
-			size = vk.DeviceSize(dst_buffer.desc.size),
-			offset = 0,
-			buffer = backend_dst_buffer.vk_buffer,
-			srcAccessMask = {.TRANSFER_WRITE},
-			dstAccessMask = access_mask,
+			sType               = .BUFFER_MEMORY_BARRIER,
+			pNext               = nil,
+			size                = vk.DeviceSize(dst_buffer.desc.size),
+			offset              = 0,
+			buffer              = backend_dst_buffer.vk_buffer,
+			srcAccessMask       = {.TRANSFER_WRITE},
+			dstAccessMask       = access_mask,
 			srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
 			dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
 		}
@@ -422,13 +436,13 @@ when USE_VULKAN_BACKEND {
 
 			// Issue a post-copy barrier
 			post_upload_barrier := vk.BufferMemoryBarrier {
-				sType = .BUFFER_MEMORY_BARRIER,
-				pNext = nil,
-				size = vk.DeviceSize(p_size_in_bytes),
-				offset = vk.DeviceSize(p_dst_buffer_offset),
-				buffer = backend_dst_buffer.vk_buffer,
-				srcAccessMask = {.TRANSFER_WRITE},
-				dstAccessMask = access_mask,
+				sType               = .BUFFER_MEMORY_BARRIER,
+				pNext               = nil,
+				size                = vk.DeviceSize(p_size_in_bytes),
+				offset              = vk.DeviceSize(p_dst_buffer_offset),
+				buffer              = backend_dst_buffer.vk_buffer,
+				srcAccessMask       = {.TRANSFER_WRITE},
+				dstAccessMask       = access_mask,
 				srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
 				dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
 			}
@@ -536,12 +550,12 @@ when USE_VULKAN_BACKEND {
 
 			// Issue pre-copy barrier
 			pre_upload_barrier := vk.BufferMemoryBarrier {
-				sType = .BUFFER_MEMORY_BARRIER,
-				pNext = nil,
-				size = vk.DeviceSize(p_size_in_bytes),
-				offset = vk.DeviceSize(p_offset),
-				buffer = backend_dst_buffer.vk_buffer,
-				dstAccessMask = {.TRANSFER_WRITE},
+				sType               = .BUFFER_MEMORY_BARRIER,
+				pNext               = nil,
+				size                = vk.DeviceSize(p_size_in_bytes),
+				offset              = vk.DeviceSize(p_offset),
+				buffer              = backend_dst_buffer.vk_buffer,
+				dstAccessMask       = {.TRANSFER_WRITE},
 				srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
 				dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
 			}
@@ -577,12 +591,12 @@ when USE_VULKAN_BACKEND {
 
 		// Issue release and acquire buffer range 
 		release_acquire_barrier := vk.BufferMemoryBarrier {
-			sType = .BUFFER_MEMORY_BARRIER,
-			pNext = nil,
-			size = vk.DeviceSize(p_size_in_bytes),
-			offset = vk.DeviceSize(p_offset),
-			buffer = backend_dst_buffer.vk_buffer,
-			dstAccessMask = {.TRANSFER_WRITE},
+			sType               = .BUFFER_MEMORY_BARRIER,
+			pNext               = nil,
+			size                = vk.DeviceSize(p_size_in_bytes),
+			offset              = vk.DeviceSize(p_offset),
+			buffer              = backend_dst_buffer.vk_buffer,
+			dstAccessMask       = {.TRANSFER_WRITE},
 			srcQueueFamilyIndex = src_queue,
 			dstQueueFamilyIndex = G_RENDERER.queue_family_transfer_index,
 		}

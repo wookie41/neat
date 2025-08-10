@@ -59,12 +59,6 @@ StructuredBuffer<MeshInstanceInfo> gMeshInstanceInfoBuffer : register(t0, space2
 [[vk::binding(1, 2)]]
 StructuredBuffer<Material> gMaterialsBuffer : register(t1, space2);
 
-[[vk::binding(2, 2)]]
-Texture2D gCascadeShadowTextures[MAX_SHADOW_CASCADES] : register(t2, space2);
-
-[[vk::binding(3, 2)]]
-StructuredBuffer<ShadowCascade> gShadowCascades : register(t3, space2);
-
 //---------------------------------------------------------------------------//
 
 [[vk::binding(0, 3)]]

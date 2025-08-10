@@ -168,8 +168,8 @@ draw_stream_add_draw :: proc(
 	p_draw_count: u32,
 	p_instance_count: u32,
 	p_pipeline_ref: GraphicsPipelineRef = InvalidGraphicsPipelineRef,
-	p_vertex_buffers: []OffsetBuffer = {},
-	p_index_buffer: OffsetBuffer = InvalidOffsetBuffer,
+	p_vertex_buffers: []BufferSection = {},
+	p_index_buffer: BufferSection = InvalidBufferSection,
 	p_index_type: IndexType = .UInt32,
 	p_bind_groups: []BindGroupsWithOffsets = {},
 	p_push_constants: []rawptr = {},
@@ -185,6 +185,7 @@ draw_stream_add_draw :: proc(
 			vertex_buffers.buffer_ref,
 			u32(i),
 			vertex_buffers.offset,
+			vertex_buffers.size,
 		)
 	}
 
@@ -196,6 +197,7 @@ draw_stream_add_draw :: proc(
 			p_index_buffer.buffer_ref,
 			p_index_type,
 			p_index_buffer.offset,
+			p_index_buffer.size,
 		)
 	}
 
@@ -232,9 +234,17 @@ draw_stream_set_vertex_buffer :: proc(
 	p_draw_stream: ^DrawStream,
 	p_buffer_ref: BufferRef,
 	p_binding: u32,
-	p_offset: u32 = 0,
+	p_offset: u32,
+	p_size: u32,
 ) {
-	draw_stream_write(p_draw_stream, .BindVertexBuffer, p_buffer_ref.ref, p_binding, p_offset)
+	draw_stream_write(
+		p_draw_stream,
+		.BindVertexBuffer,
+		p_buffer_ref.ref,
+		p_binding,
+		p_offset,
+		p_size,
+	)
 }
 
 //---------------------------------------------------------------------------//
@@ -243,7 +253,8 @@ draw_stream_set_index_buffer :: proc(
 	p_draw_stream: ^DrawStream,
 	p_buffer_ref: BufferRef,
 	p_index_type: IndexType,
-	p_offset: u32 = 0,
+	p_offset: u32,
+	p_size: u32,
 ) {
 
 	p_draw_stream.current_index_buffer_ref = p_buffer_ref
@@ -254,13 +265,14 @@ draw_stream_set_index_buffer :: proc(
 		.BindIndexBuffer,
 		p_buffer_ref.ref,
 		p_offset,
+		p_size,
 		u32(p_index_type),
 	)
 }
 
 //---------------------------------------------------------------------------//
 
-// It's allowed to pass INVALID_OFFSET for p_dynamic_offsets. This means that dynamic offsets for this bind 
+// It's allowed to pass DYNAMIC_OFFSET for p_dynamic_offsets. This means that dynamic offsets for this bind 
 // group will be provided upon dispatching the draw stream. It's useful when we want to
 // dispatch the same draw stream, but with a different set of constant buffers, e.g.
 // rendering the same set of objects to a different render view
@@ -324,12 +336,14 @@ draw_stream_dispatch_bind_vertex_buffer :: proc(p_draw_stream_dispatch: ^DrawStr
 	}
 	binding := draw_stream_dispatch_read_next(p_draw_stream_dispatch)
 	buffer_offset := draw_stream_dispatch_read_next(p_draw_stream_dispatch)
+	buffer_size := draw_stream_dispatch_read_next(p_draw_stream_dispatch)
 
 	backend_draw_stream_dispatch_bind_vertex_buffer(
 		p_draw_stream_dispatch.cmd_buff_ref,
 		vertex_buffer_ref,
 		binding,
 		buffer_offset,
+		buffer_size,
 	)
 }
 
@@ -341,12 +355,14 @@ draw_stream_dispatch_bind_index_buffer :: proc(p_draw_stream_dispatch: ^DrawStre
 		ref = draw_stream_dispatch_read_next(p_draw_stream_dispatch),
 	}
 	buffer_offset := draw_stream_dispatch_read_next(p_draw_stream_dispatch)
+	buffer_size := draw_stream_dispatch_read_next(p_draw_stream_dispatch)
 	index_type := IndexType(draw_stream_dispatch_read_next(p_draw_stream_dispatch))
 	p_draw_stream_dispatch.index_buffer_ref = index_buffer_ref
 	backend_draw_stream_dispatch_bind_index_buffer(
 		p_draw_stream_dispatch.cmd_buff_ref,
 		index_buffer_ref,
 		buffer_offset,
+		buffer_size,
 		index_type,
 	)
 }
@@ -388,7 +404,7 @@ draw_stream_dispatch_change_bind_group :: proc(p_draw_stream_dispatch: ^DrawStre
 
 	// Patch placeholder dynamic offset
 	for i in 0 ..< len(dynamic_offsets) {
-		if dynamic_offsets[i] == common.INVALID_OFFSET {
+		if dynamic_offsets[i] == common.DYNAMIC_OFFSET {
 			assert(
 				p_draw_stream_dispatch.dynamic_offsets_used <
 				u32(len(p_draw_stream_dispatch.dynamic_offsets)),

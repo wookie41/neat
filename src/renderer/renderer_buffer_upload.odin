@@ -112,7 +112,7 @@ buffer_upload_init :: proc(p_options: BufferUploadInitOptions) -> bool {
 	}
 
 	INTERNAL.staging_buffer_offset = 0
-	INTERNAL.last_frame_requests_per_buffer = make_map(
+	INTERNAL.last_frame_requests_per_buffer = make(
 		map[BufferRef][dynamic]BufferUploadRequest,
 		32,
 		get_next_frame_allocator(),
@@ -245,7 +245,7 @@ buffer_upload_request_upload :: proc(p_request: BufferUploadRequest) -> BufferUp
 @(private)
 buffer_upload_run_last_frame_requests :: proc() {
 
-	last_frame_requests_per_buffer := make_map(
+	last_frame_requests_per_buffer := make(
 		map[BufferRef][dynamic]BufferUploadRequest,
 		len(INTERNAL.last_frame_requests_per_buffer),
 		get_next_frame_allocator(),

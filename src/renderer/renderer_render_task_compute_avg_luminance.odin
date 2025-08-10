@@ -19,12 +19,12 @@ THREAD_GROUP_SIZE :: glsl.uvec2{16, 16}
 
 @(private = "file")
 ComputeAvgLumRenderTaskData :: struct {
-	build_histogram_job:   GenericComputeJob,
-	reduce_histogram_job:  GenericComputeJob,
-	histogram_buffer_ref:  BufferRef,
-	exposure_buffer_ref:   BufferRef,
-	scene_hdr_ref:         ImageRef,
-	build_shader_bindings: RenderPassBindings,
+	build_histogram_job:       GenericComputeJob,
+	reduce_histogram_job:      GenericComputeJob,
+	histogram_buffer_ref:      BufferRef,
+	exposure_buffer_ref:       BufferRef,
+	build_histogram_bindings:  []Binding,
+	reduce_histogram_bindings: []Binding,
 }
 
 //---------------------------------------------------------------------------//
@@ -67,12 +67,6 @@ create_instance :: proc(
 ) -> (
 	res: bool,
 ) {
-	doc_name := xml.find_attribute_val_by_key(
-		p_render_task_config.doc,
-		p_render_task_config.render_task_element_id,
-		"name",
-	) or_return
-
 	build_shader_name := xml.find_attribute_val_by_key(
 		p_render_task_config.doc,
 		p_render_task_config.render_task_element_id,
@@ -145,55 +139,49 @@ create_instance :: proc(
 	histogram_buffer := &g_resources.buffers[buffer_get_idx(render_task_data.histogram_buffer_ref)]
 	exposure_buffer := &g_resources.buffers[buffer_get_idx(render_task_data.exposure_buffer_ref)]
 
-	// Setup bindings
-	render_task_setup_render_pass_bindings(
-		p_render_task_config,
-		&render_task_data.build_shader_bindings,
-		{size_of(BuildHistogramUniformData)},
-		{exposure_buffer.desc.size},
-		{histogram_buffer.desc.size},
-	)
-	defer if res == false {
-		render_pass_destroy_bindings(render_task_data.build_shader_bindings)
-	}
-
 	// Create the build histogram job
-	render_task_data.build_histogram_job = generic_compute_job_create(
-		common.create_name(doc_name),
-		build_shader_ref,
-		render_task_data.build_shader_bindings,
-		true,
-	) or_return
+	{
+		bindings := render_task_config_parse_bindings(
+			p_render_task_config,
+			true,
+			{
+				size_of(GenericComputeJobUniformData),
+				size_of(BuildHistogramUniformData),
+				exposure_buffer.desc.size,
+				histogram_buffer.desc.size,
+			},
+			"BuildHistogramBindings",
+		) or_return
+
+		render_task_data.build_histogram_job = generic_compute_job_create(
+			common.create_name("BuildLuminanceHistogram"),
+			build_shader_ref,
+			bindings,
+		) or_return
+
+		render_task_data.build_histogram_bindings = bindings
+	}
 
 	// Create the reduce job
 	{
-		bindings := RenderPassBindings {
-			buffer_inputs  = {
-				{
-					buffer_ref = g_uniform_buffers.transient_buffer.buffer_ref,
-					offset = common.INVALID_OFFSET,
-					size = size_of(ReduceHistogramUniformData),
-					usage = .Uniform,
-				},
+		bindings := render_task_config_parse_bindings(
+			p_render_task_config,
+			true,
+			{
+				size_of(ReduceHistogramUniformData),
+				histogram_buffer.desc.size,
+				exposure_buffer.desc.size,
 			},
-			buffer_outputs = {
-				{
-					buffer_ref = render_task_data.histogram_buffer_ref,
-					size = histogram_buffer.desc.size,
-				},
-				{
-					buffer_ref = render_task_data.exposure_buffer_ref,
-					size = exposure_buffer.desc.size,
-				},
-			},
-		}
+			"ReduceHistogramBindings",
+		) or_return
 
 		render_task_data.reduce_histogram_job = generic_compute_job_create(
 			common.create_name("ReduceLuminaceHistogram"),
 			reduce_shader_ref,
 			bindings,
-			false,
 		) or_return
+
+		render_task_data.reduce_histogram_bindings = bindings
 	}
 
 	render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
@@ -211,7 +199,9 @@ destroy_instance :: proc(p_render_task_ref: RenderTaskRef) {
 
 	generic_compute_job_destroy(render_task_data.build_histogram_job)
 	generic_compute_job_destroy(render_task_data.reduce_histogram_job)
-	render_pass_destroy_bindings(render_task_data.build_shader_bindings)
+
+	delete(render_task_data.build_histogram_bindings, G_RENDERER_ALLOCATORS.resource_allocator)
+	delete(render_task_data.reduce_histogram_bindings, G_RENDERER_ALLOCATORS.resource_allocator)
 
 	free(render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
 }
@@ -267,7 +257,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 
 		job_uniform_offsets := []u32{generic_compute_job_uniform_data_offset, uniform_data_offset}
 
-		transition_render_pass_resources(render_task_data.build_shader_bindings, .Compute)
+		transition_binding_resources(render_task_data.build_histogram_bindings, .Compute)
 
 		compute_command_dispatch(
 			render_task_data.build_histogram_job.compute_command_ref,
@@ -283,23 +273,6 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 		gpu_debug_region_begin(get_frame_cmd_buffer_ref(), "Reduce histogram")
 		defer gpu_debug_region_end(get_frame_cmd_buffer_ref())
 
-		histogram_buffer := &g_resources.buffers[buffer_get_idx(render_task_data.histogram_buffer_ref)]
-		exposure_buffer := &g_resources.buffers[buffer_get_idx(render_task_data.exposure_buffer_ref)]
-
-		bindings := RenderPassBindings {
-			buffer_outputs = {
-				{
-					buffer_ref = render_task_data.histogram_buffer_ref,
-					size = histogram_buffer.desc.size,
-					needs_read_barrier = true,
-				},
-				{
-					buffer_ref = render_task_data.exposure_buffer_ref,
-					size = exposure_buffer.desc.size,
-				},
-			},
-		}
-
 		uniform_data := ReduceHistogramUniformData {
 			min_lum_log       = lum_min,
 			lum_range_log     = lum_range,
@@ -312,7 +285,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 
 		job_uniform_offsets := []u32{uniform_data_offset}
 
-		transition_render_pass_resources(bindings, .Compute)
+		transition_binding_resources(render_task_data.reduce_histogram_bindings, .Compute)
 
 		compute_command_dispatch(
 			render_task_data.reduce_histogram_job.compute_command_ref,

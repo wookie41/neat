@@ -111,8 +111,8 @@ when USE_VULKAN_BACKEND {
 		// Create the command pool for immediate submit
 		{
 			cmd_pool_create_info := vk.CommandPoolCreateInfo {
-				sType = .COMMAND_POOL_CREATE_INFO,
-				flags = {.RESET_COMMAND_BUFFER},
+				sType            = .COMMAND_POOL_CREATE_INFO,
+				flags            = {.RESET_COMMAND_BUFFER},
 				queueFamilyIndex = G_RENDERER.queue_family_graphics_index,
 			}
 			if vk.CreateCommandPool(
@@ -166,9 +166,9 @@ when USE_VULKAN_BACKEND {
 
 		if p_command_pools_create {
 			pool_info := vk.CommandPoolCreateInfo {
-				sType = .COMMAND_POOL_CREATE_INFO,
+				sType            = .COMMAND_POOL_CREATE_INFO,
 				queueFamilyIndex = p_queue_family_idx,
-				flags = {.RESET_COMMAND_BUFFER},
+				flags            = {.RESET_COMMAND_BUFFER},
 			}
 
 			for i in 0 ..< G_RENDERER.num_frames_in_flight {
@@ -202,7 +202,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backcommand_buffer_end_create :: proc(p_ref: CommandBufferRef) -> bool {
+	backend_command_buffer_create :: proc(p_ref: CommandBufferRef) -> bool {
 		cmd_buffer_idx := command_buffer_get_idx(p_ref)
 		cmd_buffer := &g_resources.cmd_buffers[cmd_buffer_idx]
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[cmd_buffer_idx]

@@ -1,6 +1,10 @@
+#+feature dynamic-literals
+
 package renderer
 
 //---------------------------------------------------------------------------//
+
+import "base:intrinsics"
 
 import "core:c"
 import "core:math/linalg/glsl"
@@ -232,7 +236,7 @@ ImageResource :: struct {
 	desc:             ImageDesc,
 	flags:            ImageFlags,
 	bindless_idx:     u32,
-	loaded_mips_mask: u16, // mip 0 is the first bit
+	loaded_mips_mask: u32, // mip 0 is the first bit
 	queue:            DeviceQueueType,
 }
 
@@ -392,14 +396,10 @@ image_create_texture :: proc(p_ref: ImageRef) -> bool {
 	image.bindless_idx = image_allocate_new_bindless_array_entry()
 	// 3D texture loading not supported right now
 	assert(image.desc.type == .TwoDimensional)
-
 	assert(
 		(image.desc.format > .ColorFormatsStart && image.desc.format < .ColorFormatsEnd) ||
 		(image.desc.format > .CompressedFormatsStart && image.desc.format < .CompressedFormatsEnd),
 	)
-
-	// the loaded mips bitmask is 16 bit, but 2^15x2^15 should be enough for the texture
-	assert(image.desc.mip_count <= 16)
 
 	if backend_image_create_texture(p_ref) == false {
 		append(&INTERNAL.free_bindless_indices, image.bindless_idx)
@@ -408,6 +408,7 @@ image_create_texture :: proc(p_ref: ImageRef) -> bool {
 	}
 
 	image.desc.array_size = 1
+	image.loaded_mips_mask = 0
 
 	// Queue data copy for this texture
 	image_upload_info := ImageUploadInfo {
@@ -498,6 +499,20 @@ image_find_by_str :: proc(p_str: string) -> ImageRef {
 	return image_find_by_name(common.create_name(p_str))
 }
 
+//--------------------------------------------------------------------------//
+
+
+image_get_highest_loaded_mip :: proc(p_image_ref: ImageRef) -> u32 {
+	image := &g_resources.images[image_get_idx(p_image_ref)]
+	mip_count := image.desc.mip_count
+	// negate to count leading zeros
+	loaded_mips_mask := ~image.loaded_mips_mask
+	// shift so that last mip (lowest quality) is the first bit in the chain
+	loaded_mips_mask = loaded_mips_mask << (32 - mip_count)
+	loaded_mips_count := intrinsics.count_leading_zeros(loaded_mips_mask)
+	return mip_count - min(u32(loaded_mips_count), mip_count)
+
+}
 //--------------------------------------------------------------------------//
 
 @(private)

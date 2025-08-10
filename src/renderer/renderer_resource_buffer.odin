@@ -86,12 +86,13 @@ BufferSuballocation :: struct {
 
 //---------------------------------------------------------------------------//
 
-OffsetBuffer :: struct {
+BufferSection :: struct {
 	buffer_ref: BufferRef,
 	offset:     u32,
+	size:     u32,
 }
 
-InvalidOffsetBuffer :: OffsetBuffer {
+InvalidBufferSection :: BufferSection {
 	buffer_ref = {ref = c.UINT32_MAX},
 }
 

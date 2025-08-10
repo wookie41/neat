@@ -24,7 +24,7 @@ INTERNAL: struct {
 @(private)
 ui_init :: proc() -> bool {
 
-	pool_sizes := []vk.DescriptorPoolSize{
+	pool_sizes := []vk.DescriptorPoolSize {
 		{.SAMPLER, 1000},
 		{.COMBINED_IMAGE_SAMPLER, 1000},
 		{.SAMPLED_IMAGE, 1000},
@@ -39,11 +39,11 @@ ui_init :: proc() -> bool {
 	}
 
 	descriptor_pool_create_info := vk.DescriptorPoolCreateInfo {
-		sType = .DESCRIPTOR_POOL_CREATE_INFO,
-		maxSets = 1000,
+		sType         = .DESCRIPTOR_POOL_CREATE_INFO,
+		maxSets       = 1000,
 		poolSizeCount = u32(len(pool_sizes)),
-		pPoolSizes = raw_data(pool_sizes),
-		flags = {.FREE_DESCRIPTOR_SET},
+		pPoolSizes    = raw_data(pool_sizes),
+		flags         = {.FREE_DESCRIPTOR_SET},
 	}
 
 	vk.CreateDescriptorPool(
@@ -54,15 +54,15 @@ ui_init :: proc() -> bool {
 	)
 
 	init_info := imgui_vk.InitInfo {
-		Instance = G_RENDERER.instance,
-		PhysicalDevice = G_RENDERER.physical_device,
-		Device = G_RENDERER.device,
-		Queue = G_RENDERER.graphics_queue,
-		DescriptorPool = INTERNAL.descriptor_pool,
-		MinImageCount = u32(len(G_RENDERER.swapchain_images)),
-		ImageCount = u32(len(G_RENDERER.swapchain_images)),
-		MSAASamples = {._1},
-		UseDynamicRendering = true,
+		Instance              = G_RENDERER.instance,
+		PhysicalDevice        = G_RENDERER.physical_device,
+		Device                = G_RENDERER.device,
+		Queue                 = G_RENDERER.graphics_queue,
+		DescriptorPool        = INTERNAL.descriptor_pool,
+		MinImageCount         = u32(len(G_RENDERER.swapchain_images)),
+		ImageCount            = u32(len(G_RENDERER.swapchain_images)),
+		MSAASamples           = {._1},
+		UseDynamicRendering   = true,
 		ColorAttachmentFormat = G_RENDERER.swapchain_format.format,
 	}
 
@@ -133,6 +133,8 @@ ui_submit :: proc() {
 		layerCount = 1,
 		renderArea = {extent = {G_RENDERER.swap_extent.width, G_RENDERER.swap_extent.height}},
 	}
+
+	transition_render_outputs({{image_ref = G_RENDERER.swap_image_refs[G_RENDERER.swap_img_idx]}})
 
 	vk.CmdBeginRendering(backend_cmd_buffer.vk_cmd_buff, &rendering_info)
 

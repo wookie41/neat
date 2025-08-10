@@ -3,7 +3,6 @@ package common
 //---------------------------------------------------------------------------//
 
 import "base:runtime"
-import "core:container/bit_array"
 import "core:encoding/json"
 import "core:encoding/xml"
 import "core:fmt"
@@ -17,6 +16,7 @@ import "core:strings"
 //---------------------------------------------------------------------------//
 
 INVALID_OFFSET: u32 : max(u32)
+DYNAMIC_OFFSET: u32 : max(u32)
 
 //---------------------------------------------------------------------------//
 
@@ -110,37 +110,6 @@ aprintf :: proc(allocator: mem.Allocator, format: string, args: ..any) -> string
 	context.allocator = allocator
 	defer context.allocator = curr_alloc
 	return fmt.aprintf(format, ..args)
-}
-
-//---------------------------------------------------------------------------//
-
-
-bit_array_init :: proc(
-	p_bit_array: ^bit_array.Bit_Array,
-	max_index: int,
-	min_index: int,
-	allocator: mem.Allocator,
-) -> bool {
-	INDEX_SHIFT :: 6
-	INDEX_MASK :: 63
-	NUM_BITS :: 64
-
-	context.allocator = allocator
-	size_in_bits := max_index - min_index
-
-	assert(size_in_bits > 0)
-	legs := size_in_bits >> INDEX_SHIFT
-	if size_in_bits & INDEX_MASK > 0 {legs += 1}
-	bits, err := make([dynamic]u64, legs, allocator)
-	if err != mem.Allocator_Error.None {
-		return false
-	}
-	p_bit_array.bits = bits
-	p_bit_array.bias = min_index
-	p_bit_array.max_index = max_index
-	p_bit_array.free_pointer = true
-
-	return true
 }
 
 //---------------------------------------------------------------------------//

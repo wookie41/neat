@@ -10,6 +10,8 @@
 
 //---------------------------------------------------------------------------//
 
+// Inputs
+
 [[vk::binding(1, 0)]]
 StructuredBuffer<ExposureInfo> exposureBuffer : register(t0, space0);
 
@@ -26,6 +28,14 @@ Texture2D<float4> gBufferParamsTex : register(t3, space0);
 Texture2D<float> depthTex : register(t4, space0);   
 
 [[vk::binding(6, 0)]]
+Texture2D<float> gCascadeShadowTextures[] : register(t5, space0);
+
+[[vk::binding(7, 0)]]
+StructuredBuffer<ShadowCascade> gShadowCascades : register(t6, space0);
+
+// Outputs 
+
+[[vk::binding(8, 0)]]
 RWTexture2D<float4> outputImage : register(u0, space0);
 
 //---------------------------------------------------------------------------//
@@ -50,7 +60,7 @@ void CSMain(uint2 dispatchThreadId: SV_DispatchThreadID)
     const float3 posVS = mul(uPerView.ViewMatrix, float4(posWS, 1)).xyz;
 
     int cascadeIndex;
-    const float directionalLightShadow = SampleDirectionalLightShadow(posWS, posVS, input.cellCoord, cascadeIndex);
+    const float directionalLightShadow = SampleDirectionalLightShadow(gCascadeShadowTextures, gShadowCascades, posWS, posVS, input.cellCoord, cascadeIndex);
 
     const float3 V = normalize(uPerView.CameraPositionWS - posWS);
     const float3 L = -uPerFrame.Sun.DirectionWS;
@@ -85,8 +95,6 @@ void CSMain(uint2 dispatchThreadId: SV_DispatchThreadID)
     {
         pixelColor *= GetCascadeDebugColor(cascadeIndex);
     }
-
-    // pixelColor = float4((normalWS.xy + 1) * 0.5, 0, 1);
 
     outputImage[input.cellCoord] = float4(pixelColor, 1);
 }

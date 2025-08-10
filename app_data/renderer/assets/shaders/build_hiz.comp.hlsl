@@ -29,16 +29,18 @@ cbuffer BuildHiZParams : register(b1, space0)
 }
 
 [[vk::binding(2, 0)]]
-RWStructuredBuffer<SpdGlobalAtomicBufferData> spdGlobalAtomicBuffer : register(u0, space0);
-
-[[vk::binding(3, 0)]]
-RWStructuredBuffer<uint> minMaxDepthBuffer : register(u1, space0);
-
-[[vk::binding(4, 0)]]
 Texture2D depthTex : register(t0, space0);
 
+//---------------------------------------------------------------------------//
+
+[[vk::binding(3, 0)]]
+RWStructuredBuffer<SpdGlobalAtomicBufferData> spdGlobalAtomicBuffer : register(u0, space0);
+
+[[vk::binding(4, 0)]]
+RWStructuredBuffer<uint> minMaxDepthBuffer : register(u1, space0);
+
 [[vk::binding(5, 0)]]
-RWTexture2D<float> hiZBufferTex[12] : register(u2, space0);
+RWTexture2D<float> hiZBufferTex[] : register(u2, space0);
 
 //---------------------------------------------------------------------------//
 

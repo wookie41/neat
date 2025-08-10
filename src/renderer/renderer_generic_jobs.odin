@@ -4,7 +4,6 @@ package renderer
 
 import "../common"
 import "core:math/linalg/glsl"
-import "core:mem"
 
 //---------------------------------------------------------------------------//
 
@@ -37,8 +36,7 @@ GenericComputeJobUniformData :: struct #packed {
 generic_compute_job_create :: proc(
 	p_name: common.Name,
 	p_shader_ref: ShaderRef,
-	p_render_pass_bindings: RenderPassBindings,
-	p_is_compute_render_target_pass: bool,
+	p_bindings: []Binding,
 ) -> (
 	out_job: GenericComputeJob,
 	out_success: bool,
@@ -48,17 +46,7 @@ generic_compute_job_create :: proc(
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
 
-	// Create a bind group layout and bind group based on the input images and buffers
-	bind_group_ref, bind_group_layout_ref := create_bind_group_for_bindings(
-		p_name,
-		p_render_pass_bindings,
-		true,
-		p_is_compute_render_target_pass,
-		temp_arena.allocator,
-	)
-	if bind_group_ref == InvalidBindGroupRef {
-		return {}, false
-	}
+	bind_group_ref, bind_group_layout_ref := bind_group_create_for_bindings(p_name, p_bindings, true)
 
 	// Create the compute command 
 	compute_command_ref := compute_command_allocate(p_name, 4, 0)
@@ -92,19 +80,19 @@ generic_compute_job_create :: proc(
 generic_pixel_job_create :: proc(
 	p_name: common.Name,
 	p_shader_ref: ShaderRef,
-	p_render_pass_bindings: RenderPassBindings,
+	p_bindings: []Binding,
+	p_render_pass_outputs: []RenderPassOutput,
 	p_resolution: glsl.uvec2,
 ) -> (
 	out_job: GenericPixelJob,
 	out_success: bool,
 ) {
-
 	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
 
 	// Create a render pass based on output images
-	render_pass_ref := render_pass_allocate(p_name, len(p_render_pass_bindings.image_outputs))
+	render_pass_ref := render_pass_allocate(p_name, len(p_render_pass_outputs))
 	render_pass := &g_resources.render_passes[render_pass_get_idx(render_pass_ref)]
 	render_pass.desc.depth_stencil_type = .None
 	render_pass.desc.primitive_type = .TriangleList
@@ -112,7 +100,7 @@ generic_pixel_job_create :: proc(
 	render_pass.desc.multisampling_type = ._1
 	render_pass.desc.resolution = p_resolution
 
-	for output_image, i in p_render_pass_bindings.image_outputs {
+	for output_image, i in p_render_pass_outputs {
 		image := &g_resources.images[image_get_idx(output_image.image_ref)]
 		render_pass.desc.layout.render_target_formats[i] = image.desc.format
 		render_pass.desc.layout.render_target_blend_types[i] = .Default
@@ -120,18 +108,8 @@ generic_pixel_job_create :: proc(
 
 	render_pass_create(render_pass_ref) or_return
 
-	// Create a bind group layout and bind group based on the input images and buffers
-	bind_group_ref, bind_group_layout_ref := create_bind_group_for_bindings(
-		p_name,
-		p_render_pass_bindings,
-		false,
-		false,
-		temp_arena.allocator,
-	)
-	if bind_group_ref == InvalidBindGroupRef {
-		return {}, false
-	}
-
+	bind_group_ref, bind_group_layout_ref := bind_group_create_for_bindings(p_name, p_bindings, false)
+	
 	// Create the draw command 
 	draw_command_ref := draw_command_allocate(p_name, 4, 0)
 	draw_command := &g_resources.draw_commands[draw_command_get_idx(draw_command_ref)]
@@ -164,194 +142,11 @@ generic_pixel_job_create :: proc(
 
 //---------------------------------------------------------------------------//
 
-@(private = "file")
-create_bind_group_for_bindings :: proc(
-	p_name: common.Name,
-	p_render_pass_bindings: RenderPassBindings,
-	p_is_compute: bool,
-	p_is_compute_render_target_pass: bool,
-	p_allocator: mem.Allocator,
-) -> (
-	BindGroupRef,
-	BindGroupLayoutRef,
-) {
-	assert(p_is_compute_render_target_pass == false || (p_is_compute_render_target_pass && p_is_compute))
-
-	shader_stage: ShaderStageFlags = {.Compute} if p_is_compute else {.Pixel}
-
-	bindings_count :=
-		u32(len(p_render_pass_bindings.image_inputs)) +
-		u32(len(p_render_pass_bindings.buffer_inputs)) +
-		u32(len(p_render_pass_bindings.buffer_outputs))
-
-	if p_is_compute_render_target_pass {
-		bindings_count += 1 // uniform buffer slot holding input texture size etc.
-		bindings_count += u32(len(p_render_pass_bindings.image_outputs)) // for pixel path, these are handled via attachments
-	}
-
-	// Create the layout
-	bind_group_layout_ref := bind_group_layout_allocate(p_name, bindings_count)
-	bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_get_idx(bind_group_layout_ref)]
-
-	binding_index := 0
-
-	// First entry for compute path contains the uniform buffer with the output texture size
-	if p_is_compute_render_target_pass {
-		bind_group_layout.desc.bindings[0].count = 1
-		bind_group_layout.desc.bindings[0].shader_stages = shader_stage
-		bind_group_layout.desc.bindings[0].type = .UniformBufferDynamic
-
-		binding_index += 1
-	}
-
-	for buffer_input in p_render_pass_bindings.buffer_inputs {
-		bind_group_layout.desc.bindings[binding_index].count = 1
-		bind_group_layout.desc.bindings[binding_index].shader_stages = shader_stage
-
-		switch buffer_input.usage {
-		case .Uniform:
-			bind_group_layout.desc.bindings[binding_index].type = .UniformBufferDynamic
-		case .General:
-			bind_group_layout.desc.bindings[binding_index].type = .StorageBuffer
-		}
-
-		binding_index += 1
-	}
-
-	for _ in p_render_pass_bindings.buffer_outputs {
-		bind_group_layout.desc.bindings[binding_index].count = 1
-		bind_group_layout.desc.bindings[binding_index].shader_stages = shader_stage
-		bind_group_layout.desc.bindings[binding_index].type = .StorageBuffer
-
-		binding_index += 1
-	}
-
-	for _ in p_render_pass_bindings.image_inputs {
-		bind_group_layout.desc.bindings[binding_index].count = 1
-		bind_group_layout.desc.bindings[binding_index].shader_stages = shader_stage
-		bind_group_layout.desc.bindings[binding_index].type = .Image
-
-		binding_index += 1
-	}
-
-	if p_is_compute {
-		for _ in p_render_pass_bindings.image_outputs {
-			bind_group_layout.desc.bindings[binding_index].count = 1
-			bind_group_layout.desc.bindings[binding_index].shader_stages = shader_stage
-			bind_group_layout.desc.bindings[binding_index].type = .StorageImage
-
-			binding_index += 1
-		}
-	}
-
-	if bind_group_layout_create(bind_group_layout_ref) == false {
-		bind_group_layout_destroy(bind_group_layout_ref)
-		return InvalidBindGroupRef, InvalidBindGroupLayoutRef
-	}
-
-	// Create bind group
-	bind_group_ref := bind_group_allocate(p_name)
-	bind_group := &g_resources.bind_groups[bind_group_get_idx(bind_group_ref)]
-
-	bind_group.desc.layout_ref = bind_group_layout_ref
-
-	if bind_group_create(bind_group_ref) == false {
-		bind_group_layout_destroy(bind_group_layout_ref)
-		return InvalidBindGroupRef, InvalidBindGroupLayoutRef
-	}
-
-	// Update the bind group
-	buffers_count := 1 if p_is_compute_render_target_pass else 0
-	buffers_count += len(p_render_pass_bindings.buffer_inputs)
-	buffers_count += (len(p_render_pass_bindings.buffer_outputs))
-
-	images_count := len(p_render_pass_bindings.image_outputs) if p_is_compute else 0
-	images_count += len(p_render_pass_bindings.image_inputs)
-
-	bind_group_update_info := BindGroupUpdate {
-		buffers = make([]BindGroupBufferBinding, buffers_count, p_allocator),
-		images  = make([]BindGroupImageBinding, images_count, p_allocator),
-	}
-
-	// Update the bind group with the images from the render tasks bindings
-	if p_is_compute_render_target_pass {
-		bind_group_update_info.buffers[0] = {
-			binding    = 0,
-			buffer_ref = g_uniform_buffers.transient_buffer.buffer_ref,
-			size       = size_of(GenericComputeJobUniformData),
-		}
-	}
-
-	binding_index = 1 if p_is_compute_render_target_pass else 0
-
-	for input_buffer in p_render_pass_bindings.buffer_inputs {
-		bind_group_update_info.buffers[binding_index] = BindGroupBufferBinding {
-			binding    = u32(binding_index),
-			buffer_ref = input_buffer.buffer_ref,
-			// The offset is expected to be updated dynamically
-			offset     = 0 if input_buffer.usage == .Uniform else input_buffer.offset,
-			size       = input_buffer.size,
-		}
-		binding_index += 1
-	}
-
-	for output_buffer in p_render_pass_bindings.buffer_outputs {
-		bind_group_update_info.buffers[binding_index] = BindGroupBufferBinding {
-			binding    = u32(binding_index),
-			buffer_ref = output_buffer.buffer_ref,
-			offset     = output_buffer.offset,
-			size       = output_buffer.size,
-		}
-		binding_index += 1
-	}
-
-	for input_image, i in p_render_pass_bindings.image_inputs {
-		bind_group_update_info.images[i] = BindGroupImageBinding {
-			binding     = u32(binding_index),
-			image_ref   = input_image.image_ref,
-			base_mip    = input_image.base_mip,
-			base_array  = input_image.base_array_layer,
-			mip_count   = input_image.mip_count,
-			layer_count = input_image.array_layer_count,
-		}
-
-		if input_image.base_mip > 0 || input_image.base_array_layer > 0 {
-			bind_group_update_info.images[i].flags += {.AddressSubresource}
-		}
-
-		binding_index += 1
-	}
-
-	num_input_images := len(p_render_pass_bindings.image_inputs)
-
-	if p_is_compute {
-		for output_image, i in p_render_pass_bindings.image_outputs {
-			bind_group_update_info.images[num_input_images + i] = BindGroupImageBinding {
-				binding     = u32(binding_index),
-				image_ref   = output_image.image_ref,
-				base_mip    = output_image.mip,
-				base_array  = output_image.array_layer,
-				mip_count   = 1,
-				layer_count = 1,
-				flags       = {.AddressSubresource},
-			}
-
-			binding_index += 1
-		}
-	}
-
-	bind_group_update(bind_group_ref, bind_group_update_info)
-
-	return bind_group_ref, bind_group_layout_ref
-}
-
-//---------------------------------------------------------------------------//
-
 @(private)
 generic_compute_job_destroy :: proc(p_job: GenericComputeJob) {
 	compute_command_destroy(p_job.compute_command_ref)
-	bind_group_destroy(p_job.bind_group_ref)
 	bind_group_layout_destroy(p_job.bind_group_layout_ref)
+	bind_group_destroy(p_job.bind_group_ref)
 }
 
 //---------------------------------------------------------------------------//

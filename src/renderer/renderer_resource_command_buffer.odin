@@ -80,7 +80,7 @@ command_buffer_allocate :: proc(p_name: common.Name) -> CommandBufferRef {
 //---------------------------------------------------------------------------//
 
 command_buffer_create :: #force_inline proc(p_ref: CommandBufferRef) -> bool {
-	if backcommand_buffer_end_create(p_ref) == false {
+	if backend_command_buffer_create(p_ref) == false {
 		common.ref_free(&G_COMMAND_BUFFER_REF_ARRAY, p_ref)
 		return false
 	}

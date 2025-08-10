@@ -18,11 +18,12 @@ THREAD_GROUP_SIZE :: glsl.uvec2{8, 8}
 
 @(private = "file")
 FullScreenRenderTaskData :: struct {
-	compute_job:          GenericComputeJob,
-	pixel_job:            GenericPixelJob,
-	resolution:           Resolution,
-	render_pass_bindings: RenderPassBindings,
-	is_using_compute:     bool,
+	compute_job:         GenericComputeJob,
+	pixel_job:           GenericPixelJob,
+	resolution:          Resolution,
+	bindings:            []Binding,
+	render_pass_outputs: []RenderPassOutput,
+	is_using_compute:    bool,
 }
 
 //---------------------------------------------------------------------------//
@@ -78,16 +79,7 @@ create_instance :: proc(
 	)
 	defer if res == false {
 		free(fullscreen_render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
-		render_pass_destroy_bindings(fullscreen_render_task_data.render_pass_bindings)
 	}
-
-	//  Setup render task bindings
-	render_task_setup_render_pass_bindings(
-		p_render_task_config,
-		&fullscreen_render_task_data.render_pass_bindings,
-		nil,
-		{ size_of(f32) * 3},
-	)
 
 	fullscreen_render_task_data.resolution = G_RESOLUTION_NAME_MAPPING[resolution_name]
 	fullscreen_render_task_data.is_using_compute = strings.has_suffix(shader_name, ".comp")
@@ -99,11 +91,17 @@ create_instance :: proc(
 	defer common.arena_delete(temp_arena)
 
 	if fullscreen_render_task_data.is_using_compute {
+
+		fullscreen_render_task_data.bindings = render_task_config_parse_bindings(
+			p_render_task_config,
+			true,
+			{size_of(GenericComputeJobUniformData)},
+		) or_return
+
 		compute_job, success := generic_compute_job_create(
 			render_task_name,
 			shader_ref,
-			fullscreen_render_task_data.render_pass_bindings,
-			true,
+			fullscreen_render_task_data.bindings,
 		)
 		if success == false {
 			log.errorf(
@@ -114,10 +112,23 @@ create_instance :: proc(
 		}
 		fullscreen_render_task_data.compute_job = compute_job
 	} else {
+
+		fullscreen_render_task_data.bindings = render_task_config_parse_bindings(
+			p_render_task_config,
+			false,
+			{size_of(GenericComputeJobUniformData)},
+		) or_return
+
+		fullscreen_render_task_data.render_pass_outputs = parse_output_images(
+			p_render_task_config,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
+
 		pixel_job, success := generic_pixel_job_create(
 			render_task_name,
 			shader_ref,
-			fullscreen_render_task_data.render_pass_bindings,
+			fullscreen_render_task_data.bindings,
+			fullscreen_render_task_data.render_pass_outputs,
 			resolve_resolution(fullscreen_render_task_data.resolution),
 		)
 		if success == false {
@@ -146,7 +157,11 @@ destroy_instance :: proc(p_render_task_ref: RenderTaskRef) {
 		generic_pixel_job_destroy(fullscreen_render_task_data.pixel_job)
 	}
 
-	render_pass_destroy_bindings(fullscreen_render_task_data.render_pass_bindings)
+	delete(fullscreen_render_task_data.bindings, G_RENDERER_ALLOCATORS.resource_allocator)
+	delete(
+		fullscreen_render_task_data.render_pass_outputs,
+		G_RENDERER_ALLOCATORS.resource_allocator,
+	)
 
 	free(fullscreen_render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
 }
@@ -179,8 +194,8 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 	}
 
 	// Perform resource transitions
-	transition_render_pass_resources(
-		fullscreen_render_task_data.render_pass_bindings,
+	transition_binding_resources(
+		fullscreen_render_task_data.bindings,
 		.Compute if fullscreen_render_task_data.is_using_compute else .Graphics,
 	)
 
@@ -212,7 +227,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 
 	render_task_render_pass_begin(
 		fullscreen_render_task_data.pixel_job.render_pass_ref,
-		fullscreen_render_task_data.render_pass_bindings,
+		fullscreen_render_task_data.render_pass_outputs,
 	)
 
 	draw_command_execute(

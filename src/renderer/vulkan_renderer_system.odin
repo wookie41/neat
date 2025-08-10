@@ -62,6 +62,7 @@ when USE_VULKAN_BACKEND {
 		render_finished_semaphores:    [dynamic]vk.Semaphore,
 		image_available_semaphores:    [dynamic]vk.Semaphore,
 		frame_fences:                  [dynamic]vk.Fence,
+		present_fences:                [dynamic]vk.Fence,
 		vma_allocator:                 vma.Allocator,
 		misc_flags:                    BackendMiscFlags,
 		swap_img_idx:                  u32,
@@ -81,6 +82,7 @@ when USE_VULKAN_BACKEND {
 			{name = vk.KHR_SWAPCHAIN_EXTENSION_NAME, required = true},
 			{name = vk.KHR_MAINTENANCE1_EXTENSION_NAME, required = true},
 			{name = vk.KHR_MAINTENANCE3_EXTENSION_NAME, required = true},
+			{name = vk.KHR_MAINTENANCE_5_EXTENSION_NAME, required = true},
 			{name = vk.EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, required = true},
 			{name = vk.EXT_DEBUG_MARKER_EXTENSION_NAME, required = false},
 		}
@@ -489,9 +491,27 @@ when USE_VULKAN_BACKEND {
 			device_features.samplerAnisotropy = true
 			device_features.depthClamp = true
 
+			maintenance5 := vk.PhysicalDeviceMaintenance5FeaturesKHR {
+				sType                 = .PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR,
+				maintenance5 = true,
+			}
+
+			swapchain_maintenance1 := vk.PhysicalDeviceSwapchainMaintenance1FeaturesEXT {
+				sType                 = .PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT,
+				swapchainMaintenance1 = true,
+				pNext                 = &maintenance5,
+			}
+
+			synchronization2_features := vk.PhysicalDeviceSynchronization2Features {
+				sType            = .PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
+				synchronization2 = true,
+				pNext            = &swapchain_maintenance1,
+			}
+
 			robustness2_features := vk.PhysicalDeviceRobustness2FeaturesEXT {
 				sType          = .PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
 				nullDescriptor = true,
+				pNext          = &synchronization2_features,
 			}
 
 			dynamic_rendering_fratures := vk.PhysicalDeviceDynamicRenderingFeatures {
@@ -588,6 +608,7 @@ when USE_VULKAN_BACKEND {
 		vma.destroy_allocator(vma_allocator)
 		for i in 0 ..< num_frames_in_flight {
 			vk.DestroyFence(device, frame_fences[i], nil)
+			vk.DestroyFence(device, present_fences[i], nil)
 			vk.DestroySemaphore(device, render_finished_semaphores[i], nil)
 			vk.DestroySemaphore(device, image_available_semaphores[i], nil)
 		}
@@ -618,7 +639,18 @@ when USE_VULKAN_BACKEND {
 backend_wait_for_frame_resources :: proc() {
 	frame_idx := get_frame_idx()
 
-	vk.WaitForFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx], true, max(u64))
+	wait_fences := []vk.Fence {
+		G_RENDERER.frame_fences[frame_idx],
+		G_RENDERER.present_fences[frame_idx],
+	}
+
+	vk.WaitForFences(
+		G_RENDERER.device,
+		u32(len(wait_fences)),
+		raw_data(wait_fences),
+		true,
+		max(u64),
+	)
 
 	if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 		backend_wait_for_transfer_resources()
@@ -651,6 +683,8 @@ backend_post_render :: proc() {
 		},
 	}
 
+	swap_image.vk_layouts[0][0] = to_present_barrier.newLayout
+
 	vk.CmdPipelineBarrier(
 		backend_cmd_buff.vk_cmd_buff,
 		{.COLOR_ATTACHMENT_OUTPUT},
@@ -674,7 +708,11 @@ backend_submit_current_frame :: proc() {
 
 	// Submit
 	{
-		vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[get_frame_idx()])
+		reset_fences := []vk.Fence {
+			G_RENDERER.frame_fences[get_frame_idx()],
+			G_RENDERER.present_fences[get_frame_idx()],
+		}
+		vk.ResetFences(G_RENDERER.device, u32(len(reset_fences)), raw_data(reset_fences))
 
 		submit_info := vk.SubmitInfo {
 			sType                = .SUBMIT_INFO,
@@ -697,6 +735,12 @@ backend_submit_current_frame :: proc() {
 
 	// Present
 	{
+		swapchain_present_fence_info := vk.SwapchainPresentFenceInfoEXT {
+			sType          = .SWAPCHAIN_PRESENT_FENCE_INFO_EXT,
+			pFences        = &G_RENDERER.present_fences[get_frame_idx()],
+			swapchainCount = 1,
+		}
+
 		present_info := vk.PresentInfoKHR {
 			sType              = .PRESENT_INFO_KHR,
 			waitSemaphoreCount = 1,
@@ -704,6 +748,7 @@ backend_submit_current_frame :: proc() {
 			swapchainCount     = 1,
 			pSwapchains        = &G_RENDERER.swapchain,
 			pImageIndices      = &G_RENDERER.swap_img_idx,
+			pNext              = &swapchain_present_fence_info,
 		}
 
 		vk.QueuePresentKHR(G_RENDERER.present_queue, &present_info)
@@ -868,6 +913,7 @@ create_synchronization_primitives :: proc() {
 	resize(&image_available_semaphores, int(num_frames_in_flight))
 
 	resize(&frame_fences, int(num_frames_in_flight))
+	resize(&present_fences, int(num_frames_in_flight))
 
 	fence_create_info := vk.FenceCreateInfo {
 		sType = .FENCE_CREATE_INFO,
@@ -880,6 +926,7 @@ create_synchronization_primitives :: proc() {
 
 	for i in 0 ..< num_frames_in_flight {
 		vk.CreateFence(device, &fence_create_info, nil, &frame_fences[i])
+		vk.CreateFence(device, &fence_create_info, nil, &present_fences[i])
 		vk.CreateSemaphore(device, &semaphore_create_info, nil, &render_finished_semaphores[i])
 		vk.CreateSemaphore(device, &semaphore_create_info, nil, &image_available_semaphores[i])
 	}
@@ -928,8 +975,13 @@ recreate_swapchain :: proc() {
 	clear(&swapchain_images)
 	clear(&swapchain_image_views)
 
-	// @TODO Make it better, use pOldSwapchain when recreating the swapchain 
-	vk.DeviceWaitIdle(device)
+	vk.WaitForFences(
+		G_RENDERER.device,
+		1,
+		&G_RENDERER.present_fences[get_frame_idx()],
+		true,
+		max(u64),
+	)
 
 	for image_view in swapchain_image_views {
 		vk.DestroyImageView(device, image_view, nil)
@@ -937,6 +989,7 @@ recreate_swapchain :: proc() {
 
 	for _, i in frame_fences {
 		vk.DestroyFence(device, frame_fences[i], nil)
+		vk.DestroyFence(device, present_fences[i], nil)
 		vk.DestroySemaphore(device, render_finished_semaphores[i], nil)
 		vk.DestroySemaphore(device, image_available_semaphores[i], nil)
 	}
@@ -965,7 +1018,6 @@ backend_begin_frame :: proc() {
 
 	frame_idx := get_frame_idx()
 
-	// Wait until frame resources will not be used anymore
 	// @TODO Move this after recording the command buffer to save some performance
 	acquire_result := vk.AcquireNextImageKHR(
 		G_RENDERER.device,
@@ -999,6 +1051,7 @@ backend_begin_frame :: proc() {
 		)
 
 		vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.frame_fences[frame_idx])
+		vk.ResetFences(G_RENDERER.device, 1, &G_RENDERER.present_fences[frame_idx])
 
 		return
 	}
