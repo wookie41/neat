@@ -124,7 +124,7 @@ mesh_instance_send_transform_data :: proc() {
 				data_ptr = &mesh_instance.model_matrix,
 			}
 
-			buffer_upload_response := request_buffer_upload(buffer_upload_request)
+			buffer_upload_response := buffer_upload_request_upload(buffer_upload_request)
 			if buffer_upload_response.status == .Uploaded {
 				mesh_instance.flags -= {.MeshInstanceDataDirty}
 			}

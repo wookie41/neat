@@ -382,7 +382,7 @@ render_instanced_mesh_job_run :: proc(
 		size_of(MeshInstancedDrawInfo) * len(mesh_instanced_draws_infos),
 	)
 
-	upload_response := request_buffer_upload(
+	upload_response := buffer_upload_request_upload(
 		BufferUploadRequest {
 			dst_buff = p_job_data.instance_info_buffer_ref,
 			dst_buff_offset = mesh_instance_data_offset,

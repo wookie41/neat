@@ -101,7 +101,7 @@ AsyncUploadInfo :: struct {
 
 
 @(private)
-init_buffer_upload :: proc(p_options: BufferUploadInitOptions) -> bool {
+buffer_upload_init :: proc(p_options: BufferUploadInitOptions) -> bool {
 
 	if .IntegratedGPU in G_RENDERER.gpu_device_flags {
 		// On integrated GPUs we can leverage the fact, the we're sharing memory
@@ -159,7 +159,7 @@ init_buffer_upload :: proc(p_options: BufferUploadInitOptions) -> bool {
 	}
 
 
-	return backend_init_buffer_upload(p_options)
+	return backend_buffer_upload_init(p_options)
 }
 
 //---------------------------------------------------------------------------//
@@ -174,7 +174,7 @@ buffer_upload_begin_frame :: proc() {
 
 // Used to check if a request of a given size will fit into the buffer
 @(private)
-dry_request_buffer_upload :: proc(p_buffer_ref: BufferRef, p_size: u32) -> bool {
+buffer_upload_check_if_fits :: proc(p_buffer_ref: BufferRef, p_size: u32) -> bool {
 	if .IntegratedGPU in G_RENDERER.gpu_device_flags {
 		buffer := &g_resources.buffers[get_buffer_idx(p_buffer_ref)]
 		return p_size <= buffer.desc.size
@@ -184,13 +184,13 @@ dry_request_buffer_upload :: proc(p_buffer_ref: BufferRef, p_size: u32) -> bool 
 
 //---------------------------------------------------------------------------//
 
-request_buffer_upload :: proc(p_request: BufferUploadRequest) -> BufferUploadResponse {
+buffer_upload_request_upload :: proc(p_request: BufferUploadRequest) -> BufferUploadResponse {
 
 	assert(p_request.size > 0)
 
 	// On integrated GPUs we can just copy the data directly to the GPU memory, without any staging buffers
 	if .IntegratedGPU in G_RENDERER.gpu_device_flags {
-		return request_buffer_upload_integrated(p_request)
+		return buffer_upload_request_upload_integrated(p_request)
 	}
 
 	// Slice the upload accross multiple frames
@@ -229,7 +229,7 @@ request_buffer_upload :: proc(p_request: BufferUploadRequest) -> BufferUploadRes
 	
 	// When this request has to run synchronously,  make sure we have 
 	// enough space in the staging buffer to run it at once
-	if dry_request_buffer_upload(p_request.dst_buff, p_request.size) == false {
+	if buffer_upload_check_if_fits(p_request.dst_buff, p_request.size) == false {
 		return BufferUploadResponse{status = .Failed}
 	}
 
@@ -243,7 +243,7 @@ request_buffer_upload :: proc(p_request: BufferUploadRequest) -> BufferUploadRes
 //---------------------------------------------------------------------------//
 
 @(private)
-run_last_frame_buffer_upload_requests :: proc() {
+buffer_upload_run_last_frame_requests :: proc() {
 
 	last_frame_requests_per_buffer := make_map(
 		map[BufferRef][dynamic]BufferUploadRequest,
@@ -267,7 +267,7 @@ run_last_frame_buffer_upload_requests :: proc() {
 		for request in pending_requests {
 
 			// Delay the request to the next frame if the staging buffer is full
-			if dry_request_buffer_upload(request.dst_buff, request.size) == false {
+			if buffer_upload_check_if_fits(request.dst_buff, request.size) == false {
 				append(&not_satisfied_requests, request)
 				continue
 			}
@@ -330,7 +330,7 @@ buffer_upload_send_data :: proc(p_request: BufferUploadRequest) -> PendingBuffer
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-request_buffer_upload_integrated :: proc(p_request: BufferUploadRequest) -> BufferUploadResponse {
+buffer_upload_request_upload_integrated :: proc(p_request: BufferUploadRequest) -> BufferUploadResponse {
 	buffer := &g_resources.buffers[get_buffer_idx(p_request.dst_buff)]
 	dst_ptr := mem.ptr_offset(buffer.mapped_ptr, p_request.dst_buff_offset)
 	mem.copy(dst_ptr, p_request.data_ptr, int(p_request.size))

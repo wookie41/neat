@@ -131,7 +131,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_init_buffer_upload :: proc(p_options: BufferUploadInitOptions) -> bool {
+	backend_buffer_upload_init :: proc(p_options: BufferUploadInitOptions) -> bool {
 		G_RENDERER.transfer_fences_pre_graphics = make(
 			[]vk.Fence,
 			G_RENDERER.num_frames_in_flight,

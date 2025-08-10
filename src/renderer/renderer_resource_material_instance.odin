@@ -95,7 +95,7 @@ material_instance_update_dirty_data :: proc(p_material_instance_ref: MaterialIns
 	material_instance_data_offset := size_of(MaterialProperties) * material_instance_idx
 
 	// If material instance data is dirty, we need to issue a copy to the GPU
-	request_buffer_upload(
+	buffer_upload_request_upload(
 		BufferUploadRequest {
 			dst_buff = g_renderer_buffers.material_instances_buffer_ref,
 			dst_buff_offset = material_instance_data_offset,

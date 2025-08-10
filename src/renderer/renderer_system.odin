@@ -284,7 +284,7 @@ init :: proc(p_options: InitOptions) -> bool {
 			staging_buffer_size       = 8 * common.MEGABYTE,
 			staging_async_buffer_size = 8 * common.MEGABYTE,
 		}
-		init_buffer_upload(buffer_upload_options) or_return
+		buffer_upload_init(buffer_upload_options) or_return
 	}
 
 	// Init deferred resource deletion
@@ -576,7 +576,7 @@ update :: proc(p_dt: f32) {
 	image_upload_begin_frame()
 	buffer_upload_begin_frame()
 
-	run_last_frame_buffer_upload_requests()
+	buffer_upload_run_last_frame_requests()
 	batch_update_bindless_array_entries()
 	buffer_upload_process_async_requests()
 	image_upload_progress_copies()

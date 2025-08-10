@@ -233,7 +233,7 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 			async_upload_finished_callback = mesh_upload_finished_callback,
 		}
 
-		request_buffer_upload(index_buffer_upload_request)
+		buffer_upload_request_upload(index_buffer_upload_request)
 		mesh.data_upload_context.needed_uploads_count += 1
 
 		mesh.index_buffer_allocation = index_allocation
@@ -258,7 +258,7 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 			async_upload_finished_callback = mesh_upload_finished_callback,
 		}
 
-		request_buffer_upload(positions_upload_request)
+		buffer_upload_request_upload(positions_upload_request)
 		mesh.data_upload_context.needed_uploads_count += 1
 
 		if .UV in mesh.desc.features {
@@ -274,7 +274,7 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 				async_upload_callback_user_data = &mesh.data_upload_context,
 				async_upload_finished_callback = mesh_upload_finished_callback,
 			}
-			request_buffer_upload(uvs_upload_request)
+			buffer_upload_request_upload(uvs_upload_request)
 			mesh.data_upload_context.needed_uploads_count += 1
 		}
 
@@ -291,7 +291,7 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 				async_upload_callback_user_data = &mesh.data_upload_context,
 				async_upload_finished_callback = mesh_upload_finished_callback,
 			}
-			request_buffer_upload(normals_upload_request)
+			buffer_upload_request_upload(normals_upload_request)
 			mesh.data_upload_context.needed_uploads_count += 1
 		}
 
@@ -308,7 +308,7 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 				async_upload_callback_user_data = &mesh.data_upload_context,
 				async_upload_finished_callback = mesh_upload_finished_callback,
 			}
-			request_buffer_upload(tangents_upload_request)
+			buffer_upload_request_upload(tangents_upload_request)
 			mesh.data_upload_context.needed_uploads_count += 1
 		}
 		
