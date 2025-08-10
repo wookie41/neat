@@ -267,8 +267,8 @@ init :: proc(p_options: InitOptions) -> bool {
 	init_shaders() or_return
 	init_render_passes() or_return
 	pipelines_init() or_return
-	init_bind_group_layouts()
-	init_bind_groups()
+	bind_group_layout_init()
+	bind_group_init()
 	init_buffers()
 	init_meshes()
 	init_images() or_return
@@ -336,12 +336,12 @@ init :: proc(p_options: InitOptions) -> bool {
 	// Create bind group layout for uniforms
 	{
 		// Bind group layout creation
-		G_RENDERER.uniforms_bind_group_layout_ref = allocate_bind_group_layout_ref(
+		G_RENDERER.uniforms_bind_group_layout_ref = bind_group_layout_allocate(
 			common.create_name("Uniforms"),
 			2,
 		)
 
-		bind_group_layout_idx := get_bind_group_layout_idx(
+		bind_group_layout_idx := bind_group_layout_get_idx(
 			G_RENDERER.uniforms_bind_group_layout_ref,
 		)
 		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_idx]
@@ -360,21 +360,21 @@ init :: proc(p_options: InitOptions) -> bool {
 			type          = .UniformBufferDynamic,
 		}
 
-		if create_bind_group_layout(G_RENDERER.uniforms_bind_group_layout_ref) == false {
+		if bind_group_layout_create(G_RENDERER.uniforms_bind_group_layout_ref) == false {
 			log.error("Failed to create the global uniforms bind group layout")
 			return false
 		}
 
 		// Now create the bind group based on this layout
-		G_RENDERER.uniforms_bind_group_ref = allocate_bind_group_ref(
+		G_RENDERER.uniforms_bind_group_ref = bind_group_allocate(
 			common.create_name("Uniforms"),
 		)
 
-		bind_group_idx := get_bind_group_idx(G_RENDERER.uniforms_bind_group_ref)
+		bind_group_idx := bind_group_get_idx(G_RENDERER.uniforms_bind_group_ref)
 		bind_group := &g_resources.bind_groups[bind_group_idx]
 		bind_group.desc.layout_ref = G_RENDERER.uniforms_bind_group_layout_ref
 
-		if create_bind_group(G_RENDERER.uniforms_bind_group_ref) == false {
+		if bind_group_create(G_RENDERER.uniforms_bind_group_ref) == false {
 			log.error("Failed to create the uniforms bind group")
 			return false
 		}
@@ -382,12 +382,12 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	// Create the bind group layout for global resources
 	{
-		G_RENDERER.globals_bind_group_layout_ref = allocate_bind_group_layout_ref(
+		G_RENDERER.globals_bind_group_layout_ref = bind_group_layout_allocate(
 			common.create_name("Globals"),
 			len(GlobalResourceSlot),
 		)
 
-		bind_group_layout_idx := get_bind_group_layout_idx(
+		bind_group_layout_idx := bind_group_layout_get_idx(
 			G_RENDERER.globals_bind_group_layout_ref,
 		)
 		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_idx]
@@ -414,18 +414,18 @@ init :: proc(p_options: InitOptions) -> bool {
 			type          = .StorageBuffer,
 		}
 
-		if create_bind_group_layout(G_RENDERER.globals_bind_group_layout_ref) == false {
+		if bind_group_layout_create(G_RENDERER.globals_bind_group_layout_ref) == false {
 			log.error("Failed to create the bindless resources bind group layout")
 			return false
 		}
 
-		G_RENDERER.globals_bind_group_ref = allocate_bind_group_ref(common.create_name("Globals"))
+		G_RENDERER.globals_bind_group_ref = bind_group_allocate(common.create_name("Globals"))
 
-		bind_group_idx := get_bind_group_idx(G_RENDERER.globals_bind_group_ref)
+		bind_group_idx := bind_group_get_idx(G_RENDERER.globals_bind_group_ref)
 		bind_group := &g_resources.bind_groups[bind_group_idx]
 		bind_group.desc.layout_ref = G_RENDERER.globals_bind_group_layout_ref
 
-		if create_bind_group(G_RENDERER.globals_bind_group_ref) == false {
+		if bind_group_create(G_RENDERER.globals_bind_group_ref) == false {
 			log.error("Failed to create the global resources bind group")
 			return false
 		}
@@ -433,12 +433,12 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	// Create the bind group layout for bindless resources
 	{
-		G_RENDERER.bindless_bind_group_layout_ref = allocate_bind_group_layout_ref(
+		G_RENDERER.bindless_bind_group_layout_ref = bind_group_layout_allocate(
 			common.create_name("Bindless"),
 			len(BindlessResourceSlot) + len(SamplerType),
 		)
 
-		bind_group_layout_idx := get_bind_group_layout_idx(
+		bind_group_layout_idx := bind_group_layout_get_idx(
 			G_RENDERER.bindless_bind_group_layout_ref,
 		)
 		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_idx]
@@ -467,20 +467,20 @@ init :: proc(p_options: InitOptions) -> bool {
 				}
 		}
 
-		if create_bind_group_layout(G_RENDERER.bindless_bind_group_layout_ref) == false {
+		if bind_group_layout_create(G_RENDERER.bindless_bind_group_layout_ref) == false {
 			log.error("Failed to create the bindless resources bind group layout")
 			return false
 		}
 
-		G_RENDERER.bindless_bind_group_ref = allocate_bind_group_ref(
+		G_RENDERER.bindless_bind_group_ref = bind_group_allocate(
 			common.create_name("Bindless"),
 		)
 
-		bind_group_idx := get_bind_group_idx(G_RENDERER.bindless_bind_group_ref)
+		bind_group_idx := bind_group_get_idx(G_RENDERER.bindless_bind_group_ref)
 		bind_group := &g_resources.bind_groups[bind_group_idx]
 		bind_group.desc.layout_ref = G_RENDERER.bindless_bind_group_layout_ref
 
-		if create_bind_group(G_RENDERER.bindless_bind_group_ref) == false {
+		if bind_group_create(G_RENDERER.bindless_bind_group_ref) == false {
 			log.error("Failed to create the bindless group")
 			return false
 		}

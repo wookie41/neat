@@ -113,7 +113,7 @@ render_task_common_init :: proc(
 			continue
 		}
 
-		render_mesh_bind_group := &g_resources.bind_groups[get_bind_group_idx(p_bind_group_ref)]
+		render_mesh_bind_group := &g_resources.bind_groups[bind_group_get_idx(p_bind_group_ref)]
 		if material_pass_compile_for_type(
 			   material_pass_ref,
 			   material_pass_type,

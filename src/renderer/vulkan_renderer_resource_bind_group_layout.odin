@@ -149,7 +149,7 @@ when USE_VULKAN_BACKEND {
 		common.temp_arena_init(&temp_arena)
 		defer common.arena_delete(temp_arena)
 
-		bind_group_layout_idx := get_bind_group_layout_idx(p_bind_group_layout_ref)
+		bind_group_layout_idx := bind_group_layout_get_idx(p_bind_group_layout_ref)
 		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_idx]
 		backend_bind_group_layout := &g_resources.backend_bind_group_layouts[bind_group_layout_idx]
 
@@ -270,7 +270,7 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_destroy_bind_group_layout :: proc(p_bind_group_ref: BindGroupLayoutRef) {
-		bind_group_idx := get_bind_group_layout_idx(p_bind_group_ref)
+		bind_group_idx := bind_group_layout_get_idx(p_bind_group_ref)
 		bind_group_layout := &g_resources.bind_group_layouts[bind_group_idx]
 		backend_bind_group_layout := &g_resources.backend_bind_group_layouts[bind_group_idx]
 

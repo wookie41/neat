@@ -757,7 +757,7 @@ when USE_VULKAN_BACKEND {
 			return
 		}
 
-		bindless_bind_group_idx := get_bind_group_idx(G_RENDERER.bindless_bind_group_ref)
+		bindless_bind_group_idx := bind_group_get_idx(G_RENDERER.bindless_bind_group_ref)
 		bindless_bind_group := &g_resources.backend_bind_groups[bindless_bind_group_idx]
 
 		descriptor_writes := make([]vk.WriteDescriptorSet, u32(num_writes), temp_arena.allocator)
@@ -1071,7 +1071,7 @@ when USE_VULKAN_BACKEND {
 		}
 
 		// Update the bindless array
-		bindless_bind_group_idx := get_bind_group_idx(G_RENDERER.bindless_bind_group_ref)
+		bindless_bind_group_idx := bind_group_get_idx(G_RENDERER.bindless_bind_group_ref)
 		bindless_bind_group := &g_resources.backend_bind_groups[bindless_bind_group_idx]
 
 		descriptor_writes := make(

@@ -81,7 +81,7 @@ BindGroupsWithOffsets :: struct {
 //---------------------------------------------------------------------------//
 
 @(private)
-init_bind_groups :: proc() {
+bind_group_init :: proc() {
 	G_BIND_GROUP_REF_ARRAY = common.ref_array_create(
 		BindGroupResource,
 		MAX_BIND_GROUPS,
@@ -103,16 +103,16 @@ init_bind_groups :: proc() {
 
 //---------------------------------------------------------------------------//
 
-allocate_bind_group_ref :: proc(p_name: common.Name) -> BindGroupRef {
+bind_group_allocate :: proc(p_name: common.Name) -> BindGroupRef {
 	ref := BindGroupRef(common.ref_create(BindGroupResource, &G_BIND_GROUP_REF_ARRAY, p_name))
-	bind_group := &g_resources.bind_groups[get_bind_group_idx(ref)]
+	bind_group := &g_resources.bind_groups[bind_group_get_idx(ref)]
 	bind_group.desc.name = p_name
 	return ref
 }
 
 //---------------------------------------------------------------------------//
 
-create_bind_group :: proc(p_bind_group_ref: BindGroupRef) -> bool {
+bind_group_create :: proc(p_bind_group_ref: BindGroupRef) -> bool {
 	backend_create_bind_group(p_bind_group_ref) or_return
 	return true
 }
@@ -125,13 +125,13 @@ bind_group_update :: proc(p_bind_group_ref: BindGroupRef, p_bind_group_update: B
 
 //---------------------------------------------------------------------------//
 
-get_bind_group_idx :: #force_inline proc(p_ref: BindGroupRef) -> u32 {
+bind_group_get_idx :: #force_inline proc(p_ref: BindGroupRef) -> u32 {
 	return common.ref_get_idx(&G_BIND_GROUP_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//
 
-destroy_bind_group :: proc(p_ref: BindGroupRef) {
+bind_group_destroy :: proc(p_ref: BindGroupRef) {
 	backend_destroy_bind_group(p_ref)
 	common.ref_free(&G_BIND_GROUP_REF_ARRAY, p_ref)
 }

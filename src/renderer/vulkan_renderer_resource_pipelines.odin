@@ -562,7 +562,7 @@ when USE_VULKAN_BACKEND {
 				continue
 			}
 
-			bind_group_layout_idx := get_bind_group_layout_idx(bind_group_layout_ref)
+			bind_group_layout_idx := bind_group_layout_get_idx(bind_group_layout_ref)
 			descriptor_set_layouts[i] =
 				g_resources.backend_bind_group_layouts[bind_group_layout_idx].vk_descriptor_set_layout
 		}

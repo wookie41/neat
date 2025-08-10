@@ -65,12 +65,12 @@ render_instanced_mesh_job_init :: proc() -> bool {
 
 	// Create a bind group layout for task
 	{
-		INTERNAL.job_bind_group_layout = allocate_bind_group_layout_ref(
+		INTERNAL.job_bind_group_layout = bind_group_layout_allocate(
 			common.create_name("RenderInstancedMesh"),
 			2,
 		)
 
-		bind_group_layout := &g_resources.bind_group_layouts[get_bind_group_layout_idx(INTERNAL.job_bind_group_layout)]
+		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_get_idx(INTERNAL.job_bind_group_layout)]
 
 		// Custom uniform data
 		bind_group_layout.desc.bindings[0] = {
@@ -86,7 +86,7 @@ render_instanced_mesh_job_init :: proc() -> bool {
 			type          = .StorageBufferDynamic,
 		}
 
-		create_bind_group_layout(INTERNAL.job_bind_group_layout) or_return
+		bind_group_layout_create(INTERNAL.job_bind_group_layout) or_return
 	}
 
 	return true
@@ -140,12 +140,12 @@ render_instanced_mesh_job_create :: proc(
 	}
 
 	// Create the bind group
-	mesh_job.bind_group_ref = allocate_bind_group_ref(common.create_name("RenderInstancedMesh"))
+	mesh_job.bind_group_ref = bind_group_allocate(common.create_name("RenderInstancedMesh"))
 	{
-		bind_group := &g_resources.bind_groups[get_bind_group_idx(mesh_job.bind_group_ref)]
+		bind_group := &g_resources.bind_groups[bind_group_get_idx(mesh_job.bind_group_ref)]
 		bind_group.desc.layout_ref = INTERNAL.job_bind_group_layout
 
-		if create_bind_group(mesh_job.bind_group_ref) == false {
+		if bind_group_create(mesh_job.bind_group_ref) == false {
 			return {}, false
 		}
 	}

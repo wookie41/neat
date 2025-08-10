@@ -190,8 +190,8 @@ create_bind_group_for_bindings :: proc(
 	}
 
 	// Create the layout
-	bind_group_layout_ref := allocate_bind_group_layout_ref(p_name, bindings_count)
-	bind_group_layout := &g_resources.bind_group_layouts[get_bind_group_layout_idx(bind_group_layout_ref)]
+	bind_group_layout_ref := bind_group_layout_allocate(p_name, bindings_count)
+	bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_get_idx(bind_group_layout_ref)]
 
 	binding_index := 0
 
@@ -244,19 +244,19 @@ create_bind_group_for_bindings :: proc(
 		}
 	}
 
-	if create_bind_group_layout(bind_group_layout_ref) == false {
-		destroy_bind_group_layout(bind_group_layout_ref)
+	if bind_group_layout_create(bind_group_layout_ref) == false {
+		bind_group_layout_destroy(bind_group_layout_ref)
 		return InvalidBindGroupRef, InvalidBindGroupLayoutRef
 	}
 
 	// Create bind group
-	bind_group_ref := allocate_bind_group_ref(p_name)
-	bind_group := &g_resources.bind_groups[get_bind_group_idx(bind_group_ref)]
+	bind_group_ref := bind_group_allocate(p_name)
+	bind_group := &g_resources.bind_groups[bind_group_get_idx(bind_group_ref)]
 
 	bind_group.desc.layout_ref = bind_group_layout_ref
 
-	if create_bind_group(bind_group_ref) == false {
-		destroy_bind_group_layout(bind_group_layout_ref)
+	if bind_group_create(bind_group_ref) == false {
+		bind_group_layout_destroy(bind_group_layout_ref)
 		return InvalidBindGroupRef, InvalidBindGroupLayoutRef
 	}
 
@@ -350,8 +350,8 @@ create_bind_group_for_bindings :: proc(
 @(private)
 generic_compute_job_destroy :: proc(p_job: GenericComputeJob) {
 	compute_command_destroy(p_job.compute_command_ref)
-	destroy_bind_group(p_job.bind_group_ref)
-	destroy_bind_group_layout(p_job.bind_group_layout_ref)
+	bind_group_destroy(p_job.bind_group_ref)
+	bind_group_layout_destroy(p_job.bind_group_layout_ref)
 }
 
 //---------------------------------------------------------------------------//
@@ -359,8 +359,8 @@ generic_compute_job_destroy :: proc(p_job: GenericComputeJob) {
 
 @(private)
 generic_pixel_job_destroy :: proc(p_job: GenericPixelJob) {
-	destroy_bind_group(p_job.bind_group_ref)
-	destroy_bind_group_layout(p_job.bind_group_layout_ref)
+	bind_group_destroy(p_job.bind_group_ref)
+	bind_group_layout_destroy(p_job.bind_group_layout_ref)
 	draw_command_destroy(p_job.draw_command_ref)
 	destroy_render_pass(p_job.render_pass_ref)
 }
