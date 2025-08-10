@@ -158,13 +158,13 @@ create_instance :: proc(
 	}
 
 	// Create the SPD atomic counter buffer
-	spd_atomic_counter_buffer_ref := allocate_buffer_ref(common.create_name(spd_counter_name))
-	spd_atomic_counter_buffer := &g_resources.buffers[get_buffer_idx(spd_atomic_counter_buffer_ref)]
+	spd_atomic_counter_buffer_ref := buffer_allocate(common.create_name(spd_counter_name))
+	spd_atomic_counter_buffer := &g_resources.buffers[buffer_get_idx(spd_atomic_counter_buffer_ref)]
 	spd_atomic_counter_buffer.desc.flags = {.Dedicated}
 	spd_atomic_counter_buffer.desc.size = size_of(u32) * 6
 	spd_atomic_counter_buffer.desc.usage = {.StorageBuffer}
 
-	if create_buffer(spd_atomic_counter_buffer_ref) == false {
+	if buffer_create(spd_atomic_counter_buffer_ref) == false {
 		log.errorf(
 			"Failed to create render task '%s' - couldn't create min max depth buffer\n",
 			doc_name,
@@ -172,17 +172,17 @@ create_instance :: proc(
 		return false
 	}
 	defer if res == false {
-		destroy_buffer(spd_atomic_counter_buffer_ref)
+		buffer_destroy(spd_atomic_counter_buffer_ref)
 	}
 
 	// Create the min max depth buffer
-	min_max_depth_buffer_ref := allocate_buffer_ref(common.create_name(min_max_depth_buffer_name))
-	min_max_depth_buffer := &g_resources.buffers[get_buffer_idx(min_max_depth_buffer_ref)]
+	min_max_depth_buffer_ref := buffer_allocate(common.create_name(min_max_depth_buffer_name))
+	min_max_depth_buffer := &g_resources.buffers[buffer_get_idx(min_max_depth_buffer_ref)]
 	min_max_depth_buffer.desc.flags = {.Dedicated}
 	min_max_depth_buffer.desc.size = size_of(u32) * 2
 	min_max_depth_buffer.desc.usage = {.StorageBuffer}
 
-	if create_buffer(min_max_depth_buffer_ref) == false {
+	if buffer_create(min_max_depth_buffer_ref) == false {
 		log.errorf(
 			"Failed to create render task '%s' - couldn't create min max depth buffer\n",
 			doc_name,
@@ -191,7 +191,7 @@ create_instance :: proc(
 	}
 
 	defer if res == false {
-		destroy_buffer(min_max_depth_buffer_ref)
+		buffer_destroy(min_max_depth_buffer_ref)
 	}
 
 	// Setup render task bindings
@@ -266,8 +266,8 @@ destroy_instance :: proc(p_render_task_ref: RenderTaskRef) {
 	generic_compute_job_destroy(hiz_render_task_data.reset_buffer_job)
 	render_pass_bindings_destroy(hiz_render_task_data.build_hiz_bindings)
 	destroy_image(hiz_render_task_data.hiz_ref)
-	destroy_buffer(hiz_render_task_data.spd_atomic_counter_buffer_ref)
-	destroy_buffer(hiz_render_task_data.min_max_depth_buffer_ref)
+	buffer_destroy(hiz_render_task_data.spd_atomic_counter_buffer_ref)
+	buffer_destroy(hiz_render_task_data.min_max_depth_buffer_ref)
 
 	free(hiz_render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
 }

@@ -113,11 +113,11 @@ render_instanced_mesh_job_create :: proc(
 	{
 		// @TODO Resize this buffer if instance data wouldn't be able to fit it in
 		// Create buffer for instanced mesh draws
-		mesh_job.instance_info_buffer_ref = allocate_buffer_ref(
+		mesh_job.instance_info_buffer_ref = buffer_allocate(
 			common.create_name("MeshInstancedDrawInfo"),
 		)
 
-		mesh_instanced_draw_info_buffer := &g_resources.buffers[get_buffer_idx(mesh_job.instance_info_buffer_ref)]
+		mesh_instanced_draw_info_buffer := &g_resources.buffers[buffer_get_idx(mesh_job.instance_info_buffer_ref)]
 
 		mesh_instanced_draw_info_buffer.desc.flags = {.Dedicated}
 		mesh_instanced_draw_info_buffer.desc.usage = {.DynamicStorageBuffer}
@@ -130,13 +130,13 @@ render_instanced_mesh_job_create :: proc(
 			mesh_instanced_draw_info_buffer.desc.usage += {.TransferDst}
 		}
 
-		if create_buffer(mesh_job.instance_info_buffer_ref) == false {
+		if buffer_create(mesh_job.instance_info_buffer_ref) == false {
 			return {}, false
 		}
 	}
 
 	defer if res == false {
-		destroy_buffer(mesh_job.instance_info_buffer_ref)
+		buffer_destroy(mesh_job.instance_info_buffer_ref)
 	}
 
 	// Create the bind group

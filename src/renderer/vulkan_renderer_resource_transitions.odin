@@ -64,8 +64,8 @@ when USE_VULKAN_BACKEND {
 				continue
 			}
 
-			buffer := &g_resources.buffers[get_buffer_idx(buffer_input.buffer_ref)]
-			backend_buffer := &g_resources.backend_buffers[get_buffer_idx(buffer_input.buffer_ref)]
+			buffer := &g_resources.buffers[buffer_get_idx(buffer_input.buffer_ref)]
+			backend_buffer := &g_resources.backend_buffers[buffer_get_idx(buffer_input.buffer_ref)]
 
 			if buffer.last_access == .Read {
 				continue
@@ -293,8 +293,8 @@ when USE_VULKAN_BACKEND {
 
 		for buffer_output in p_bindings.buffer_outputs {
 
-			buffer := &g_resources.buffers[get_buffer_idx(buffer_output.buffer_ref)]
-			backend_buffer := &g_resources.backend_buffers[get_buffer_idx(buffer_output.buffer_ref)]
+			buffer := &g_resources.buffers[buffer_get_idx(buffer_output.buffer_ref)]
+			backend_buffer := &g_resources.backend_buffers[buffer_get_idx(buffer_output.buffer_ref)]
 
 			buffer_barrier := vk.BufferMemoryBarrier {
 				sType               = .BUFFER_MEMORY_BARRIER,

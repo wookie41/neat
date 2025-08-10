@@ -134,25 +134,25 @@ init_meshes :: proc() -> bool {
 	// Create vertex buffer for mesh data
 	{
 		using INTERNAL
-		vertex_buffer_ref = allocate_buffer_ref(common.create_name("MeshVertexBuffer"))
-		vertex_buffer := &g_resources.buffers[get_buffer_idx(vertex_buffer_ref)]
+		vertex_buffer_ref = buffer_allocate(common.create_name("MeshVertexBuffer"))
+		vertex_buffer := &g_resources.buffers[buffer_get_idx(vertex_buffer_ref)]
 
 		vertex_buffer.desc.size = VERTEX_BUFFER_SIZE
 		vertex_buffer.desc.usage = {.VertexBuffer, .TransferDst}
 		vertex_buffer.desc.flags = {.Dedicated}
-		create_buffer(vertex_buffer_ref) or_return
+		buffer_create(vertex_buffer_ref) or_return
 	}
 
 	// Create index buffer for mesh data
 	{
 		using INTERNAL
-		index_buffer_ref = allocate_buffer_ref(common.create_name("MeshIndexBuffer"))
-		index_buffer := &g_resources.buffers[get_buffer_idx(index_buffer_ref)]
+		index_buffer_ref = buffer_allocate(common.create_name("MeshIndexBuffer"))
+		index_buffer := &g_resources.buffers[buffer_get_idx(index_buffer_ref)]
 
 		index_buffer.desc.size = INDEX_BUFFER_SIZE
 		index_buffer.desc.usage = {.IndexBuffer, .TransferDst}
 		index_buffer.desc.flags = {.Dedicated}
-		create_buffer(index_buffer_ref) or_return
+		buffer_create(index_buffer_ref) or_return
 	}
 
 	return true
@@ -191,7 +191,7 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 
 
 	// Suballocate the vertex buffer
-	vertex_allocation_successful, vertex_allocation := buffer_allocate(
+	vertex_allocation_successful, vertex_allocation := buffer_suballocate(
 		INTERNAL.vertex_buffer_ref,
 		u32(vertex_data_size),
 	)
@@ -210,7 +210,7 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 
 	// Upload index data 
 	if .Indexed in mesh.desc.flags {
-		index_allocation_successful, index_allocation := buffer_allocate(
+		index_allocation_successful, index_allocation := buffer_suballocate(
 			INTERNAL.index_buffer_ref,
 			u32(index_data_size),
 		)

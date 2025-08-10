@@ -123,17 +123,17 @@ buffer_upload_init :: proc(p_options: BufferUploadInitOptions) -> bool {
 
 	// Create the staging buffer used as upload src
 	{
-		INTERNAL.staging_buffer_ref = allocate_buffer_ref(
+		INTERNAL.staging_buffer_ref = buffer_allocate(
 			common.create_name("UploadStagingBuffer"),
 		)
-		staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer_ref)]
+		staging_buffer := &g_resources.buffers[buffer_get_idx(INTERNAL.staging_buffer_ref)]
 		// make the buffer n-times large, so we can upload data from the CPU while the GPU is still doing the transfer
 		staging_buffer.desc.size =
 			p_options.staging_buffer_size * G_RENDERER.num_frames_in_flight
 		staging_buffer.desc.flags = {.HostWrite, .Mapped}
 		staging_buffer.desc.usage = {.TransferSrc}
 
-		if !create_buffer(INTERNAL.staging_buffer_ref) {
+		if !buffer_create(INTERNAL.staging_buffer_ref) {
 			log.error("Failed to create the staging buffer for upload")
 			return false
 		}
@@ -143,16 +143,16 @@ buffer_upload_init :: proc(p_options: BufferUploadInitOptions) -> bool {
 	{
 		INTERNAL.async_uploads = make([dynamic]AsyncUploadInfo, get_frame_allocator())
 
-		INTERNAL.async_staging_buffer_ref = allocate_buffer_ref(
+		INTERNAL.async_staging_buffer_ref = buffer_allocate(
 			common.create_name("AsyncUploadStagingBuffer"),
 		)
-		staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.async_staging_buffer_ref)]
+		staging_buffer := &g_resources.buffers[buffer_get_idx(INTERNAL.async_staging_buffer_ref)]
 		staging_buffer.desc.size =
 			p_options.staging_async_buffer_size * G_RENDERER.num_frames_in_flight
 		staging_buffer.desc.flags = {.HostWrite, .Mapped}
 		staging_buffer.desc.usage = {.TransferSrc}
 
-		if !create_buffer(INTERNAL.async_staging_buffer_ref) {
+		if !buffer_create(INTERNAL.async_staging_buffer_ref) {
 			log.error("Failed to create the async staging buffer for upload")
 			return false
 		}
@@ -176,7 +176,7 @@ buffer_upload_begin_frame :: proc() {
 @(private)
 buffer_upload_check_if_fits :: proc(p_buffer_ref: BufferRef, p_size: u32) -> bool {
 	if .IntegratedGPU in G_RENDERER.gpu_device_flags {
-		buffer := &g_resources.buffers[get_buffer_idx(p_buffer_ref)]
+		buffer := &g_resources.buffers[buffer_get_idx(p_buffer_ref)]
 		return p_size <= buffer.desc.size
 	}
 	return (INTERNAL.staging_buffer_offset + p_size) <= INTERNAL.single_staging_region_size
@@ -262,7 +262,7 @@ buffer_upload_run_last_frame_requests :: proc() {
 		not_satisfied_requests := make([dynamic]BufferUploadRequest, get_next_frame_allocator())
 		requests_to_run := make([dynamic]PendingBufferUploadRequest, temp_arena.allocator)
 
-		buffer := &g_resources.buffers[get_buffer_idx(buffer_ref)]
+		buffer := &g_resources.buffers[buffer_get_idx(buffer_ref)]
 
 		for request in pending_requests {
 
@@ -285,7 +285,7 @@ buffer_upload_run_last_frame_requests :: proc() {
 			)
 
 			for request in requests_to_run {
-				staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer_ref)]
+				staging_buffer := &g_resources.buffers[buffer_get_idx(INTERNAL.staging_buffer_ref)]
 				upload_ptr := mem.ptr_offset(staging_buffer.mapped_ptr, request.staging_buffer_offset)
 				
 				res := mem.compare_ptrs(upload_ptr, request.data_ptr, int(request.size))
@@ -311,7 +311,7 @@ buffer_upload_run_last_frame_requests :: proc() {
 @(private = "file")
 buffer_upload_send_data :: proc(p_request: BufferUploadRequest) -> PendingBufferUploadRequest {
 
-	staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer_ref)]
+	staging_buffer := &g_resources.buffers[buffer_get_idx(INTERNAL.staging_buffer_ref)]
 
 	pending_request := PendingBufferUploadRequest {
 		request               = p_request,
@@ -331,7 +331,7 @@ buffer_upload_send_data :: proc(p_request: BufferUploadRequest) -> PendingBuffer
 
 @(private = "file")
 buffer_upload_request_upload_integrated :: proc(p_request: BufferUploadRequest) -> BufferUploadResponse {
-	buffer := &g_resources.buffers[get_buffer_idx(p_request.dst_buff)]
+	buffer := &g_resources.buffers[buffer_get_idx(p_request.dst_buff)]
 	dst_ptr := mem.ptr_offset(buffer.mapped_ptr, p_request.dst_buff_offset)
 	mem.copy(dst_ptr, p_request.data_ptr, int(p_request.size))
 	if p_request.async_upload_finished_callback != nil {
@@ -358,7 +358,7 @@ buffer_upload_process_async_requests :: proc() {
 		backend_upload_sliced_proc = backend_buffer_upload_run_sliced_async
 	}
 
-	staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.async_staging_buffer_ref)]
+	staging_buffer := &g_resources.buffers[buffer_get_idx(INTERNAL.async_staging_buffer_ref)]
 
 	for &async_upload_info in INTERNAL.async_uploads {
 

@@ -98,7 +98,7 @@ InvalidOffsetBuffer :: OffsetBuffer {
 //---------------------------------------------------------------------------//
 
 @(private)
-init_buffers :: proc() {
+buffer_init :: proc() {
 	G_BUFFER_REF_ARRAY = common.ref_array_create(
 		BufferResource,
 		MAX_BUFFERS,
@@ -114,21 +114,21 @@ init_buffers :: proc() {
 		MAX_BUFFERS,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
-	backend_init_buffers()
+	backend_buffer_init()
 }
 
 //---------------------------------------------------------------------------//
 
-allocate_buffer_ref :: proc(p_name: common.Name) -> BufferRef {
+buffer_allocate :: proc(p_name: common.Name) -> BufferRef {
 	ref := BufferRef(common.ref_create(BufferResource, &G_BUFFER_REF_ARRAY, p_name))
-	g_resources.buffers[get_buffer_idx(ref)].desc.name = p_name
+	g_resources.buffers[buffer_get_idx(ref)].desc.name = p_name
 	return ref
 }
 
 //---------------------------------------------------------------------------//
 
-create_buffer :: proc(p_ref: BufferRef) -> bool {
-	buffer := &g_resources.buffers[get_buffer_idx(p_ref)]
+buffer_create :: proc(p_ref: BufferRef) -> bool {
+	buffer := &g_resources.buffers[buffer_get_idx(p_ref)]
 
 	// Create the virtual VMA block used for sub-allocations
 	{
@@ -143,7 +143,7 @@ create_buffer :: proc(p_ref: BufferRef) -> bool {
 		}
 	}
 
-	if backend_create_buffer(p_ref) == false {
+	if backend_buffer_create(p_ref) == false {
 		common.ref_free(&G_BUFFER_REF_ARRAY, p_ref)
 		return false
 	}
@@ -156,35 +156,35 @@ create_buffer :: proc(p_ref: BufferRef) -> bool {
 
 //---------------------------------------------------------------------------//
 
-get_buffer_idx :: #force_inline proc(p_ref: BufferRef) -> u32 {
+buffer_get_idx :: #force_inline proc(p_ref: BufferRef) -> u32 {
 	return common.ref_get_idx(&G_BUFFER_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//
 
-destroy_buffer :: proc(p_ref: BufferRef) {
-	buffer := &g_resources.buffers[get_buffer_idx(p_ref)]
+buffer_destroy :: proc(p_ref: BufferRef) {
+	buffer := &g_resources.buffers[buffer_get_idx(p_ref)]
 	buffer.mapped_ptr = nil
-	backend_destroy_buffer(p_ref)
+	backend_buffer_destroy(p_ref)
 	common.ref_free(&G_BUFFER_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//
 
-map_buffer :: proc(p_ref: BufferRef) -> rawptr {
-	return backend_map_buffer(p_ref)
+buffer_mmap :: proc(p_ref: BufferRef) -> rawptr {
+	return backend_buffer_mmap(p_ref)
 }
 
 //---------------------------------------------------------------------------//
 
-unmap_buffer :: proc(p_ref: BufferRef) {
-	backend_unmap_buffer(p_ref)
+buffer_unmmap :: proc(p_ref: BufferRef) {
+	backend_buffer_unmmap(p_ref)
 }
 
 //---------------------------------------------------------------------------//
 
-buffer_allocate :: proc(p_buffer_ref: BufferRef, p_size: u32) -> (bool, BufferSuballocation) {
-	buffer := &g_resources.buffers[get_buffer_idx(p_buffer_ref)]
+buffer_suballocate :: proc(p_buffer_ref: BufferRef, p_size: u32) -> (bool, BufferSuballocation) {
+	buffer := &g_resources.buffers[buffer_get_idx(p_buffer_ref)]
 
 	alloc_info := vma.VirtualAllocationCreateInfo {
 		size  = vk.DeviceSize(p_size),
@@ -209,14 +209,14 @@ buffer_allocate :: proc(p_buffer_ref: BufferRef, p_size: u32) -> (bool, BufferSu
 //---------------------------------------------------------------------------//
 
 buffer_free :: proc(p_buffer_ref: BufferRef, p_allocation: vma.VirtualAllocation) {
-	buffer := &g_resources.buffers[get_buffer_idx(p_buffer_ref)]
+	buffer := &g_resources.buffers[buffer_get_idx(p_buffer_ref)]
 	vma.virtual_free(buffer.vma_block, p_allocation)
 }
 //---------------------------------------------------------------------------//
 
 
 buffer_free_all :: proc(p_buffer_ref: BufferRef) {
-	buffer := &g_resources.buffers[get_buffer_idx(p_buffer_ref)]
+	buffer := &g_resources.buffers[buffer_get_idx(p_buffer_ref)]
 
 	vma.destroy_virtual_block(buffer.vma_block)
 	virtual_block_create_info := vma.VirtualBlockCreateInfo {
@@ -230,14 +230,14 @@ buffer_free_all :: proc(p_buffer_ref: BufferRef) {
 
 //---------------------------------------------------------------------------//
 
-find_buffer :: proc {
-	find_buffer_by_name,
-	find_buffer_by_str,
+buffer_find :: proc {
+	buffer_find_by_name,
+	buffer_find_by_str,
 }
 
 //---------------------------------------------------------------------------//
 
-find_buffer_by_name :: proc(p_name: common.Name) -> BufferRef {
+buffer_find_by_name :: proc(p_name: common.Name) -> BufferRef {
 	ref := common.ref_find_by_name(&G_BUFFER_REF_ARRAY, p_name)
 	if ref == InvalidBufferRef {
 		return InvalidBufferRef
@@ -247,8 +247,8 @@ find_buffer_by_name :: proc(p_name: common.Name) -> BufferRef {
 
 //--------------------------------------------------------------------------//
 
-find_buffer_by_str :: proc(p_str: string) -> BufferRef {
-	return find_buffer_by_name(common.create_name(p_str))
+buffer_find_by_str :: proc(p_str: string) -> BufferRef {
+	return buffer_find_by_name(common.create_name(p_str))
 }
 
 //--------------------------------------------------------------------------//

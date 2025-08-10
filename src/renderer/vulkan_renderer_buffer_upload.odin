@@ -66,7 +66,7 @@ when USE_VULKAN_BACKEND {
 			}
 
 			// Issue release/acquire barriers
-			dst_buffer_idx := get_buffer_idx(finished_transfer_info.dst_buffer_ref)
+			dst_buffer_idx := buffer_get_idx(finished_transfer_info.dst_buffer_ref)
 			backend_dst_buffer := &g_resources.backend_buffers[dst_buffer_idx]
 
 			src_cmd_buffer_ref := get_frame_cmd_buffer_ref()
@@ -220,7 +220,7 @@ when USE_VULKAN_BACKEND {
 		common.temp_arena_init(&temp_arena)
 		defer common.arena_delete(temp_arena)
 
-		dst_buffer_idx := get_buffer_idx(p_dst_buffer_ref)
+		dst_buffer_idx := buffer_get_idx(p_dst_buffer_ref)
 		dst_buffer := &g_resources.buffers[dst_buffer_idx]
 		backend_dst_buffer := &g_resources.backend_buffers[dst_buffer_idx]
 
@@ -252,7 +252,7 @@ when USE_VULKAN_BACKEND {
 			}
 		}
 
-		backend_staging_buff := &g_resources.backend_buffers[get_buffer_idx(p_staging_buffer_ref)]
+		backend_staging_buff := &g_resources.backend_buffers[buffer_get_idx(p_staging_buffer_ref)]
 
 		cmd_buffer_ref := get_frame_cmd_buffer_ref()
 		backend_cmd_buff := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buffer_ref)]
@@ -381,10 +381,10 @@ when USE_VULKAN_BACKEND {
 		cmd_buff_ref := get_frame_cmd_buffer_ref()
 		backend_cmd_buff := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buff_ref)]
 
-		dst_buffer_idx := get_buffer_idx(p_dst_buffer_ref)
+		dst_buffer_idx := buffer_get_idx(p_dst_buffer_ref)
 		dst_buffer := &g_resources.buffers[dst_buffer_idx]
-		backend_dst_buffer := &g_resources.backend_buffers[get_buffer_idx(p_dst_buffer_ref)]
-		backend_src_buff := &g_resources.backend_buffers[get_buffer_idx(p_src_buffer_ref)]
+		backend_dst_buffer := &g_resources.backend_buffers[buffer_get_idx(p_dst_buffer_ref)]
+		backend_src_buff := &g_resources.backend_buffers[buffer_get_idx(p_src_buffer_ref)]
 
 		// Run the copy
 		buffer_copy := vk.BufferCopy {
@@ -472,9 +472,9 @@ when USE_VULKAN_BACKEND {
 
 		transfer_cmd_buff := get_frame_transfer_cmd_buffer_post_graphics()
 
-		dst_buffer_idx := get_buffer_idx(p_dst_buffer_ref)
+		dst_buffer_idx := buffer_get_idx(p_dst_buffer_ref)
 		backend_dst_buffer := &g_resources.backend_buffers[dst_buffer_idx]
-		backend_src_buff := &g_resources.backend_buffers[get_buffer_idx(p_src_buffer_ref)]
+		backend_src_buff := &g_resources.backend_buffers[buffer_get_idx(p_src_buffer_ref)]
 
 		src_queue := backend_dst_buffer.owning_queue_family_idx
 
@@ -526,7 +526,7 @@ when USE_VULKAN_BACKEND {
 		p_offset: u32,
 	) {
 
-		backend_dst_buffer := &g_resources.backend_buffers[get_buffer_idx(p_buffer_ref)]
+		backend_dst_buffer := &g_resources.backend_buffers[buffer_get_idx(p_buffer_ref)]
 
 		// Non-dedicated transfer queue path
 		if (.DedicatedTransferQueue in G_RENDERER.gpu_device_flags) == false {

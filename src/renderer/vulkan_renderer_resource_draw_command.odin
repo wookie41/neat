@@ -42,7 +42,7 @@ when USE_VULKAN_BACKEND {
 
 		if draw_command.desc.vertex_buffer_ref != InvalidBufferRef {
 			vertex_buffer_offset := vk.DeviceSize(draw_command.desc.vertex_buffer_offset)
-			vertex_buffer := &g_resources.backend_buffers[get_buffer_idx(draw_command.desc.vertex_buffer_ref)]
+			vertex_buffer := &g_resources.backend_buffers[buffer_get_idx(draw_command.desc.vertex_buffer_ref)]
 			vk.CmdBindVertexBuffers(
 				cmd_buff.vk_cmd_buff,
 				0,
@@ -65,7 +65,7 @@ when USE_VULKAN_BACKEND {
 		if draw_command.desc.index_buffer_ref == InvalidBufferRef {
 			vk.CmdDraw(cmd_buff.vk_cmd_buff, draw_command.desc.draw_count, 1, 0, 0)
 		} else {
-			index_buffer := &g_resources.backend_buffers[get_buffer_idx(draw_command.desc.vertex_buffer_ref)]
+			index_buffer := &g_resources.backend_buffers[buffer_get_idx(draw_command.desc.vertex_buffer_ref)]
 			vk.CmdBindIndexBuffer(
 				cmd_buff.vk_cmd_buff,
 				index_buffer.vk_buffer,

@@ -269,7 +269,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	pipelines_init() or_return
 	bind_group_layout_init()
 	bind_group_init()
-	init_buffers()
+	buffer_init()
 	init_meshes()
 	init_images() or_return
 	init_command_buffers(p_options) or_return
@@ -501,7 +501,7 @@ init :: proc(p_options: InitOptions) -> bool {
 	{
 		using g_renderer_buffers
 
-		mesh_instance_info_buffer := &g_resources.buffers[get_buffer_idx(mesh_instance_info_buffer_ref)]
+		mesh_instance_info_buffer := &g_resources.buffers[buffer_get_idx(mesh_instance_info_buffer_ref)]
 
 		bind_group_update(
 			G_RENDERER.uniforms_bind_group_ref,
@@ -646,7 +646,7 @@ deinit :: proc() {
 	// @TODOdeinit_pipelines()
 	// @TODO deinit_images()
 	// @TODO deinit_meshes()
-	// @TODO deinit_buffers()
+	// @TODO debuffer_init()
 	// @TODO deinit_command_buffers(p_options)
 	deinit_render_tasks()
 	deinit_backend()

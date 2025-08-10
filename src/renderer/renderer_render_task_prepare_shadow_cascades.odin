@@ -113,7 +113,7 @@ create_instance :: proc(
 	}
 
 	// Find the min-max depth buffer
-	min_max_depth_buffer_ref := find_buffer(min_max_depth_buffer_name)
+	min_max_depth_buffer_ref := buffer_find(min_max_depth_buffer_name)
 	if min_max_depth_buffer_ref == InvalidBufferRef {
 		log.errorf(
 			"Failed to create render task '%s' - can't find buffer named %s\n",
@@ -133,15 +133,15 @@ create_instance :: proc(
 	}
 
 	// Create the shadow cascades buffer
-	shadow_cascades_buffer_ref := allocate_buffer_ref(
+	shadow_cascades_buffer_ref := buffer_allocate(
 		common.create_name(shadow_cascades_buffer_name),
 	)
-	shadow_cascades_buffer := &g_resources.buffers[get_buffer_idx(shadow_cascades_buffer_ref)]
+	shadow_cascades_buffer := &g_resources.buffers[buffer_get_idx(shadow_cascades_buffer_ref)]
 	shadow_cascades_buffer.desc.flags = {.Dedicated}
 	shadow_cascades_buffer.desc.size = size_of(ShadowCascade) * MAX_SHADOW_CASCADES
 	shadow_cascades_buffer.desc.usage = {.StorageBuffer}
 
-	if create_buffer(shadow_cascades_buffer_ref) == false {
+	if buffer_create(shadow_cascades_buffer_ref) == false {
 		log.errorf(
 			"Failed to create render task '%s' - couldn't create shadow cascades buffer\n",
 			doc_name,
@@ -150,7 +150,7 @@ create_instance :: proc(
 	}
 
 	defer if res == false {
-		destroy_buffer(shadow_cascades_buffer_ref)
+		buffer_destroy(shadow_cascades_buffer_ref)
 	}
 
 	// Setup render task bindings
@@ -214,7 +214,7 @@ destroy_instance :: proc(p_render_task_ref: RenderTaskRef) {
 
 	generic_compute_job_destroy(render_task_data.compute_job)
 	render_pass_bindings_destroy(render_task_data.render_pass_bindings)
-	destroy_buffer(render_task_data.shadow_cascades_buffer_ref)
+	buffer_destroy(render_task_data.shadow_cascades_buffer_ref)
 
 	free(render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
 }

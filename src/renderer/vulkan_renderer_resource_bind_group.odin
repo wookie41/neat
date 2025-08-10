@@ -238,7 +238,7 @@ when USE_VULKAN_BACKEND {
 				binding.type == .UniformBuffer ||
 				binding.type == .UniformBufferDynamic, "Buffer binding required")
 
-			binding_buffer_idx := get_buffer_idx(buffer_binding.buffer_ref)
+			binding_buffer_idx := buffer_get_idx(buffer_binding.buffer_ref)
 			buffer := &g_resources.buffers[binding_buffer_idx]
 			backend_buffer := &g_resources.backend_buffers[binding_buffer_idx]
 

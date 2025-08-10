@@ -43,16 +43,16 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_init_buffers :: proc() {
+	backend_buffer_init :: proc() {
 
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_create_buffer :: proc(p_buffer_ref: BufferRef) -> bool {
+	backend_buffer_create :: proc(p_buffer_ref: BufferRef) -> bool {
 
-		image_idx := get_buffer_idx(p_buffer_ref)
+		image_idx := buffer_get_idx(p_buffer_ref)
 		buffer := &g_resources.buffers[image_idx]
 		backend_buffer := &g_resources.backend_buffers[image_idx]
 
@@ -154,8 +154,8 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_destroy_buffer :: proc(p_buffer_ref: BufferRef) {
-		backend_buffer := &g_resources.backend_buffers[get_buffer_idx(p_buffer_ref)]
+	backend_buffer_destroy :: proc(p_buffer_ref: BufferRef) {
+		backend_buffer := &g_resources.backend_buffers[buffer_get_idx(p_buffer_ref)]
 		vma.destroy_buffer(
 			G_RENDERER.vma_allocator,
 			backend_buffer.vk_buffer,
@@ -166,9 +166,9 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_map_buffer :: proc(p_buffer_ref: BufferRef) -> rawptr {
+	backend_buffer_mmap :: proc(p_buffer_ref: BufferRef) -> rawptr {
 		mapped_ptr: rawptr
-		backend_buffer := &g_resources.backend_buffers[get_buffer_idx(p_buffer_ref)]
+		backend_buffer := &g_resources.backend_buffers[buffer_get_idx(p_buffer_ref)]
 		vma.map_memory(G_RENDERER.vma_allocator, backend_buffer.allocation, &mapped_ptr)
 		return mapped_ptr
 	}
@@ -176,8 +176,8 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_unmap_buffer :: proc(p_buffer_ref: BufferRef) {
-		backend_buffer := &g_resources.backend_buffers[get_buffer_idx(p_buffer_ref)]
+	backend_buffer_unmmap :: proc(p_buffer_ref: BufferRef) {
+		backend_buffer := &g_resources.backend_buffers[buffer_get_idx(p_buffer_ref)]
 		vma.unmap_memory(G_RENDERER.vma_allocator, backend_buffer.allocation)
 	}
 

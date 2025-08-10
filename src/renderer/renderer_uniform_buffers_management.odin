@@ -113,7 +113,7 @@ uniform_buffer_create_transient_buffer :: proc(p_data: ^$T) -> u32 {
 
 	INTERNAL.current_transient_buffer_offset += aligned_size
 
-	transient_buffer := &g_resources.buffers[get_buffer_idx(g_uniform_buffers.transient_buffer.buffer_ref)]
+	transient_buffer := &g_resources.buffers[buffer_get_idx(g_uniform_buffers.transient_buffer.buffer_ref)]
 
 	mem.copy(mem.ptr_offset(transient_buffer.mapped_ptr, buffer_offset), p_data, data_size)
 
@@ -192,8 +192,8 @@ uniform_buffer_create_dynamic_by_size :: proc(
 	p_name: common.Name,
 	p_size: u32,
 ) -> DynamicUniformBuffer {
-	buffer_ref := allocate_buffer_ref(p_name)
-	buffer := &g_resources.buffers[get_buffer_idx(buffer_ref)]
+	buffer_ref := buffer_allocate(p_name)
+	buffer := &g_resources.buffers[buffer_get_idx(buffer_ref)]
 
 	aligned_size := uniform_buffer_ensure_alignment(p_size)
 
@@ -201,7 +201,7 @@ uniform_buffer_create_dynamic_by_size :: proc(
 	buffer.desc.size = aligned_size * G_RENDERER.num_frames_in_flight
 	buffer.desc.usage = {.DynamicUniformBuffer}
 
-	if create_buffer(buffer_ref) == false {
+	if buffer_create(buffer_ref) == false {
 		return DynamicUniformBuffer{buffer_ref = InvalidBufferRef, aligned_size = 0}
 	}
 

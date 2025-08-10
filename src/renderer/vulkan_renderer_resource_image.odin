@@ -897,7 +897,7 @@ when USE_VULKAN_BACKEND {
 		image_idx := get_image_idx(p_image_ref)
 		backend_image := &g_resources.backend_images[image_idx]
 
-		backend_buffer := &g_resources.backend_buffers[get_buffer_idx(p_staging_buffer_ref)]
+		backend_buffer := &g_resources.backend_buffers[buffer_get_idx(p_staging_buffer_ref)]
 
 		for mip_region_copy, i in p_mip_region_copies {
 			buffer_image_copies[i] = vk.BufferImageCopy {

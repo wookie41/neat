@@ -434,7 +434,7 @@ render_task_setup_render_pass_bindings :: proc(
 			output_buffer_idx += 1
 		}
 
-		buffer_ref := find_buffer(buffer_name)
+		buffer_ref := buffer_find(buffer_name)
 		if buffer_ref == InvalidBufferRef {
 			log.errorf("Can't setup render task - unknown buffer '%s'\n", buffer_name)
 			current_element_idx += 1
@@ -636,7 +636,7 @@ load_buffer_inputs :: proc(
 				input_buffer_idx += 1
 			}
 
-			buffer_ref = find_buffer(buffer_name)
+			buffer_ref = buffer_find(buffer_name)
 
 			if buffer_ref == InvalidBufferRef {
 				log.errorf("Can't create render task - unknown buffer '%s'\n", buffer_name)

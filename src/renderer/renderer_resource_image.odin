@@ -318,15 +318,15 @@ init_images :: proc() -> bool {
 	{
 		INTERNAL.staging_buffer_offset = 0
 		INTERNAL.staging_buffer_single_region_size = common.MEGABYTE * 8
-		INTERNAL.staging_buffer_ref = allocate_buffer_ref(common.create_name("ImageStagingBuffer"))
+		INTERNAL.staging_buffer_ref = buffer_allocate(common.create_name("ImageStagingBuffer"))
 
-		staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer_ref)]
+		staging_buffer := &g_resources.buffers[buffer_get_idx(INTERNAL.staging_buffer_ref)]
 		staging_buffer.desc.size =
 			INTERNAL.staging_buffer_single_region_size * G_RENDERER.num_frames_in_flight
 		staging_buffer.desc.flags = {.HostWrite, .Mapped}
 		staging_buffer.desc.usage = {.TransferSrc}
 
-		create_buffer(INTERNAL.staging_buffer_ref) or_return
+		buffer_create(INTERNAL.staging_buffer_ref) or_return
 	}
 
 	backend_init_images()
@@ -543,7 +543,7 @@ try_progress_image_copies :: proc(
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
 
-	staging_buffer := &g_resources.buffers[get_buffer_idx(INTERNAL.staging_buffer_ref)]
+	staging_buffer := &g_resources.buffers[buffer_get_idx(INTERNAL.staging_buffer_ref)]
 	any_uploads_performed := false
 
 	for _, i in p_current_uploads {

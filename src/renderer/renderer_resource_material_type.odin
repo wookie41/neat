@@ -149,7 +149,7 @@ init_material_types :: proc() -> bool {
 //---------------------------------------------------------------------------//
 
 deinit_material_types :: proc() {
-	destroy_buffer(g_renderer_buffers.material_instances_buffer_ref)
+	buffer_destroy(g_renderer_buffers.material_instances_buffer_ref)
 }
 
 //---------------------------------------------------------------------------//
