@@ -66,7 +66,7 @@ create_instance :: proc(
 		return false
 	}
 
-	shader_ref := find_shader_by_name(shader_name)
+	shader_ref := shader_find_by_name(shader_name)
 	if shader_ref == InvalidShaderRef {
 		log.errorf("Failed to create render task '%s' - invalid shader\n", doc_name)
 		return false
@@ -78,7 +78,7 @@ create_instance :: proc(
 	)
 	defer if res == false {
 		free(fullscreen_render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
-		render_pass_bindings_destroy(fullscreen_render_task_data.render_pass_bindings)
+		render_pass_destroy_bindings(fullscreen_render_task_data.render_pass_bindings)
 	}
 
 	//  Setup render task bindings
@@ -127,7 +127,7 @@ create_instance :: proc(
 		fullscreen_render_task_data.pixel_job = pixel_job
 	}
 
-	fullscreen_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	fullscreen_render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	fullscreen_render_task.data_ptr = rawptr(fullscreen_render_task_data)
 
 	return true
@@ -137,7 +137,7 @@ create_instance :: proc(
 
 @(private = "file")
 destroy_instance :: proc(p_render_task_ref: RenderTaskRef) {
-	fullscreen_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	fullscreen_render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	fullscreen_render_task_data := (^FullScreenRenderTaskData)(fullscreen_render_task.data_ptr)
 
 	if fullscreen_render_task_data.is_using_compute {
@@ -146,7 +146,7 @@ destroy_instance :: proc(p_render_task_ref: RenderTaskRef) {
 		generic_pixel_job_destroy(fullscreen_render_task_data.pixel_job)
 	}
 
-	render_pass_bindings_destroy(fullscreen_render_task_data.render_pass_bindings)
+	render_pass_destroy_bindings(fullscreen_render_task_data.render_pass_bindings)
 
 	free(fullscreen_render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
 }
@@ -168,7 +168,7 @@ end_frame :: proc(p_render_task_ref: RenderTaskRef) {
 @(private = "file")
 render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 
-	fullscreen_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	fullscreen_render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	fullscreen_render_task_data := (^FullScreenRenderTaskData)(fullscreen_render_task.data_ptr)
 
 	render_view := render_camera_create_render_view(g_render_camera)
@@ -210,7 +210,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 		return
 	}
 
-	render_task_begin_render_pass(
+	render_task_render_pass_begin(
 		fullscreen_render_task_data.pixel_job.render_pass_ref,
 		fullscreen_render_task_data.render_pass_bindings,
 	)
@@ -222,7 +222,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 		{nil, global_uniform_offsets, nil, nil},
 	)
 
-	end_render_pass(
+	render_pass_end(
 		fullscreen_render_task_data.pixel_job.render_pass_ref,
 		get_frame_cmd_buffer_ref(),
 	)

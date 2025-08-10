@@ -98,20 +98,20 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_init_images :: proc() {
+	backend_image_init :: proc() {
 		INTERNAL.bindless_array_updates = make([dynamic]BindlessArrayUpdate)
 		INTERNAL.finished_image_uploads = make([dynamic]FinishedImageUpload, get_frame_allocator())
 		INTERNAL.default_image_ref = InvalidImageRef
 	}
 
 	@(private)
-	backend_create_texture_image :: proc(p_image_ref: ImageRef) -> bool {
+	backend_image_create_texture :: proc(p_image_ref: ImageRef) -> bool {
 
 		temp_arena: common.Arena
 		common.temp_arena_init(&temp_arena, common.MEGABYTE)
 		defer common.arena_delete(temp_arena)
 
-		image_idx := get_image_idx(p_image_ref)
+		image_idx := image_get_idx(p_image_ref)
 
 		image := &g_resources.images[image_idx]
 		backend_image := &g_resources.backend_images[image_idx]
@@ -361,7 +361,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_create_swap_images :: proc() {
+	backend_image_create_swap_images :: proc() {
 
 		// If those images are already created, this means that the swapchain is getting recreated
 		is_recreating_swapchain := len(G_RENDERER.swap_image_refs) > 0
@@ -373,13 +373,13 @@ when USE_VULKAN_BACKEND {
 				G_RENDERER_ALLOCATORS.resource_allocator,
 			)
 			for _, i in G_RENDERER.swap_image_refs {
-				G_RENDERER.swap_image_refs[i] = allocate_image_ref(common.create_name("SwapImage"))
+				G_RENDERER.swap_image_refs[i] = image_allocate(common.create_name("SwapImage"))
 			}
 		}
 
 		for vk_swap_image, i in G_RENDERER.swapchain_images {
 			ref := G_RENDERER.swap_image_refs[i]
-			image_idx := get_image_idx(ref)
+			image_idx := image_get_idx(ref)
 
 			swap_image := &g_resources.images[image_idx]
 			backend_swap_image := &g_resources.backend_images[image_idx]
@@ -434,13 +434,13 @@ when USE_VULKAN_BACKEND {
 
 
 	@(private)
-	backend_create_image :: proc(p_image_ref: ImageRef) -> (res: bool) {
+	backend_image_create :: proc(p_image_ref: ImageRef) -> (res: bool) {
 
 		temp_arena: common.Arena
 		common.temp_arena_init(&temp_arena)
 		defer common.arena_delete(temp_arena)
 
-		image_idx := get_image_idx(p_image_ref)
+		image_idx := image_get_idx(p_image_ref)
 		image := &g_resources.images[image_idx]
 		image_backend := &g_resources.backend_images[image_idx]
 
@@ -717,8 +717,8 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	backend_destroy_image :: proc(p_image_ref: ImageRef) {
-		img_idx := get_image_idx(p_image_ref)
+	backend_image_destroy :: proc(p_image_ref: ImageRef) {
+		img_idx := image_get_idx(p_image_ref)
 		image := &g_resources.images[img_idx]
 		backend_image := &g_resources.backend_images[img_idx]
 		if (.SwapImage in image.desc.flags) == false {
@@ -747,7 +747,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_batch_update_bindless_array_entries :: proc() {
+	backend_image_update_bindless_array :: proc() {
 		temp_arena: common.Arena
 		common.temp_arena_init(&temp_arena)
 		defer common.arena_delete(temp_arena)
@@ -765,14 +765,14 @@ when USE_VULKAN_BACKEND {
 		image_infos := make([]vk.DescriptorImageInfo, u32(num_writes), temp_arena.allocator)
 
 		if INTERNAL.default_image_ref == InvalidImageRef {
-			INTERNAL.default_image_ref = find_image("DefaultImage")
+			INTERNAL.default_image_ref = image_find("DefaultImage")
 		}
 
-		backend_default_image := &g_resources.backend_images[get_image_idx(INTERNAL.default_image_ref)]
+		backend_default_image := &g_resources.backend_images[image_get_idx(INTERNAL.default_image_ref)]
 
 		for bindless_update, i in INTERNAL.bindless_array_updates {
 
-			image_idx := get_image_idx(bindless_update.image_ref)
+			image_idx := image_get_idx(bindless_update.image_ref)
 			image := &g_resources.images[image_idx]
 			backend_image := &g_resources.backend_images[image_idx]
 
@@ -814,7 +814,7 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_image_upload_initialize :: proc(p_ref: ImageRef) {
 
-		image_idx := get_image_idx(p_ref)
+		image_idx := image_get_idx(p_ref)
 		image := &g_resources.images[image_idx]
 		backend_image := &g_resources.backend_images[image_idx]
 
@@ -836,7 +836,7 @@ when USE_VULKAN_BACKEND {
 		}
 
 		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
-			transfer_cmd_buff := get_frame_transfer_cmd_buffer_post_graphics()
+			transfer_cmd_buff := frame_transfer_cmd_buffer_post_graphics_get()
 
 			vk.CmdPipelineBarrier(
 				transfer_cmd_buff,
@@ -855,7 +855,7 @@ when USE_VULKAN_BACKEND {
 		}
 
 		cmd_buffer_ref := get_frame_cmd_buffer_ref()
-		cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buffer_ref)]
+		cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(cmd_buffer_ref)]
 
 		// Otherwise just prepare it to copy
 		vk.CmdPipelineBarrier(
@@ -894,7 +894,7 @@ when USE_VULKAN_BACKEND {
 			temp_arena.allocator,
 		)
 
-		image_idx := get_image_idx(p_image_ref)
+		image_idx := image_get_idx(p_image_ref)
 		backend_image := &g_resources.backend_images[image_idx]
 
 		backend_buffer := &g_resources.backend_buffers[buffer_get_idx(p_staging_buffer_ref)]
@@ -919,11 +919,11 @@ when USE_VULKAN_BACKEND {
 
 
 		cmd_buffer_ref := get_frame_cmd_buffer_ref()
-		cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buffer_ref)]
+		cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(cmd_buffer_ref)]
 		vk_cmd_buff := cmd_buffer.vk_cmd_buff
 
 		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
-			vk_cmd_buff = get_frame_transfer_cmd_buffer_post_graphics()
+			vk_cmd_buff = frame_transfer_cmd_buffer_post_graphics_get()
 		}
 
 		vk.CmdCopyBufferToImage(
@@ -980,7 +980,7 @@ when USE_VULKAN_BACKEND {
 
 			unique_image_refs[finished_upload.image_ref] = 0
 
-			image_idx := get_image_idx(finished_upload.image_ref)
+			image_idx := image_get_idx(finished_upload.image_ref)
 			image := &g_resources.images[image_idx]
 			backend_image := &g_resources.backend_images[image_idx]
 
@@ -994,7 +994,7 @@ when USE_VULKAN_BACKEND {
 			}
 
 			cmd_buffer_ref := get_frame_cmd_buffer_ref()
-			cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buffer_ref)]
+			cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(cmd_buffer_ref)]
 
 			to_sample_barrier := vk.ImageMemoryBarrier {
 				sType = .IMAGE_MEMORY_BARRIER,
@@ -1013,7 +1013,7 @@ when USE_VULKAN_BACKEND {
 
 			if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 
-				transfer_cmd_buff := get_frame_transfer_cmd_buffer_pre_graphics()
+				transfer_cmd_buff := frame_transfer_cmd_buffer_pre_graphics_get()
 				to_sample_barrier.srcQueueFamilyIndex = G_RENDERER.queue_family_transfer_index
 				to_sample_barrier.dstQueueFamilyIndex = G_RENDERER.queue_family_graphics_index
 
@@ -1085,7 +1085,7 @@ when USE_VULKAN_BACKEND {
 		num_bindless_updates := 0
 
 		for image_ref in unique_image_refs {
-			image_idx := get_image_idx(image_ref)
+			image_idx := image_get_idx(image_ref)
 			image := &g_resources.images[image_idx]
 			backend_image := &g_resources.backend_images[image_idx]
 

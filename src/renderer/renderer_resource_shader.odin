@@ -87,7 +87,7 @@ InvalidShaderRef := ShaderRef {
 
 //---------------------------------------------------------------------------//
 
-init_shaders :: proc() -> bool {
+shader_init :: proc() -> bool {
 	g_resource_refs.shaders = common.ref_array_create(
 		ShaderResource,
 		MAX_SHADERS,
@@ -149,8 +149,8 @@ init_shaders :: proc() -> bool {
 	for entry in shader_json_entries {
 
 		name := common.create_name(entry.name)
-		shader_ref := allocate_shader_ref(name)
-		shader := &g_resources.shaders[get_shader_idx(shader_ref)]
+		shader_ref := shader_allocate(name)
+		shader := &g_resources.shaders[shader_get_idx(shader_ref)]
 		shader.desc.file_path = common.create_name(entry.path)
 		shader.desc.features = slice.clone(
 			entry.features,
@@ -175,7 +175,7 @@ init_shaders :: proc() -> bool {
 			return false
 		}
 
-		if create_shader(shader_ref) == false {
+		if shader_create(shader_ref) == false {
 			log.errorf("Failed to create shader %s\n", entry.name)
 			common.ref_free(&g_resource_refs.shaders, shader_ref)
 			continue
@@ -184,19 +184,19 @@ init_shaders :: proc() -> bool {
 
 	init_shader_files_watcher()
 
-	return backend_init_shaders()
+	return backend_shader_init()
 }
 
 //---------------------------------------------------------------------------//
 
-deinit_shaders :: proc() {
-	backend_deinit_shaders()
+shader_deinit :: proc() {
+	backend_shader_deinit()
 }
 
 //---------------------------------------------------------------------------//
 
-create_shader :: proc(p_shader_ref: ShaderRef) -> bool {
-	shader := &g_resources.shaders[get_shader_idx(p_shader_ref)]
+shader_create :: proc(p_shader_ref: ShaderRef) -> bool {
+	shader := &g_resources.shaders[shader_get_idx(p_shader_ref)]
 	shader.hash = calculate_hash_for_shader(&shader.desc)
 	assert((shader.hash in INTERNAL.shader_by_hash) == false)
 
@@ -206,8 +206,8 @@ create_shader :: proc(p_shader_ref: ShaderRef) -> bool {
 
 	shader_code := shader_compile(p_shader_ref, temp_arena.allocator) or_return
 
-	if backend_create_shader(p_shader_ref, shader_code) == false {
-		destroy_shader(p_shader_ref)
+	if backend_shader_create(p_shader_ref, shader_code) == false {
+		shader_destroy(p_shader_ref)
 		return false
 	}
 
@@ -217,23 +217,23 @@ create_shader :: proc(p_shader_ref: ShaderRef) -> bool {
 
 //---------------------------------------------------------------------------//
 
-allocate_shader_ref :: proc(p_name: common.Name) -> ShaderRef {
+shader_allocate :: proc(p_name: common.Name) -> ShaderRef {
 	ref := ShaderRef(common.ref_create(ShaderResource, &g_resource_refs.shaders, p_name))
-	g_resources.shaders[get_shader_idx(ref)].desc.name = p_name
+	g_resources.shaders[shader_get_idx(ref)].desc.name = p_name
 	return ref
 }
 //---------------------------------------------------------------------------//
 
-get_shader_idx :: #force_inline proc(p_ref: ShaderRef) -> u32 {
+shader_get_idx :: #force_inline proc(p_ref: ShaderRef) -> u32 {
 	return common.ref_get_idx(&g_resource_refs.shaders, p_ref)
 }
 
 //--------------------------------------------------------------------------//
 
-destroy_shader :: proc(p_ref: ShaderRef) {
+shader_destroy :: proc(p_ref: ShaderRef) {
 	// @TODO remove from cache (shader_by_hash)
-	shader := &g_resources.shaders[get_shader_idx(p_ref)]
-	backend_destroy_shader(p_ref)
+	shader := &g_resources.shaders[shader_get_idx(p_ref)]
+	backend_shader_destroy(p_ref)
 	for feature in shader.desc.features {
 		delete(feature, G_RENDERER_ALLOCATORS.resource_allocator)
 	}
@@ -244,14 +244,14 @@ destroy_shader :: proc(p_ref: ShaderRef) {
 
 //--------------------------------------------------------------------------//
 
-find_shader_by_name :: proc {
-	find_shader_by_name_name,
-	find_shader_by_name_str,
+shader_find_by_name :: proc {
+	shader_find_by_name_name,
+	shader_find_by_name_str,
 }
 
 //--------------------------------------------------------------------------//
 
-find_shader_by_name_name :: proc(p_name: common.Name) -> ShaderRef {
+shader_find_by_name_name :: proc(p_name: common.Name) -> ShaderRef {
 	ref := common.ref_find_by_name(&g_resource_refs.shaders, p_name)
 	if ref == InvalidShaderRef {
 		return InvalidShaderRef
@@ -261,81 +261,13 @@ find_shader_by_name_name :: proc(p_name: common.Name) -> ShaderRef {
 
 //--------------------------------------------------------------------------//
 
-find_shader_by_name_str :: proc(p_name: string) -> ShaderRef {
+shader_find_by_name_str :: proc(p_name: string) -> ShaderRef {
 	name := common.create_name(p_name)
 	ref := common.ref_find_by_name(&g_resource_refs.shaders, name)
 	if ref == InvalidShaderRef {
 		return InvalidShaderRef
 	}
 	return ShaderRef(ref)
-}
-
-//--------------------------------------------------------------------------//
-
-// Creates a new shader permutation using the base shader
-create_shader_permutation :: proc(
-	p_name: common.Name,
-	p_base_shader_ref: ShaderRef,
-	p_features: []string,
-	p_merge_features: bool,
-) -> ShaderRef {
-	base_shader := &g_resources.shaders[get_shader_idx(p_base_shader_ref)]
-
-	permutation_desc := base_shader.desc
-
-	if p_merge_features {
-		num_features := len(p_features) + len(base_shader.desc.features)
-		permutation_desc.features = make(
-			[]string,
-			num_features,
-			G_RENDERER_ALLOCATORS.resource_allocator,
-		)
-
-		for feature, i in base_shader.desc.features {
-			permutation_desc.features[i] = feature
-		}
-
-		for feature, i in p_features {
-			permutation_desc.features[i + len(base_shader.desc.features)] = feature
-		}
-
-	} else {
-
-		num_features := len(p_features)
-		permutation_desc.features = make(
-			[]string,
-			num_features,
-			G_RENDERER_ALLOCATORS.resource_allocator,
-		)
-
-		for feature, i in p_features {
-			permutation_desc.features[i] = feature
-		}
-
-	}
-
-	permutation_hash := calculate_hash_for_shader(&permutation_desc)
-	if permutation_hash in INTERNAL.shader_by_hash {
-		return INTERNAL.shader_by_hash[permutation_hash]
-	}
-
-	for feature, i in permutation_desc.features {
-		permutation_desc.features[i] = strings.clone(
-			feature,
-			G_RENDERER_ALLOCATORS.resource_allocator,
-		)
-	}
-
-	permutation_ref := allocate_shader_ref(p_name)
-	permutation := &g_resources.shaders[get_shader_idx(permutation_ref)]
-
-	permutation.desc = permutation_desc
-
-	if create_shader(permutation_ref) {
-		return permutation_ref
-	}
-
-	return InvalidShaderRef
 }
 
 //--------------------------------------------------------------------------//
@@ -379,7 +311,7 @@ init_shader_files_watcher :: proc() -> bool {
 
 
 @(private)
-shaders_update :: proc() {
+shader_update :: proc() {
 
 	windows.ResetEvent(INTERNAL.windows_event_handle)
 
@@ -441,7 +373,7 @@ shaders_update :: proc() {
 			)
 
 			if err == nil {
-				reload_shader(file_name)
+				shader_reload(file_name)
 			}
 
 			if event.next_entry_offset == 0 {
@@ -460,7 +392,7 @@ shaders_update :: proc() {
 //--------------------------------------------------------------------------//
 
 @(private = "file")
-reload_shader :: proc(p_shader_file_name: string) {
+shader_reload :: proc(p_shader_file_name: string) {
 
 	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena, common.MEGABYTE)
@@ -479,7 +411,7 @@ reload_shader :: proc(p_shader_file_name: string) {
 		common.arena_reset(temp_arena)
 
 		shader_ref := g_resource_refs.shaders.alive_refs[i]
-		shader := &g_resources.shaders[get_shader_idx(shader_ref)]
+		shader := &g_resources.shaders[shader_get_idx(shader_ref)]
 
 		if shader_name != shader.desc.file_path {
 			continue
@@ -495,7 +427,7 @@ reload_shader :: proc(p_shader_file_name: string) {
 			return
 		}
 
-		if backend_reload_shader(shader_ref, shader_code) == false {
+		if backend_shader_reload(shader_ref, shader_code) == false {
 			return
 		}
 
@@ -505,7 +437,7 @@ reload_shader :: proc(p_shader_file_name: string) {
 		if shader.desc.stage == .Compute {
 			for j in 0 ..< g_resource_refs.compute_pipelines.alive_count {
 				pipeline_ref := g_resource_refs.compute_pipelines.alive_refs[j]
-				pipeline := &g_resources.compute_pipelines[get_compute_pipeline_idx(pipeline_ref)]
+				pipeline := &g_resources.compute_pipelines[compute_pipeline_get_idx(pipeline_ref)]
 
 				if pipeline.desc.compute_shader_ref == shader_ref {
 					backend_compute_pipeline_destroy(pipeline_ref)
@@ -516,7 +448,7 @@ reload_shader :: proc(p_shader_file_name: string) {
 		} else {
 			for j in 0 ..< g_resource_refs.graphics_pipelines.alive_count {
 				pipeline_ref := g_resource_refs.graphics_pipelines.alive_refs[j]
-				pipeline := &g_resources.graphics_pipelines[get_graphics_pipeline_idx(pipeline_ref)]
+				pipeline := &g_resources.graphics_pipelines[graphics_pipeline_get_idx(pipeline_ref)]
 
 				if pipeline.desc.vert_shader_ref == shader_ref ||
 				   pipeline.desc.frag_shader_ref == shader_ref {
@@ -552,7 +484,7 @@ shader_compile :: proc(
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
 
-	shader := &g_resources.shaders[get_shader_idx(p_shader_ref)]
+	shader := &g_resources.shaders[shader_get_idx(p_shader_ref)]
 
 	shader_stage := ""
 	shader_suffix := ""

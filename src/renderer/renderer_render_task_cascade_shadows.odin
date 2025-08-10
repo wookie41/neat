@@ -50,7 +50,7 @@ create_instance :: proc(
 ) -> (
 	res: bool,
 ) {
-	cascade_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	cascade_render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 
 	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena, common.MEGABYTE)
@@ -73,7 +73,7 @@ create_instance :: proc(
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
 
-	cascade_render_task_data.cascade_shadows_image_ref = find_image(cascades_image_name)
+	cascade_render_task_data.cascade_shadows_image_ref = image_find(cascades_image_name)
 
 	render_mesh_job := render_instanced_mesh_job_create(size_of(ShadowPassConstantData)) or_return
 
@@ -122,7 +122,7 @@ create_instance :: proc(
 
 @(private = "file")
 destroy_instance :: proc(p_render_task_ref: RenderTaskRef) {
-	cascade_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	cascade_render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	cascade_render_task_data := (^CascadeShadowsRenderTaskData)(cascade_render_task.data_ptr)
 	if cascade_render_task_data != nil {
 		delete(
@@ -166,7 +166,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
 
-	cascade_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	cascade_render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	cascade_render_task_data := (^CascadeShadowsRenderTaskData)(cascade_render_task.data_ptr)
 
 	using cascade_render_task_data

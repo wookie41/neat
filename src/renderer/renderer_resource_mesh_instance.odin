@@ -51,7 +51,7 @@ MeshInstanceInfoData :: struct #packed {
 
 //---------------------------------------------------------------------------//
 
-init_mesh_instances :: proc() -> bool {
+mesh_instance_init :: proc() -> bool {
 	g_resources.mesh_instances = make_soa(
 		#soa[]MeshInstanceResource,
 		MAX_MESH_INSTANCES,
@@ -67,13 +67,13 @@ init_mesh_instances :: proc() -> bool {
 
 //---------------------------------------------------------------------------//
 
-deinit_mesh_instances :: proc() {
+mesh_instance_deinit :: proc() {
 }
 
 //---------------------------------------------------------------------------//
 
-create_mesh_instance :: proc(p_mesh_instance_ref: MeshInstanceRef) -> bool {
-	mesh_instance := &g_resources.mesh_instances[get_mesh_instance_idx(p_mesh_instance_ref)]
+mesh_instance_create :: proc(p_mesh_instance_ref: MeshInstanceRef) -> bool {
+	mesh_instance := &g_resources.mesh_instances[mesh_instance_get_idx(p_mesh_instance_ref)]
 	mesh_instance.model_matrix = glsl.identity(glsl.mat4)
 	mesh_instance.flags += {.MeshInstanceDataDirty}
 	return true
@@ -81,22 +81,22 @@ create_mesh_instance :: proc(p_mesh_instance_ref: MeshInstanceRef) -> bool {
 
 //---------------------------------------------------------------------------//
 
-allocate_mesh_instance_ref :: proc(p_name: common.Name) -> MeshInstanceRef {
+mesh_instance_allocate :: proc(p_name: common.Name) -> MeshInstanceRef {
 	ref := MeshInstanceRef(
 		common.ref_create(MeshInstanceResource, &g_resource_refs.mesh_instances, p_name),
 	)
-	g_resources.mesh_instances[get_mesh_instance_idx(ref)].desc.name = p_name
+	g_resources.mesh_instances[mesh_instance_get_idx(ref)].desc.name = p_name
 	return ref
 }
 //---------------------------------------------------------------------------//
 
-get_mesh_instance_idx :: proc(p_ref: MeshInstanceRef) -> u32 {
+mesh_instance_get_idx :: proc(p_ref: MeshInstanceRef) -> u32 {
 	return common.ref_get_idx(&g_resource_refs.mesh_instances, p_ref)
 }
 
 //--------------------------------------------------------------------------//
 
-destroy_mesh_instance :: proc(p_ref: MeshInstanceRef) {
+mesh_instance_destroy :: proc(p_ref: MeshInstanceRef) {
 	// mesh_instance := get_mesh_instance(p_ref)
 	common.ref_free(&g_resource_refs.mesh_instances, p_ref)
 }
@@ -109,7 +109,7 @@ mesh_instance_send_transform_data :: proc() {
 	for i in 0 ..< g_resource_refs.mesh_instances.alive_count {
 
 		mesh_instance_ref := g_resource_refs.mesh_instances.alive_refs[i]
-		mesh_instance_idx := get_mesh_instance_idx(mesh_instance_ref)
+		mesh_instance_idx := mesh_instance_get_idx(mesh_instance_ref)
 		mesh_instance := &g_resources.mesh_instances[mesh_instance_idx]
 
 		if .MeshInstanceDataDirty in mesh_instance.flags {
@@ -138,7 +138,7 @@ mesh_instance_set_model_matrix :: proc(
 	p_mesh_instance_ref: MeshInstanceRef,
 	p_model_matrix: glsl.mat4x4,
 ) {
-	mesh_instance := &g_resources.mesh_instances[get_mesh_instance_idx(p_mesh_instance_ref)]
+	mesh_instance := &g_resources.mesh_instances[mesh_instance_get_idx(p_mesh_instance_ref)]
 	mesh_instance.model_matrix = p_model_matrix
 	mesh_instance.flags += {.MeshInstanceDataDirty}
 }
@@ -152,12 +152,12 @@ mesh_instance_spawn :: proc(
 	p_scale: glsl.vec3 = glsl.vec3(1),
 ) -> MeshInstanceRef {
 
-	mesh_instance_ref := allocate_mesh_instance_ref(p_name)
+	mesh_instance_ref := mesh_instance_allocate(p_name)
 
-	mesh_instance := &g_resources.mesh_instances[get_mesh_instance_idx(mesh_instance_ref)]
+	mesh_instance := &g_resources.mesh_instances[mesh_instance_get_idx(mesh_instance_ref)]
 	mesh_instance.desc.mesh_ref = p_mesh_ref
 
-	if create_mesh_instance(mesh_instance_ref) == false {
+	if mesh_instance_create(mesh_instance_ref) == false {
 		return InvalidMeshInstanceRef
 	}
 

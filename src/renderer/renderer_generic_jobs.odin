@@ -61,7 +61,7 @@ generic_compute_job_create :: proc(
 	}
 
 	// Create the compute command 
-	compute_command_ref := compute_command_allocate_ref(p_name, 4, 0)
+	compute_command_ref := compute_command_allocate(p_name, 4, 0)
 	compute_command := &g_resources.compute_commands[compute_command_get_idx(compute_command_ref)]
 
 	compute_command.desc.bind_group_layout_refs[0] = bind_group_layout_ref
@@ -104,8 +104,8 @@ generic_pixel_job_create :: proc(
 	defer common.arena_delete(temp_arena)
 
 	// Create a render pass based on output images
-	render_pass_ref := allocate_render_pass_ref(p_name, len(p_render_pass_bindings.image_outputs))
-	render_pass := &g_resources.render_passes[get_render_pass_idx(render_pass_ref)]
+	render_pass_ref := render_pass_allocate(p_name, len(p_render_pass_bindings.image_outputs))
+	render_pass := &g_resources.render_passes[render_pass_get_idx(render_pass_ref)]
 	render_pass.desc.depth_stencil_type = .None
 	render_pass.desc.primitive_type = .TriangleList
 	render_pass.desc.resterizer_type = .Default
@@ -113,12 +113,12 @@ generic_pixel_job_create :: proc(
 	render_pass.desc.resolution = p_resolution
 
 	for output_image, i in p_render_pass_bindings.image_outputs {
-		image := &g_resources.images[get_image_idx(output_image.image_ref)]
+		image := &g_resources.images[image_get_idx(output_image.image_ref)]
 		render_pass.desc.layout.render_target_formats[i] = image.desc.format
 		render_pass.desc.layout.render_target_blend_types[i] = .Default
 	}
 
-	create_render_pass(render_pass_ref) or_return
+	render_pass_create(render_pass_ref) or_return
 
 	// Create a bind group layout and bind group based on the input images and buffers
 	bind_group_ref, bind_group_layout_ref := create_bind_group_for_bindings(
@@ -133,7 +133,7 @@ generic_pixel_job_create :: proc(
 	}
 
 	// Create the draw command 
-	draw_command_ref := draw_command_allocate_ref(p_name, 4, 0)
+	draw_command_ref := draw_command_allocate(p_name, 4, 0)
 	draw_command := &g_resources.draw_commands[draw_command_get_idx(draw_command_ref)]
 
 	draw_command.desc.bind_group_layout_refs[0] = bind_group_layout_ref
@@ -141,7 +141,7 @@ generic_pixel_job_create :: proc(
 	draw_command.desc.bind_group_layout_refs[2] = G_RENDERER.globals_bind_group_layout_ref
 	draw_command.desc.bind_group_layout_refs[3] = G_RENDERER.bindless_bind_group_layout_ref
 
-	draw_command.desc.vert_shader_ref = find_shader_by_name("fullscreen.vert")
+	draw_command.desc.vert_shader_ref = shader_find_by_name("fullscreen.vert")
 	draw_command.desc.frag_shader_ref = p_shader_ref
 	draw_command.desc.draw_count = 3
 	draw_command.desc.vertex_layout = .Empty
@@ -362,7 +362,7 @@ generic_pixel_job_destroy :: proc(p_job: GenericPixelJob) {
 	bind_group_destroy(p_job.bind_group_ref)
 	bind_group_layout_destroy(p_job.bind_group_layout_ref)
 	draw_command_destroy(p_job.draw_command_ref)
-	destroy_render_pass(p_job.render_pass_ref)
+	render_pass_destroy(p_job.render_pass_ref)
 }
 
 //---------------------------------------------------------------------------//

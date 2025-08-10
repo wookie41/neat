@@ -116,7 +116,7 @@ ui_submit :: proc() {
 	imgui.End()
 
 	cmd_buff_ref := get_frame_cmd_buffer_ref()
-	backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buff_ref)]
+	backend_cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(cmd_buff_ref)]
 
 	swapchain_rendering_info := vk.RenderingAttachmentInfo {
 		sType       = .RENDERING_ATTACHMENT_INFO,

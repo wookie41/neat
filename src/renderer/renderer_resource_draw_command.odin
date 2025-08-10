@@ -47,7 +47,7 @@ G_COMPUTE_COMMAND_REF_ARRAY: common.RefArray(DrawCommandResource)
 //---------------------------------------------------------------------------//
 
 @(private)
-draw_commands_init :: proc() -> bool {
+draw_command_init :: proc() -> bool {
 	g_resources.draw_commands = make_soa(
 		#soa[]DrawCommandResource,
 		MAX_COMPUTE_COMMANDS,
@@ -64,12 +64,12 @@ draw_commands_init :: proc() -> bool {
 //---------------------------------------------------------------------------//
 
 @(private)
-draw_commands_deinit :: proc() {
+draw_command_deinit :: proc() {
 }
 
 //---------------------------------------------------------------------------//
 
-draw_command_allocate_ref :: proc(
+draw_command_allocate :: proc(
 	p_name: common.Name,
 	p_bind_group_layouts_count: u32,
 	p_push_constants_count: u32,
@@ -119,13 +119,13 @@ draw_command_get_idx :: #force_inline proc(p_ref: DrawCommandRef) -> u32 {
 draw_command_create :: proc(p_ref: DrawCommandRef, p_render_pass_ref: RenderPassRef) -> bool {
 	draw_command := &g_resources.draw_commands[draw_command_get_idx(p_ref)]
 
-	draw_command.pipeline_ref = graphics_pipeline_allocate_ref(
+	draw_command.pipeline_ref = graphics_pipeline_allocate(
 		draw_command.desc.name,
 		u32(len(draw_command.desc.bind_group_layout_refs)),
 		u32(len(draw_command.desc.push_constants)),
 	)
 
-	graphics_pipeline := &g_resources.graphics_pipelines[get_graphics_pipeline_idx(draw_command.pipeline_ref)]
+	graphics_pipeline := &g_resources.graphics_pipelines[graphics_pipeline_get_idx(draw_command.pipeline_ref)]
 	graphics_pipeline.desc.bind_group_layout_refs = draw_command.desc.bind_group_layout_refs
 	graphics_pipeline.desc.push_constants = draw_command.desc.push_constants
 	graphics_pipeline.desc.vert_shader_ref = draw_command.desc.vert_shader_ref

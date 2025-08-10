@@ -156,7 +156,7 @@ PipelineType :: enum u8 {
 //---------------------------------------------------------------------------//
 
 @(private)
-pipelines_init :: proc() -> bool {
+pipeline_init :: proc() -> bool {
 	// Graphics pipelines
 	g_resource_refs.graphics_pipelines = common.ref_array_create(
 		GraphicsPipelineResource,
@@ -191,7 +191,7 @@ pipelines_init :: proc() -> bool {
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
 
-	backend_pipelines_init() or_return
+	backend_pipeline_init() or_return
 
 	return true
 }
@@ -199,13 +199,13 @@ pipelines_init :: proc() -> bool {
 //---------------------------------------------------------------------------//
 
 @(private)
-pipelines_deinit :: proc() {
-	backend_pipelines_deinit()
+pipeline_deinit :: proc() {
+	backend_pipeline_deinit()
 }
 
 //---------------------------------------------------------------------------//
 
-graphics_pipeline_allocate_ref :: proc(
+graphics_pipeline_allocate :: proc(
 	p_name: common.Name,
 	p_bind_group_layouts_count: u32,
 	p_push_constants_count: u32,
@@ -213,7 +213,7 @@ graphics_pipeline_allocate_ref :: proc(
 	ref := GraphicsPipelineRef(
 		common.ref_create(GraphicsPipelineResource, &g_resource_refs.graphics_pipelines, p_name),
 	)
-	pipeline := &g_resources.graphics_pipelines[get_graphics_pipeline_idx(ref)]
+	pipeline := &g_resources.graphics_pipelines[graphics_pipeline_get_idx(ref)]
 	pipeline.desc.name = p_name
 	pipeline.desc.bind_group_layout_refs = make(
 		[]BindGroupLayoutRef,
@@ -240,14 +240,14 @@ graphics_pipeline_create :: proc(p_ref: GraphicsPipelineRef) -> bool {
 
 //---------------------------------------------------------------------------//
 
-get_graphics_pipeline_idx :: #force_inline proc(p_ref: GraphicsPipelineRef) -> u32 {
+graphics_pipeline_get_idx :: #force_inline proc(p_ref: GraphicsPipelineRef) -> u32 {
 	return common.ref_get_idx(&g_resource_refs.graphics_pipelines, p_ref)
 }
 
 //---------------------------------------------------------------------------//
 
 graphics_pipeline_destroy :: proc(p_ref: GraphicsPipelineRef) {
-	pipeline := &g_resources.graphics_pipelines[get_graphics_pipeline_idx(p_ref)]
+	pipeline := &g_resources.graphics_pipelines[graphics_pipeline_get_idx(p_ref)]
 
 	delete(pipeline.desc.bind_group_layout_refs, G_RENDERER_ALLOCATORS.resource_allocator)
 	pipeline.desc.bind_group_layout_refs = nil
@@ -269,7 +269,7 @@ graphics_pipeline_bind :: proc(
 
 //---------------------------------------------------------------------------//
 
-compute_pipeline_allocate_ref :: proc(
+compute_pipeline_allocate :: proc(
 	p_name: common.Name,
 	p_bind_group_layouts_count: u32,
 	p_push_constants_count: u32,
@@ -277,7 +277,7 @@ compute_pipeline_allocate_ref :: proc(
 	ref := ComputePipelineRef(
 		common.ref_create(ComputePipelineResource, &g_resource_refs.compute_pipelines, p_name),
 	)
-	pipeline := &g_resources.compute_pipelines[get_compute_pipeline_idx(ref)]
+	pipeline := &g_resources.compute_pipelines[compute_pipeline_get_idx(ref)]
 	pipeline.desc.name = p_name
 	pipeline.desc.bind_group_layout_refs = make(
 		[]BindGroupLayoutRef,
@@ -304,14 +304,14 @@ compute_pipeline_create :: proc(p_ref: ComputePipelineRef) -> bool {
 
 //---------------------------------------------------------------------------//
 
-get_compute_pipeline_idx :: #force_inline proc(p_ref: ComputePipelineRef) -> u32 {
+compute_pipeline_get_idx :: #force_inline proc(p_ref: ComputePipelineRef) -> u32 {
 	return common.ref_get_idx(&g_resource_refs.compute_pipelines, p_ref)
 }
 
 //---------------------------------------------------------------------------//
 
 compute_pipeline_destroy :: proc(p_ref: ComputePipelineRef) {
-	pipeline := &g_resources.compute_pipelines[get_compute_pipeline_idx(p_ref)]
+	pipeline := &g_resources.compute_pipelines[compute_pipeline_get_idx(p_ref)]
 
 	delete(pipeline.desc.bind_group_layout_refs, G_RENDERER_ALLOCATORS.resource_allocator)
 	pipeline.desc.bind_group_layout_refs = nil

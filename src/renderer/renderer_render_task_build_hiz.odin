@@ -105,7 +105,7 @@ create_instance :: proc(
 		return false
 	}
 
-	shader_ref := find_shader_by_name(shader_name)
+	shader_ref := shader_find_by_name(shader_name)
 	if shader_ref == InvalidShaderRef {
 		log.errorf(
 			"Failed to create render task '%s' - invalid shader %s\n",
@@ -114,7 +114,7 @@ create_instance :: proc(
 		)
 		return false
 	}
-	reset_buffer_shader_ref := find_shader_by_name(reset_buffer_shader_name)
+	reset_buffer_shader_ref := shader_find_by_name(reset_buffer_shader_name)
 	if reset_buffer_shader_ref == InvalidShaderRef {
 		log.errorf(
 			"Failed to create render task '%s' - invalid shader %s\n",
@@ -138,8 +138,8 @@ create_instance :: proc(
 	) // clamp to SPD 
 
 	// Create the HiZ buffer
-	hiz_ref := allocate_image_ref(common.create_name(hiz_buffer_name))
-	hiz := &g_resources.images[get_image_idx(hiz_ref)]
+	hiz_ref := image_allocate(common.create_name(hiz_buffer_name))
+	hiz := &g_resources.images[image_get_idx(hiz_ref)]
 	hiz.desc.dimensions = glsl.uvec3{resolution.x, resolution.y, 1}
 	hiz.desc.mip_count = u32(linalg.ceil(linalg.max(log2Size.x, log2Size.y)))
 	hiz.desc.array_size = 1
@@ -148,13 +148,13 @@ create_instance :: proc(
 	hiz.desc.type = .TwoDimensional
 	hiz.desc.sample_count_flags = {._1}
 
-	if create_image(hiz_ref) == false {
+	if image_create(hiz_ref) == false {
 		log.errorf("Failed to create render task '%s' - couldn't create HiZ\n", doc_name)
 		return false
 	}
 
 	defer if res == false {
-		destroy_image(hiz_ref)
+		image_destroy(hiz_ref)
 	}
 
 	// Create the SPD atomic counter buffer
@@ -203,7 +203,7 @@ create_instance :: proc(
 		{spd_atomic_counter_buffer.desc.size, min_max_depth_buffer.desc.size},
 	)
 	defer if res == false {
-		render_pass_bindings_destroy(hiz_render_task_data.build_hiz_bindings)
+		render_pass_destroy_bindings(hiz_render_task_data.build_hiz_bindings)
 	}
 
 	hiz_render_task_data.mip_count = hiz.desc.mip_count
@@ -249,7 +249,7 @@ create_instance :: proc(
 	hiz_render_task_data.min_max_depth_buffer_ref = min_max_depth_buffer_ref
 	hiz_render_task_data.reset_buffer_job = reset_buffer_job
 
-	hiz_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	hiz_render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	hiz_render_task.data_ptr = rawptr(hiz_render_task_data)
 
 	return true
@@ -259,13 +259,13 @@ create_instance :: proc(
 
 @(private = "file")
 destroy_instance :: proc(p_render_task_ref: RenderTaskRef) {
-	hiz_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	hiz_render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	hiz_render_task_data := (^HiZRenderTaskData)(hiz_render_task.data_ptr)
 
 	generic_compute_job_destroy(hiz_render_task_data.build_hiz_job)
 	generic_compute_job_destroy(hiz_render_task_data.reset_buffer_job)
-	render_pass_bindings_destroy(hiz_render_task_data.build_hiz_bindings)
-	destroy_image(hiz_render_task_data.hiz_ref)
+	render_pass_destroy_bindings(hiz_render_task_data.build_hiz_bindings)
+	image_destroy(hiz_render_task_data.hiz_ref)
 	buffer_destroy(hiz_render_task_data.spd_atomic_counter_buffer_ref)
 	buffer_destroy(hiz_render_task_data.min_max_depth_buffer_ref)
 
@@ -289,7 +289,7 @@ end_frame :: proc(p_render_task_ref: RenderTaskRef) {
 @(private = "file")
 render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 
-	hiz_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	hiz_render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	hiz_render_task_data := (^HiZRenderTaskData)(hiz_render_task.data_ptr)
 
 	render_view := render_camera_create_render_view(g_render_camera)

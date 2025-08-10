@@ -293,7 +293,7 @@ ImageMipRegionCopy :: struct {
 //---------------------------------------------------------------------------//
 
 @(private)
-init_images :: proc() -> bool {
+image_init :: proc() -> bool {
 	G_IMAGE_REF_ARRAY = common.ref_array_create(
 		ImageResource,
 		MAX_IMAGES,
@@ -329,12 +329,12 @@ init_images :: proc() -> bool {
 		buffer_create(INTERNAL.staging_buffer_ref) or_return
 	}
 
-	backend_init_images()
+	backend_image_init()
 
 	// Create a default image that we'll use when a texture is missing
 	{
-		G_RENDERER.default_image_ref = allocate_image_ref(common.create_name("DefaultImage"))
-		default_image := &g_resources.images[get_image_idx(G_RENDERER.default_image_ref)]
+		G_RENDERER.default_image_ref = image_allocate(common.create_name("DefaultImage"))
+		default_image := &g_resources.images[image_get_idx(G_RENDERER.default_image_ref)]
 
 		default_image.desc.type = .TwoDimensional
 		default_image.desc.dimensions = glsl.uvec3{4, 4, 1}
@@ -345,7 +345,7 @@ init_images :: proc() -> bool {
 		default_image.desc.array_size = 1
 
 
-		create_image(G_RENDERER.default_image_ref)
+		image_create(G_RENDERER.default_image_ref)
 	}
 
 	return true
@@ -360,35 +360,35 @@ image_upload_begin_frame :: proc() {
 
 //---------------------------------------------------------------------------//
 
-allocate_image_ref :: proc(p_name: common.Name) -> ImageRef {
+image_allocate :: proc(p_name: common.Name) -> ImageRef {
 	ref := ImageRef(common.ref_create(ImageResource, &G_IMAGE_REF_ARRAY, p_name))
-	reset_image_ref(ref)
-	image := &g_resources.images[get_image_idx(ref)]
+	image_reset(ref)
+	image := &g_resources.images[image_get_idx(ref)]
 	image.desc.name = p_name
 	return ref
 }
 
 //---------------------------------------------------------------------------//
 
-reset_image_ref :: proc(p_image_ref: ImageRef) {
-	image := &g_resources.images[get_image_idx(p_image_ref)]
-	backend_image := &g_resources.backend_images[get_image_idx(p_image_ref)]
+image_reset :: proc(p_image_ref: ImageRef) {
+	image := &g_resources.images[image_get_idx(p_image_ref)]
+	backend_image := &g_resources.backend_images[image_get_idx(p_image_ref)]
 	image^ = ImageResource{}
 	backend_image^ = BackendImageResource{}
 }
 
 //---------------------------------------------------------------------------//
 
-free_image_ref :: proc(p_ref: ImageRef) {
+image_free :: proc(p_ref: ImageRef) {
 	common.ref_free(&G_IMAGE_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//
 
 /** Helper method to create image that can later be used as a sampled image inside a shader */
-create_texture_image :: proc(p_ref: ImageRef) -> bool {
+image_create_texture :: proc(p_ref: ImageRef) -> bool {
 
-	image := &g_resources.images[get_image_idx(p_ref)]
+	image := &g_resources.images[image_get_idx(p_ref)]
 	image.bindless_idx = image_allocate_new_bindless_array_entry()
 	// 3D texture loading not supported right now
 	assert(image.desc.type == .TwoDimensional)
@@ -401,7 +401,7 @@ create_texture_image :: proc(p_ref: ImageRef) -> bool {
 	// the loaded mips bitmask is 16 bit, but 2^15x2^15 should be enough for the texture
 	assert(image.desc.mip_count <= 16)
 
-	if backend_create_texture_image(p_ref) == false {
+	if backend_image_create_texture(p_ref) == false {
 		append(&INTERNAL.free_bindless_indices, image.bindless_idx)
 		common.ref_free(&G_IMAGE_REF_ARRAY, p_ref)
 		return false
@@ -425,9 +425,9 @@ create_texture_image :: proc(p_ref: ImageRef) -> bool {
 	return true
 }
 
-create_image :: proc(p_image_ref: ImageRef) -> bool {
+image_create :: proc(p_image_ref: ImageRef) -> bool {
 
-	image := &g_resources.images[get_image_idx(p_image_ref)]
+	image := &g_resources.images[image_get_idx(p_image_ref)]
 
 	if .AddToBindlessArray in image.desc.flags {
 		image.bindless_idx = image_allocate_new_bindless_array_entry()
@@ -436,7 +436,7 @@ create_image :: proc(p_image_ref: ImageRef) -> bool {
 	// the loaded mips bitmask is 16 bit, but 2^15x2^15 should be enough for the texture
 	assert(image.desc.mip_count <= 16)
 
-	if backend_create_image(p_image_ref) == false {
+	if backend_image_create(p_image_ref) == false {
 		append(&INTERNAL.free_bindless_indices, image.bindless_idx)
 
 		common.ref_free(&G_IMAGE_REF_ARRAY, p_image_ref)
@@ -448,43 +448,43 @@ create_image :: proc(p_image_ref: ImageRef) -> bool {
 
 //---------------------------------------------------------------------------//
 
-get_image_idx :: #force_inline proc(p_ref: ImageRef) -> u32 {
+image_get_idx :: #force_inline proc(p_ref: ImageRef) -> u32 {
 	return common.ref_get_idx(&G_IMAGE_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//
 
-create_swap_images :: proc() {
-	backend_create_swap_images()
+image_create_swap_images :: proc() {
+	backend_image_create_swap_images()
 }
 
 //---------------------------------------------------------------------------//
 
-destroy_image :: proc(p_ref: ImageRef) {
-	image := &g_resources.images[get_image_idx(p_ref)]
+image_destroy :: proc(p_ref: ImageRef) {
+	image := &g_resources.images[image_get_idx(p_ref)]
 	if image.bindless_idx != c.UINT32_MAX {
 		append(&INTERNAL.free_bindless_indices, image.bindless_idx)
 	}
-	backend_destroy_image(p_ref)
+	backend_image_destroy(p_ref)
 	common.ref_free(&G_IMAGE_REF_ARRAY, p_ref)
 }
 
 //---------------------------------------------------------------------------//
 
-batch_update_bindless_array_entries :: proc() {
-	backend_batch_update_bindless_array_entries()
+image_update_bindless_array :: proc() {
+	backend_image_update_bindless_array()
 }
 
 //---------------------------------------------------------------------------//
 
-find_image :: proc {
-	find_image_by_name,
-	find_image_by_str,
+image_find :: proc {
+	image_find_by_name,
+	image_find_by_str,
 }
 
 //---------------------------------------------------------------------------//
 
-find_image_by_name :: proc(p_name: common.Name) -> ImageRef {
+image_find_by_name :: proc(p_name: common.Name) -> ImageRef {
 	ref := common.ref_find_by_name(&G_IMAGE_REF_ARRAY, p_name)
 	if ref == InvalidImageRef {
 		return InvalidImageRef
@@ -494,14 +494,14 @@ find_image_by_name :: proc(p_name: common.Name) -> ImageRef {
 
 //--------------------------------------------------------------------------//
 
-find_image_by_str :: proc(p_str: string) -> ImageRef {
-	return find_image_by_name(common.create_name(p_str))
+image_find_by_str :: proc(p_str: string) -> ImageRef {
+	return image_find_by_name(common.create_name(p_str))
 }
 
 //--------------------------------------------------------------------------//
 
 @(private)
-image_upload_progress_copies :: proc() {
+image_progress_uploads :: proc() {
 	temp_arena := common.Arena{}
 	common.temp_arena_init(&temp_arena, common.KILOBYTE * 256)
 	defer common.arena_delete(temp_arena)
@@ -556,7 +556,7 @@ try_progress_image_copies :: proc(
 			image_upload_info.is_initialized = true
 		}
 
-		image := &g_resources.images[get_image_idx(image_upload_info.image_ref)]
+		image := &g_resources.images[image_get_idx(image_upload_info.image_ref)]
 		block_size := get_block_size_in_bytes(image.desc.format)
 		mip_region_copies := make([dynamic]ImageMipRegionCopy, temp_arena.allocator)
 
@@ -688,7 +688,7 @@ calculate_image_upload_size :: proc(p_image_dimensions: glsl.uvec3, p_mip: u32) 
 //--------------------------------------------------------------------------//
 
 @(private)
-image_upload_finalize_finished_uploads :: proc() {
+image_finalize_finished_uploads :: proc() {
 	backend_finalize_async_image_copies()
 }
 

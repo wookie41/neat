@@ -148,7 +148,7 @@ material_asset_create :: proc(p_material_asset_ref: MaterialAssetRef) -> bool {
 		return true
 	}
 
-	material_type_ref := renderer.find_material_type(material_asset.material_type_name)
+	material_type_ref := renderer.material_type_find(material_asset.material_type_name)
 	if material_type_ref == renderer.InvalidMaterialTypeRef {
 		log.warn(
 			"Failed to create material '%s' - unsupported material type '%s'\n",
@@ -160,16 +160,16 @@ material_asset_create :: proc(p_material_asset_ref: MaterialAssetRef) -> bool {
 	}
 
 	// Create a material instance for this material asset
-	material_asset.material_instance_ref = renderer.allocate_material_instance_ref(
+	material_asset.material_instance_ref = renderer.material_instance_allocate(
 		material_asset.name,
 	)
-	material_instance_idx := renderer.get_material_instance_idx(
+	material_instance_idx := renderer.material_instance_get_idx(
 		material_asset.material_instance_ref,
 	)
 	material_instance := &renderer.g_resources.material_instances[material_instance_idx]
 	material_instance.desc.material_type_ref = material_type_ref
 
-	renderer.create_material_instance(material_asset.material_instance_ref)
+	renderer.material_instance_create(material_asset.material_instance_ref)
 
 	material_asset.ref_count = 1
 	material_asset.base = AssetMetadataBase {
@@ -267,7 +267,7 @@ material_asset_load :: proc(p_name: common.Name) -> MaterialAssetRef {
 		}
 	}
 
-	material_type_ref := renderer.find_material_type(material_metadata.material_type_name)
+	material_type_ref := renderer.material_type_find(material_metadata.material_type_name)
 	if material_type_ref == renderer.InvalidMaterialTypeRef {
 		log.warn(
 			"Failed to load material '%s' - unsupported material type '%s'",
@@ -281,14 +281,14 @@ material_asset_load :: proc(p_name: common.Name) -> MaterialAssetRef {
 	material_asset := material_asset_get(material_asset_ref)
 
 	// Create a material instance for this material asset
-	material_asset.material_instance_ref = renderer.allocate_material_instance_ref(p_name)
-	material_instance_idx := renderer.get_material_instance_idx(
+	material_asset.material_instance_ref = renderer.material_instance_allocate(p_name)
+	material_instance_idx := renderer.material_instance_get_idx(
 		material_asset.material_instance_ref,
 	)
 	material_instance := &renderer.g_resources.material_instances[material_instance_idx]
 	material_instance.desc.material_type_ref = material_type_ref
 
-	renderer.create_material_instance(material_asset.material_instance_ref)
+	renderer.material_instance_create(material_asset.material_instance_ref)
 
 	material_asset.texture_asset_refs = make(
 		[dynamic]TextureAssetRef,
@@ -306,7 +306,7 @@ material_asset_load :: proc(p_name: common.Name) -> MaterialAssetRef {
 
 	if success == false {
 		common.ref_free(&G_MATERIAL_ASSET_REF_ARRAY, material_asset_ref)
-		renderer.destroy_material_instance(material_asset.material_instance_ref)
+		renderer.material_instance_destroy(material_asset.material_instance_ref)
 		return InvalidMaterialAssetRef
 	}
 
@@ -535,12 +535,12 @@ material_asset_set_image_by_name :: proc(
 		return
 	}
 
-	image_ref := renderer.find_image(p_image_name)
+	image_ref := renderer.image_find(p_image_name)
 	if image_ref == renderer.InvalidImageRef {
 		return
 	}
 
-	p_image_id^ = renderer.g_resources.images[renderer.get_image_idx(image_ref)].bindless_idx
+	p_image_id^ = renderer.g_resources.images[renderer.image_get_idx(image_ref)].bindless_idx
 	append(p_out_texture_refs, texture_asset_ref)
 }
 
@@ -558,7 +558,7 @@ material_asset_unload :: proc(p_material_asset_ref: MaterialAssetRef) {
 	}
 	delete(material_asset.texture_asset_refs)
 
-	renderer.destroy_material_instance(material_asset.material_instance_ref)
+	renderer.material_instance_destroy(material_asset.material_instance_ref)
 	common.ref_free(&G_MATERIAL_ASSET_REF_ARRAY, p_material_asset_ref)
 }
 

@@ -631,9 +631,9 @@ backend_wait_for_frame_resources :: proc() {
 backend_post_render :: proc() {
 
 	swap_image_ref := G_RENDERER.swap_image_refs[G_RENDERER.swap_img_idx]
-	swap_image := &g_resources.backend_images[get_image_idx(swap_image_ref)]
+	swap_image := &g_resources.backend_images[image_get_idx(swap_image_ref)]
 
-	backend_cmd_buff := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(get_frame_cmd_buffer_ref())]
+	backend_cmd_buff := &g_resources.backend_cmd_buffers[command_buffer_get_idx(get_frame_cmd_buffer_ref())]
 
 	// Transition the swapchain to present 
 	to_present_barrier := vk.ImageMemoryBarrier {
@@ -670,7 +670,7 @@ backend_post_render :: proc() {
 @(private)
 backend_submit_current_frame :: proc() {
 
-	backend_cmd_buff := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(get_frame_cmd_buffer_ref())]
+	backend_cmd_buff := &g_resources.backend_cmd_buffers[command_buffer_get_idx(get_frame_cmd_buffer_ref())]
 
 	// Submit
 	{
@@ -987,7 +987,7 @@ backend_begin_frame :: proc() {
 
 	if should_recreate_swapchain {
 		recreate_swapchain()
-		create_swap_images()
+		image_create_swap_images()
 
 		vk.AcquireNextImageKHR(
 			G_RENDERER.device,
@@ -1006,7 +1006,7 @@ backend_begin_frame :: proc() {
 	// We have to put the current swap image in the undefined state, so proper barriers are issued
 	{
 		swap_image_ref := G_RENDERER.swap_image_refs[G_RENDERER.swap_img_idx]
-		image_backend := &g_resources.backend_images[get_image_idx(swap_image_ref)]
+		image_backend := &g_resources.backend_images[image_get_idx(swap_image_ref)]
 		image_backend.vk_layouts[0][0] = .UNDEFINED
 	}
 

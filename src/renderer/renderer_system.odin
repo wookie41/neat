@@ -93,7 +93,7 @@ g_resources: struct {
 	compute_pipelines:          #soa[]ComputePipelineResource,
 	backend_compute_pipelines:  #soa[]BackendComputePipelineResource,
 	render_passes:              #soa[]RenderPassResource,
-	backend_render_passes:      #soa[]BackendRenderPassResource,
+	backrender_pass_endes:      #soa[]BackendRenderPassResource,
 	render_tasks:               []RenderTaskResource,
 	shaders:                    #soa[]ShaderResource,
 	backend_shaders:            #soa[]BackendShaderResource,
@@ -264,20 +264,20 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	backend_init(p_options) or_return
 
-	init_shaders() or_return
-	init_render_passes() or_return
-	pipelines_init() or_return
+	shader_init() or_return
+	render_pass_init() or_return
+	pipeline_init() or_return
 	bind_group_layout_init()
 	bind_group_init()
 	buffer_init()
-	init_meshes()
-	init_images() or_return
-	init_command_buffers(p_options) or_return
+	mesh_init()
+	image_init() or_return
+	command_buffer_init(p_options) or_return
 	buffer_management_init() or_return
-	draw_commands_init() or_return
-	compute_commands_init() or_return
+	draw_command_init() or_return
+	compute_command_init() or_return
 
-	create_swap_images()
+	image_create_swap_images()
 
 	{
 		buffer_upload_options := BufferUploadInitOptions {
@@ -314,18 +314,18 @@ init :: proc(p_options: InitOptions) -> bool {
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
 		for i in 0 ..< G_RENDERER.num_frames_in_flight {
-			cmd_buff_ref := allocate_command_buffer_ref(common.create_name("CmdBuffer"))
+			cmd_buff_ref := command_buffer_allocate(common.create_name("CmdBuffer"))
 			if cmd_buff_ref == InvalidCommandBufferRef {
 				log.error("Failed to allocate command buffer")
 				return false
 			}
-			cmd_buffer := &g_resources.cmd_buffers[get_cmd_buffer_idx(cmd_buff_ref)]
+			cmd_buffer := &g_resources.cmd_buffers[command_buffer_get_idx(cmd_buff_ref)]
 			cmd_buffer.desc = {
 				flags  = {.Primary},
 				thread = 0,
 				frame  = u8(i),
 			}
-			if create_command_buffer(cmd_buff_ref) == false {
+			if command_buffer_create(cmd_buff_ref) == false {
 				log.error("Failed to create command buffer")
 				return false
 			}
@@ -487,11 +487,11 @@ init :: proc(p_options: InitOptions) -> bool {
 	}
 
 
-	init_render_tasks() or_return
-	init_material_passes() or_return
-	init_material_types() or_return
-	init_material_instances() or_return
-	init_mesh_instances() or_return
+	render_task_init() or_return
+	material_pass_init() or_return
+	material_type_init() or_return
+	material_instance_init() or_return
+	mesh_instance_init() or_return
 
 	uniform_buffer_init()
 	init_jobs() or_return
@@ -562,29 +562,29 @@ update :: proc(p_dt: f32) {
 
 	process_deferred_resource_deletes()
 
-	shaders_update()
+	shader_update()
 
 	cmd_buff_ref := get_frame_cmd_buffer_ref()
-	begin_command_buffer(cmd_buff_ref)
+	command_buffer_begin(cmd_buff_ref)
 
 	backend_begin_frame()
 	ui_begin_frame()
 
 	buffer_upload_finalize_finished_uploads()
-	image_upload_finalize_finished_uploads()
+	image_finalize_finished_uploads()
 
 	image_upload_begin_frame()
 	buffer_upload_begin_frame()
 
 	buffer_upload_run_last_frame_requests()
-	batch_update_bindless_array_entries()
+	image_update_bindless_array()
 	buffer_upload_process_async_requests()
-	image_upload_progress_copies()
+	image_progress_uploads()
 
 	material_instance_update_dirty_materials()
 	mesh_instance_send_transform_data()
 
-	render_tasks_update(p_dt)
+	render_task_update(p_dt)
 
 	draw_debug_ui(p_dt)
 
@@ -592,7 +592,7 @@ update :: proc(p_dt: f32) {
 
 	ui_submit()
 
-	end_command_buffer(cmd_buff_ref)
+	command_buffer_end(cmd_buff_ref)
 
 	submit_current_frame()
 	free_all(get_frame_allocator())
@@ -638,17 +638,17 @@ deinit :: proc() {
 
 	ui_shutdown()
 
-	pipelines_deinit()
-	deinit_shaders()
-	deinit_render_tasks()
+	pipeline_deinit()
+	shader_deinit()
+	render_task_deinit()
 	// @TODO deinit_bind_groups()
 	// @TODO deinit_pipeline_layouts()
 	// @TODOdeinit_pipelines()
-	// @TODO deinit_images()
-	// @TODO deinit_meshes()
+	// @TODO deimage_init()
+	// @TODO mesh_deinit()
 	// @TODO debuffer_init()
-	// @TODO deinit_command_buffers(p_options)
-	deinit_render_tasks()
+	// @TODO decommand_buffer_init(p_options)
+	render_task_deinit()
 	deinit_backend()
 }
 
@@ -702,7 +702,7 @@ load_renderer_config :: proc() -> bool {
 	G_RENDERER.config.render_resolution.x = render_width
 	G_RENDERER.config.render_resolution.y = render_height
 
-	renderer_config_create_images(doc)
+	renderer_config_image_creates(doc)
 	renderer_config_load_render_tasks(doc)
 
 	return true
@@ -711,7 +711,7 @@ load_renderer_config :: proc() -> bool {
 //---------------------------------------------------------------------------//
 
 @(private = "file")
-renderer_config_create_images :: proc(p_doc: ^xml.Document) -> bool {
+renderer_config_image_creates :: proc(p_doc: ^xml.Document) -> bool {
 	images_id, images_found := xml.find_child_by_ident(p_doc, 0, "Images")
 	if images_found == false {
 		return true
@@ -813,8 +813,8 @@ renderer_config_create_images :: proc(p_doc: ^xml.Document) -> bool {
 				image_flags += {.Sampled}
 			}
 
-			image_ref := allocate_image_ref(image_name)
-			image_idx := get_image_idx(image_ref)
+			image_ref := image_allocate(image_name)
+			image_idx := image_get_idx(image_ref)
 			image := &g_resources.images[image_idx]
 
 			image.desc.dimensions = image_dimensions
@@ -834,7 +834,7 @@ renderer_config_create_images :: proc(p_doc: ^xml.Document) -> bool {
 				1,
 			)
 
-			if create_image(image_ref) == false {
+			if image_create(image_ref) == false {
 				log.errorf("Failed to create image '%s'\n", child.ident)
 				continue
 			}
@@ -882,8 +882,8 @@ renderer_config_load_render_tasks :: proc(p_doc: ^xml.Document) -> bool {
 				continue
 			}
 
-			render_task_ref := allocate_render_task_ref(common.create_name(render_task_name))
-			g_resources.render_tasks[get_render_task_idx(render_task_ref)].desc.type =
+			render_task_ref := render_task_allocate(common.create_name(render_task_name))
+			g_resources.render_tasks[render_task_get_idx(render_task_ref)].desc.type =
 				render_task_type
 
 
@@ -891,9 +891,9 @@ renderer_config_load_render_tasks :: proc(p_doc: ^xml.Document) -> bool {
 				doc                    = p_doc,
 				render_task_element_id = element_id,
 			}
-			if create_render_task(render_task_ref, &render_task_config) == false {
+			if render_task_create(render_task_ref, &render_task_config) == false {
 				log.errorf("Failed to create render task '%s:%s'\n", child.ident, render_task_name)
-				destroy_render_task(render_task_ref)
+				render_task_destroy(render_task_ref)
 				continue
 			}
 

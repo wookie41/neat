@@ -33,27 +33,27 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_init_shaders :: proc() -> bool {
+	backend_shader_init :: proc() -> bool {
 		return true
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_deinit_shaders :: proc() {
+	backend_shader_deinit :: proc() {
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_create_shader :: proc(
+	backend_shader_create :: proc(
 		p_ref: ShaderRef,
 		p_shader_code: []byte,
 	) -> (
 		create_result: bool,
 	) {
 
-		shader_idx := get_shader_idx(p_ref)
+		shader_idx := shader_get_idx(p_ref)
 		shader := &g_resources.shaders[shader_idx]
 		backend_shader := &g_resources.backend_shaders[shader_idx]
 
@@ -80,18 +80,18 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_destroy_shader :: proc(p_shader_ref: ShaderRef) {
-		shader := &g_resources.backend_shaders[get_shader_idx(p_shader_ref)]
+	backend_shader_destroy :: proc(p_shader_ref: ShaderRef) {
+		shader := &g_resources.backend_shaders[shader_get_idx(p_shader_ref)]
 		vk_module := defer_resource_delete(safe_destroy_vk_module, vk.ShaderModule)
 		vk_module^ = shader.vk_module
 	}
 
 	//---------------------------------------------------------------------------//
 
-	backend_reload_shader :: proc(p_shader_ref: ShaderRef, p_shader_code: []byte) -> bool {
-		shader := &g_resources.backend_shaders[get_shader_idx(p_shader_ref)]
+	backend_shader_reload :: proc(p_shader_ref: ShaderRef, p_shader_code: []byte) -> bool {
+		shader := &g_resources.backend_shaders[shader_get_idx(p_shader_ref)]
 		old_vk_module := shader.vk_module
-		if backend_create_shader(p_shader_ref, p_shader_code) == true {
+		if backend_shader_create(p_shader_ref, p_shader_code) == true {
 
 			vk_module := defer_resource_delete(safe_destroy_vk_module, vk.ShaderModule)
 			vk_module^ = old_vk_module

@@ -18,32 +18,32 @@ when USE_VULKAN_BACKEND {
 	BackendRenderPassResource :: struct {}
 
 	@(private)
-	backend_init_render_passes :: proc() {
+	backrender_pass_end_init :: proc() {
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_create_render_pass :: proc(p_ref: RenderPassRef) -> bool {
+	backrender_pass_end_create :: proc(p_ref: RenderPassRef) -> bool {
 		return true
 	}
 
 	//---------------------------------------------------------------------------//	
 
 	@(private)
-	backend_destroy_render_pass :: proc(p_render_pass_ref: RenderPassRef) {
+	backrender_pass_end_destroy :: proc(p_render_pass_ref: RenderPassRef) {
 		// nothing to do
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_begin_render_pass :: proc(
+	backrender_pass_end_begin :: proc(
 		p_render_pass_ref: RenderPassRef,
 		p_cmd_buff_ref: CommandBufferRef,
 		p_begin_info: ^RenderPassBeginInfo,
 	) {
-		render_pass_idx := get_render_pass_idx(p_render_pass_ref)
+		render_pass_idx := render_pass_get_idx(p_render_pass_ref)
 		render_pass := &g_resources.render_passes[render_pass_idx]
 
 		assert((.IsActive in render_pass.flags) == false)
@@ -66,13 +66,13 @@ when USE_VULKAN_BACKEND {
 		// Prepare rendering attachments for outputs
 		for output in p_begin_info.bindings.image_outputs {
 
-			image_idx := get_image_idx(output.image_ref)
+			image_idx := image_get_idx(output.image_ref)
 			image := &g_resources.images[image_idx]
 
 			// Grab the proper swap image for this frame
 			if .SwapImage in image.desc.flags {
 				swap_image_ref := G_RENDERER.swap_image_refs[G_RENDERER.swap_img_idx]
-				image_idx = get_image_idx(swap_image_ref)
+				image_idx = image_get_idx(swap_image_ref)
 				image = &g_resources.images[image_idx]
 			}
 
@@ -137,7 +137,7 @@ when USE_VULKAN_BACKEND {
 			image_backend.vk_layouts[output.array_layer][output.mip] = new_layout
 		}
 
-		cmd_buffer_idx := get_cmd_buffer_idx(p_cmd_buff_ref)
+		cmd_buffer_idx := command_buffer_get_idx(p_cmd_buff_ref)
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[cmd_buffer_idx]
 
 		// Prepare the rendering info
@@ -185,15 +185,15 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_end_render_pass :: #force_inline proc(
+	backend_render_pass_end :: #force_inline proc(
 		p_render_pass_ref: RenderPassRef,
 		p_cmd_buff_ref: CommandBufferRef,
 	) {
-		render_pass := &g_resources.render_passes[get_render_pass_idx(p_render_pass_ref)]
+		render_pass := &g_resources.render_passes[render_pass_get_idx(p_render_pass_ref)]
 		assert(.IsActive in render_pass.flags)
 		render_pass.flags -= {.IsActive}
 
-		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
+		backend_cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(p_cmd_buff_ref)]
 		vk.CmdEndRendering(backend_cmd_buffer.vk_cmd_buff)
 	}
 }

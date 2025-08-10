@@ -118,7 +118,7 @@ G_MESH_REF_ARRAY: common.RefArray(MeshResource)
 
 //---------------------------------------------------------------------------//
 
-init_meshes :: proc() -> bool {
+mesh_init :: proc() -> bool {
 
 	G_MESH_REF_ARRAY = common.ref_array_create(
 		MeshResource,
@@ -160,13 +160,13 @@ init_meshes :: proc() -> bool {
 
 //---------------------------------------------------------------------------//
 
-deinit_meshes :: proc() {
+mesh_deinit :: proc() {
 }
 
 //---------------------------------------------------------------------------//
 
-create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
-	mesh := &g_resources.meshes[get_mesh_idx(p_mesh_ref)]
+mesh_create :: proc(p_mesh_ref: MeshRef) -> bool {
+	mesh := &g_resources.meshes[mesh_get_idx(p_mesh_ref)]
 
 	index_count := len(mesh.desc.indices)
 	vertex_count := len(mesh.desc.position)
@@ -321,10 +321,10 @@ create_mesh :: proc(p_mesh_ref: MeshRef) -> bool {
 
 //---------------------------------------------------------------------------//
 
-allocate_mesh_ref :: proc(p_name: common.Name, p_num_submeshes: u32) -> MeshRef {
+mesh_allocate :: proc(p_name: common.Name, p_num_submeshes: u32) -> MeshRef {
 	ref := MeshRef(common.ref_create(MeshResource, &G_MESH_REF_ARRAY, p_name))
-	reset_mesh_ref(ref)
-	mesh := &g_resources.meshes[get_mesh_idx(ref)]
+	mesh_reset(ref)
+	mesh := &g_resources.meshes[mesh_get_idx(ref)]
 	mesh.desc.name = p_name
 	mesh.desc.sub_meshes = make(
 		[]SubMesh,
@@ -336,21 +336,21 @@ allocate_mesh_ref :: proc(p_name: common.Name, p_num_submeshes: u32) -> MeshRef 
 
 //---------------------------------------------------------------------------//
 
-reset_mesh_ref :: proc(p_mesh_ref: MeshRef) {
-	mesh := &g_resources.meshes[get_mesh_idx(p_mesh_ref)]
+mesh_reset :: proc(p_mesh_ref: MeshRef) {
+	mesh := &g_resources.meshes[mesh_get_idx(p_mesh_ref)]
 	mesh^ = MeshResource{}
 }
 
 //---------------------------------------------------------------------------//
 
-get_mesh_idx :: proc(p_ref: MeshRef) -> u32 {
+mesh_get_idx :: proc(p_ref: MeshRef) -> u32 {
 	return common.ref_get_idx(&G_MESH_REF_ARRAY, p_ref)
 }
 
 //--------------------------------------------------------------------------//
 
-destroy_mesh :: proc(p_ref: MeshRef) {
-	mesh := &g_resources.meshes[get_mesh_idx(p_ref)]
+mesh_destroy :: proc(p_ref: MeshRef) {
+	mesh := &g_resources.meshes[mesh_get_idx(p_ref)]
 
 	delete(mesh.desc.sub_meshes, G_RENDERER_ALLOCATORS.resource_allocator)
 
@@ -362,7 +362,7 @@ destroy_mesh :: proc(p_ref: MeshRef) {
 //--------------------------------------------------------------------------//
 
 @(private)
-free_mesh_ref :: proc(p_mesh_ref: MeshRef) {
+mesh_free :: proc(p_mesh_ref: MeshRef) {
 	common.ref_free(&G_MESH_REF_ARRAY, p_mesh_ref)
 
 }
@@ -384,14 +384,14 @@ mesh_get_global_index_buffer_ref :: proc() -> BufferRef {
 //--------------------------------------------------------------------------//
 
 
-find_mesh :: proc {
-	find_mesh_by_name,
-	find_mesh_by_str,
+mesh_find :: proc {
+	mesh_find_by_name,
+	mesh_find_by_str,
 }
 
 //---------------------------------------------------------------------------//
 
-find_mesh_by_name :: proc(p_name: common.Name) -> MeshRef {
+mesh_find_by_name :: proc(p_name: common.Name) -> MeshRef {
 	ref := common.ref_find_by_name(&G_MESH_REF_ARRAY, p_name)
 	if ref == InvalidMeshRef {
 		return InvalidMeshRef
@@ -401,8 +401,8 @@ find_mesh_by_name :: proc(p_name: common.Name) -> MeshRef {
 
 //--------------------------------------------------------------------------//
 
-find_mesh_by_str :: proc(p_str: string) -> MeshRef {
-	return find_mesh_by_name(common.create_name(p_str))
+mesh_find_by_str :: proc(p_str: string) -> MeshRef {
+	return mesh_find_by_name(common.create_name(p_str))
 }
 
 //--------------------------------------------------------------------------//
@@ -421,7 +421,7 @@ mesh_upload_finished_callback :: proc(p_user_data: rawptr) {
 
 	mesh_data_upload_ctx.finished_uploads_count += 1
 	if mesh_data_upload_ctx.finished_uploads_count == mesh_data_upload_ctx.needed_uploads_count {
-		mesh := &g_resources.meshes[get_mesh_idx(mesh_ref)]
+		mesh := &g_resources.meshes[mesh_get_idx(mesh_ref)]
 		if mesh.desc.file_mapping.mapped_ptr != nil {
 			common.unmap_file(mesh.desc.file_mapping)
 			return

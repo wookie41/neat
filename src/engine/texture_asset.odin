@@ -279,7 +279,7 @@ texture_asset_unload :: proc(p_texture_asset_ref: TextureAssetRef) {
 	delete(texture_asset.texture_datas, G_ALLOCATORS.main_allocator)
 	common.ref_free(&G_TEXTURE_ASSET_REF_ARRAY, p_texture_asset_ref)
 	if texture_asset.image_ref != renderer.InvalidImageRef {
-		renderer.destroy_image(texture_asset.image_ref)
+		renderer.image_destroy(texture_asset.image_ref)
 	}
 }
 
@@ -459,8 +459,8 @@ texture_asset_load_by_name :: proc(p_name: common.Name) -> TextureAssetRef {
 		return InvalidTextureAssetRef
 	}
 
-	image_ref := renderer.allocate_image_ref(p_name)
-	image := &renderer.g_resources.images[renderer.get_image_idx(image_ref)]
+	image_ref := renderer.image_allocate(p_name)
+	image := &renderer.g_resources.images[renderer.image_get_idx(image_ref)]
 
 	if image_ref == renderer.InvalidImageRef {
 		texture_asset_unload(texture_ref)
@@ -482,7 +482,7 @@ texture_asset_load_by_name :: proc(p_name: common.Name) -> TextureAssetRef {
 		image.desc.format = .BC6H_UFloat
 	case:
 		texture_asset_unload(texture_ref)
-		renderer.destroy_image(image_ref)
+		renderer.image_destroy(image_ref)
 		log.warnf("Unsupported image format for image '%s'\n", common.get_string(p_name))
 		return InvalidTextureAssetRef
 	}
@@ -495,7 +495,7 @@ texture_asset_load_by_name :: proc(p_name: common.Name) -> TextureAssetRef {
 	image.desc.sample_count_flags = {._1}
 	image.desc.file_mapping = texture_asset_file_mapping
 
-	if renderer.create_texture_image(image_ref) == false {
+	if renderer.image_create_texture(image_ref) == false {
 		texture_asset_unload(texture_ref)
 		return InvalidTextureAssetRef
 	}

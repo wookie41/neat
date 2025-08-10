@@ -97,12 +97,12 @@ create_instance :: proc(
 		"exposureBuffer",
 	) or_return
 
-	build_shader_ref := find_shader_by_name(build_shader_name)
+	build_shader_ref := shader_find_by_name(build_shader_name)
 	if build_shader_ref == InvalidShaderRef {
 		return false
 	}
 
-	reduce_shader_ref := find_shader_by_name(reduce_shader_name)
+	reduce_shader_ref := shader_find_by_name(reduce_shader_name)
 	if reduce_shader_ref == InvalidShaderRef {
 		return false
 	}
@@ -154,7 +154,7 @@ create_instance :: proc(
 		{histogram_buffer.desc.size},
 	)
 	defer if res == false {
-		render_pass_bindings_destroy(render_task_data.build_shader_bindings)
+		render_pass_destroy_bindings(render_task_data.build_shader_bindings)
 	}
 
 	// Create the build histogram job
@@ -196,7 +196,7 @@ create_instance :: proc(
 		) or_return
 	}
 
-	render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	render_task.data_ptr = rawptr(render_task_data)
 
 	return true
@@ -206,12 +206,12 @@ create_instance :: proc(
 
 @(private = "file")
 destroy_instance :: proc(p_render_task_ref: RenderTaskRef) {
-	render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	render_task_data := (^ComputeAvgLumRenderTaskData)(render_task.data_ptr)
 
 	generic_compute_job_destroy(render_task_data.build_histogram_job)
 	generic_compute_job_destroy(render_task_data.reduce_histogram_job)
-	render_pass_bindings_destroy(render_task_data.build_shader_bindings)
+	render_pass_destroy_bindings(render_task_data.build_shader_bindings)
 
 	free(render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
 }
@@ -233,7 +233,7 @@ end_frame :: proc(p_render_task_ref: RenderTaskRef) {
 @(private = "file")
 render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 
-	render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	render_task_data := (^ComputeAvgLumRenderTaskData)(render_task.data_ptr)
 
 	render_view := render_camera_create_render_view(g_render_camera)

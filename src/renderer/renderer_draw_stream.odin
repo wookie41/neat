@@ -415,7 +415,7 @@ draw_stream_dispatcher_submit_draw :: proc(p_draw_stream_dispatch: ^DrawStreamDi
 	assert(p_draw_stream_dispatch.pipeline_ref != InvalidGraphicsPipelineRef)
 
 	// Collect push constants for the current pipeline
-	pipeline := &g_resources.graphics_pipelines[get_graphics_pipeline_idx(p_draw_stream_dispatch.pipeline_ref)]
+	pipeline := &g_resources.graphics_pipelines[graphics_pipeline_get_idx(p_draw_stream_dispatch.pipeline_ref)]
 
 	push_constants_start := p_draw_stream_dispatch.current_push_constant
 	push_constants_count := u32(len(pipeline.desc.push_constants))

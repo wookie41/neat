@@ -126,7 +126,7 @@ MaterialProperties :: struct #packed {
 
 //---------------------------------------------------------------------------//
 
-init_material_types :: proc() -> bool {
+material_type_init :: proc() -> bool {
 
 
 	// Allocate memory for the material types
@@ -141,43 +141,43 @@ init_material_types :: proc() -> bool {
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
 
-	load_material_types_from_config_file() or_return
+	material_types_load_types_from_config_file() or_return
 
 	return true
 }
 
 //---------------------------------------------------------------------------//
 
-deinit_material_types :: proc() {
+material_type_deinit :: proc() {
 	buffer_destroy(g_renderer_buffers.material_instances_buffer_ref)
 }
 
 //---------------------------------------------------------------------------//
 
-create_material_type :: proc(p_material_ref: MaterialTypeRef) -> bool {
+material_type_create :: proc(p_material_ref: MaterialTypeRef) -> bool {
 	return true
 }
 
 //---------------------------------------------------------------------------//
 
-allocate_material_type_ref :: proc(p_name: common.Name) -> MaterialTypeRef {
+material_type_allocate :: proc(p_name: common.Name) -> MaterialTypeRef {
 	ref := MaterialTypeRef(
 		common.ref_create(MaterialTypeResource, &G_MATERIAL_TYPE_REF_ARRAY, p_name),
 	)
-	g_resources.material_types[get_material_type_idx(ref)].desc.name = p_name
+	g_resources.material_types[material_type_get_idx(ref)].desc.name = p_name
 	return ref
 }
 
 //---------------------------------------------------------------------------//
 
-get_material_type_idx :: #force_inline proc(p_ref: MaterialTypeRef) -> u32 {
+material_type_get_idx :: #force_inline proc(p_ref: MaterialTypeRef) -> u32 {
 	return common.ref_get_idx(&G_MATERIAL_TYPE_REF_ARRAY, p_ref)
 }
 
 //--------------------------------------------------------------------------//
 
-destroy_material_type :: proc(p_ref: MaterialTypeRef) {
-	material_type := &g_resources.material_types[get_material_type_idx(p_ref)]
+material_type_destroy :: proc(p_ref: MaterialTypeRef) {
+	material_type := &g_resources.material_types[material_type_get_idx(p_ref)]
 
 	if len(material_type.desc.defines) > 0 {
 		delete(material_type.desc.defines, G_RENDERER_ALLOCATORS.resource_allocator)
@@ -191,7 +191,7 @@ destroy_material_type :: proc(p_ref: MaterialTypeRef) {
 //--------------------------------------------------------------------------//
 
 @(private = "file")
-load_material_types_from_config_file :: proc() -> bool {
+material_types_load_types_from_config_file :: proc() -> bool {
 	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
@@ -220,11 +220,11 @@ load_material_types_from_config_file :: proc() -> bool {
 	}
 
 	for material_type_json_entry in material_type_json_entries {
-		material_type_ref := allocate_material_type_ref(
+		material_type_ref := material_type_allocate(
 			common.create_name(material_type_json_entry.name),
 		)
 
-		material_type := &g_resources.material_types[get_material_type_idx(material_type_ref)]
+		material_type := &g_resources.material_types[material_type_get_idx(material_type_ref)]
 		material_type.desc.name = common.create_name(material_type_json_entry.name)
 
 		// Defines
@@ -252,7 +252,7 @@ load_material_types_from_config_file :: proc() -> bool {
 			assert(material_type.desc.material_passes_refs[i] != InvalidMaterialPassRef)
 		}
 
-		assert(create_material_type(material_type_ref))
+		assert(material_type_create(material_type_ref))
 	}
 
 	return true
@@ -260,12 +260,12 @@ load_material_types_from_config_file :: proc() -> bool {
 
 //--------------------------------------------------------------------------//
 
-find_material_type :: proc {
-	find_material_type_by_name,
-	find_material_type_by_str,
+material_type_find :: proc {
+	material_type_find_by_name,
+	material_type_find_by_str,
 }
 
-find_material_type_by_name :: proc(p_name: common.Name) -> MaterialTypeRef {
+material_type_find_by_name :: proc(p_name: common.Name) -> MaterialTypeRef {
 	ref := common.ref_find_by_name(&G_MATERIAL_TYPE_REF_ARRAY, p_name)
 	if ref == InvalidMaterialTypeRef {
 		return InvalidMaterialTypeRef
@@ -275,8 +275,8 @@ find_material_type_by_name :: proc(p_name: common.Name) -> MaterialTypeRef {
 
 //--------------------------------------------------------------------------//
 
-find_material_type_by_str :: proc(p_str: string) -> MaterialTypeRef {
-	return find_material_type_by_name(common.create_name(p_str))
+material_type_find_by_str :: proc(p_str: string) -> MaterialTypeRef {
+	return material_type_find_by_name(common.create_name(p_str))
 }
 
 //--------------------------------------------------------------------------//

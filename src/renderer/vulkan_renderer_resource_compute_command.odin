@@ -25,9 +25,9 @@ when USE_VULKAN_BACKEND {
 		p_work_group_count: glsl.uvec3,
 		p_push_constant: []rawptr,
 	) {
-		cmd_buff := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
+		cmd_buff := &g_resources.backend_cmd_buffers[command_buffer_get_idx(p_cmd_buff_ref)]
 
-		pipeline_idx := get_compute_pipeline_idx(p_pipeline_ref)
+		pipeline_idx := compute_pipeline_get_idx(p_pipeline_ref)
 		pipeline := &g_resources.compute_pipelines[pipeline_idx]
 		backend_pipeline := &g_resources.backend_compute_pipelines[pipeline_idx]
 

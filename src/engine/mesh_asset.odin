@@ -452,11 +452,11 @@ mesh_asset_load_by_name :: proc(p_mesh_asset_name: common.Name) -> (ret_mesh_ref
 	}
 
 	// Create renderer mesh
-	mesh_resource_ref := renderer.allocate_mesh_ref(
+	mesh_resource_ref := renderer.mesh_allocate(
 		p_mesh_asset_name,
 		u32(len(mesh_metadata.sub_meshes)),
 	)
-	mesh_resource_idx := renderer.get_mesh_idx(mesh_resource_ref)
+	mesh_resource_idx := renderer.mesh_get_idx(mesh_resource_ref)
 	mesh_resource := &renderer.g_resources.meshes[mesh_resource_idx]
 	mesh_resource.desc.data_allocator = G_ALLOCATORS.main_allocator
 
@@ -559,7 +559,7 @@ mesh_asset_load_by_name :: proc(p_mesh_asset_name: common.Name) -> (ret_mesh_ref
 	}
 
 	// Create the mesh resource
-	if renderer.create_mesh(mesh_resource_ref) == false {
+	if renderer.mesh_create(mesh_resource_ref) == false {
 		return InvalidMeshAssetRef
 	}
 
@@ -588,7 +588,7 @@ mesh_asset_unload :: proc(p_mesh_asset_ref: MeshAssetRef) {
 	if mesh_asset.ref_count > 0 {
 		return
 	}
-	renderer.destroy_mesh(mesh_asset.mesh_ref)
+	renderer.mesh_destroy(mesh_asset.mesh_ref)
 }
 
 //---------------------------------------------------------------------------//

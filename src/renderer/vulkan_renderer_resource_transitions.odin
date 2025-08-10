@@ -100,9 +100,9 @@ when USE_VULKAN_BACKEND {
 		}
 
 		graphics_cmd_buff_ref := get_frame_cmd_buffer_ref()
-		compute_cmd_buff := get_frame_compute_cmd_buffer()
+		compute_cmd_buff := frame_compute_cmd_buffer_get()
 
-		graphics_cmd_buffer_idx := get_cmd_buffer_idx(graphics_cmd_buff_ref)
+		graphics_cmd_buffer_idx := command_buffer_get_idx(graphics_cmd_buff_ref)
 		backend_graphics_cmd_buffer := &g_resources.backend_cmd_buffers[graphics_cmd_buffer_idx]
 
 		// Insert barriers for input
@@ -148,13 +148,13 @@ when USE_VULKAN_BACKEND {
 
 		for output in p_bindings.image_outputs {
 
-			image_idx := get_image_idx(output.image_ref)
+			image_idx := image_get_idx(output.image_ref)
 			image := &g_resources.images[image_idx]
 
 			// Grab the proper swap image for this frame
 			if .SwapImage in image.desc.flags {
 				swap_image_ref := G_RENDERER.swap_image_refs[G_RENDERER.swap_img_idx]
-				image_idx = get_image_idx(swap_image_ref)
+				image_idx = image_get_idx(swap_image_ref)
 				image = &g_resources.images[image_idx]
 			}
 
@@ -445,7 +445,7 @@ when USE_VULKAN_BACKEND {
 		p_graphics_barriers: ^[dynamic]vk.ImageMemoryBarrier,
 		p_compute_barriers: ^[dynamic]vk.ImageMemoryBarrier,
 	) {
-		image_idx := get_image_idx(p_input_image.image_ref)
+		image_idx := image_get_idx(p_input_image.image_ref)
 		image := &g_resources.images[image_idx]
 
 		new_layout := vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL

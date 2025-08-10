@@ -65,7 +65,7 @@ render_task_common_init :: proc(
 		"renderPass",
 	) or_return
 
-	render_pass_ref := find_render_pass_by_name(render_pass_name)
+	render_pass_ref := render_pass_find_by_name(render_pass_name)
 	if render_pass_ref == InvalidRenderPassRef {
 		return false
 	}
@@ -103,7 +103,7 @@ render_task_common_init :: proc(
 		}
 
 		material_pass_ref := find_material_pass_by_name(material_pass_name)
-		material_pass := &g_resources.material_passes[get_material_pass_idx(material_pass_ref)]
+		material_pass := &g_resources.material_passes[material_pass_get_idx(material_pass_ref)]
 
 		if material_pass_ref == InvalidMaterialPassRef {
 			log.errorf(

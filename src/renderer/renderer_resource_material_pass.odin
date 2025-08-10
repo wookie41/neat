@@ -72,7 +72,7 @@ G_MATERIAL_PASS_TYPE_SHADERS_MAPPING := map[MaterialPassType]string {
 
 //---------------------------------------------------------------------------//
 
-init_material_passes :: proc() -> bool {
+material_pass_init :: proc() -> bool {
 	G_MATERIAL_PASS_REF_ARRAY = common.ref_array_create(
 		MaterialPassResource,
 		MAX_MATERIAL_PASSES,
@@ -83,20 +83,20 @@ init_material_passes :: proc() -> bool {
 		MAX_MATERIAL_PASSES,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
-	load_material_passes_from_config_file() or_return
+	material_pass_load_passes_from_config_file() or_return
 
 	return true
 }
 
 //---------------------------------------------------------------------------//
 
-deinit_material_passs :: proc() {
+material_pass_deinit :: proc() {
 }
 
 //---------------------------------------------------------------------------//
 
-create_material_pass :: proc(p_material_pass_ref: MaterialPassRef) -> bool {
-	material_pass := &g_resources.material_passes[get_material_pass_idx(p_material_pass_ref)]
+material_pass_create :: proc(p_material_pass_ref: MaterialPassRef) -> bool {
+	material_pass := &g_resources.material_passes[material_pass_get_idx(p_material_pass_ref)]
 	material_pass.pass_type_pipeline_refs = make(
 		[]GraphicsPipelineRef,
 		len(MaterialPassType),
@@ -112,23 +112,23 @@ create_material_pass :: proc(p_material_pass_ref: MaterialPassRef) -> bool {
 
 //---------------------------------------------------------------------------//
 
-allocate_material_pass_ref :: proc(p_name: common.Name) -> MaterialPassRef {
+material_pass_allocate :: proc(p_name: common.Name) -> MaterialPassRef {
 	ref := MaterialPassRef(
 		common.ref_create(MaterialPassResource, &G_MATERIAL_PASS_REF_ARRAY, p_name),
 	)
-	g_resources.material_passes[get_material_pass_idx(ref)].desc.name = p_name
+	g_resources.material_passes[material_pass_get_idx(ref)].desc.name = p_name
 	return ref
 }
 //---------------------------------------------------------------------------//
 
-get_material_pass_idx :: proc(p_ref: MaterialPassRef) -> u32 {
+material_pass_get_idx :: proc(p_ref: MaterialPassRef) -> u32 {
 	return common.ref_get_idx(&G_MATERIAL_PASS_REF_ARRAY, p_ref)
 }
 
 //--------------------------------------------------------------------------//
 
-destroy_material_pass :: proc(p_ref: MaterialPassRef) {
-	material_pass := &g_resources.material_passes[get_material_pass_idx(p_ref)]
+material_pass_destroy :: proc(p_ref: MaterialPassRef) {
+	material_pass := &g_resources.material_passes[material_pass_get_idx(p_ref)]
 	if len(material_pass.desc.defines) > 0 {
 		delete(material_pass.desc.defines, G_RENDERER_ALLOCATORS.resource_allocator)
 	}
@@ -139,7 +139,7 @@ destroy_material_pass :: proc(p_ref: MaterialPassRef) {
 //--------------------------------------------------------------------------//
 
 @(private = "file")
-load_material_passes_from_config_file :: proc() -> bool {
+material_pass_load_passes_from_config_file :: proc() -> bool {
 	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
@@ -168,8 +168,8 @@ load_material_passes_from_config_file :: proc() -> bool {
 	}
 
 	for entry in material_passes_json_entries {
-		material_pass_ref := allocate_material_pass_ref(common.create_name(entry.name))
-		material_pass := &g_resources.material_passes[get_material_pass_idx(material_pass_ref)]
+		material_pass_ref := material_pass_allocate(common.create_name(entry.name))
+		material_pass := &g_resources.material_passes[material_pass_get_idx(material_pass_ref)]
 
 		material_pass.desc.include_path = common.create_name(entry.include_path)
 
@@ -180,7 +180,7 @@ load_material_passes_from_config_file :: proc() -> bool {
 			)
 		}
 
-		create_material_pass(material_pass_ref)
+		material_pass_create(material_pass_ref)
 	}
 
 	return true
@@ -190,14 +190,14 @@ load_material_passes_from_config_file :: proc() -> bool {
 
 @(private)
 find_material_pass_by_name :: proc {
-	find_material_pass_by_name_name,
-	find_material_pass_by_name_str,
+	material_pass_find_by_name_name,
+	material_pass_find_by_name_str,
 }
 
 //--------------------------------------------------------------------------//
 
 @(private)
-find_material_pass_by_name_name :: proc(p_name: common.Name) -> MaterialPassRef {
+material_pass_find_by_name_name :: proc(p_name: common.Name) -> MaterialPassRef {
 	ref := common.ref_find_by_name(&G_MATERIAL_PASS_REF_ARRAY, p_name)
 	if ref == InvalidMaterialPassRef {
 		return InvalidMaterialPassRef
@@ -208,7 +208,7 @@ find_material_pass_by_name_name :: proc(p_name: common.Name) -> MaterialPassRef 
 //--------------------------------------------------------------------------//
 
 @(private)
-find_material_pass_by_name_str :: proc(p_name: string) -> MaterialPassRef {
+material_pass_find_by_name_str :: proc(p_name: string) -> MaterialPassRef {
 	ref := common.ref_find_by_name(&G_MATERIAL_PASS_REF_ARRAY, common.create_name(p_name))
 	if ref == InvalidMaterialPassRef {
 		return InvalidMaterialPassRef
@@ -228,7 +228,7 @@ material_pass_compile_for_type :: proc(
 ) {
 
 	pass_type_idx := transmute(u8)p_material_pass_type
-	material_pass := &g_resources.material_passes[get_material_pass_idx(p_material_pass_ref)]
+	material_pass := &g_resources.material_passes[material_pass_get_idx(p_material_pass_ref)]
 
 	if material_pass.pass_type_pipeline_refs[pass_type_idx] != InvalidGraphicsPipelineRef {
 		return
@@ -256,11 +256,11 @@ material_pass_compile_for_type :: proc(
 	assert(p_material_pass_type in G_MATERIAL_PASS_TYPE_SHADERS_MAPPING)
 
 	shader_path := common.create_name(G_MATERIAL_PASS_TYPE_SHADERS_MAPPING[p_material_pass_type])
-	vertex_shader_ref := allocate_shader_ref(shader_path)
-	pixel_shader_ref := allocate_shader_ref(shader_path)
+	vertex_shader_ref := shader_allocate(shader_path)
+	pixel_shader_ref := shader_allocate(shader_path)
 
-	vertex_shader := &g_resources.shaders[get_shader_idx(vertex_shader_ref)]
-	pixel_shader := &g_resources.shaders[get_shader_idx(pixel_shader_ref)]
+	vertex_shader := &g_resources.shaders[shader_get_idx(vertex_shader_ref)]
+	pixel_shader := &g_resources.shaders[shader_get_idx(pixel_shader_ref)]
 
 	vertex_shader.desc.features = shader_defines
 	vertex_shader.desc.file_path = shader_path
@@ -270,18 +270,18 @@ material_pass_compile_for_type :: proc(
 	pixel_shader.desc.file_path = shader_path
 	pixel_shader.desc.stage = .Pixel
 
-	create_shader(vertex_shader_ref) or_return
+	shader_create(vertex_shader_ref) or_return
 	defer if result == false {
-		destroy_shader(vertex_shader_ref)
+		shader_destroy(vertex_shader_ref)
 	}
 
-	create_shader(pixel_shader_ref) or_return
+	shader_create(pixel_shader_ref) or_return
 	defer if result == false {
-		destroy_shader(pixel_shader_ref)
+		shader_destroy(pixel_shader_ref)
 	}
 
-	pipeline_ref := graphics_pipeline_allocate_ref(material_pass.desc.name, 4, 0)
-	pipeline := &g_resources.graphics_pipelines[get_graphics_pipeline_idx(pipeline_ref)]
+	pipeline_ref := graphics_pipeline_allocate(material_pass.desc.name, 4, 0)
+	pipeline := &g_resources.graphics_pipelines[graphics_pipeline_get_idx(pipeline_ref)]
 	pipeline.desc.bind_group_layout_refs = {
 		p_bind_group_layout_ref,
 		G_RENDERER.uniforms_bind_group_layout_ref,

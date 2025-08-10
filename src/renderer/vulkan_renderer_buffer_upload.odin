@@ -52,7 +52,7 @@ when USE_VULKAN_BACKEND {
 			return
 		}
 
-		transfer_cmd_buff := get_frame_transfer_cmd_buffer_pre_graphics()
+		transfer_cmd_buff := frame_transfer_cmd_buffer_pre_graphics_get()
 		finished_transfer_infos := make([dynamic]FinishedTransferInfo, get_next_frame_allocator())
 
 		for finished_transfer_info in &INTERNAL.finished_transfer_infos {
@@ -71,11 +71,11 @@ when USE_VULKAN_BACKEND {
 
 			src_cmd_buffer_ref := get_frame_cmd_buffer_ref()
 			src_cmd_buffer :=
-				g_resources.backend_cmd_buffers[get_cmd_buffer_idx(src_cmd_buffer_ref)].vk_cmd_buff
+				g_resources.backend_cmd_buffers[command_buffer_get_idx(src_cmd_buffer_ref)].vk_cmd_buff
 
 			if finished_transfer_info.post_transfer_queue_family_idx ==
 			   G_RENDERER.queue_family_compute_index {
-				src_cmd_buffer = get_frame_compute_cmd_buffer()
+				src_cmd_buffer = frame_compute_cmd_buffer_get()
 			}
 
 			release_acquire_barrier := vk.BufferMemoryBarrier {
@@ -188,7 +188,7 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_buffer_upload_start_async_cmd_buffer_pre_graphics :: proc() {
-		transfer_cmd_buff_pre_graphics := get_frame_transfer_cmd_buffer_pre_graphics()
+		transfer_cmd_buff_pre_graphics := frame_transfer_cmd_buffer_pre_graphics_get()
 		begin_info := vk.CommandBufferBeginInfo {
 			sType = .COMMAND_BUFFER_BEGIN_INFO,
 			flags = {.ONE_TIME_SUBMIT},
@@ -200,7 +200,7 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	backend_buffer_upload_start_async_cmd_buffer_post_graphics :: proc() {
-		transfer_cmd_buff_post_graphics := get_frame_transfer_cmd_buffer_post_graphics()
+		transfer_cmd_buff_post_graphics := frame_transfer_cmd_buffer_post_graphics_get()
 		begin_info := vk.CommandBufferBeginInfo {
 			sType = .COMMAND_BUFFER_BEGIN_INFO,
 			flags = {.ONE_TIME_SUBMIT},
@@ -255,7 +255,7 @@ when USE_VULKAN_BACKEND {
 		backend_staging_buff := &g_resources.backend_buffers[buffer_get_idx(p_staging_buffer_ref)]
 
 		cmd_buffer_ref := get_frame_cmd_buffer_ref()
-		backend_cmd_buff := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buffer_ref)]
+		backend_cmd_buff := &g_resources.backend_cmd_buffers[command_buffer_get_idx(cmd_buffer_ref)]
 
 		// Issue pre-copy barrier
 		pre_upload_barrier := vk.BufferMemoryBarrier {
@@ -322,7 +322,7 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_buffer_upload_submit_pre_graphics :: proc() {
 
-		transfer_cmd_buff := get_frame_transfer_cmd_buffer_pre_graphics()
+		transfer_cmd_buff := frame_transfer_cmd_buffer_pre_graphics_get()
 		vk.EndCommandBuffer(transfer_cmd_buff)
 
 		submit_info := vk.SubmitInfo {
@@ -344,7 +344,7 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_buffer_upload_submit_post_graphics :: proc() {
 
-		transfer_cmd_buff := get_frame_transfer_cmd_buffer_post_graphics()
+		transfer_cmd_buff := frame_transfer_cmd_buffer_post_graphics_get()
 		vk.EndCommandBuffer(transfer_cmd_buff)
 
 		submit_info := vk.SubmitInfo {
@@ -379,7 +379,7 @@ when USE_VULKAN_BACKEND {
 	) {
 
 		cmd_buff_ref := get_frame_cmd_buffer_ref()
-		backend_cmd_buff := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buff_ref)]
+		backend_cmd_buff := &g_resources.backend_cmd_buffers[command_buffer_get_idx(cmd_buff_ref)]
 
 		dst_buffer_idx := buffer_get_idx(p_dst_buffer_ref)
 		dst_buffer := &g_resources.buffers[dst_buffer_idx]
@@ -470,7 +470,7 @@ when USE_VULKAN_BACKEND {
 		p_base_offset: u32,
 	) {
 
-		transfer_cmd_buff := get_frame_transfer_cmd_buffer_post_graphics()
+		transfer_cmd_buff := frame_transfer_cmd_buffer_post_graphics_get()
 
 		dst_buffer_idx := buffer_get_idx(p_dst_buffer_ref)
 		backend_dst_buffer := &g_resources.backend_buffers[dst_buffer_idx]
@@ -480,10 +480,10 @@ when USE_VULKAN_BACKEND {
 
 		src_cmd_buffer_ref := get_frame_cmd_buffer_ref()
 		src_cmd_buffer :=
-			g_resources.backend_cmd_buffers[get_cmd_buffer_idx(src_cmd_buffer_ref)].vk_cmd_buff
+			g_resources.backend_cmd_buffers[command_buffer_get_idx(src_cmd_buffer_ref)].vk_cmd_buff
 
 		if src_queue == G_RENDERER.queue_family_compute_index {
-			src_cmd_buffer = get_frame_compute_cmd_buffer()
+			src_cmd_buffer = frame_compute_cmd_buffer_get()
 		}
 
 		// Run the copy
@@ -532,7 +532,7 @@ when USE_VULKAN_BACKEND {
 		if (.DedicatedTransferQueue in G_RENDERER.gpu_device_flags) == false {
 
 			cmd_buff_ref := get_frame_cmd_buffer_ref()
-			backend_cmd_buff := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buff_ref)]
+			backend_cmd_buff := &g_resources.backend_cmd_buffers[command_buffer_get_idx(cmd_buff_ref)]
 
 			// Issue pre-copy barrier
 			pre_upload_barrier := vk.BufferMemoryBarrier {
@@ -563,16 +563,16 @@ when USE_VULKAN_BACKEND {
 		}
 
 
-		transfer_cmd_buff := get_frame_transfer_cmd_buffer_post_graphics()
+		transfer_cmd_buff := frame_transfer_cmd_buffer_post_graphics_get()
 
 		src_queue := backend_dst_buffer.owning_queue_family_idx
 
 		src_cmd_buffer_ref := get_frame_cmd_buffer_ref()
 		src_cmd_buffer :=
-			g_resources.backend_cmd_buffers[get_cmd_buffer_idx(src_cmd_buffer_ref)].vk_cmd_buff
+			g_resources.backend_cmd_buffers[command_buffer_get_idx(src_cmd_buffer_ref)].vk_cmd_buff
 
 		if src_queue == G_RENDERER.queue_family_compute_index {
-			src_cmd_buffer = get_frame_compute_cmd_buffer()
+			src_cmd_buffer = frame_compute_cmd_buffer_get()
 		}
 
 		// Issue release and acquire buffer range 

@@ -102,7 +102,7 @@ create_instance :: proc(
 		"shadowCascadesBuffer",
 	) or_return
 
-	shader_ref := find_shader_by_name(shader_name)
+	shader_ref := shader_find_by_name(shader_name)
 	if shader_ref == InvalidShaderRef {
 		log.errorf(
 			"Failed to create render task '%s' - invalid shader %s\n",
@@ -129,7 +129,7 @@ create_instance :: proc(
 	)
 	defer if res == false {
 		free(render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
-		render_pass_bindings_destroy(render_task_data.render_pass_bindings)
+		render_pass_destroy_bindings(render_task_data.render_pass_bindings)
 	}
 
 	// Create the shadow cascades buffer
@@ -182,7 +182,7 @@ create_instance :: proc(
 	render_task_data.compute_job = compute_job
 	render_task_data.shadow_cascades_buffer_ref = shadow_cascades_buffer_ref
 
-	render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	render_task.data_ptr = rawptr(render_task_data)
 
 	render_task_data.min_max_depth_buffer_ref = min_max_depth_buffer_ref
@@ -209,11 +209,11 @@ create_instance :: proc(
 
 @(private = "file")
 destroy_instance :: proc(p_render_task_ref: RenderTaskRef) {
-	render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	render_task_data := (^PrepareShadowCascadesRenderTaskData)(render_task.data_ptr)
 
 	generic_compute_job_destroy(render_task_data.compute_job)
-	render_pass_bindings_destroy(render_task_data.render_pass_bindings)
+	render_pass_destroy_bindings(render_task_data.render_pass_bindings)
 	buffer_destroy(render_task_data.shadow_cascades_buffer_ref)
 
 	free(render_task_data, G_RENDERER_ALLOCATORS.resource_allocator)
@@ -236,7 +236,7 @@ end_frame :: proc(p_render_task_ref: RenderTaskRef) {
 @(private = "file")
 render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 
-	render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	render_task_data := (^PrepareShadowCascadesRenderTaskData)(render_task.data_ptr)
 
 	render_view := render_camera_create_render_view(g_render_camera)

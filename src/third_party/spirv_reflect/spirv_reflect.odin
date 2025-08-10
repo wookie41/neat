@@ -2241,13 +2241,13 @@ foreign spirv_reflect {
     spv_has_result_and_type :: proc(opcode : SpvOp, hasResult : ^bool, hasResultType : ^bool) ---;
 
     @(link_name="spvReflectCreateShaderModule")
-    create_shader_module :: proc(size : _c.size_t, p_code : rawptr, p_module : ^ShaderModule) -> Result ---;
+    shader_create_module :: proc(size : _c.size_t, p_code : rawptr, p_module : ^ShaderModule) -> Result ---;
 
     @(link_name="spvReflectCreateShaderModule2")
-    create_shader_module2 :: proc(flags : u32, size : _c.size_t, p_code : rawptr, p_module : ^ShaderModule) -> Result ---;
+    shader_create_module2 :: proc(flags : u32, size : _c.size_t, p_code : rawptr, p_module : ^ShaderModule) -> Result ---;
 
     @(link_name="spvReflectDestroyShaderModule")
-    destroy_shader_module :: proc(p_module : ^ShaderModule) ---;
+    shader_destroy_module :: proc(p_module : ^ShaderModule) ---;
 
     @(link_name="spvReflectGetCodeSize")
     get_code_size :: proc(p_module : ^ShaderModule) -> u32 ---;

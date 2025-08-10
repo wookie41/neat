@@ -199,9 +199,9 @@ render_instanced_mesh_job_run :: proc(
 
 		mesh_instance_ref := g_resource_refs.mesh_instances.alive_refs[i]
 
-		mesh_instance_idx := get_mesh_instance_idx(mesh_instance_ref)
+		mesh_instance_idx := mesh_instance_get_idx(mesh_instance_ref)
 		mesh_instance := &g_resources.mesh_instances[mesh_instance_idx]
-		mesh_idx := get_mesh_idx(mesh_instance.desc.mesh_ref)
+		mesh_idx := mesh_get_idx(mesh_instance.desc.mesh_ref)
 		mesh := &g_resources.meshes[mesh_idx]
 
 		// Skip mesh if it's data is still being uploaded
@@ -213,9 +213,9 @@ render_instanced_mesh_job_run :: proc(
 		// Add an instanced draw call for each submesh
 		for submesh, submesh_idx in mesh.desc.sub_meshes {
 
-			material_instance_idx := get_material_instance_idx(submesh.material_instance_ref)
+			material_instance_idx := material_instance_get_idx(submesh.material_instance_ref)
 			material_instance := &g_resources.material_instances[material_instance_idx]
-			material_type_idx := get_material_type_idx(material_instance.desc.material_type_ref)
+			material_type_idx := material_type_get_idx(material_instance.desc.material_type_ref)
 
 			mesh_batch_key := calculate_mesh_batch_key(
 				material_type_idx,
@@ -279,7 +279,7 @@ render_instanced_mesh_job_run :: proc(
 	mesh_instance_data_offset := MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE * get_frame_idx()
 
 	for material_type_ref, material_mesh_batches in mesh_batches_per_material_type {
-		material_type := &g_resources.material_types[get_material_type_idx(material_type_ref)]
+		material_type := &g_resources.material_types[material_type_get_idx(material_type_ref)]
 		for material_pass_ref in material_type.desc.material_passes_refs {
 
 			// Only render this material pass if it's a part of the mesh render task
@@ -292,7 +292,7 @@ render_instanced_mesh_job_run :: proc(
 				continue
 			}
 
-			material_pass := &g_resources.material_passes[get_material_pass_idx(material_pass_ref)]
+			material_pass := &g_resources.material_passes[material_pass_get_idx(material_pass_ref)]
 			pipeline_ref := material_pass.pass_type_pipeline_refs[material_pass_type_idx]
 
 			draw_stream_set_pipeline(&draw_stream, pipeline_ref)
@@ -415,11 +415,11 @@ render_instanced_mesh_job_run :: proc(
 			uniform_buffer_create_view_data(render_view),
 		}
 
-		render_task_begin_render_pass(p_render_pass_ref, bindings)
+		render_task_render_pass_begin(p_render_pass_ref, bindings)
 
 		draw_stream_dispatch(cmd_buff_ref, &draw_stream, dynamic_offsets)
 		draw_stream_reset(&draw_stream)
 
-		end_render_pass(p_render_pass_ref, cmd_buff_ref)
+		render_pass_end(p_render_pass_ref, cmd_buff_ref)
 	}
 }

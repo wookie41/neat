@@ -108,7 +108,7 @@ RenderTaskConfig :: struct {
 
 //---------------------------------------------------------------------------//
 
-init_render_tasks :: proc() -> bool {
+render_task_init :: proc() -> bool {
 	INTERNAL.render_task_functions = make(
 		map[RenderTaskType]RenderTaskFunctions,
 		len(RenderTaskType),
@@ -172,28 +172,28 @@ init_render_tasks :: proc() -> bool {
 
 //---------------------------------------------------------------------------//
 
-deinit_render_tasks :: proc() {
+render_task_deinit :: proc() {
 	for i in 0 ..< G_RENDER_TASK_REF_ARRAY.alive_count {
-		destroy_render_task(G_RENDER_TASK_REF_ARRAY.alive_refs[i])
+		render_task_destroy(G_RENDER_TASK_REF_ARRAY.alive_refs[i])
 	}
 	common.ref_array_clear(&G_RENDER_TASK_REF_ARRAY)
 }
 
 //---------------------------------------------------------------------------//
 
-allocate_render_task_ref :: proc(p_name: common.Name) -> RenderTaskRef {
+render_task_allocate :: proc(p_name: common.Name) -> RenderTaskRef {
 	ref := RenderTaskRef(common.ref_create(RenderTaskResource, &G_RENDER_TASK_REF_ARRAY, p_name))
-	g_resources.render_tasks[get_render_task_idx(ref)].desc.name = p_name
+	g_resources.render_tasks[render_task_get_idx(ref)].desc.name = p_name
 	return ref
 }
 
 //---------------------------------------------------------------------------//
 
-create_render_task :: proc(
+render_task_create :: proc(
 	p_render_task_ref: RenderTaskRef,
 	p_render_task_config: ^RenderTaskConfig,
 ) -> bool {
-	render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	return INTERNAL.render_task_functions[render_task.desc.type].create_instance(
 		p_render_task_ref,
 		p_render_task_config,
@@ -202,14 +202,14 @@ create_render_task :: proc(
 
 //---------------------------------------------------------------------------//
 
-get_render_task_idx :: #force_inline proc(p_ref: RenderTaskRef) -> u32 {
+render_task_get_idx :: #force_inline proc(p_ref: RenderTaskRef) -> u32 {
 	return common.ref_get_idx(&G_RENDER_TASK_REF_ARRAY, p_ref)
 }
 
 //--------------------------------------------------------------------------//
 
-destroy_render_task :: proc(p_ref: RenderTaskRef) {
-	render_task := &g_resources.render_tasks[get_render_task_idx(p_ref)]
+render_task_destroy :: proc(p_ref: RenderTaskRef) {
+	render_task := &g_resources.render_tasks[render_task_get_idx(p_ref)]
 	INTERNAL.render_task_functions[render_task.desc.type].destroy_instance(p_ref)
 	common.ref_free(&G_RENDER_TASK_REF_ARRAY, p_ref)
 }
@@ -228,12 +228,12 @@ render_task_map_name_to_type :: proc(p_type_name: string) -> (RenderTaskType, bo
 //--------------------------------------------------------------------------//
 
 @(private)
-render_tasks_update :: proc(p_dt: f32) {
+render_task_update :: proc(p_dt: f32) {
 
 	// Fill per frame uniform data
 	for i in 0 ..< G_RENDER_TASK_REF_ARRAY.alive_count {
 		render_task_ref := G_RENDER_TASK_REF_ARRAY.alive_refs[i]
-		render_task := &g_resources.render_tasks[get_render_task_idx(render_task_ref)]
+		render_task := &g_resources.render_tasks[render_task_get_idx(render_task_ref)]
 		INTERNAL.render_task_functions[render_task.desc.type].begin_frame(render_task_ref)
 	}
 
@@ -243,14 +243,14 @@ render_tasks_update :: proc(p_dt: f32) {
 	// Render
 	for i in 0 ..< G_RENDER_TASK_REF_ARRAY.alive_count {
 		render_task_ref := G_RENDER_TASK_REF_ARRAY.alive_refs[i]
-		render_task := &g_resources.render_tasks[get_render_task_idx(render_task_ref)]
+		render_task := &g_resources.render_tasks[render_task_get_idx(render_task_ref)]
 		INTERNAL.render_task_functions[render_task.desc.type].render(render_task_ref, p_dt)
 	}
 
 	// Cleanup
 	for i in 0 ..< G_RENDER_TASK_REF_ARRAY.alive_count {
 		render_task_ref := G_RENDER_TASK_REF_ARRAY.alive_refs[i]
-		render_task := &g_resources.render_tasks[get_render_task_idx(render_task_ref)]
+		render_task := &g_resources.render_tasks[render_task_get_idx(render_task_ref)]
 		INTERNAL.render_task_functions[render_task.desc.type].end_frame(render_task_ref)
 	}
 }
@@ -322,7 +322,7 @@ render_task_setup_render_pass_bindings :: proc(
 			continue
 		}
 
-		image_ref := find_image(image_name)
+		image_ref := image_find(image_name)
 		if image_ref == InvalidImageRef {
 			log.errorf("Can't setup render task - unknown image '%s'\n", image_name)
 			current_element_idx += 1
@@ -377,7 +377,7 @@ render_task_setup_render_pass_bindings :: proc(
 		}
 
 		// Bind all mips
-		image := &g_resources.images[get_image_idx(image_ref)]
+		image := &g_resources.images[image_get_idx(image_ref)]
 		for i in 0 ..< image.desc.mip_count {
 
 			render_pass_output_image := RenderPassImageOutput {
@@ -478,7 +478,7 @@ render_task_setup_render_pass_bindings :: proc(
 
 //--------------------------------------------------------------------------//
 
-render_task_begin_render_pass :: proc(
+render_task_render_pass_begin :: proc(
 	p_render_pass_ref: RenderPassRef,
 	p_render_pass_bindings: RenderPassBindings,
 ) {
@@ -487,7 +487,7 @@ render_task_begin_render_pass :: proc(
 		bindings = p_render_pass_bindings,
 	}
 
-	begin_render_pass(p_render_pass_ref, get_frame_cmd_buffer_ref(), &render_pass_begin_info)
+	render_pass_begin(p_render_pass_ref, get_frame_cmd_buffer_ref(), &render_pass_begin_info)
 }
 
 //---------------------------------------------------------------------------//
@@ -522,8 +522,8 @@ load_image_inputs :: proc(
 			continue
 		}
 
-		image_ref := find_image(image_name)
-		image := &g_resources.images[get_image_idx(image_ref)]
+		image_ref := image_find(image_name)
+		image := &g_resources.images[image_get_idx(image_ref)]
 		if image_ref == InvalidImageRef {
 			log.errorf("Can't setup render task - unknown image '%s'\n", image.desc.name)
 			current_element_idx += 1
@@ -558,6 +558,7 @@ load_image_inputs :: proc(
 
 //---------------------------------------------------------------------------//
 
+@(private="file")
 load_buffer_inputs :: proc(
 	p_render_task_config: ^RenderTaskConfig,
 	p_uniform_buffer_sizes: []u32,

@@ -22,7 +22,7 @@ when USE_VULKAN_BACKEND {
 		p_bind_point: u32,
 		p_offset: u32,
 	) {
-		cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
+		cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(p_cmd_buff_ref)]
 		vertex_buffer := &g_resources.backend_buffers[buffer_get_idx(p_vertex_buffer_ref)]
 		vertex_buffer_offset := vk.DeviceSize(p_offset)
 
@@ -44,7 +44,7 @@ when USE_VULKAN_BACKEND {
 		p_offset: u32,
 		p_index_type: IndexType,
 	) {
-		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
+		backend_cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(p_cmd_buff_ref)]
 		index_buffer := &g_resources.backend_buffers[buffer_get_idx(p_index_buffer_ref)]
 		index_buffer_offset := vk.DeviceSize(p_offset)
 
@@ -67,10 +67,10 @@ when USE_VULKAN_BACKEND {
 		p_pipeline_ref: GraphicsPipelineRef,
 		p_push_constant: []rawptr,
 	) {
-		pipeline_idx := get_graphics_pipeline_idx(p_pipeline_ref)
+		pipeline_idx := graphics_pipeline_get_idx(p_pipeline_ref)
 		pipeline := &g_resources.graphics_pipelines[pipeline_idx]
 		backend_pipeline := &g_resources.backend_graphics_pipelines[pipeline_idx]
-		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
+		backend_cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(p_cmd_buff_ref)]
 
 		for push_constant, i in pipeline.desc.push_constants {
 
@@ -112,7 +112,7 @@ when USE_VULKAN_BACKEND {
 		p_vertex_count: u32,
 		p_instance_count: u32,
 	) {
-		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
+		backend_cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(p_cmd_buff_ref)]
 
 		vk.CmdDraw(backend_cmd_buffer.vk_cmd_buff, p_vertex_count, p_instance_count, 0, 0)
 	}

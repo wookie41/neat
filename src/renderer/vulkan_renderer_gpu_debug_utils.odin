@@ -27,7 +27,7 @@ when USE_VULKAN_BACKEND {
 			pMarkerName = strings.clone_to_cstring(p_region, temp_arena.allocator),
 		}
 
-		cmd_buff := g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
+		cmd_buff := g_resources.backend_cmd_buffers[command_buffer_get_idx(p_cmd_buff_ref)]
 
 		vk.CmdDebugMarkerBeginEXT(cmd_buff.vk_cmd_buff, &markerInfo)
 	}
@@ -39,7 +39,7 @@ when USE_VULKAN_BACKEND {
 		p_cmd_buff_ref: CommandBufferRef,
 	) {
 
-		cmd_buff := g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
+		cmd_buff := g_resources.backend_cmd_buffers[command_buffer_get_idx(p_cmd_buff_ref)]
         vk.CmdDebugMarkerEndEXT(cmd_buff.vk_cmd_buff)
 	}
 
@@ -60,7 +60,7 @@ when USE_VULKAN_BACKEND {
 			pMarkerName = strings.clone_to_cstring(p_marker, temp_arena.allocator),
 		}
 
-		cmd_buff := g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
+		cmd_buff := g_resources.backend_cmd_buffers[command_buffer_get_idx(p_cmd_buff_ref)]
 
 		vk.CmdDebugMarkerInsertEXT(cmd_buff.vk_cmd_buff, &markerInfo)
 	}

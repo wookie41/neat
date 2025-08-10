@@ -92,10 +92,10 @@ when USE_VULKAN_BACKEND {
 		p_target: u32,
 		p_dynamic_offsets: []u32,
 	) {
-		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
+		backend_cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(p_cmd_buff_ref)]
 		backend_bind_group := &g_resources.backend_bind_groups[bind_group_get_idx(p_bind_group_ref)]
 
-		pipeline_idx := get_graphics_pipeline_idx(p_pipeline_ref)
+		pipeline_idx := graphics_pipeline_get_idx(p_pipeline_ref)
 		backend_pipeline := &g_resources.backend_graphics_pipelines[pipeline_idx]
 
 		vk.CmdBindDescriptorSets(
@@ -120,10 +120,10 @@ when USE_VULKAN_BACKEND {
 		p_target: u32,
 		p_dynamic_offsets: []u32,
 	) {
-		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
+		backend_cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(p_cmd_buff_ref)]
 		backend_bind_group := &g_resources.backend_bind_groups[bind_group_get_idx(p_bind_group_ref)]
 
-		pipeline_idx := get_compute_pipeline_idx(p_pipeline_ref)
+		pipeline_idx := compute_pipeline_get_idx(p_pipeline_ref)
 		backend_pipeline := &g_resources.backend_compute_pipelines[pipeline_idx]
 
 		vk.CmdBindDescriptorSets(
@@ -187,8 +187,8 @@ when USE_VULKAN_BACKEND {
 			binding := bind_group_layout.desc.bindings[image_binding.binding]
 			assert(binding.type == .Image || binding.type == .StorageImage, "Image binding required")
 
-			image := &g_resources.images[get_image_idx(image_binding.image_ref)]
-			backend_image := &g_resources.backend_images[get_image_idx(image_binding.image_ref)]
+			image := &g_resources.images[image_get_idx(image_binding.image_ref)]
+			backend_image := &g_resources.backend_images[image_get_idx(image_binding.image_ref)]
 
 			if .AddressSubresource in image_binding.flags {
 

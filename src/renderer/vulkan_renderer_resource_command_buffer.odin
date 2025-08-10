@@ -35,7 +35,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_init_command_buffers :: proc(p_options: InitOptions) -> bool {
+	backend_command_buffer_end_init :: proc(p_options: InitOptions) -> bool {
 
 		// Create graphics command pools
 		INTERNAL.graphics_command_pools = make(
@@ -44,7 +44,7 @@ when USE_VULKAN_BACKEND {
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
 
-		create_command_pools(
+		command_pools_create(
 			u32(G_RENDERER.queue_family_graphics_index),
 			false,
 			true,
@@ -69,7 +69,7 @@ when USE_VULKAN_BACKEND {
 				int(G_RENDERER.num_frames_in_flight),
 				G_RENDERER_ALLOCATORS.resource_allocator,
 			)
-			create_command_pools(
+			command_pools_create(
 				u32(G_RENDERER.queue_family_transfer_index),
 				true,
 				true,
@@ -77,7 +77,7 @@ when USE_VULKAN_BACKEND {
 				INTERNAL.transfer_cmd_buffers_pre_graphics,
 			) or_return
 
-			create_command_pools(
+			command_pools_create(
 				u32(G_RENDERER.queue_family_transfer_index),
 				true,
 				false,
@@ -98,7 +98,7 @@ when USE_VULKAN_BACKEND {
 				int(G_RENDERER.num_frames_in_flight),
 				G_RENDERER_ALLOCATORS.resource_allocator,
 			)
-			create_command_pools(
+			command_pools_create(
 				u32(G_RENDERER.queue_family_compute_index),
 				true,
 				true,
@@ -156,15 +156,15 @@ when USE_VULKAN_BACKEND {
 
 
 	@(private = "file")
-	create_command_pools :: proc(
+	command_pools_create :: proc(
 		p_queue_family_idx: u32,
 		p_allocate_command_buffers: bool,
-		p_create_command_pools: bool,
+		p_command_pools_create: bool,
 		p_cmd_pools: []vk.CommandPool,
 		p_cmd_buffers: []vk.CommandBuffer,
 	) -> bool {
 
-		if p_create_command_pools {
+		if p_command_pools_create {
 			pool_info := vk.CommandPoolCreateInfo {
 				sType = .COMMAND_POOL_CREATE_INFO,
 				queueFamilyIndex = p_queue_family_idx,
@@ -202,8 +202,8 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_create_command_buffer :: proc(p_ref: CommandBufferRef) -> bool {
-		cmd_buffer_idx := get_cmd_buffer_idx(p_ref)
+	backcommand_buffer_end_create :: proc(p_ref: CommandBufferRef) -> bool {
+		cmd_buffer_idx := command_buffer_get_idx(p_ref)
 		cmd_buffer := &g_resources.cmd_buffers[cmd_buffer_idx]
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[cmd_buffer_idx]
 
@@ -229,8 +229,8 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_begin_command_buffer :: proc(p_ref: CommandBufferRef) {
-		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_ref)]
+	backend_command_buffer_end_begin :: proc(p_ref: CommandBufferRef) {
+		backend_cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(p_ref)]
 
 		begin_info := vk.CommandBufferBeginInfo {
 			sType = .COMMAND_BUFFER_BEGIN_INFO,
@@ -243,16 +243,16 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_end_command_buffer :: proc(p_ref: CommandBufferRef) {
-		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_ref)]
+	backend_command_buffer_end_end :: proc(p_ref: CommandBufferRef) {
+		backend_cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(p_ref)]
 		vk.EndCommandBuffer(backend_cmd_buffer.vk_cmd_buff)
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_destroy_command_buffer :: proc(p_ref: CommandBufferRef) {
-		cmd_buffer_idx := get_cmd_buffer_idx(p_ref)
+	backend_command_buffer_end_destroy :: proc(p_ref: CommandBufferRef) {
+		cmd_buffer_idx := command_buffer_get_idx(p_ref)
 		cmd_buffer := &g_resources.cmd_buffers[cmd_buffer_idx]
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[cmd_buffer_idx]
 
@@ -267,34 +267,34 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	get_frame_transfer_cmd_buffer_pre_graphics :: proc() -> vk.CommandBuffer {
+	frame_transfer_cmd_buffer_pre_graphics_get :: proc() -> vk.CommandBuffer {
 		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 			return INTERNAL.transfer_cmd_buffers_pre_graphics[get_frame_idx()]
 		}
 		cmd_buff_ref := get_frame_cmd_buffer_ref()
-		return g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buff_ref)].vk_cmd_buff
+		return g_resources.backend_cmd_buffers[command_buffer_get_idx(cmd_buff_ref)].vk_cmd_buff
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	get_frame_transfer_cmd_buffer_post_graphics :: proc() -> vk.CommandBuffer {
+	frame_transfer_cmd_buffer_post_graphics_get :: proc() -> vk.CommandBuffer {
 		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
 			return INTERNAL.transfer_cmd_buffers_post_graphics[get_frame_idx()]
 		}
 		cmd_buff_ref := get_frame_cmd_buffer_ref()
-		return g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buff_ref)].vk_cmd_buff
+		return g_resources.backend_cmd_buffers[command_buffer_get_idx(cmd_buff_ref)].vk_cmd_buff
 	}
 
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	get_frame_compute_cmd_buffer :: proc() -> vk.CommandBuffer {
+	frame_compute_cmd_buffer_get :: proc() -> vk.CommandBuffer {
 		if .DedicatedComputeQueue in G_RENDERER.gpu_device_flags {
 			return INTERNAL.compute_cmd_buffers[get_frame_idx()]
 		}
 		cmd_buff_ref := get_frame_cmd_buffer_ref()
-		return g_resources.backend_cmd_buffers[get_cmd_buffer_idx(cmd_buff_ref)].vk_cmd_buff
+		return g_resources.backend_cmd_buffers[command_buffer_get_idx(cmd_buff_ref)].vk_cmd_buff
 	}
 
 

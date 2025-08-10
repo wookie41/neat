@@ -42,7 +42,7 @@ G_COMPUTE_COMMAND_REF_ARRAY: common.RefArray(ComputeCommandResource)
 //---------------------------------------------------------------------------//
 
 @(private)
-compute_commands_init :: proc() -> bool {
+compute_command_init :: proc() -> bool {
 	g_resources.compute_commands = make_soa(
 		#soa[]ComputeCommandResource,
 		MAX_COMPUTE_COMMANDS,
@@ -59,12 +59,12 @@ compute_commands_init :: proc() -> bool {
 //---------------------------------------------------------------------------//
 
 @(private)
-compute_commands_deinit :: proc() {
+compute_command_deinit :: proc() {
 }
 
 //---------------------------------------------------------------------------//
 
-compute_command_allocate_ref :: proc(
+compute_command_allocate :: proc(
 	p_name: common.Name,
 	p_bind_group_layouts_count: u32,
 	p_push_constants_count: u32,
@@ -103,13 +103,13 @@ compute_command_get_idx :: #force_inline proc(p_ref: ComputeCommandRef) -> u32 {
 compute_command_create :: proc(p_ref: ComputeCommandRef) -> bool {
 	compute_command := &g_resources.compute_commands[compute_command_get_idx(p_ref)]
 
-	compute_command.pipeline_ref = compute_pipeline_allocate_ref(
+	compute_command.pipeline_ref = compute_pipeline_allocate(
 		compute_command.desc.name,
 		u32(len(compute_command.desc.bind_group_layout_refs)),
 		u32(len(compute_command.desc.push_constants)),
 	)
 
-	compute_pipeline := &g_resources.compute_pipelines[get_compute_pipeline_idx(compute_command.pipeline_ref)]
+	compute_pipeline := &g_resources.compute_pipelines[compute_pipeline_get_idx(compute_command.pipeline_ref)]
 	compute_pipeline.desc.bind_group_layout_refs = compute_command.desc.bind_group_layout_refs
 	compute_pipeline.desc.push_constants = compute_command.desc.push_constants
 	compute_pipeline.desc.compute_shader_ref = compute_command.desc.compute_shader_ref

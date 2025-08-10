@@ -27,7 +27,7 @@ create_instance :: proc(
 ) -> (
 	res: bool,
 ) {
-	mesh_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	mesh_render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 
 	render_mesh_job := render_instanced_mesh_job_create() or_return
 
@@ -49,7 +49,7 @@ create_instance :: proc(
 
 @(private = "file")
 destroy_instance :: proc(p_render_task_ref: RenderTaskRef) {
-	mesh_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	mesh_render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	mesh_render_task_data := (^MeshRenderTaskData)(mesh_render_task.data_ptr)
 	if mesh_render_task_data != nil {
 		delete(mesh_render_task_data.material_pass_refs, G_RENDERER_ALLOCATORS.resource_allocator)
@@ -86,7 +86,7 @@ end_frame :: proc(p_render_task_ref: RenderTaskRef) {
 @(private = "file")
 render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 
-	mesh_render_task := &g_resources.render_tasks[get_render_task_idx(p_render_task_ref)]
+	mesh_render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	mesh_render_task_data := (^MeshRenderTaskData)(mesh_render_task.data_ptr)
 
 	camera_render_view := render_camera_create_render_view(g_render_camera)

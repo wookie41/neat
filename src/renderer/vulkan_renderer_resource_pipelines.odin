@@ -173,7 +173,7 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	backend_pipelines_init :: proc() -> bool {
+	backend_pipeline_init :: proc() -> bool {
 		// Create an empty descriptor set layout used to fill gaps
 		{
 			create_info := vk.DescriptorSetLayoutCreateInfo {
@@ -226,7 +226,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private)
-	backend_pipelines_deinit :: proc() {
+	backend_pipeline_deinit :: proc() {
 		cache_size: int
 
 		vk.GetPipelineCacheData(G_RENDERER.device, INTERNAL.vk_pipeline_cache, &cache_size, nil)
@@ -249,7 +249,7 @@ when USE_VULKAN_BACKEND {
 
 	backend_graphics_pipeline_create :: proc(p_ref: GraphicsPipelineRef) -> bool {
 
-		pipeline_idx := get_graphics_pipeline_idx(p_ref)
+		pipeline_idx := graphics_pipeline_get_idx(p_ref)
 		pipeline := &g_resources.graphics_pipelines[pipeline_idx]
 		backend_pipeline := &g_resources.backend_graphics_pipelines[pipeline_idx]
 
@@ -257,8 +257,8 @@ when USE_VULKAN_BACKEND {
 		common.temp_arena_init(&temp_arena)
 		defer common.arena_delete(temp_arena)
 
-		vertex_shader_idx := get_shader_idx(pipeline.desc.vert_shader_ref)
-		fragment_shader_idx := get_shader_idx(pipeline.desc.frag_shader_ref)
+		vertex_shader_idx := shader_get_idx(pipeline.desc.vert_shader_ref)
+		fragment_shader_idx := shader_get_idx(pipeline.desc.frag_shader_ref)
 
 		vert_shader := &g_resources.shaders[vertex_shader_idx]
 		frag_shader := &g_resources.shaders[fragment_shader_idx]
@@ -266,7 +266,7 @@ when USE_VULKAN_BACKEND {
 		backend_vert_shader := &g_resources.backend_shaders[vertex_shader_idx]
 		backend_frag_shader := &g_resources.backend_shaders[fragment_shader_idx]
 
-		render_pass := &g_resources.render_passes[get_render_pass_idx(pipeline.desc.render_pass_ref)]
+		render_pass := &g_resources.render_passes[render_pass_get_idx(pipeline.desc.render_pass_ref)]
 
 		// create stage info for each shader
 		vertex_stage_info := vk.PipelineShaderStageCreateInfo {
@@ -445,7 +445,7 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_graphics_pipeline_destroy :: proc(p_pipeline_ref: GraphicsPipelineRef) {
 
-		pipeline_idx := get_graphics_pipeline_idx(p_pipeline_ref)
+		pipeline_idx := graphics_pipeline_get_idx(p_pipeline_ref)
 		backend_pipeline := &g_resources.backend_graphics_pipelines[pipeline_idx]
 
 		pipeline_layout_hash := hash_pipeline_layout(p_pipeline_ref)
@@ -473,10 +473,10 @@ when USE_VULKAN_BACKEND {
 		p_pipeline_ref: GraphicsPipelineRef,
 		p_cmd_buffer_ref: CommandBufferRef,
 	) {
-		pipeline_idx := get_graphics_pipeline_idx(p_pipeline_ref)
+		pipeline_idx := graphics_pipeline_get_idx(p_pipeline_ref)
 		backend_pipeline := &g_resources.backend_graphics_pipelines[pipeline_idx]
 
-		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buffer_ref)]
+		backend_cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(p_cmd_buffer_ref)]
 		vk.CmdBindPipeline(backend_cmd_buffer.vk_cmd_buff, .GRAPHICS, backend_pipeline.vk_pipeline)
 	}
 
@@ -492,9 +492,9 @@ when USE_VULKAN_BACKEND {
 	hash_graphics_pipeline_layout_ref :: #force_inline proc(
 		p_pipeline_ref: GraphicsPipelineRef,
 	) -> u32 {
-		pipeline := &g_resources.graphics_pipelines[get_graphics_pipeline_idx(p_pipeline_ref)]
-		vert_shader_hash := g_resources.shaders[get_shader_idx(pipeline.desc.vert_shader_ref)].hash
-		frag_shader_hash := g_resources.shaders[get_shader_idx(pipeline.desc.frag_shader_ref)].hash
+		pipeline := &g_resources.graphics_pipelines[graphics_pipeline_get_idx(p_pipeline_ref)]
+		vert_shader_hash := g_resources.shaders[shader_get_idx(pipeline.desc.vert_shader_ref)].hash
+		frag_shader_hash := g_resources.shaders[shader_get_idx(pipeline.desc.frag_shader_ref)].hash
 		return hash_graphics_pipeline_layout_shaders(vert_shader_hash,frag_shader_hash)
 	}
 
@@ -504,8 +504,8 @@ when USE_VULKAN_BACKEND {
 	hash_compute_pipeline_layout_ref :: #force_inline proc(
 		p_pipeline_ref: ComputePipelineRef,
 	) -> u32 {
-		pipeline := &g_resources.compute_pipelines[get_compute_pipeline_idx(p_pipeline_ref)]
-		return hash_compute_pipeline_layout_shaders(g_resources.shaders[get_shader_idx(pipeline.desc.compute_shader_ref)].hash)
+		pipeline := &g_resources.compute_pipelines[compute_pipeline_get_idx(p_pipeline_ref)]
+		return hash_compute_pipeline_layout_shaders(g_resources.shaders[shader_get_idx(pipeline.desc.compute_shader_ref)].hash)
 	}
 
 	//---------------------------------------------------------------------------//
@@ -633,7 +633,7 @@ when USE_VULKAN_BACKEND {
 
 	backend_compute_pipeline_create :: proc(p_ref: ComputePipelineRef) -> bool {
 
-		pipeline_idx := get_compute_pipeline_idx(p_ref)
+		pipeline_idx := compute_pipeline_get_idx(p_ref)
 		pipeline := &g_resources.compute_pipelines[pipeline_idx]
 		backend_pipeline := &g_resources.backend_compute_pipelines[pipeline_idx]
 
@@ -641,7 +641,7 @@ when USE_VULKAN_BACKEND {
 		common.temp_arena_init(&temp_arena)
 		defer common.arena_delete(temp_arena)
 
-		compute_shader_idx := get_shader_idx(pipeline.desc.compute_shader_ref)
+		compute_shader_idx := shader_get_idx(pipeline.desc.compute_shader_ref)
 		compute_shader := &g_resources.shaders[compute_shader_idx]
 		backend_compute_shader := &g_resources.backend_shaders[compute_shader_idx]
 
@@ -685,7 +685,7 @@ when USE_VULKAN_BACKEND {
 	@(private)
 	backend_compute_pipeline_destroy :: proc(p_pipeline_ref: ComputePipelineRef) {
 
-		pipeline_idx := get_compute_pipeline_idx(p_pipeline_ref)
+		pipeline_idx := compute_pipeline_get_idx(p_pipeline_ref)
 		backend_pipeline := &g_resources.backend_compute_pipelines[pipeline_idx]
 
 		pipeline_layout_hash := hash_pipeline_layout(p_pipeline_ref)
@@ -746,10 +746,10 @@ when USE_VULKAN_BACKEND {
 		p_pipeline_ref: ComputePipelineRef,
 		p_cmd_buffer_ref: CommandBufferRef,
 	) {
-		pipeline_idx := get_compute_pipeline_idx(p_pipeline_ref)
+		pipeline_idx := compute_pipeline_get_idx(p_pipeline_ref)
 		backend_pipeline := &g_resources.backend_compute_pipelines[pipeline_idx]
 
-		backend_cmd_buffer := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buffer_ref)]
+		backend_cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(p_cmd_buffer_ref)]
 		vk.CmdBindPipeline(backend_cmd_buffer.vk_cmd_buff, .COMPUTE, backend_pipeline.vk_pipeline)
 	}
 

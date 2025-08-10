@@ -22,10 +22,10 @@ when USE_VULKAN_BACKEND {
 		p_pipeline_ref: GraphicsPipelineRef,
 		p_push_constant: []rawptr,
 	) {
-		cmd_buff := &g_resources.backend_cmd_buffers[get_cmd_buffer_idx(p_cmd_buff_ref)]
+		cmd_buff := &g_resources.backend_cmd_buffers[command_buffer_get_idx(p_cmd_buff_ref)]
 		draw_command := &g_resources.draw_commands[draw_command_get_idx(p_ref)]
 
-		pipeline_idx := get_graphics_pipeline_idx(p_pipeline_ref)
+		pipeline_idx := graphics_pipeline_get_idx(p_pipeline_ref)
 		pipeline := &g_resources.compute_pipelines[pipeline_idx]
 		backend_pipeline := &g_resources.backend_compute_pipelines[pipeline_idx]
 
