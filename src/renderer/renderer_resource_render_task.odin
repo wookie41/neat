@@ -78,8 +78,9 @@ RenderTaskFunctions :: struct {
 	// Called after the frame ends, i.e. after all draw and compute commands were submited
 	end_frame:        proc(p_render_task_ref: RenderTaskRef),
 	// Called each frame to run the render task
-	render:           proc(p_render_task_ref: RenderTaskRef, dt: f32),
-	// Pointer to data that is internally used but the render task
+	render:           proc(p_render_task_ref: RenderTaskRef, p_dt: f32),
+	// Called each frame so that the render task can draw debug ui
+	draw_debug_ui: proc(p_render_task_ref: RenderTaskRef),
 }
 
 //---------------------------------------------------------------------------//
@@ -604,3 +605,16 @@ parse_output_buffer :: proc(
 }
 
 //---------------------------------------------------------------------------//
+
+@(private)
+render_task_draw_debug_ui :: proc() {
+	for i in 0 ..< G_RENDER_TASK_REF_ARRAY.alive_count {
+		render_task_ref := G_RENDER_TASK_REF_ARRAY.alive_refs[i]
+		render_task := &g_resources.render_tasks[render_task_get_idx(render_task_ref)]
+		draw_debug_ui := INTERNAL.render_task_functions[render_task.desc.type].draw_debug_ui
+		
+		if (draw_debug_ui != nil) {
+			draw_debug_ui(render_task_ref)
+		}
+	}
+}

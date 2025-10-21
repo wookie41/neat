@@ -11,7 +11,6 @@ import "core:mem"
 
 import "../common"
 
-import imgui "../third_party/odin-imgui"
 import sdl "vendor:sdl2"
 
 //---------------------------------------------------------------------------//
@@ -954,30 +953,7 @@ init_jobs :: proc() -> bool {
 @(private = "file")
 draw_debug_ui :: proc(p_dt: f32) {
 	// Debug UI
-	imgui.InputInt("Shadow cascade count", (^i32)(&G_RENDERER_SETTINGS.num_shadow_cascades))
-	imgui.Checkbox(
-		"Draw shadow cascades",
-		(^bool)(&G_RENDERER_SETTINGS.debug_draw_shadow_cascades),
-	)
-	imgui.Checkbox("Fit shadow cascades", (^bool)(&G_RENDERER_SETTINGS.fit_shadow_cascades))
-	imgui.Checkbox(
-		"Stabilize shadow cascades",
-		(^bool)(&G_RENDERER_SETTINGS.stabilize_shadow_cascades),
-	)
-	imgui.InputFloat(
-		"Shadows rendering distance",
-		(&G_RENDERER_SETTINGS.shadows_rendering_distance),
-	)
-	imgui.InputFloat(
-		"Direcional light shadow sampling radius",
-		(&G_RENDERER_SETTINGS.directional_light_shadow_sampling_radius),
-	)
-
-	G_RENDERER_SETTINGS.num_shadow_cascades = max(0, G_RENDERER_SETTINGS.num_shadow_cascades)
-	G_RENDERER_SETTINGS.num_shadow_cascades = min(
-		G_RENDERER_SETTINGS.num_shadow_cascades,
-		MAX_SHADOW_CASCADES,
-	)
+	render_task_draw_debug_ui()
 }
 
 //---------------------------------------------------------------------------//

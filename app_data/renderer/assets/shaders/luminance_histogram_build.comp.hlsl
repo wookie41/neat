@@ -29,7 +29,6 @@ Texture2D<float4> lastSceneHDRTex : register(t0, space0);
 [[vk::binding(3, 0)]]
 StructuredBuffer<ExposureInfo> exposureInfoBuffer : register(t1, space0);
 
-
 //---------------------------------------------------------------------------//
 
 // Outputs

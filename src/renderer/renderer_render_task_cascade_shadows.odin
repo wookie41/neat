@@ -3,9 +3,10 @@ package renderer
 //---------------------------------------------------------------------------//
 
 import "../common"
-import "core:slice"
+import imgui "../third_party/odin-imgui"
 import "core:encoding/xml"
 import "core:math/linalg/glsl"
+import "core:slice"
 
 //---------------------------------------------------------------------------//
 
@@ -39,6 +40,7 @@ cascade_shadows_render_task_init :: proc(p_render_task_functions: ^RenderTaskFun
 	p_render_task_functions.begin_frame = begin_frame
 	p_render_task_functions.end_frame = end_frame
 	p_render_task_functions.render = render
+	p_render_task_functions.draw_debug_ui = draw_debug_ui
 }
 
 //---------------------------------------------------------------------------//
@@ -155,7 +157,10 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 			projection = glsl.mat4(0),
 		}
 
-		outputs_per_view[i] = slice.clone(cascade_render_task_data.render_outputs, temp_arena.allocator)
+		outputs_per_view[i] = slice.clone(
+			cascade_render_task_data.render_outputs,
+			temp_arena.allocator,
+		)
 		outputs_per_view[i][0].array_layer = i
 
 		shadow_pass_info := ShadowPassConstantData {
@@ -180,3 +185,32 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 }
 
 //---------------------------------------------------------------------------//
+
+@(private = "file")
+draw_debug_ui :: proc(_: RenderTaskRef) {
+
+	imgui.InputInt("Shadow cascade count", (^i32)(&G_RENDERER_SETTINGS.num_shadow_cascades))
+	imgui.Checkbox(
+		"Draw shadow cascades",
+		(^bool)(&G_RENDERER_SETTINGS.debug_draw_shadow_cascades),
+	)
+	imgui.Checkbox("Fit shadow cascades", (^bool)(&G_RENDERER_SETTINGS.fit_shadow_cascades))
+	imgui.Checkbox(
+		"Stabilize shadow cascades",
+		(^bool)(&G_RENDERER_SETTINGS.stabilize_shadow_cascades),
+	)
+	imgui.InputFloat(
+		"Shadows rendering distance",
+		(&G_RENDERER_SETTINGS.shadows_rendering_distance),
+	)
+	imgui.InputFloat(
+		"Direcional light shadow sampling radius",
+		(&G_RENDERER_SETTINGS.directional_light_shadow_sampling_radius),
+	)
+
+	G_RENDERER_SETTINGS.num_shadow_cascades = max(0, G_RENDERER_SETTINGS.num_shadow_cascades)
+	G_RENDERER_SETTINGS.num_shadow_cascades = min(
+		G_RENDERER_SETTINGS.num_shadow_cascades,
+		MAX_SHADOW_CASCADES,
+	)
+}
