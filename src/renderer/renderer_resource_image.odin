@@ -6,11 +6,14 @@ package renderer
 
 import "base:intrinsics"
 
+import "../common"
 import "core:c"
+import "core:log"
 import "core:math/linalg/glsl"
 import "core:mem"
+import "core:strings"
 
-import "../common"
+import stb_image "vendor:stb/image/"
 
 //---------------------------------------------------------------------------//
 
@@ -449,6 +452,49 @@ image_create :: proc(p_image_ref: ImageRef) -> bool {
 
 //---------------------------------------------------------------------------//
 
+image_load_from_path :: proc(p_image_name: common.Name, p_image_path: string) -> ImageRef {
+	temp_arena := common.Arena{}
+	common.temp_arena_init(&temp_arena)
+	defer common.arena_delete(temp_arena)
+
+	file_path := strings.clone_to_cstring(p_image_path, temp_arena.allocator)
+	width, height, num_channels: i32
+	image_bytes := stb_image.load(file_path, &width, &height, &num_channels, num_channels)
+
+	if image_bytes == nil {
+		log.errorf("Failed to load image from path: %s'\n", p_image_path)
+		return InvalidImageRef
+	}
+
+	image_data := make([]byte, width * height * num_channels, G_RENDERER_ALLOCATORS.main_allocator)
+	mem.copy(raw_data(image_data), image_bytes, len(image_data))
+	stb_image.image_free(image_bytes)
+
+	image_ref := image_allocate(p_image_name)
+	image := &g_resources.images[image_get_idx(image_ref)]
+	image.desc.mip_count = 1
+	image.desc.array_size = 1
+	image.desc.dimensions = glsl.uvec3{u32(width), u32(height), 1}
+	image.desc.flags = {.AddToBindlessArray, .Sampled}
+	image.desc.format = .RGBA8UNorm
+	image.desc.sample_count_flags = {._1}
+	image.desc.type = .TwoDimensional
+
+	image.desc.data_per_mip = make([][]byte, 1, G_RENDERER_ALLOCATORS.main_allocator)
+	image.desc.data_per_mip[0] = image_data
+	image.desc.mip_data_allocator = G_RENDERER_ALLOCATORS.main_allocator
+
+	if image_create_texture(image_ref) {
+		return image_ref
+	}
+
+	log.errorf("Failed to create image from path: %s'\n", p_image_path)
+	image_destroy(image_ref)
+	return InvalidImageRef
+}
+
+//---------------------------------------------------------------------------//
+
 image_get_idx :: #force_inline proc(p_ref: ImageRef) -> u32 {
 	return common.ref_get_idx(&G_IMAGE_REF_ARRAY, p_ref)
 }
@@ -513,6 +559,14 @@ image_get_highest_loaded_mip :: proc(p_image_ref: ImageRef) -> u32 {
 	return mip_count - min(u32(loaded_mips_count), mip_count)
 
 }
+
+image_copy_content :: proc(
+	p_cmd_buffer_ref: CommandBufferRef,
+	p_src_image_ref: ImageRef,
+	p_dst_image_ref: ImageRef,
+) {
+	backend_image_copy_content(p_cmd_buffer_ref, p_src_image_ref, p_dst_image_ref)
+}
 //--------------------------------------------------------------------------//
 
 @(private)
@@ -572,6 +626,48 @@ try_progress_image_copies :: proc(
 		}
 
 		image := &g_resources.images[image_get_idx(image_upload_info.image_ref)]
+
+		is_not_compressed :=
+			(image.desc.format < .CompressedFormatsStart ||
+				image.desc.format > .CompressedFormatsEnd)
+
+		if is_not_compressed {
+
+			// Not compressed images, without mips are uploaded in one go
+
+			assert(image.desc.mip_count == 1)
+
+			upload_size: u32 =
+				image.desc.dimensions.x *
+				image.desc.dimensions.y *
+				image.desc.dimensions.z *
+				get_pixel_size_in_bytes(image.desc.format)
+
+			if (upload_size + INTERNAL.staging_buffer_offset) >
+			   INTERNAL.staging_buffer_single_region_size {
+				append(p_surviving_uploads, image_upload_info^)
+				continue
+			}
+
+			staging_buffer_offset :=
+				INTERNAL.staging_buffer_single_region_size * get_frame_idx() +
+				INTERNAL.staging_buffer_offset
+			INTERNAL.staging_buffer_offset += upload_size
+
+			staging_buffer_ptr := mem.ptr_offset(staging_buffer.mapped_ptr, staging_buffer_offset)
+			mem.copy(staging_buffer_ptr, raw_data(image.desc.data_per_mip[0]), int(upload_size))
+
+			backend_copy_whole_image(
+				image_upload_info.image_ref,
+				INTERNAL.staging_buffer_ref,
+				staging_buffer_offset,
+			)
+
+			backend_finish_image_copy(image_upload_info.image_ref, 0)
+
+			continue
+		}
+
 		block_size := get_block_size_in_bytes(image.desc.format)
 		mip_region_copies := make([dynamic]ImageMipRegionCopy, temp_arena.allocator)
 
@@ -739,6 +835,65 @@ get_block_size_in_bytes :: proc(p_format: ImageFormat) -> u32 {
 	case:
 		assert(false)
 	}
+	return 0
+}
+
+//--------------------------------------------------------------------------//
+
+@(private = "file")
+get_pixel_size_in_bytes :: proc(p_format: ImageFormat) -> u32 {
+
+	#partial switch p_format {
+	case .R32UInt:
+		return 4
+	case .R32Int:
+		return 4
+	case .R16SFloat:
+		return 2
+	case .R32SFloat:
+		return 4
+	case .R8UNorm:
+		return 1
+	case .RG8UNorm:
+		return 2
+	case .RG32UInt:
+		return 8
+	case .RG32Int:
+		return 8
+	case .RG32SFloat:
+		return 8
+	case .RGB8UNorm:
+		return 3
+	case .RGB32UInt:
+		return 4
+	case .RGB32Int:
+		return 16
+	case .RGB16SFloat:
+		return 8
+	case .RGBA16SFloat:
+		return 8
+	case .RGB32SFloat:
+		return 12
+	case .RGBA8UNorm:
+		return 4
+	case .RGBA32UInt:
+		return 16
+	case .RGBA32Int:
+		return 16
+	case .RGBA32SFloat:
+		return 16
+	case .R11G11B10UFloat:
+		return 4
+	case .RGBA16SNorm:
+		return 8
+	case .RGBA8_SRGB:
+		return 4
+	case .BGRA8_SRGB:
+		return 4
+	case:
+		assert(false)
+	}
+
 	return 0
 }
 

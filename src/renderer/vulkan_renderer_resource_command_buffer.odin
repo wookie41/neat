@@ -268,7 +268,7 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	frame_transfer_cmd_buffer_pre_graphics_get :: proc() -> vk.CommandBuffer {
-		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+		if is_async_transfer_enabled() {
 			return INTERNAL.transfer_cmd_buffers_pre_graphics[get_frame_idx()]
 		}
 		cmd_buff_ref := get_frame_cmd_buffer_ref()
@@ -279,7 +279,7 @@ when USE_VULKAN_BACKEND {
 
 	@(private)
 	frame_transfer_cmd_buffer_post_graphics_get :: proc() -> vk.CommandBuffer {
-		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+		if is_async_transfer_enabled() {
 			return INTERNAL.transfer_cmd_buffers_post_graphics[get_frame_idx()]
 		}
 		cmd_buff_ref := get_frame_cmd_buffer_ref()

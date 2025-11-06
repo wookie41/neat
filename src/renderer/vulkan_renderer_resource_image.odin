@@ -28,6 +28,7 @@ when USE_VULKAN_BACKEND {
 		vk_views:          [][]vk.ImageView, // Per array, per mip image view
 		vk_layouts:        [][]vk.ImageLayout,
 		allocation:        vma.Allocation,
+		aspect_mask:       ImageAspectFlags,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -170,8 +171,6 @@ when USE_VULKAN_BACKEND {
 				vk_sample_count_flags += {G_SAMPLE_COUNT_MAPPING[sample_count]}
 			}
 		}
-
-		assert(image.desc.array_size == 0)
 
 		// Create image
 		image_create_info := vk.ImageCreateInfo {
@@ -357,6 +356,8 @@ when USE_VULKAN_BACKEND {
 			BindlessArrayUpdate{image_ref = p_image_ref, use_default_image = true},
 		)
 
+		backend_image.aspect_mask = image_aspect
+
 		return true
 	}
 
@@ -454,20 +455,20 @@ when USE_VULKAN_BACKEND {
 			image_type = .D3
 		}
 
-		usage := vk.ImageUsageFlags{}
-		aspect_mask := vk.ImageAspectFlags{}
+		usage := vk.ImageUsageFlags{.TRANSFER_SRC, .TRANSFER_DST}
+		aspect_mask := ImageAspectFlags{}
 
 		if image.desc.format > .DepthFormatsStart && image.desc.format < .DepthFormatsEnd {
 			usage += {.DEPTH_STENCIL_ATTACHMENT}
-			aspect_mask += {.DEPTH}
+			aspect_mask += {.Depth}
 
 			if image.desc.format > .DepthStencilFormatsStart &&
 			   image.desc.format < .DepthStencilFormatsEnd {
-				aspect_mask += {.STENCIL}
+				aspect_mask += {.Stencil}
 			}
 
 		} else {
-			aspect_mask += {.COLOR}
+			aspect_mask += {.Color}
 			if image.desc.format < .CompressedFormatsStart ||
 			   image.desc.format > .CompressedFormatsEnd {
 				usage += {.COLOR_ATTACHMENT}
@@ -553,7 +554,7 @@ when USE_VULKAN_BACKEND {
 			viewType = view_type,
 			format = G_IMAGE_FORMAT_MAPPING[image.desc.format],
 			subresourceRange = {
-				aspectMask = aspect_mask,
+				aspectMask = vk_map_image_aspect(aspect_mask),
 				levelCount = image.desc.mip_count,
 				layerCount = image.desc.array_size,
 			},
@@ -646,7 +647,7 @@ when USE_VULKAN_BACKEND {
 				viewType = G_IMAGE_VIEW_TYPE_MAPPING[image.desc.type],
 				format = G_IMAGE_FORMAT_MAPPING[image.desc.format],
 				subresourceRange = {
-					aspectMask = aspect_mask,
+					aspectMask = vk_map_image_aspect(aspect_mask),
 					levelCount = image.desc.mip_count,
 					layerCount = 1,
 					baseArrayLayer = array_level,
@@ -681,7 +682,7 @@ when USE_VULKAN_BACKEND {
 					viewType = G_IMAGE_VIEW_TYPE_MAPPING[image.desc.type],
 					format = G_IMAGE_FORMAT_MAPPING[image.desc.format],
 					subresourceRange = {
-						aspectMask = aspect_mask,
+						aspectMask = vk_map_image_aspect(aspect_mask),
 						levelCount = 1,
 						layerCount = 1,
 						baseArrayLayer = array_level,
@@ -713,6 +714,8 @@ when USE_VULKAN_BACKEND {
 
 			}
 		}
+
+		image_backend.aspect_mask = aspect_mask
 
 		return true
 	}
@@ -844,25 +847,25 @@ when USE_VULKAN_BACKEND {
 		cmd_buffer_ref := get_frame_cmd_buffer_ref()
 		cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(cmd_buffer_ref)]
 
-		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
-			transfer_cmd_buff := frame_transfer_cmd_buffer_post_graphics_get()
+		// if is_async_transfer_enabled() {
+		// 	transfer_cmd_buff := frame_transfer_cmd_buffer_post_graphics_get()
 
-			// Acquire
-			vk.CmdPipelineBarrier(
-				transfer_cmd_buff,
-				{.BOTTOM_OF_PIPE},
-				{.TRANSFER},
-				nil,
-				0,
-				nil,
-				0,
-				nil,
-				1,
-				&to_transfer_barrier,
-			)
+		// 	// Acquire
+		// 	vk.CmdPipelineBarrier(
+		// 		transfer_cmd_buff,
+		// 		{.BOTTOM_OF_PIPE},
+		// 		{.TRANSFER},
+		// 		nil,
+		// 		0,
+		// 		nil,
+		// 		0,
+		// 		nil,
+		// 		1,
+		// 		&to_transfer_barrier,
+		// 	)
 
-			return
-		}
+		// 	return
+		// }
 
 		// Otherwise just prepare it to copy
 		vk.CmdPipelineBarrier(
@@ -878,6 +881,47 @@ when USE_VULKAN_BACKEND {
 			&to_transfer_barrier,
 		)
 
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_copy_whole_image :: proc(
+		p_image_ref: ImageRef,
+		p_staging_buffer_ref: BufferRef,
+		p_staging_buffer_offset: u32,
+	) {
+
+		image := &g_resources.images[image_get_idx(p_image_ref)]
+		backend_image := &g_resources.backend_images[image_get_idx(p_image_ref)]
+		backend_buffer := &g_resources.backend_buffers[buffer_get_idx(p_staging_buffer_ref)]
+
+		image_copy := vk.BufferImageCopy {
+			bufferOffset = vk.DeviceSize(p_staging_buffer_offset),
+			imageSubresource = {aspectMask = {.COLOR}, layerCount = 1},
+			imageExtent = vk.Extent3D {
+				width = image.desc.dimensions.x,
+				height = image.desc.dimensions.y,
+				depth = 1,
+			},
+		}
+
+		cmd_buffer_ref := get_frame_cmd_buffer_ref()
+		cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(cmd_buffer_ref)]
+		vk_cmd_buff := cmd_buffer.vk_cmd_buff
+
+		if is_async_transfer_enabled() {
+			vk_cmd_buff = frame_transfer_cmd_buffer_post_graphics_get()
+		}
+
+		vk.CmdCopyBufferToImage(
+			vk_cmd_buff,
+			backend_buffer.vk_buffer,
+			backend_image.vk_image,
+			.TRANSFER_DST_OPTIMAL,
+			1,
+			&image_copy,
+		)
 	}
 
 	//---------------------------------------------------------------------------//
@@ -929,7 +973,7 @@ when USE_VULKAN_BACKEND {
 		cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(cmd_buffer_ref)]
 		vk_cmd_buff := cmd_buffer.vk_cmd_buff
 
-		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+		if is_async_transfer_enabled() {
 			vk_cmd_buff = frame_transfer_cmd_buffer_post_graphics_get()
 		}
 
@@ -972,7 +1016,10 @@ when USE_VULKAN_BACKEND {
 		)
 
 		upload_fences := G_RENDERER.frame_fences[:]
-		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+		
+		// Uploads from frame 0 are synchronous, they're finialized in frame 1
+		// so we need to check graphics queue fences, as it was used on frame 0 for uploads
+		if is_async_transfer_enabled() && get_frame_id() > 1 {
 			upload_fences = G_RENDERER.transfer_fences_post_graphics[:]
 		}
 
@@ -1002,10 +1049,17 @@ when USE_VULKAN_BACKEND {
 
 			if image.desc.file_mapping.mapped_ptr == nil {
 				delete(image.desc.data_per_mip[finished_upload.mip], image.desc.mip_data_allocator)
-			} else if finished_upload.mip == 0 {
-				common.unmap_file(image.desc.file_mapping)
-				image.desc.file_mapping = {}
 			}
+
+			if finished_upload.mip == 0 {
+				if image.desc.file_mapping.mapped_ptr == nil {
+					delete(image.desc.data_per_mip, G_RENDERER_ALLOCATORS.main_allocator)
+				} else if finished_upload.mip == 0 {
+					common.unmap_file(image.desc.file_mapping)
+					image.desc.file_mapping = {}
+				}
+			}
+
 
 			cmd_buffer_ref := get_frame_cmd_buffer_ref()
 			cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(cmd_buffer_ref)]
@@ -1027,7 +1081,7 @@ when USE_VULKAN_BACKEND {
 				},
 			}
 
-			if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+			if is_async_transfer_enabled() {
 
 				transfer_cmd_buff := frame_transfer_cmd_buffer_pre_graphics_get()
 				to_sample_barrier.srcQueueFamilyIndex = G_RENDERER.queue_family_transfer_index
@@ -1048,7 +1102,7 @@ when USE_VULKAN_BACKEND {
 				)
 
 				// Clear access mask, the image hasn't been used on graphics queue yet
-				to_sample_barrier.srcAccessMask = {} 
+				to_sample_barrier.srcAccessMask = {}
 				// Layout was changed by transfer queue already, so adjust accordingly
 				to_sample_barrier.oldLayout = .SHADER_READ_ONLY_OPTIMAL
 				// Update stages where it's going to be used
@@ -1141,6 +1195,135 @@ when USE_VULKAN_BACKEND {
 			raw_data(descriptor_writes),
 			0,
 			nil,
+		)
+	}
+
+	//---------------------------------------------------------------------------//
+
+	@(private)
+	backend_image_copy_content :: proc(
+		p_cmd_buffer_ref: CommandBufferRef,
+		p_src_image_ref: ImageRef,
+		p_dst_image_ref: ImageRef,
+	) {
+		src_image := &g_resources.images[image_get_idx(p_src_image_ref)]
+		dst_image := &g_resources.images[image_get_idx(p_dst_image_ref)]
+
+		assert(src_image.desc.array_size == dst_image.desc.array_size)
+		assert(src_image.desc.mip_count == dst_image.desc.mip_count)
+		assert(src_image.desc.type == dst_image.desc.type)
+		assert(src_image.desc.format == dst_image.desc.format)
+
+		src_backend_image := &g_resources.backend_images[image_get_idx(p_src_image_ref)]
+		dst_backend_image := &g_resources.backend_images[image_get_idx(p_dst_image_ref)]
+
+		cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(p_cmd_buffer_ref)]
+
+		src_image_layout := src_backend_image.vk_layouts[0][0]
+		dst_image_layout := dst_backend_image.vk_layouts[0][0]
+
+		// Make sure all subresources have the same layout (required by the copy)
+		for layouts, i in src_backend_image.vk_layouts {
+			for layout, j in layouts {
+				assert(src_image_layout == layout)
+				src_backend_image.vk_layouts[i][j] = .TRANSFER_SRC_OPTIMAL
+			}
+		}
+
+		for layouts, i in dst_backend_image.vk_layouts {
+			for layout, j in layouts {
+				assert(dst_image_layout == layout)
+				dst_backend_image.vk_layouts[i][j] = .TRANSFER_DST_OPTIMAL
+			}
+		}
+
+		temp_arena := common.Arena{}
+		common.temp_arena_init(&temp_arena)
+		defer common.arena_delete(temp_arena)
+
+		regions := make([dynamic]vk.ImageCopy, temp_arena.allocator)
+
+		for layer in 0 ..< src_image.desc.array_size {
+			for mip in 0 ..< src_image.desc.mip_count {
+				region := vk.ImageCopy {
+					extent = vk.Extent3D {
+						src_image.desc.dimensions.x << mip,
+						src_image.desc.dimensions.y << mip,
+						src_image.desc.dimensions.z << mip,
+					},
+					srcSubresource = {
+						aspectMask = vk_map_image_aspect(src_backend_image.aspect_mask),
+						baseArrayLayer = layer,
+						mipLevel = mip,
+						layerCount = 1,
+					},
+					dstSubresource = {
+						aspectMask = vk_map_image_aspect(dst_backend_image.aspect_mask),
+						baseArrayLayer = layer,
+						mipLevel = mip,
+						layerCount = 1,
+					},
+				}
+
+				append(&regions, region)
+
+			}
+		}
+
+		is_depth_image :=
+			src_image.desc.format > .DepthFormatsStart && src_image.desc.format < .DepthFormatsEnd
+
+		src_image_barrier := vk.ImageMemoryBarrier {
+			sType = .IMAGE_MEMORY_BARRIER,
+			dstAccessMask = {.TRANSFER_READ},
+			srcAccessMask = vk_resolve_access_from_layout(src_image_layout),
+			image = src_backend_image.vk_image,
+			newLayout = .TRANSFER_SRC_OPTIMAL,
+			oldLayout = src_image_layout,
+			subresourceRange = {
+				aspectMask = vk.ImageAspectFlags{.DEPTH} if is_depth_image else {.COLOR},
+				layerCount = src_image.desc.array_size,
+				levelCount = src_image.desc.mip_count,
+			},
+		}
+
+		dst_image_barrier := vk.ImageMemoryBarrier {
+			sType = .IMAGE_MEMORY_BARRIER,
+			dstAccessMask = {.TRANSFER_WRITE},
+			srcAccessMask = vk_resolve_access_from_layout(dst_image_layout),
+			image = dst_backend_image.vk_image,
+			newLayout = .TRANSFER_DST_OPTIMAL,
+			oldLayout = dst_image_layout,
+			subresourceRange = {
+				aspectMask = vk.ImageAspectFlags{.DEPTH} if is_depth_image else {.COLOR},
+				layerCount = dst_image.desc.array_size,
+				levelCount = dst_image.desc.mip_count,
+			},
+		}
+
+		image_barriers := []vk.ImageMemoryBarrier{src_image_barrier, dst_image_barrier}
+
+		vk.CmdPipelineBarrier(
+			cmd_buffer.vk_cmd_buff,
+			{.COMPUTE_SHADER, .COLOR_ATTACHMENT_OUTPUT, .LATE_FRAGMENT_TESTS},
+			{.TRANSFER},
+			{},
+			0,
+			nil,
+			0,
+			nil,
+			u32(len(image_barriers)),
+			raw_data(image_barriers),
+		)
+
+		vk.CmdCopyImage(
+			cmd_buffer.vk_cmd_buff,
+			src_backend_image.vk_image,
+			.TRANSFER_SRC_OPTIMAL,
+			dst_backend_image.vk_image,
+			.TRANSFER_DST_OPTIMAL,
+			u32(len(regions)),
+			raw_data(regions),
 		)
 	}
 

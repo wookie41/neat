@@ -145,7 +145,7 @@ render_instanced_mesh_job_run :: proc(
 	p_debug_name: common.Name,
 	p_job_data: RenderInstancedMeshJob,
 	p_render_pass_ref: RenderPassRef,
-	p_render_views: []RenderView,
+	p_render_views: []RenderViews,
 	p_outputs_per_view: [][]RenderPassOutput,
 	p_material_pass_refs: []MaterialPassRef,
 	p_material_pass_type: MaterialPassType,
@@ -393,7 +393,7 @@ render_instanced_mesh_job_run :: proc(
 	num_user_dynamic_offsets := (p_job_data.num_dynamic_offset_buffers - 1)
 	for i in 0 ..< len(p_render_views) {
 
-		render_view := p_render_views[i]
+		render_views := p_render_views[i]
 		outputs := p_outputs_per_view[i]
 
 		for j in 0 ..< num_user_dynamic_offsets {
@@ -402,7 +402,7 @@ render_instanced_mesh_job_run :: proc(
 		}
 
 		resolved_dynamic_offsets[len(resolved_dynamic_offsets) - 1] =
-			uniform_buffer_create_view_data(render_view)
+			uniform_buffer_create_view_data(render_views)
 
 		render_task_render_pass_begin(p_render_pass_ref, outputs)
 

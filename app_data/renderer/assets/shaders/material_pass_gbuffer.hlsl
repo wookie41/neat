@@ -78,7 +78,7 @@ float4 VSMain(in VSInput pVertexInput, in uint pInstanceId: SV_INSTANCEID, out P
     pPixelInput.tangent = normalize(mul(normalMatrix, pVertexInput.tangent));
     pPixelInput.binormal = normalize(cross(pVertexInput.normal, pVertexInput.tangent));
 
-    return mul(uPerView.ProjectionMatrix, mul(uPerView.ViewMatrix, float4(positionWS.xyz, 1)));
+    return mul(uPerView.CurrentView.ProjectionMatrix, mul(uPerView.CurrentView.ViewMatrix, float4(positionWS.xyz, 1)));
 }
 
 //---------------------------------------------------------------------------//

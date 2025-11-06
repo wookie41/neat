@@ -226,10 +226,14 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 	render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	render_task_data := (^ComputeAvgLumRenderTaskData)(render_task.data_ptr)
 
-	render_view := render_view_create_from_camera(g_render_camera)
+	render_views := RenderViews {
+		current_view = render_view_create_from_camera(g_render_camera),
+		previous_view = render_view_create_from_camera(g_previous_render_camera),
+	}
+
 	global_uniform_offsets := []u32 {
 		g_uniform_buffers.frame_data_offset,
-		uniform_buffer_create_view_data(render_view),
+		uniform_buffer_create_view_data(render_views),
 	}
 
 	gpu_debug_region_begin(get_frame_cmd_buffer_ref(), render_task.desc.name)
@@ -262,9 +266,9 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 		compute_command_dispatch(
 			render_task_data.build_histogram_job.compute_command_ref,
 			get_frame_cmd_buffer_ref(),
-			nil,
-			{job_uniform_offsets, global_uniform_offsets, nil, nil},
 			glsl.uvec3{work_group_count.x, work_group_count.y, 1},
+			{job_uniform_offsets, global_uniform_offsets, nil, nil},
+			nil,
 		)
 	}
 
@@ -290,9 +294,9 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 		compute_command_dispatch(
 			render_task_data.reduce_histogram_job.compute_command_ref,
 			get_frame_cmd_buffer_ref(),
-			nil,
-			{job_uniform_offsets, global_uniform_offsets, nil, nil},
 			glsl.uvec3{1, 1, 1},
+			{job_uniform_offsets, global_uniform_offsets, nil, nil},
+			nil,
 		)
 	}
 }

@@ -19,7 +19,7 @@ when USE_VULKAN_BACKEND {
 
 	//---------------------------------------------------------------------------//
 
-	@(private="file")
+	@(private = "file")
 	INTERNAL: struct {
 		immutable_samplers:          []vk.Sampler,
 		descriptor_set_layout_cache: map[u32]DescriptorSetLayoutCacheEntry,
@@ -62,6 +62,7 @@ when USE_VULKAN_BACKEND {
 				borderColor  = .FLOAT_OPAQUE_BLACK,
 				compareOp    = .ALWAYS,
 				mipmapMode   = .LINEAR,
+				maxLod       = 16,
 			}
 
 
@@ -280,22 +281,21 @@ when USE_VULKAN_BACKEND {
 		if cache_entry.ref_count == 0 {
 			delete_key(&INTERNAL.descriptor_set_layout_cache, bind_group_layout.hash)
 
-			layout_to_delete := defer_resource_delete(safe_destroy_descriptor_set_layout, vk.DescriptorSetLayout)
+			layout_to_delete := defer_resource_delete(
+				safe_destroy_descriptor_set_layout,
+				vk.DescriptorSetLayout,
+			)
 			layout_to_delete^ = backend_bind_group_layout.vk_descriptor_set_layout
 		}
 	}
 
 	//---------------------------------------------------------------------------//
 
-	@(private="file")
+	@(private = "file")
 	safe_destroy_descriptor_set_layout :: proc(p_user_data: rawptr) {
 		set_layout := (^vk.DescriptorSetLayout)(p_user_data)
 
-		vk.DestroyDescriptorSetLayout(
-			G_RENDERER.device,
-			set_layout^,
-			nil,
-		)
+		vk.DestroyDescriptorSetLayout(G_RENDERER.device, set_layout^, nil)
 	}
 
 	//---------------------------------------------------------------------------//

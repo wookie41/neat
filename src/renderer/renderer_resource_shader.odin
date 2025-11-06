@@ -14,6 +14,7 @@ import "core:os"
 import "core:slice"
 import "core:strings"
 import "core:sys/windows"
+import "core:unicode"
 import "core:unicode/utf16"
 
 import "../common"
@@ -35,18 +36,20 @@ INTERNAL: struct {
 
 @(private)
 ShaderJSONEntry :: struct {
-	name:     string,
-	path:     string,
-	features: []string,
+	name:               string,
+	path:               string,
+	features:           []string,
+	custom_entry_point: string `json:"customEntryPoint"`,
 }
 
 //---------------------------------------------------------------------------//
 
 ShaderDesc :: struct {
-	name:      common.Name,
-	file_path: common.Name,
-	stage:     ShaderStage,
-	features:  []string,
+	name:               common.Name,
+	file_path:          common.Name,
+	stage:              ShaderStage,
+	features:           []string,
+	custom_entry_point: common.Name,
 }
 
 //---------------------------------------------------------------------------//
@@ -152,16 +155,72 @@ shader_init :: proc() -> bool {
 		shader_ref := shader_allocate(name)
 		shader := &g_resources.shaders[shader_get_idx(shader_ref)]
 		shader.desc.file_path = common.create_name(entry.path)
-		shader.desc.features = slice.clone(
-			entry.features,
+
+		shader_features := slice.clone_to_dynamic(entry.features, temp_arena.allocator)
+		for feature, i in shader.desc.features {
+			shader_features[i] = strings.clone(feature, G_RENDERER_ALLOCATORS.resource_allocator)
+		}
+
+		if len(entry.custom_entry_point) > 0 {
+			shader.desc.custom_entry_point = common.create_name(entry.custom_entry_point)
+
+			custom_entry_point_define_builder := strings.Builder{}
+			strings.builder_init(&custom_entry_point_define_builder, temp_arena.allocator)
+
+			assert(unicode.is_upper(rune(entry.custom_entry_point[0])))
+
+			last_upper_case_character_index := 0
+			for c, i in entry.custom_entry_point[1:] {
+
+				if unicode.is_upper(c) {
+
+					if last_upper_case_character_index > 0 {
+						strings.write_rune(&custom_entry_point_define_builder, '_')
+					}
+
+					strings.write_string(
+						&custom_entry_point_define_builder,
+						strings.to_upper(
+							entry.custom_entry_point[last_upper_case_character_index:i + 1],
+							temp_arena.allocator,
+						),
+					)
+
+					last_upper_case_character_index = i + 1
+				}
+			}
+
+			if last_upper_case_character_index > 0 {
+				strings.write_rune(&custom_entry_point_define_builder, '_')
+			}
+
+			strings.write_string(
+				&custom_entry_point_define_builder,
+				strings.to_upper(
+					entry.custom_entry_point[last_upper_case_character_index:len(
+						entry.custom_entry_point,
+					)],
+					temp_arena.allocator,
+				),
+			)
+
+			strings.write_string(&custom_entry_point_define_builder, "_SHADER")
+			append(
+				&shader_features,
+				strings.clone(
+					strings.to_string(custom_entry_point_define_builder),
+					G_RENDERER_ALLOCATORS.resource_allocator,
+				),
+			)
+
+		} else {
+			shader.desc.custom_entry_point = common.EMPTY_NAME
+		}
+
+		shader.desc.features = common.to_static_slice(
+			shader_features,
 			G_RENDERER_ALLOCATORS.resource_allocator,
 		)
-		for feature, i in shader.desc.features {
-			shader.desc.features[i] = strings.clone(
-				feature,
-				G_RENDERER_ALLOCATORS.resource_allocator,
-			)
-		}
 
 		if strings.has_suffix(entry.name, ".vert") {
 			shader.desc.stage = .Vertex
@@ -464,8 +523,6 @@ shader_reload :: proc(p_shader_file_name: string) {
 			p_shader_file_name,
 			num_reloaded_pipelines,
 		)
-
-		return
 	}
 }
 
@@ -527,7 +584,7 @@ shader_compile :: proc(
 	// if the compiled version is up to date
 	last_shader_write_time := common.get_last_file_write_time(shader_src_path)
 
-	// @TODO disable once we also keep track of the changes to include files
+	// @TODO enable once we also keep track of the changes to include files
 	shader_cache_enabled := false
 
 	shader_bin_path := common.aprintf(
@@ -566,6 +623,7 @@ shader_compile :: proc(
 			   shader_bin_path,
 			   shader.desc.stage,
 			   shader_defines,
+			   shader.desc.custom_entry_point,
 		   ) ==
 		   false {
 			return nil, false

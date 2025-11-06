@@ -354,7 +354,7 @@ buffer_upload_process_async_requests :: proc() {
 	}
 
 	backend_upload_sliced_proc := backend_buffer_upload_run_sliced_sync
-	if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+	if is_async_transfer_enabled() {
 		backend_upload_sliced_proc = backend_buffer_upload_run_sliced_async
 	}
 
@@ -428,7 +428,7 @@ buffer_upload_process_async_requests :: proc() {
 
 @(private)
 buffer_upload_submit_pre_graphics :: proc() {
-	if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+	if is_async_transfer_enabled() {
 		backend_buffer_upload_submit_pre_graphics()
 	}
 }
@@ -437,7 +437,7 @@ buffer_upload_submit_pre_graphics :: proc() {
 
 @(private)
 buffer_upload_submit_post_graphics :: proc() {
-	if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+	if is_async_transfer_enabled() {
 		backend_buffer_upload_submit_post_graphics()
 	}
 }
@@ -446,7 +446,7 @@ buffer_upload_submit_post_graphics :: proc() {
 
 @(private)
 buffer_upload_finalize_finished_uploads :: proc() {
-	if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+	if is_async_transfer_enabled() {
 		backend_buffer_upload_finalize_finished_uploads()
 	}
 }

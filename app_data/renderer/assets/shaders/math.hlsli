@@ -22,10 +22,10 @@ float3 UnprojectDepthToWorldPos(in float2 uv, in float depth, in float4x4 invVie
 
 //---------------------------------------------------------------------------//
 
-// Projects depth buffer value back to view space
-float LinearizeDepth(float hwDepth, float near)
+// Projects depth buffer (1 .. 0) value back to view space (near .. inf)
+float LinearizeDepth(in float hwDepth, in float near)
 {
-    return -(near / hwDepth);
+    return (near / hwDepth);
 }
 
 //---------------------------------------------------------------------------//
@@ -57,7 +57,7 @@ void ComputeFrustumPoints(
     pFrustumPoints[7] = (nearPlaneCenter - pUp * heightNear - right * widthNear);
 
     frustumCenter = 0;
-    
+
     [unroll]
     for (int i = 0; i < 8; i++)
         frustumCenter += pFrustumPoints[i];
@@ -97,6 +97,50 @@ float4x4 CreateOrthographicMatrix(float left, float right, float bottom, float t
 
     return matrix;
 }
+//---------------------------------------------------------------------------//
+
+float SliceToExponentialDepthJittered(in float near, in float far, in float jitter, in int slice, in int numSlices)
+{
+    return near * pow(far / near, (float(slice) + 0.5f + jitter) / float(numSlices));
+}
+//---------------------------------------------------------------------------//
+
+// http://www.aortiz.me/2018/12/21/CG.html
+// Convert linear depth (near...far) to (0...1) value distributed with exponential functions
+// like SliceToExponentialDepthJittered.
+// This function is performing all calculations, a more optimized one precalculates factors on CPU.
+float LinearDepthToUV(in float near, in float far, in float linearDepth, in int numSlices) {
+    const float oneOverLogFOverN = 1.0f / log2(far / near);
+    const float scale = numSlices * oneOverLogFOverN;
+    const float bias = -(numSlices * log2(near) * oneOverLogFOverN);
+    return max(log2(linearDepth) * scale + bias, 0.0f) / float(numSlices);
+}
+
+//---------------------------------------------------------------------------//
+
+// Convert linear depth (near...far) to raw depth (0..1)
+float LinearDepthToRawDepth(in float linearDepth, in float near, in float far)
+{
+    return (near * far) / (linearDepth * (near - far)) - far / (near - far);
+}
+
+//---------------------------------------------------------------------------//
+
+// Convert linear depth (near...far) to raw depth (0..1)
+float LinearDepthToRawDepth2(in float linearDepth, in float near, in float far)
+{
+    return (near * far) / (linearDepth * (far - near)) - near / (far - near);
+}
+
+//---------------------------------------------------------------------------//
+
+// Convert raw depth (0..1) to linear (near...far)
+float RawDepthToLinearDepth(in float rawDepth, in float near, in float far)
+{
+    return near * far / (far + rawDepth * (near - far));
+}
+
+
 //---------------------------------------------------------------------------//
 
 #endif // MATH_H

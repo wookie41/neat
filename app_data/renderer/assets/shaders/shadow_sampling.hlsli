@@ -37,12 +37,34 @@ float SampleDirectionalLightShadow(
         offset *= offsetScale * distance;
 
         const float2 samplePosition = uv + offset;
-        const float depthShadowMap = cascadeShadowTextures[cascadeIndex].SampleLevel(uNearestClampToBorderSampler, samplePosition, 0).r;
+        const float depthShadowMap = cascadeShadowTextures[cascadeIndex].SampleLevel(uLinearClampToBorderSampler, samplePosition, 0).r;
 
         occlusion += (depthPixel >= depthShadowMap ? 1 : 0);
     }
 
     return occlusion / sampleCount;
+}
+
+//---------------------------------------------------------------------------//
+
+float SampleDirectionalLightShadowSingleTap(
+    Texture2D<float> cascadeShadowTextures[],
+    StructuredBuffer<ShadowCascade> shadowCascades,
+    in float3 positionWS, in float3 positionVS, out int cascadeIndex)
+{
+    const float pixelZ = -positionVS.z;
+
+    cascadeIndex = 0;
+    while (pixelZ > shadowCascades[cascadeIndex].Split && cascadeIndex < (uPerFrame.NumShadowCascades - 1))
+        cascadeIndex++;
+
+    const float4 positionLS = mul(shadowCascades[cascadeIndex].LightMatrix, float4(positionWS, 1));
+    const float depthPixel = positionLS.z;
+    const float2 uv = positionLS.xy;
+
+    const float depthShadowMap = cascadeShadowTextures[cascadeIndex].SampleLevel(uLinearClampToBorderSampler, uv, 0).r;
+
+    return depthPixel >= depthShadowMap ? 1 : 0;
 }
     
 //---------------------------------------------------------------------------//

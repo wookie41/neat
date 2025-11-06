@@ -7,10 +7,11 @@
 
 //---------------------------------------------------------------------------//
 
-struct PerView
+struct RenderView
 {
     float4x4 ViewMatrix;
     float4x4 ProjectionMatrix;
+    float4x4 ViewProjectionMatrix;
     float4x4 InvViewProjMatrix;
     float4x4 InvProjMatrix;
     float3 CameraPositionWS;
@@ -19,6 +20,12 @@ struct PerView
     float _padding1;
     float3 CameraUpWS;
     float _padding2;
+};
+
+struct PerView
+{
+    RenderView CurrentView;
+    RenderView PreviousView;
 };
 
 //---------------------------------------------------------------------------//
@@ -30,12 +37,20 @@ struct PerFrame
     float DeltaTime;
     float Time;
     int NumShadowCascades;
-    int _padding0;
+    int FrameId;
 
     int FrameIdMod2;
     int FrameIdMod4;
     int FrameIdMod16;
     int FrameIdMod64;
+
+    float HaltonX;
+    float HaltonY;
+    float VolumetricFogNear;
+    float VolumetricFogFar;
+
+    uint3 VolumetricFogDimensions;
+    int VolumetricFogOpacityAAEnabled;
 };
 
 //---------------------------------------------------------------------------//

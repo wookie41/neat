@@ -38,5 +38,34 @@
     {
         "name": "tonemap.comp",
         "path": "tonemap.comp.hlsl"
+    },
+    {
+        "name": "generate_volumetric_noise.comp",
+        "path": "generate_volumetric_noise.comp.hlsl"
+    },
+    {
+        "name": "volumetric_fog_inject_data.comp",
+        "path": "volumetric_fog.comp.hlsl",
+        "customEntryPoint": "InjectData"
+    },
+    {
+        "name": "volumetric_fog_scatter_light.comp",
+        "path": "volumetric_fog.comp.hlsl",
+        "customEntryPoint": "ScatterLight"
+    },
+    {
+        "name": "volumetric_fog_integrate_light.comp",
+        "path": "volumetric_fog.comp.hlsl",
+        "customEntryPoint": "IntegrateLight"
+    },
+    {
+        "name": "volumetric_fog_spatial_filter.comp",
+        "path": "volumetric_fog.comp.hlsl",
+        "customEntryPoint": "SpatialFilter"
+    },
+    {
+        "name": "volumetric_fog_temporal_filter.comp",
+        "path": "volumetric_fog.comp.hlsl",
+        "customEntryPoint": "TemporalFilter"
     }
 ]

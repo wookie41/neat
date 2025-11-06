@@ -60,7 +60,7 @@ when USE_VULKAN_BACKEND {
 		finished_transfer_infos := make([dynamic]FinishedTransferInfo, get_next_frame_allocator())
 
 		upload_fences := G_RENDERER.frame_fences[:]
-		if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+		if is_async_transfer_enabled() {
 			upload_fences = G_RENDERER.transfer_fences_post_graphics[:]
 		}
 
@@ -543,7 +543,7 @@ when USE_VULKAN_BACKEND {
 		backend_dst_buffer := &g_resources.backend_buffers[buffer_get_idx(p_buffer_ref)]
 
 		// Non-dedicated transfer queue path
-		if (.DedicatedTransferQueue in G_RENDERER.gpu_device_flags) == false {
+		if (is_async_transfer_enabled()) == false {
 
 			cmd_buff_ref := get_frame_cmd_buffer_ref()
 			backend_cmd_buff := &g_resources.backend_cmd_buffers[command_buffer_get_idx(cmd_buff_ref)]

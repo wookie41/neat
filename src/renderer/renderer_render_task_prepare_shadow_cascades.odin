@@ -195,11 +195,14 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 	render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	render_task_data := (^PrepareShadowCascadesRenderTaskData)(render_task.data_ptr)
 
-	render_view := render_view_create_from_camera(g_render_camera)
+	render_views := RenderViews {
+		current_view  = render_view_create_from_camera(g_render_camera),
+		previous_view = render_view_create_from_camera(g_previous_render_camera),
+	}
 
 	global_uniform_offsets := []u32 {
 		g_uniform_buffers.frame_data_offset,
-		uniform_buffer_create_view_data(render_view),
+		uniform_buffer_create_view_data(render_views),
 	}
 
 	transition_binding_resources(render_task_data.bindings, .Compute)
@@ -234,9 +237,9 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 	compute_command_dispatch(
 		render_task_data.compute_job.compute_command_ref,
 		get_frame_cmd_buffer_ref(),
-		nil,
-		{task_offsets, global_uniform_offsets, nil, nil},
 		glsl.uvec3{1, 1, 1},
+		{task_offsets, global_uniform_offsets, nil, nil},
+		nil,
 	)
 }
 

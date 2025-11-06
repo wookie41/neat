@@ -38,15 +38,5 @@
                 "isDefault": true
             }
         },
-        {
-            "label": "Run Plain",
-            "type": "shell",
-            "command": "odin build src/runner/neat.odin -file --debug -o:minimal --vet-shadowing --vet-unused --vet-style  -out:bin/neat.exe",
-            "problemMatcher": [],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            }
-        }
     ]
 }

@@ -75,6 +75,59 @@
             <MaterialPass name="OpaquePBR" />
         </CascadeShadows>
 
+        <VolumetricFog name="VolumetricFog" 
+            injectDataShader="volumetric_fog_inject_data.comp"
+            scatterLightShader="volumetric_fog_scatter_light.comp"
+            integrateLightShader="volumetric_fog_integrate_light.comp"
+            spatialFilterShader="volumetric_fog_spatial_filter.comp"
+            temporalFilterShader="volumetric_fog_temporal_filter.comp"
+            volumetricFogImage="VolumetricFog">
+
+            <InjectDataBindings>
+                <InputBuffer usage="Uniform"/>
+                <InputImage name="BlueNoise"/>
+                <InputImage name="VolumetricNoise"/>
+                <OutputImage name="VolumetricFogWorking1"/>
+            </InjectDataBindings>
+
+            <LightScatteringBindings>
+                <InputBuffer usage="Uniform"/>
+                <InputImage name="BlueNoise"/>
+                <InputImage name="VolumetricNoise"/>
+                <InputImage name="CascadeShadows"/>
+                <InputBuffer usage="Storage" name="ShadowCascades"/>
+                <InputBuffer usage="Storage" name="ExposureBuffer" />
+                <OutputImage name="VolumetricFogWorking2"/>
+            </LightScatteringBindings>
+
+            <IntegrateLightBindings>
+                <InputBuffer usage="Uniform"/>
+                <InputImage name="BlueNoise"/>
+                <InputImage name="VolumetricNoise"/>
+                <InputImage name="VolumetricFogWorking1"/>
+                <InputImage name="VolumetricFogWorking2"/>
+                <OutputImage name="VolumetricFog"/>
+            </IntegrateLightBindings>
+
+            <SpatialFilterBindings>
+                <InputBuffer usage="Uniform"/>
+                <InputImage name="BlueNoise"/>
+                <InputImage name="VolumetricNoise"/>
+                <InputImage name="VolumetricFog"/>
+                <OutputImage name="VolumetricFogWorking1"/>
+            </SpatialFilterBindings>
+
+            <TemporalFilterBindings>
+                <InputBuffer usage="Uniform"/>
+                <InputImage name="BlueNoise"/>
+                <InputImage name="VolumetricNoise"/>
+                <InputImage name="VolumetricFogWorking1"/>
+                <InputImage name="PreviousVolumetricFog"/>
+                <OutputImage name="VolumetricFog"/>
+            </TemporalFilterBindings>
+
+        </VolumetricFog>
+
         <FullScreen name="Lighting" shader="lighting.comp" resolution="Full">
             <InputBuffer usage="Uniform"/>
             <InputBuffer usage="Storage" name="ExposureBuffer" />
@@ -84,6 +137,7 @@
             <InputImage name="DepthBuffer" />
             <InputImage name="CascadeShadows" />
             <InputBuffer usage="Storage" name="ShadowCascades" />
+            <InputImage name="VolumetricFog" />
             <OutputImage name="SceneHDR" />
         </FullScreen>
 

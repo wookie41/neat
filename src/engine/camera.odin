@@ -28,7 +28,7 @@ camera_init :: proc() {
 	using Camera
 	position = {50, 150, 500}
 	speed = 0.5
-	near_plane = 0.001
+	near_plane = 0.1
 	fov = 45.0
 	rotation_sensitivity = 0.25
 	up = {0, 1, 0}

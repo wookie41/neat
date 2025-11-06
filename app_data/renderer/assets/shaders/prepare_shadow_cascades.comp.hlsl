@@ -44,11 +44,9 @@ RWStructuredBuffer<ShadowCascade> lightMatrices : register(u0, space0);
 float CalculateCascadeSplit(int cascadeIndex, float depthMinLinear, float depthMaxLinear)
 {
     if (cascadeIndex < 0)
-        return depthMinLinear;
+        return 0;
 
     return depthMinLinear + ((depthMaxLinear - depthMinLinear) * (cascadeIndex + 1) / float(numCascades)); // linear
-
-    
     // return lerp(
     //     depthMinLinear + (float(cascadeIndex + 1) / float(numCascades)) * (depthMaxLinear - depthMinLinear),
     //     depthMinLinear * pow(depthMaxLinear / depthMinLinear, float(cascadeIndex + 1) / float(numCascades)),
@@ -62,8 +60,8 @@ void CSMain(uint localThreadIndex: SV_GroupIndex)
 {
     if (localThreadIndex < numCascades)
     {
-        const float depthMinLinear = (flags & FIT_CASCADES) > 0 ? -LinearizeDepth(asfloat(minMaxDepthBuffer[1]), uPerView.CameraNearPlane) : uPerView.CameraNearPlane;
-        const float depthMaxLinear = (flags & FIT_CASCADES) > 0 ? -LinearizeDepth(asfloat(minMaxDepthBuffer[0]), uPerView.CameraNearPlane) : renderingDistance;
+        const float depthMinLinear = (flags & FIT_CASCADES) > 0 ? LinearizeDepth(asfloat(minMaxDepthBuffer[1]), uPerView.CurrentView.CameraNearPlane) : uPerView.CurrentView.CameraNearPlane;
+        const float depthMaxLinear = (flags & FIT_CASCADES) > 0 ? LinearizeDepth(asfloat(minMaxDepthBuffer[0]), uPerView.CurrentView.CameraNearPlane) : renderingDistance;
 
         const float nearSplit = CalculateCascadeSplit(int(localThreadIndex) - 1, depthMinLinear, depthMaxLinear);
         const float farSplit = CalculateCascadeSplit(localThreadIndex, depthMinLinear, depthMaxLinear);
@@ -97,8 +95,8 @@ void CSMain(uint localThreadIndex: SV_GroupIndex)
 
         // Calculate points of the view frustum capped to this cascade's near and far planes
         ComputeFrustumPoints(
-            nearSplit, farSplit, aspectRatio, tanFovHalf, 
-            uPerView.CameraPositionWS, uPerView.CameraForwardWS, uPerView.CameraUpWS,
+            nearSplit, farSplit, aspectRatio, tanFovHalf,
+            uPerView.CurrentView.CameraPositionWS, uPerView.CurrentView.CameraForwardWS, uPerView.CurrentView.CameraUpWS,
             frustumPoints, frustumCenter);
 
         float4x4 view;

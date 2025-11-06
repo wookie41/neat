@@ -145,17 +145,14 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 
 	using cascade_render_task_data
 
-	render_views := make([]RenderView, num_cascades, temp_arena.allocator)
+	render_views := make([]RenderViews, num_cascades, temp_arena.allocator)
 	outputs_per_view := make([][]RenderPassOutput, num_cascades, temp_arena.allocator)
 	shadow_pass_uniform_offsets := make([]u32, num_cascades, temp_arena.allocator)
 
 	for i in 0 ..< num_cascades {
 
 		// Dummy, cascade matrices are calculated by prepare_shadow_cascades
-		render_views[i] = {
-			view       = glsl.mat4(0),
-			projection = glsl.mat4(0),
-		}
+		render_views[i] = {}
 
 		outputs_per_view[i] = slice.clone(
 			cascade_render_task_data.render_outputs,

@@ -652,7 +652,7 @@ backend_wait_for_frame_resources :: proc() {
 		max(u64),
 	)
 
-	if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+	if is_async_transfer_enabled() {
 		backend_wait_for_transfer_resources()
 	}
 }
@@ -740,6 +740,11 @@ backend_submit_current_frame :: proc() {
 			pFences        = &G_RENDERER.present_fences[get_frame_idx()],
 			swapchainCount = 1,
 		}
+
+		swap_image_ref := G_RENDERER.swap_image_refs[G_RENDERER.swap_img_idx]
+		swap_image := &g_resources.backend_images[image_get_idx(swap_image_ref)]
+
+		assert(swap_image.vk_layouts[0][0] == .PRESENT_SRC_KHR)
 
 		present_info := vk.PresentInfoKHR {
 			sType              = .PRESENT_INFO_KHR,
@@ -1056,15 +1061,7 @@ backend_begin_frame :: proc() {
 		return
 	}
 
-	// We have to put the current swap image in the undefined state, so proper barriers are issued
-	{
-		swap_image_ref := G_RENDERER.swap_image_refs[G_RENDERER.swap_img_idx]
-		image_backend := &g_resources.backend_images[image_get_idx(swap_image_ref)]
-		image_backend.vk_layouts[0][0] = .UNDEFINED
-	}
-
-
-	if .DedicatedTransferQueue in G_RENDERER.gpu_device_flags {
+	if is_async_transfer_enabled() {
 		backend_buffer_upload_start_async_cmd_buffer_pre_graphics()
 		backend_buffer_upload_start_async_cmd_buffer_post_graphics()
 	}

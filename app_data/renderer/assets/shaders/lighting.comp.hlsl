@@ -7,6 +7,7 @@
 #include "packing.hlsli"
 #include "resources.hlsli"
 #include "shadow_sampling.hlsli"
+#include "volumetric_fog.hlsli"
 
 //---------------------------------------------------------------------------//
 
@@ -33,9 +34,11 @@ Texture2D<float> gCascadeShadowTextures[] : register(t5, space0);
 [[vk::binding(7, 0)]]
 StructuredBuffer<ShadowCascade> gShadowCascades : register(t6, space0);
 
+[[vk::binding(8, 0)]]
+Texture3D<float4> gVolumetricFog : register(t7, space0);
 // Outputs 
 
-[[vk::binding(8, 0)]]
+[[vk::binding(9, 0)]]
 RWTexture2D<float4> outputImage : register(u0, space0);
 
 //---------------------------------------------------------------------------//
@@ -56,13 +59,13 @@ void CSMain(uint2 dispatchThreadId: SV_DispatchThreadID)
     const float occlusion = parameters.b;
 
     const float depth = depthTex[input.cellCoord].x;
-    const float3 posWS = UnprojectDepthToWorldPos(input.uv, depth, uPerView.InvViewProjMatrix);
-    const float3 posVS = mul(uPerView.ViewMatrix, float4(posWS, 1)).xyz;
+    const float3 posWS = UnprojectDepthToWorldPos(input.uv, depth, uPerView.CurrentView.InvViewProjMatrix);
+    const float3 posVS = mul(uPerView.CurrentView.ViewMatrix, float4(posWS, 1)).xyz;
 
     int cascadeIndex;
     const float directionalLightShadow = SampleDirectionalLightShadow(gCascadeShadowTextures, gShadowCascades, posWS, posVS, input.cellCoord, cascadeIndex);
 
-    const float3 V = normalize(uPerView.CameraPositionWS - posWS);
+    const float3 V = normalize(uPerView.CurrentView.CameraPositionWS - posWS);
     const float3 L = -uPerFrame.Sun.DirectionWS;
     const float3 H = normalize(V + L);
 
@@ -95,6 +98,8 @@ void CSMain(uint2 dispatchThreadId: SV_DispatchThreadID)
     {
         pixelColor *= GetCascadeDebugColor(cascadeIndex);
     }
+
+    pixelColor = ApplyVolumetricFog(input.uv, depth, pixelColor, gVolumetricFog);
 
     outputImage[input.cellCoord] = float4(pixelColor, 1);
 }

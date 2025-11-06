@@ -112,7 +112,7 @@ when USE_VULKAN_BACKEND {
 		if len(input_image_barriers_graphics) > 0 || len(input_buffer_barriers_graphics) > 0 {
 			vk.CmdPipelineBarrier(
 				backend_graphics_cmd_buffer.vk_cmd_buff,
-				{.COMPUTE_SHADER, .COLOR_ATTACHMENT_OUTPUT, .LATE_FRAGMENT_TESTS},
+				{.COMPUTE_SHADER, .COLOR_ATTACHMENT_OUTPUT, .LATE_FRAGMENT_TESTS, .TRANSFER},
 				{.VERTEX_SHADER, .FRAGMENT_SHADER, .COMPUTE_SHADER},
 				{},
 				0,
@@ -174,7 +174,7 @@ when USE_VULKAN_BACKEND {
 		if len(output_image_barriers_graphics) > 0 || len(output_buffer_barriers_graphics) > 0 {
 			vk.CmdPipelineBarrier(
 				backend_graphics_cmd_buffer.vk_cmd_buff,
-				{.VERTEX_SHADER, .FRAGMENT_SHADER, .COMPUTE_SHADER},
+				{.VERTEX_SHADER, .FRAGMENT_SHADER, .COMPUTE_SHADER, .TRANSFER, .COLOR_ATTACHMENT_OUTPUT},
 				{.COLOR_ATTACHMENT_OUTPUT} if p_pipeline_type == .Graphics else {.COMPUTE_SHADER},
 				{},
 				0,
@@ -244,7 +244,6 @@ when USE_VULKAN_BACKEND {
 		image := &g_resources.images[image_idx]
 
 		new_layout := vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL
-		src_access_mask := vk.AccessFlags{.SHADER_READ}
 		dst_access_mask := vk.AccessFlags{.SHADER_READ}
 		aspect_mask := vk.ImageAspectFlags{.COLOR}
 
@@ -257,10 +256,6 @@ when USE_VULKAN_BACKEND {
 			   image.desc.format < .DepthStencilFormatsEnd {
 				new_layout = .DEPTH_STENCIL_READ_ONLY_OPTIMAL
 			}
-
-			src_access_mask += {.DEPTH_STENCIL_ATTACHMENT_WRITE}
-		} else {
-			src_access_mask += {.COLOR_ATTACHMENT_WRITE}
 		}
 
 		image_backend := &g_resources.backend_images[image_idx]
@@ -276,7 +271,7 @@ when USE_VULKAN_BACKEND {
 
 				image_input_barrier := vk.ImageMemoryBarrier {
 					sType = .IMAGE_MEMORY_BARRIER,
-					srcAccessMask = src_access_mask,
+					srcAccessMask = vk_resolve_access_from_layout(old_layout),
 					dstAccessMask = dst_access_mask,
 					oldLayout = old_layout,
 					newLayout = new_layout,
@@ -398,11 +393,13 @@ when USE_VULKAN_BACKEND {
 				image.desc.format > .DepthFormatsStart && image.desc.format < .DepthFormatsEnd
 
 			aspect_mask: vk.ImageAspectFlags = {.DEPTH} if is_depth_image else {.COLOR}
+			old_layout := image_backend.vk_layouts[p_binding.array_layer][p_binding.base_mip]
 
 			image_barrier := vk.ImageMemoryBarrier {
 				sType = .IMAGE_MEMORY_BARRIER,
 				dstAccessMask = {.SHADER_WRITE},
-				oldLayout = image_backend.vk_layouts[p_binding.array_layer][p_binding.base_mip],
+				srcAccessMask = vk_resolve_access_from_layout(old_layout),
+				oldLayout = old_layout,
 				newLayout = new_layout,
 				image = image_backend.vk_image,
 				subresourceRange = {
@@ -438,7 +435,8 @@ when USE_VULKAN_BACKEND {
 			}
 
 			// Check if this image needs to be transitioned
-			if image_backend.vk_layouts[p_binding.array_layer][p_binding.base_mip] == new_layout {
+			current_layout := image_backend.vk_layouts[p_binding.array_layer][p_binding.base_mip]
+			if current_layout == new_layout {
 				return
 			}
 
@@ -448,6 +446,7 @@ when USE_VULKAN_BACKEND {
 			p_depth_barrier^ = {
 				sType = .IMAGE_MEMORY_BARRIER,
 				dstAccessMask = {.DEPTH_STENCIL_ATTACHMENT_READ, .DEPTH_STENCIL_ATTACHMENT_WRITE},
+				srcAccessMask = vk_resolve_access_from_layout(current_layout),
 				oldLayout = image_backend.vk_layouts[p_binding.array_layer][p_binding.base_mip],
 				newLayout = new_layout,
 				image = image_backend.vk_image,
@@ -467,12 +466,18 @@ when USE_VULKAN_BACKEND {
 		} else {
 
 			new_layout = .ATTACHMENT_OPTIMAL
+			current_layout := image_backend.vk_layouts[p_binding.array_layer][p_binding.base_mip]
+
+			if new_layout == current_layout {
+				return
+			}
 
 			// Transition the image to the expected layout
 			image_barrier := vk.ImageMemoryBarrier {
 				sType = .IMAGE_MEMORY_BARRIER,
 				dstAccessMask = {.COLOR_ATTACHMENT_WRITE},
-				oldLayout = image_backend.vk_layouts[p_binding.array_layer][p_binding.base_mip],
+				oldLayout = current_layout,
+				srcAccessMask = vk_resolve_access_from_layout(current_layout),
 				newLayout = new_layout,
 				image = image_backend.vk_image,
 				subresourceRange = {
@@ -546,5 +551,45 @@ when USE_VULKAN_BACKEND {
 	}
 
 	//---------------------------------------------------------------------------//
+
+	@(private)
+	vk_resolve_access_from_layout :: proc(p_image_layout: vk.ImageLayout) -> vk.AccessFlags {
+
+		if p_image_layout == .GENERAL {
+			return {.SHADER_WRITE}
+		}
+
+		if p_image_layout == .ATTACHMENT_OPTIMAL {
+			return {.COLOR_ATTACHMENT_WRITE}
+		}
+
+		if p_image_layout == .DEPTH_ATTACHMENT_OPTIMAL {
+			return {.DEPTH_STENCIL_ATTACHMENT_WRITE}
+		}
+
+		if p_image_layout == .TRANSFER_SRC_OPTIMAL {
+			return {.TRANSFER_READ}
+		}
+
+		if p_image_layout == .TRANSFER_DST_OPTIMAL {
+			return {.TRANSFER_WRITE}
+		}
+
+		if p_image_layout == .SHADER_READ_ONLY_OPTIMAL {
+			return {.SHADER_READ}
+		}
+
+		if p_image_layout == .UNDEFINED || p_image_layout == .PRESENT_SRC_KHR {
+			return {}
+		}
+
+		if p_image_layout == .DEPTH_READ_ONLY_OPTIMAL {
+			return {.DEPTH_STENCIL_ATTACHMENT_READ}
+		}
+
+		assert(false)
+
+		return {}
+	}
 
 }

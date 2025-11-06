@@ -110,6 +110,7 @@ when USE_VULKAN_BACKEND {
 		p_bin_path: string,
 		p_shader_stage: ShaderStage,
 		p_shader_defines: string,
+		p_custom_entry_point: common.Name,
 	) -> bool {
 
 		temp_arena: common.Arena
@@ -131,6 +132,10 @@ when USE_VULKAN_BACKEND {
 			entry_point = "CSMain"
 		case:
 			assert(false, "Unsupported shader type")
+		}
+
+		if p_custom_entry_point != common.EMPTY_NAME {
+			entry_point = common.get_string(p_custom_entry_point)
 		}
 
 		// @TODO strip debug info

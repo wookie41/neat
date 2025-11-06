@@ -46,7 +46,7 @@ create_instance :: proc(
 	name := common.create_name(name_str)
 
 	bindings := render_task_config_parse_bindings(p_render_task_config, {}) or_return
-	defer delete(bindings, G_RENDERER_ALLOCATORS.resource_allocator) 
+	defer delete(bindings, G_RENDERER_ALLOCATORS.resource_allocator)
 
 	render_mesh_job := render_instanced_mesh_job_create(name, bindings) or_return
 	defer if res == false {
@@ -90,7 +90,7 @@ begin_frame :: proc(p_render_task_ref: RenderTaskRef) {
 end_frame :: proc(p_render_task_ref: RenderTaskRef) {
 }
 
-//---------------------------------------------------------------------------//
+//-------------------------------------------------------------+--------------//
 
 @(private = "file")
 render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
@@ -98,9 +98,12 @@ render :: proc(p_render_task_ref: RenderTaskRef, dt: f32) {
 	mesh_render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	mesh_render_task_data := (^MeshRenderTaskData)(mesh_render_task.data_ptr)
 
-	camera_render_view := render_view_create_from_camera(g_render_camera)
-
-	render_views := []RenderView{camera_render_view}
+	render_views := []RenderViews {
+		{
+			current_view = render_view_create_from_camera(g_render_camera),
+			previous_view = render_view_create_from_camera(g_previous_render_camera),
+		},
+	}
 
 	render_instanced_mesh_job_run(
 		mesh_render_task.desc.name,

@@ -14,7 +14,7 @@ rad :: f32
 @(require_results)
 mat4PerspectiveInfiniteReverse :: proc "c" (fovy, aspect, near: f32) -> (m: glsl.mat4) {
 	tan_half_fovy := glsl.tan(0.5 * fovy)
-	m[0, 0] = 1 / (aspect*tan_half_fovy)
+	m[0, 0] = 1 / (aspect * tan_half_fovy)
 	m[1, 1] = 1 / (tan_half_fovy)
 	m[3, 2] = -1
 	m[2, 3] = near
@@ -29,7 +29,8 @@ compute_frustum_points :: proc(
 	p_fov: rad,
 	p_position, p_forward, p_up: glsl.vec3,
 ) -> (
-	p_frustum_points: [8]glsl.vec3, p_frustum_center: glsl.vec3,
+	p_frustum_points: [8]glsl.vec3,
+	p_frustum_center: glsl.vec3,
 ) {
 
 	right := glsl.normalize(glsl.cross(p_forward, p_up))
@@ -62,6 +63,35 @@ compute_frustum_points :: proc(
 	p_frustum_center /= 8
 
 	return
+}
+
+//---------------------------------------------------------------------------//
+
+// Creates a halton sequence of values between 0 and 1.
+// https://en.wikipedia.org/wiki/Halton_sequence
+// Used for jittering based on a constant set of 2D points.
+
+halton :: proc(i: i32, b: i32) -> f32 {
+	f: f32 = 1.0
+	r: f32 = 0.0
+	ii := i
+	for (ii > 0) {
+		f = f / f32(b)
+		r = r + f * f32(ii % b)
+		ii = ii / b
+	}
+	return r
+}
+
+//---------------------------------------------------------------------------//
+
+pack_rgba_color :: proc(color: glsl.vec4) -> u32 {
+	return(
+		u32(color.r * 255) |
+		(u32(color.g * 255) << 8) |
+		(u32(color.b * 255) << 16) |
+		((u32(color.a * 255) << 24)) \
+	)
 }
 
 //---------------------------------------------------------------------------//

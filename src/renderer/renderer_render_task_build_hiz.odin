@@ -323,11 +323,14 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 	hiz_render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	hiz_render_task_data := (^HiZRenderTaskData)(hiz_render_task.data_ptr)
 
-	render_view := render_view_create_from_camera(g_render_camera)
+	render_views := RenderViews {
+		current_view = render_view_create_from_camera(g_render_camera),
+		previous_view = render_view_create_from_camera(g_previous_render_camera),
+	}
 
 	global_uniform_offsets := []u32 {
 		g_uniform_buffers.frame_data_offset,
-		uniform_buffer_create_view_data(render_view),
+		uniform_buffer_create_view_data(render_views),
 	}
 
 	// Reset the buffer
@@ -337,9 +340,8 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 		compute_command_dispatch(
 			hiz_render_task_data.reset_buffer_job.compute_command_ref,
 			get_frame_cmd_buffer_ref(),
-			nil,
-			{nil, global_uniform_offsets, nil, nil},
 			glsl.uvec3{1, 1, 1},
+			{nil, global_uniform_offsets, nil, nil},
 		)
 	}
 
@@ -374,9 +376,9 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 		compute_command_dispatch(
 			hiz_render_task_data.build_hiz_job.compute_command_ref,
 			get_frame_cmd_buffer_ref(),
-			nil,
-			{per_instance_offsets, global_uniform_offsets, nil, nil},
 			glsl.uvec3{work_group_count.x, work_group_count.y, 1},
+			{per_instance_offsets, global_uniform_offsets, nil, nil},
+			nil,
 		)
 	}
 }

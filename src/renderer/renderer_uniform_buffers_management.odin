@@ -21,10 +21,11 @@ TRANSIENT_UNIFORM_BUFFER_SIZE :: common.KILOBYTE * 8
 
 //---------------------------------------------------------------------------//
 
-@(private)
-PerViewData :: struct #packed {
+@(private = "file")
+RenderViewData :: struct #packed {
 	view:              glsl.mat4x4,
 	proj:              glsl.mat4x4,
+	view_proj:         glsl.mat4x4,
 	inv_view_proj:     glsl.mat4x4,
 	inv_proj:          glsl.mat4x4,
 	camera_pos_ws:     glsl.vec3,
@@ -35,21 +36,31 @@ PerViewData :: struct #packed {
 	_padding2:         f32,
 }
 
+@(private)
+PerViewData :: struct #packed {
+	current_view:  RenderViewData,
+	previous_view: RenderViewData,
+}
+
 //---------------------------------------------------------------------------//
 
 @(private)
 g_per_frame_data: struct #packed {
-	sun:                        DirectionalLight,
-	
-	delta_time: 				f32,
-	time: 						f32,
-	num_shadow_cascades:        u32,
-	padding0: 					glsl.ivec2,
-
-	frame_id_mod_2:             u32,
-	frame_id_mod_4:             u32,
-	frame_id_mod_16:            u32,
-	frame_id_mod_64:            u32,
+	sun:                               DirectionalLight,
+	delta_time:                        f32,
+	time:                              f32,
+	num_shadow_cascades:               u32,
+	frame_id:                          u32,
+	frame_id_mod_2:                    u32,
+	frame_id_mod_4:                    u32,
+	frame_id_mod_16:                   u32,
+	frame_id_mod_64:                   u32,
+	halton_x:                          f32,
+	halton_y:                          f32,
+	volumetric_fog_near:               f32,
+	volumetric_fog_far:                f32,
+	volumetric_fog_dimensions:         glsl.uvec3,
+	volumetric_fog_opacity_aa_enabled: u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -75,6 +86,12 @@ uniform_buffer_init :: proc() {
 		common.create_name("TransientBuffer"),
 		TRANSIENT_UNIFORM_BUFFER_SIZE,
 	)
+	g_per_frame_data.volumetric_fog_near = 0.001
+	g_per_frame_data.volumetric_fog_far = 1500
+
+	g_per_frame_data.sun.color = {1, 1, 1}
+	g_per_frame_data.sun.strength = 128000
+	g_per_frame_data.sun.direction = {0, -1, 0}
 }
 
 //---------------------------------------------------------------------------//
@@ -150,37 +167,55 @@ update_per_frame_data :: proc(p_dt: f32) {
 	g_per_frame_data.time += p_dt
 	g_per_frame_data.delta_time = p_dt
 
-	g_per_frame_data.sun.color = {1, 1, 1}
-	g_per_frame_data.sun.strength = 128000
-	g_per_frame_data.sun.direction = {0, -1, 0}
-
-	g_per_frame_data.frame_id_mod_2 = get_frame_id() % 2
-	g_per_frame_data.frame_id_mod_4 = get_frame_id() % 4
-	g_per_frame_data.frame_id_mod_16 = get_frame_id() % 16
-	g_per_frame_data.frame_id_mod_64 = get_frame_id() % 64
+	g_per_frame_data.frame_id = get_frame_id()
+	g_per_frame_data.frame_id_mod_2 = g_per_frame_data.frame_id % 2
+	g_per_frame_data.frame_id_mod_4 = g_per_frame_data.frame_id % 4
+	g_per_frame_data.frame_id_mod_16 = g_per_frame_data.frame_id % 16
+	g_per_frame_data.frame_id_mod_64 = g_per_frame_data.frame_id % 64
 
 	g_per_frame_data.num_shadow_cascades = G_RENDERER_SETTINGS.num_shadow_cascades
-	g_per_frame_data.sun.debug_draw_cascades = 1 if G_RENDERER_SETTINGS.debug_draw_shadow_cascades else 0
-	g_per_frame_data.sun.shadow_sampling_radius = G_RENDERER_SETTINGS.directional_light_shadow_sampling_radius
+	g_per_frame_data.sun.debug_draw_cascades =
+		1 if G_RENDERER_SETTINGS.debug_draw_shadow_cascades else 0
+	g_per_frame_data.sun.shadow_sampling_radius =
+		G_RENDERER_SETTINGS.directional_light_shadow_sampling_radius
+
+	jitter_index: i32 = (i32(g_per_frame_data.frame_id) % 8)
+
+	g_per_frame_data.halton_x = 2.0 * common.halton(jitter_index + 1, 2) - 1.0
+	g_per_frame_data.halton_y = 2.0 * common.halton(jitter_index + 1, 3) - 1.0
+
+	g_per_frame_data.volumetric_fog_near = g_render_camera.near_plane
 
 	g_uniform_buffers.frame_data_offset = uniform_buffer_create_transient_buffer(&g_per_frame_data)
 }
 
 //---------------------------------------------------------------------------//
 
+@(private = "file")
+per_view_data_create :: proc(p_view: RenderView) -> RenderViewData {
+
+	view_data := RenderViewData {
+		view              = p_view.view,
+		proj              = p_view.projection,
+		view_proj         = (p_view.projection * p_view.view),
+		inv_view_proj     = glsl.inverse(p_view.projection * p_view.view),
+		inv_proj          = glsl.inverse(p_view.projection),
+		camera_pos_ws     = p_view.position,
+		camera_near_plane = p_view.near_plane,
+		camera_forward_ws = p_view.forward,
+		camera_up_ws      = p_view.up,
+	}
+
+	return view_data
+}
+
 @(private)
-uniform_buffer_create_view_data :: proc(p_view: RenderView) -> u32 {
+uniform_buffer_create_view_data :: proc(p_render_views: RenderViews) -> u32 {
 
-	view_data := PerViewData{}
-
-	view_data.view = p_view.view
-	view_data.proj = p_view.projection
-	view_data.inv_view_proj = glsl.inverse(view_data.proj * view_data.view)
-	view_data.inv_proj = glsl.inverse(view_data.proj)
-	view_data.camera_pos_ws = p_view.position
-	view_data.camera_near_plane = p_view.near_plane
-	view_data.camera_forward_ws = p_view.forward
-	view_data.camera_up_ws = p_view.up
+	view_data := PerViewData {
+		current_view  = per_view_data_create(p_render_views.current_view),
+		previous_view = per_view_data_create(p_render_views.previous_view),
+	}
 
 	return uniform_buffer_create_transient_buffer(&view_data)
 }

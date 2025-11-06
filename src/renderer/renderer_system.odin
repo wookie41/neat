@@ -12,6 +12,7 @@ import "core:mem"
 import "../common"
 
 import sdl "vendor:sdl2"
+import imgui "../third_party/odin-imgui"
 
 //---------------------------------------------------------------------------//
 
@@ -154,6 +155,8 @@ G_RENDERER: struct {
 	default_image_ref:              ImageRef,
 	debug_mode:                     bool,
 	min_uniform_buffer_alignment:   u32,
+	blue_noise_image_ref:           ImageRef,
+	volumetric_noise_image_ref:     ImageRef,
 }
 
 //---------------------------------------------------------------------------//
@@ -209,6 +212,8 @@ RenderTaskEntry :: struct {
 //---------------------------------------------------------------------------//
 
 g_render_camera := RenderCamera{}
+@(private)
+g_previous_render_camera := RenderCamera{}
 
 //---------------------------------------------------------------------------//
 
@@ -494,6 +499,32 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	uniform_buffer_init()
 	init_jobs() or_return
+
+	// Load global textures - blue noise etc.
+	{
+		G_RENDERER.blue_noise_image_ref = image_load_from_path(
+			common.create_name("BlueNoise"),
+			"app_data/renderer/assets/textures/LDR_RG01_0.png",
+		)
+
+		// Volumetric noise texture
+		{
+			volumetric_noise_image_ref := image_allocate(common.create_name("VolumetricNoise"))
+			volumetric_noise_image := &g_resources.images[image_get_idx(volumetric_noise_image_ref)]
+
+			volumetric_noise_image.desc.array_size = 1
+			volumetric_noise_image.desc.dimensions = {64, 64, 64}
+			volumetric_noise_image.desc.flags = {.Sampled, .Storage}
+			volumetric_noise_image.desc.mip_count = 1
+			volumetric_noise_image.desc.format = .R8UNorm
+			volumetric_noise_image.desc.type = .ThreeDimensional
+
+			image_create(volumetric_noise_image_ref) or_return
+
+			G_RENDERER.volumetric_noise_image_ref = volumetric_noise_image_ref
+		}
+	}
+
 	load_renderer_config()
 
 	// Update the uniforms and bindless resources bind groups with appropriate resources
@@ -521,19 +552,19 @@ init :: proc(p_options: InitOptions) -> bool {
 		)
 
 		global_bind_group_update := BindGroupUpdate {
-				buffers = {
-					{
-						binding = u32(GlobalResourceSlot.MeshInstanceInfosBuffer),
-						buffer_ref = mesh_instance_info_buffer_ref,
-						size = mesh_instance_info_buffer.desc.size,
-					},
-					{
-						binding = u32(GlobalResourceSlot.MaterialsBuffer),
-						buffer_ref = material_instances_buffer_ref,
-						size = MATERIAL_PROPERTIES_BUFFER_SIZE,
-					},
+			buffers = {
+				{
+					binding = u32(GlobalResourceSlot.MeshInstanceInfosBuffer),
+					buffer_ref = mesh_instance_info_buffer_ref,
+					size = mesh_instance_info_buffer.desc.size,
 				},
-			}
+				{
+					binding = u32(GlobalResourceSlot.MaterialsBuffer),
+					buffer_ref = material_instances_buffer_ref,
+					size = MATERIAL_PROPERTIES_BUFFER_SIZE,
+				},
+			},
+		}
 
 		bind_group_update(G_RENDERER.globals_bind_group_ref, global_bind_group_update)
 	}
@@ -541,7 +572,8 @@ init :: proc(p_options: InitOptions) -> bool {
 	g_render_camera.position = {0, 0, 0}
 	g_render_camera.forward = {0, 0, -1}
 	g_render_camera.up = {0, 1, 0}
-	g_render_camera.near_plane = 0.001
+	g_render_camera.near_plane = 0.01
+	g_render_camera.far_plane = 10000
 	g_render_camera.fov = 45.0
 
 	ui_init() or_return
@@ -556,7 +588,6 @@ update :: proc(p_dt: f32) {
 	context.logger = INTERNAL.logger
 
 	common.arena_reset_all()
-
 	backend_wait_for_frame_resources()
 
 	process_deferred_resource_deletes()
@@ -565,6 +596,10 @@ update :: proc(p_dt: f32) {
 
 	cmd_buff_ref := get_frame_cmd_buffer_ref()
 	command_buffer_begin(cmd_buff_ref)
+
+	if get_frame_id() == 0 {
+		run_initial_frame_tasks()
+	}
 
 	backend_begin_frame()
 	ui_begin_frame()
@@ -583,13 +618,15 @@ update :: proc(p_dt: f32) {
 	material_instance_update_dirty_materials()
 	mesh_instance_send_transform_data()
 
-	render_task_update(p_dt)
-
-	draw_debug_ui(p_dt)
-
-	backend_post_render()
+	// Skip this on first frame, as initial resources are being loaded
+	if get_frame_id() > 0 {
+		render_task_update(p_dt)
+		draw_debug_ui(p_dt)
+	}
 
 	ui_submit()
+
+	backend_post_render()
 
 	command_buffer_end(cmd_buff_ref)
 
@@ -597,9 +634,44 @@ update :: proc(p_dt: f32) {
 	free_all(get_frame_allocator())
 
 	advance_frame_idx()
+
+	g_previous_render_camera = g_render_camera
 }
 
 //---------------------------------------------------------------------------//
+
+run_initial_frame_tasks :: proc() {
+	cmd_buff_ref := get_frame_cmd_buffer_ref()
+
+	// Generate volumetric noise texture
+	{
+		volumetric_noise_image := &g_resources.images[image_get_idx(G_RENDERER.volumetric_noise_image_ref)]
+
+		bindings := []Binding {
+			OutputImageBinding{image_ref = G_RENDERER.volumetric_noise_image_ref, mip_count = 1},
+		}
+
+		generate_volumetric_noise_job, _ := generic_compute_job_create(
+			common.create_name("GenerateVolumetricNoise"),
+			shader_find_by_name("generate_volumetric_noise.comp"),
+			bindings,
+		)
+		defer generic_compute_job_destroy(generate_volumetric_noise_job)
+
+		transition_binding_resources(bindings, .Compute)
+
+		compute_command_dispatch(
+			generate_volumetric_noise_job.compute_command_ref,
+			cmd_buff_ref,
+			{
+				volumetric_noise_image.desc.dimensions.x / 8,
+				volumetric_noise_image.desc.dimensions.y / 8,
+				volumetric_noise_image.desc.dimensions.z,
+			},
+			{nil, {0, 0}, nil, nil},
+		)
+	}
+}
 
 get_frame_idx :: #force_inline proc() -> u32 {
 	return INTERNAL.frame_idx
@@ -952,6 +1024,10 @@ init_jobs :: proc() -> bool {
 
 @(private = "file")
 draw_debug_ui :: proc(p_dt: f32) {
+
+	imgui.SliderFloat3("Sun direction", &g_per_frame_data.sun.direction, -1, 1)
+	imgui.SliderFloat("Sun strength", &g_per_frame_data.sun.strength, 0, 128000)
+
 	// Debug UI
 	render_task_draw_debug_ui()
 }
@@ -1004,6 +1080,14 @@ process_deferred_resource_deletes :: proc() {
 		[dynamic]DeferredResourceDeleteEntry,
 		per_frame_allocators[frame_idx],
 	)
+}
+
+//---------------------------------------------------------------------------//
+
+@(private)
+is_async_transfer_enabled :: #force_inline proc() -> bool {
+	// Async transfer is disabled on first frame due to loading internal renderer textures
+	return (.DedicatedTransferQueue in G_RENDERER.gpu_device_flags) && get_frame_id() > 0
 }
 
 //---------------------------------------------------------------------------//

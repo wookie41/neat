@@ -42,7 +42,7 @@ when USE_VULKAN_BACKEND {
 				maxSets       = 1 << 15,
 				poolSizeCount = u32(len(pool_sizes)),
 				pPoolSizes    = raw_data(pool_sizes),
-				flags         = {.UPDATE_AFTER_BIND}, // @TODO create a separate pool for that 
+				flags         = {.UPDATE_AFTER_BIND, .FREE_DESCRIPTOR_SET}, // @TODO create a separate pool for that 
 			}
 
 			vk.CreateDescriptorPool(

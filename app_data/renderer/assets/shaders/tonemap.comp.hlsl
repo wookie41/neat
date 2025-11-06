@@ -44,6 +44,7 @@ float3 ACESFitted(float3 color)
             { 0.07600, 0.90834, 0.01566 },
             { 0.02840, 0.13383, 0.83777 }
         };
+    // ACESInputMat = transpose(ACESInputMat);
 
     // ODT_SAT => XYZ => D60_2_D65 => sRGB
     float3x3 ACESOutputMat =
@@ -52,6 +53,7 @@ float3 ACESFitted(float3 color)
             { -0.10208, 1.10813, -0.00605 },
             { -0.00327, -0.07276, 1.07602 }
         };
+    // ACESInputMat = transpose(ACESInputMat);
     color = mul(ACESInputMat, color);
 
     // Apply RRT and ODT
@@ -63,6 +65,28 @@ float3 ACESFitted(float3 color)
 
 //---------------------------------------------------------------------------//
 
+float3 EncodeSRGB(float3 c) {
+    float3 result;
+    if (c.r <= 0.0031308) {
+        result.r = c.r * 12.92;
+    } else {
+        result.r = 1.055 * pow(c.r, 1.0 / 2.4) - 0.055;
+    }
+
+    if (c.g <= 0.0031308) {
+        result.g = c.g * 12.92;
+    } else {
+        result.g = 1.055 * pow(c.g, 1.0 / 2.4) - 0.055;
+    }
+
+    if (c.b <= 0.0031308) {
+        result.b = c.b * 12.92;
+    } else {
+        result.b = 1.055 * pow(c.b, 1.0 / 2.4) - 0.055;
+    }
+
+    return clamp(result, 0.0, 1.0);
+}
 [numthreads(8, 8, 1)]
 void CSMain(uint2 dispatchThreadId: SV_DispatchThreadID)
 {

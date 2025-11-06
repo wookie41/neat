@@ -126,10 +126,6 @@ compute_command_create :: proc(p_ref: ComputeCommandRef) -> bool {
 
 compute_command_destroy :: proc(p_ref: ComputeCommandRef) {
 	compute_command := &g_resources.compute_commands[compute_command_get_idx(p_ref)]
-
-	delete(compute_command.desc.bind_group_layout_refs, G_RENDERER_ALLOCATORS.resource_allocator)
-	delete(compute_command.desc.push_constants, G_RENDERER_ALLOCATORS.resource_allocator)
-
 	compute_pipeline_destroy(compute_command.pipeline_ref)
 }
 
@@ -156,9 +152,9 @@ compute_command_set_bind_group :: proc(
 compute_command_dispatch :: proc(
 	p_ref: ComputeCommandRef,
 	p_cmd_buff_ref: CommandBufferRef,
-	p_push_constants: []rawptr,
-	p_dynamic_offsets: [][]u32,
 	p_work_group_count: glsl.uvec3,
+	p_dynamic_offsets: [][]u32 = nil,
+	p_push_constants: []rawptr = nil,
 ) {
 	assert(p_work_group_count.x > 0 && p_work_group_count.y > 0 && p_work_group_count.z > 0)
 

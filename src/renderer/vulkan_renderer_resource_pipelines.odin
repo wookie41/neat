@@ -8,6 +8,8 @@ import "../common"
 import "core:log"
 import "core:math/linalg/glsl"
 import "core:os"
+import "core:strings"
+
 import vk "vendor:vulkan"
 
 //---------------------------------------------------------------------------//
@@ -593,6 +595,7 @@ when USE_VULKAN_BACKEND {
 		defer common.arena_delete(temp_arena)
 
 		compute_shader_idx := shader_get_idx(pipeline.desc.compute_shader_ref)
+		compute_shader := &g_resources.shaders[compute_shader_idx]
 		backend_compute_shader := &g_resources.backend_shaders[compute_shader_idx]
 
 		compute_stage_info := vk.PipelineShaderStageCreateInfo {
@@ -600,6 +603,13 @@ when USE_VULKAN_BACKEND {
 			stage  = {.COMPUTE},
 			module = backend_compute_shader.vk_module,
 			pName  = "CSMain",
+		}
+
+		if compute_shader.desc.custom_entry_point != common.EMPTY_NAME {
+			compute_stage_info.pName = strings.clone_to_cstring(
+				common.get_string(compute_shader.desc.custom_entry_point),
+				temp_arena.allocator,
+			)
 		}
 
 		// Pipeline layout 

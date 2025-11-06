@@ -20,7 +20,7 @@ struct ExposureInfo
     float Exposure;
 };
 
-// Convert our RGB value to Luminance
+// Convert RGB value to Luminance
 inline float RGBToLuminance(in float3 hdrColor)
 {
     return dot(hdrColor, RGB_TO_LUM);
@@ -29,7 +29,7 @@ inline float RGBToLuminance(in float3 hdrColor)
 //---------------------------------------------------------------------------//
 
 // Reference https://seblagarde.wordpress.com/wp-content/uploads/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf
-float   ComputeEV100FromAvgLuminance(float avgLuminance)
+float ComputeEV100FromAvgLuminance(float avgLuminance)
 {
     return log2(avgLuminance * 100.0f / 12.5f);
 }
@@ -71,7 +71,20 @@ float3 sRGBToLinear(float3 linearColor)
 
 //---------------------------------------------------------------------------//
 
-float3 LinearToYCoCg(float3 linearColor) 
+float ToLinear1(float c)
+{
+    return (c <= 0.04045) ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
+}
+
+//---------------------------------------------------------------------------//
+
+float ToSrgb1(float c)
+{
+    return (c < 0.0031308 ? c * 12.92 : 1.055 * pow(c, 0.41666) - 0.055);
+}
+//---------------------------------------------------------------------------//
+
+float3 LinearToYCoCg(float3 linearColor)
 {
     return float3(
         linearColor.x * 0.25 + 0.5 * linearColor.y + 0.25 * linearColor.z,
@@ -81,7 +94,7 @@ float3 LinearToYCoCg(float3 linearColor)
 
 //---------------------------------------------------------------------------//
 
-float3 YCoCgToLinear(float3 YCoCg) 
+float3 YCoCgToLinear(float3 YCoCg)
 {
     return float3(
         YCoCg.x + YCoCg.y - YCoCg.z,
@@ -106,7 +119,8 @@ float3 Hash32(float2 q)
 
 //---------------------------------------------------------------------------//
 
-float3 DitherRGB8(float3 c, int2 uv, float time) {
+float3 DitherRGB8(float3 c, int2 uv, float time)
+{
     float3 noise = Hash32(uint2(uv * time));
     noise += Hash32(uint2((uv + float2(165, 1292)) * time));
     noise -= 1.f;
@@ -114,6 +128,15 @@ float3 DitherRGB8(float3 c, int2 uv, float time) {
     return c + noise;
 }
 
+//---------------------------------------------------------------------------//
+
+float4 UnpackColorRGBA(uint color)
+{
+    return float4((color & 0xffu) / 255.f,
+                  ((color >> 8u) & 0xffu) / 255.f,
+                  ((color >> 16u) & 0xffu) / 255.f,
+                  ((color >> 24u) & 0xffu) / 255.f);
+}
 //---------------------------------------------------------------------------//
 
 #endif // COMMON_H

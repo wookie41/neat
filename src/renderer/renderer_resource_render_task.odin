@@ -34,6 +34,7 @@ RenderTaskType :: enum {
 	BuildHiZ,
 	PrepareShadowCascades,
 	ComputeAvgLuminance,
+	VolumetricFog,
 }
 
 //---------------------------------------------------------------------------//
@@ -53,6 +54,7 @@ G_RENDER_TASK_TYPE_MAPPING := map[string]RenderTaskType {
 	"BuildHiZ"              = .BuildHiZ,
 	"ComputeAvgLuminance"   = .ComputeAvgLuminance,
 	"PrepareShadowCascades" = .PrepareShadowCascades,
+	"VolumetricFog"         = .VolumetricFog,
 }
 
 //---------------------------------------------------------------------------//
@@ -80,7 +82,7 @@ RenderTaskFunctions :: struct {
 	// Called each frame to run the render task
 	render:           proc(p_render_task_ref: RenderTaskRef, p_dt: f32),
 	// Called each frame so that the render task can draw debug ui
-	draw_debug_ui: proc(p_render_task_ref: RenderTaskRef),
+	draw_debug_ui:    proc(p_render_task_ref: RenderTaskRef),
 }
 
 //---------------------------------------------------------------------------//
@@ -160,6 +162,13 @@ render_task_init :: proc() -> bool {
 		render_task_fn: RenderTaskFunctions
 		build_prepare_shadow_cascades_render_task_init(&render_task_fn)
 		INTERNAL.render_task_functions[.PrepareShadowCascades] = render_task_fn
+	}
+
+	// Init volumetric fog render task
+	{
+		render_task_fn: RenderTaskFunctions
+		volumetric_fog_render_task_init(&render_task_fn)
+		INTERNAL.render_task_functions[.VolumetricFog] = render_task_fn
 	}
 
 	return true
@@ -377,11 +386,11 @@ parse_input_image :: proc(
 	}
 
 	image_ref := image_find(image_name)
-	image := &g_resources.images[image_get_idx(image_ref)]
 	if image_ref == InvalidImageRef {
-		log.errorf("Can't setup render task - unknown image '%s'\n", image.desc.name)
+		log.errorf("Can't setup render task - unknown image '%s'\n", image_name)
 		return false
 	}
+	image := &g_resources.images[image_get_idx(image_ref)]
 
 	mip, mip_found := common.xml_get_u32_attribute(
 		p_render_task_config.doc,
@@ -612,7 +621,7 @@ render_task_draw_debug_ui :: proc() {
 		render_task_ref := G_RENDER_TASK_REF_ARRAY.alive_refs[i]
 		render_task := &g_resources.render_tasks[render_task_get_idx(render_task_ref)]
 		draw_debug_ui := INTERNAL.render_task_functions[render_task.desc.type].draw_debug_ui
-		
+
 		if (draw_debug_ui != nil) {
 			draw_debug_ui(render_task_ref)
 		}
