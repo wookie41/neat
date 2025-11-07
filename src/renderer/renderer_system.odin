@@ -260,10 +260,10 @@ init :: proc(p_options: InitOptions) -> bool {
 
 	// Init renderer settings with default values
 	G_RENDERER_SETTINGS.num_shadow_cascades = 3
-	G_RENDERER_SETTINGS.directional_light_shadow_sampling_radius = 0.3
+	G_RENDERER_SETTINGS.directional_light_shadow_sampling_radius = 0.05
 	G_RENDERER_SETTINGS.fit_shadow_cascades = true
 	G_RENDERER_SETTINGS.stabilize_shadow_cascades = false
-	G_RENDERER_SETTINGS.shadows_rendering_distance = 1500
+	G_RENDERER_SETTINGS.shadows_rendering_distance = 150
 
 	backend_init(p_options) or_return
 

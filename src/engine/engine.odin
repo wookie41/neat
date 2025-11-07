@@ -142,9 +142,9 @@ run :: proc() {
 				}
 			case .MOUSEWHEEL:
 				if sdl_event.wheel.y > 0 {
-					camera_add_speed(10)
+					camera_add_speed(0.1)
 				} else if sdl_event.wheel.y < 0 {
-					camera_add_speed(-10)
+					camera_add_speed(-0.1)
 				}
 			}
 

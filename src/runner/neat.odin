@@ -38,8 +38,8 @@ main :: proc() {
 		},
 	)
 
-	flight_helmet := engine.mesh_asset_get(engine.mesh_asset_load("FlightHelmet"))
-	scifi_helmet := engine.mesh_asset_get(engine.mesh_asset_load("SciFiHelmet"))
+	// flight_helmet := engine.mesh_asset_get(engine.mesh_asset_load("FlightHelmet"))
+	// scifi_helmet := engine.mesh_asset_get(engine.mesh_asset_load("SciFiHelmet"))
 	sponza := engine.mesh_asset_get(engine.mesh_asset_load("Sponza"))
 
 	// Spawn Sponza
@@ -47,28 +47,26 @@ main :: proc() {
 		common.create_name("Sponza"),
 		sponza.mesh_ref,
 		glsl.vec3(0),
-		glsl.vec3(0.5),
 	)
 	
 	// Spawn a few flight helmets
-	for i in 0 ..< 5 {
-		renderer.mesh_instance_spawn(
-			common.create_name("FlightHelmet"),
-			flight_helmet.mesh_ref,
-			glsl.vec3{-450 + f32(75 * i), 50, 0},
-			glsl.vec3(35),
-		)
-	}
+	// for i in 0 ..< 5 {
+	// 	renderer.mesh_instance_spawn(
+	// 		common.create_name("FlightHelmet"),
+	// 		flight_helmet.mesh_ref,
+	// 		glsl.vec3{f32(2 * i), 2, 0},
+	// 	)
+	// }
 	
-	// Spawn a few scifi helmets
-	for i in 0 ..< 5 {
-		renderer.mesh_instance_spawn(
-			common.create_name("SciFiHelmet"),
-			scifi_helmet.mesh_ref,
-			glsl.vec3{f32(75 * i) + 50, 50, 0},
-			glsl.vec3(10),
-		)
-	}
+	// // Spawn a few scifi helmets
+	// for i in 0 ..< 5 {
+	// 	renderer.mesh_instance_spawn(
+	// 		common.create_name("SciFiHelmet"),
+	// 		scifi_helmet.mesh_ref,
+	// 		glsl.vec3{f32(2 * i) - 10, 2, 0},
+	// 		glsl.vec3(0.15),
+	// 	)
+	// }
 
 	engine.run()
 }

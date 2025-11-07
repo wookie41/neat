@@ -299,28 +299,28 @@ create_instance :: proc(
 
 	render_task_data.uniform_data = VolumetricFogUniformData {
 		froxel_dimensions                    = VOLUMETRIC_FOG_IMAGE_RESOLUTION,
-		temporal_reprojection_jitter_scale   = 0.2,
+		temporal_reprojection_jitter_scale   = 0.05,
 		noise_type                           = 0,
-		noise_scale                          = 0.025,
+		noise_scale                          = 0.1,
 		spatial_filter_enabled               = 1,
 		temporal_filter_enabled              = 1,
-		volumetric_noise_position_multiplier = 0.001,
-		volumetric_noise_speed_multiplier    = 0.0005,
+		volumetric_noise_position_multiplier = 0.1,
+		volumetric_noise_speed_multiplier    = 0.001,
 		volumetric_noise_direction           = {1, 0, 0},
-		constant_fog_density                 = 0.01,
+		constant_fog_density                 = 0.1,
 		constant_fog_color                   = glsl.vec3{0.5, 0.5, 0.5},
 		height_fog_density                   = 0,
 		height_fog_color                     = glsl.vec3{0, 0.5, 0},
 		height_fog_falloff                   = 1,
-		scattering_factor                    = 0.05,
+		scattering_factor                    = 0.1,
 		box_fog_density                      = 0.0,
 		box_fog_position                     = glsl.vec3{0, 0, 0},
-		box_fog_size                         = glsl.vec3{100, 100, 100},
+		box_fog_size                         = glsl.vec3{5, 5, 5},
 		box_fog_color                        = glsl.vec3{0, 0, 1},
 		phase_anisotrophy_01                 = 0.2,
 		phase_function_type                  = 0,
 		volumetric_fog_opacity_aa_enabled    = 1,
-		temporal_reprojection_percentage     = 0.2,
+		temporal_reprojection_percentage     = 0.05,
 	}
 
 	render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
@@ -510,7 +510,7 @@ draw_debug_ui :: proc(p_render_task_ref: RenderTaskRef) {
 			"Far plane",
 			&g_per_frame_data.volumetric_fog_far,
 			g_render_camera.near_plane,
-			1500,
+			200,
 		)
 
 		imgui.Checkbox(
@@ -531,11 +531,11 @@ draw_debug_ui :: proc(p_render_task_ref: RenderTaskRef) {
 			"Temporal reprojection jitter scale",
 			&render_task_data.uniform_data.temporal_reprojection_jitter_scale,
 			0,
-			10,
+			0.2,
 		)
 
 		imgui.SliderInt("Noise type", &render_task_data.uniform_data.noise_type, 0, 2)
-		imgui.SliderFloat("Noise scale", &render_task_data.uniform_data.noise_scale, 0, 0.1)
+		imgui.SliderFloat("Noise scale", &render_task_data.uniform_data.noise_scale, 0, 1)
 
 		imgui.SliderFloat(
 			"Scattering factor",
@@ -562,9 +562,9 @@ draw_debug_ui :: proc(p_render_task_ref: RenderTaskRef) {
 		imgui.DragFloatEx(
 			"Volumetric noise scale",
 			&render_task_data.uniform_data.volumetric_noise_position_multiplier,
-			0.0001,
-			0.001,
-			0.01,
+			0.1,
+			0,
+			1,
 			nil,
 			{},
 		)
@@ -573,8 +573,8 @@ draw_debug_ui :: proc(p_render_task_ref: RenderTaskRef) {
 			"Volumetric noise speed",
 			&render_task_data.uniform_data.volumetric_noise_speed_multiplier,
 			0.0001,
+			0.0001,
 			0.001,
-			0.01,
 			nil,
 			{},
 		)
@@ -586,32 +586,49 @@ draw_debug_ui :: proc(p_render_task_ref: RenderTaskRef) {
 			1,
 		)
 
-		if (imgui.CollapsingHeader("Constant fog", {})) {
-			imgui.SliderFloat("Density", &render_task_data.uniform_data.constant_fog_density, 0, 1)
-			imgui.ColorEdit3("Color", &render_task_data.uniform_data.constant_fog_color, {})
-		}
+		imgui.Separator()
 
-		if imgui.CollapsingHeader("Height fog", {}) {
+		imgui.SliderFloat(
+			"Constant fog density",
+			&render_task_data.uniform_data.constant_fog_density,
+			0,
+			3,
+		)
+		imgui.ColorEdit3(
+			"Constant fog color",
+			&render_task_data.uniform_data.constant_fog_color,
+			{},
+		)
 
-			imgui.SliderFloat("Density", &render_task_data.uniform_data.height_fog_density, 0, 1)
-			imgui.ColorEdit3("Color", &render_task_data.uniform_data.height_fog_color, {})
+		imgui.Separator()
 
-			imgui.SliderFloat("Falloff", &render_task_data.uniform_data.height_fog_falloff, 0, 1)
-		}
+		imgui.SliderFloat(
+			"Height density",
+			&render_task_data.uniform_data.height_fog_density,
+			0,
+			3,
+		)
+		imgui.ColorEdit3("Height fog color", &render_task_data.uniform_data.height_fog_color, {})
+		imgui.SliderFloat(
+			"Height fog fallof",
+			&render_task_data.uniform_data.height_fog_falloff,
+			0,
+			1,
+		)
 
+		imgui.Separator()
 
-		if imgui.CollapsingHeader("Box fog", {}) {
+		imgui.SliderFloat("Box fog density", &render_task_data.uniform_data.box_fog_density, 0, 3)
+		imgui.SliderFloat3(
+			"Box position",
+			&render_task_data.uniform_data.box_fog_position,
+			-10,
+			10,
+		)
+		imgui.SliderFloat3("Box fog size", &render_task_data.uniform_data.box_fog_size, 0, 5)
+		imgui.ColorEdit3("Box fog color", (&render_task_data.uniform_data.box_fog_color), {})
 
-			imgui.SliderFloat("Density", &render_task_data.uniform_data.box_fog_density, 0, 1)
-			imgui.SliderFloat3(
-				"Box position",
-				&render_task_data.uniform_data.box_fog_position,
-				-1000,
-				1000,
-			)
-			imgui.SliderFloat3("Box size", &render_task_data.uniform_data.box_fog_size, 0, 1000)
-			imgui.ColorEdit3("Color", (&render_task_data.uniform_data.box_fog_color), {})
-		}
+		imgui.Separator()
 	}
 }
 

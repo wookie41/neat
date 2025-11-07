@@ -86,8 +86,8 @@ uniform_buffer_init :: proc() {
 		common.create_name("TransientBuffer"),
 		TRANSIENT_UNIFORM_BUFFER_SIZE,
 	)
-	g_per_frame_data.volumetric_fog_near = 0.001
-	g_per_frame_data.volumetric_fog_far = 1500
+	g_per_frame_data.volumetric_fog_near = 0.01
+	g_per_frame_data.volumetric_fog_far = 50
 
 	g_per_frame_data.sun.color = {1, 1, 1}
 	g_per_frame_data.sun.strength = 128000

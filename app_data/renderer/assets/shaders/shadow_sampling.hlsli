@@ -62,9 +62,9 @@ float SampleDirectionalLightShadowSingleTap(
     const float depthPixel = positionLS.z;
     const float2 uv = positionLS.xy;
 
-    const float depthShadowMap = cascadeShadowTextures[cascadeIndex].SampleLevel(uLinearClampToBorderSampler, uv, 0).r;
+    const float depthShadowMap = cascadeShadowTextures[cascadeIndex].SampleLevel(uNearestClampToBorderSampler, uv, 0).r;
 
-    return depthPixel >= depthShadowMap ? 1 : 0;
+    return (depthPixel >= depthShadowMap) ? 1 : 0;
 }
     
 //---------------------------------------------------------------------------//

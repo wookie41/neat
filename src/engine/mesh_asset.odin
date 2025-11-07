@@ -271,7 +271,7 @@ mesh_asset_import :: proc(p_import_options: MeshAssetImportOptions) -> AssetImpo
 	defer delete(mesh_import_ctx.indices, G_ALLOCATORS.main_allocator)
 
 	// Recursivly load the nodes
-	assimp_load_node(scene, scene.mRootNode, &mesh_import_ctx)
+	assimp_load_node(scene, scene.mRootNode, &mesh_import_ctx, glsl.identity(glsl.mat4x4))
 
 	// Save the metadata
 	mesh_metadata_file_path := common.aprintf(
@@ -598,11 +598,19 @@ assimp_load_node :: proc(
 	p_scene: ^assimp.Scene,
 	p_node: ^assimp.Node,
 	p_import_ctx: ^MeshImportContext,
+	p_parent_transform: glsl.mat4x4,
 ) {
 
 	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
+
+	node_transform := p_parent_transform * glsl.mat4x4{
+		p_node.mTransformation.a1, p_node.mTransformation.a2, p_node.mTransformation.a3, p_node.mTransformation.a4,
+		p_node.mTransformation.b1, p_node.mTransformation.b2, p_node.mTransformation.b3, p_node.mTransformation.b4,
+		p_node.mTransformation.c1, p_node.mTransformation.c2, p_node.mTransformation.c3, p_node.mTransformation.c4,
+		p_node.mTransformation.d1, p_node.mTransformation.d2, p_node.mTransformation.d3, p_node.mTransformation.d4,
+	}
 
 	for i in 0 ..< p_node.mNumMeshes {
 		assimp_mesh := p_scene.mMeshes[p_node.mMeshes[i]]
@@ -714,6 +722,11 @@ assimp_load_node :: proc(
 				assimp_mesh.mVertices[j].y,
 				assimp_mesh.mVertices[j].z,
 			}
+			p_import_ctx.positions[p_import_ctx.curr_vtx] = (node_transform * glsl.vec4{
+				p_import_ctx.positions[p_import_ctx.curr_vtx].x,
+				p_import_ctx.positions[p_import_ctx.curr_vtx].y,
+				p_import_ctx.positions[p_import_ctx.curr_vtx].z,
+				1}).xyz
 
 			if assimp_mesh.mNormals != nil {
 				p_import_ctx.normals[p_import_ctx.curr_vtx] = {
@@ -779,7 +792,7 @@ assimp_load_node :: proc(
 	}
 
 	for i in 0 ..< p_node.mNumChildren {
-		assimp_load_node(p_scene, p_node.mChildren[i], p_import_ctx)
+		assimp_load_node(p_scene, p_node.mChildren[i], p_import_ctx, node_transform)
 	}
 }
 

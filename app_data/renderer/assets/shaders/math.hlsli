@@ -116,6 +116,12 @@ float LinearDepthToUV(in float near, in float far, in float linearDepth, in int 
     return max(log2(linearDepth) * scale + bias, 0.0f) / float(numSlices);
 }
 
+// Convert raw_depth (1..0) to linear depth (near...far) for inverse Z
+float RawDepthToLinearDepth2(in float rawDepth, in float near, in float far)
+{
+    return near * far / (near + rawDepth * (far - near));
+}
+
 //---------------------------------------------------------------------------//
 
 // Convert linear depth (near...far) to raw depth (0..1)
@@ -126,13 +132,6 @@ float LinearDepthToRawDepth(in float linearDepth, in float near, in float far)
 
 //---------------------------------------------------------------------------//
 
-// Convert linear depth (near...far) to raw depth (0..1)
-float LinearDepthToRawDepth2(in float linearDepth, in float near, in float far)
-{
-    return (near * far) / (linearDepth * (far - near)) - near / (far - near);
-}
-
-//---------------------------------------------------------------------------//
 
 // Convert raw depth (0..1) to linear (near...far)
 float RawDepthToLinearDepth(in float rawDepth, in float near, in float far)

@@ -26,9 +26,9 @@ Camera: struct {
 
 camera_init :: proc() {
 	using Camera
-	position = {50, 150, 500}
+	position = {0, 0, 0}
 	speed = 0.5
-	near_plane = 0.1
+	near_plane = 0.01
 	fov = 45.0
 	rotation_sensitivity = 0.25
 	up = {0, 1, 0}
@@ -125,7 +125,7 @@ camera_add_rotation :: proc(p_yaw_offset: f32, p_pitch_offset: f32) {
 camera_add_speed :: proc(p_speed_delta: f32) {
 	using Camera
 	speed += p_speed_delta
-	speed = max(0.01, speed)
+	speed = max(0.5, speed)
 }
 
 //---------------------------------------------------------------------------//

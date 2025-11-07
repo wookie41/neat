@@ -196,12 +196,12 @@ RWTexture3D<float4> ScatteringExtinctionTexture : register(u0, space0);
 void InjectData(uint3 dispatchThreadId: SV_DispatchThreadID)
 {
     const int3 froxelCoord = int3(dispatchThreadId);
-    const float3 worldPosition = FroxelCoordToWorldPosition(froxelCoord);
+    const float3 worldPosition = FroxelCoordToWorldPositionCameraSpace(froxelCoord);
 
     float4 scatteringAndExtinction = float4(0.xxxx);
 
     const float3 volumetricNoiseUV = 
-        worldPosition * volumetricNoisePositionMultiplier + 
+        worldPosition * volumetricNoisePositionMultiplier * 0.5 + 
         normalize(volumetricNoiseDirection) * float(uPerFrame.FrameId) * volumetricNoiseSpeedMultiplier;
 
     float volumetricNoise = VolumetricNoiseTexture.SampleLevel(uLinearRepeatSampler, volumetricNoiseUV, 0).r;
@@ -249,7 +249,7 @@ void ScatterLight(uint3 dispatchThreadId: SV_DispatchThreadID)
     const float3 viewPostion = mul(uPerView.CurrentView.ViewMatrix, float4(worldPosition, 1)).xyz;
     const float3 V = normalize(uPerView.CurrentView.CameraPositionWS - worldPosition);
 
-    int cascadeIndex;
+    int cascadeIndex;    
     const float dirLightShadow = SampleDirectionalLightShadowSingleTap(CascadeShadowTextures, ShadowCascades, worldPosition, viewPostion, cascadeIndex);
 
     const float3 ambientTerm = 0.02;
@@ -426,7 +426,7 @@ void TemporalFilter(uint3 dispatchThreadId: SV_DispatchThreadID)
         }
     }
 
-    FinalIntegratedScatteringTexture[froxelCoords] = scatteringTransmittance    ;
+    FinalIntegratedScatteringTexture[froxelCoords] = scatteringTransmittance;
 }
 
 #endif
