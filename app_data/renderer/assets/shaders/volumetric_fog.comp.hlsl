@@ -53,10 +53,6 @@ cbuffer VolumetricFogParams : register(b0, space0)
 
     float3 volumetricNoiseDirection;
     int _padding3;
-
-    float4x4 ViewProjectionMatrix;
-    float4x4 InvViewProjMatrix;
-    float4x4 PreviousViewProjectionMatrix;
 }
 
 [[vk::binding(1, 0)]]
@@ -103,17 +99,16 @@ float3 FroxelCoordToWorldPosition(in int3 froxelCoord)
     const float2 uv = (float2(froxelCoord.xy) + float2(0.5.xx) + float2(uPerFrame.HaltonX, uPerFrame.HaltonY) * temporalReprojectionJitterScale) / float2(froxelDimensions.xy);
     const float depthJitter = GenerateNoise(float2(froxelCoord.xy), uPerFrame.FrameId, noiseScale);
     const float linearDepth = SliceToExponentialDepthJittered(uPerFrame.VolumetricFogNear, uPerFrame.VolumetricFogFar, depthJitter, froxelCoord.z, froxelDimensions.z);
-    const float rawDepth = LinearDepthToRawDepth(linearDepth, uPerFrame.VolumetricFogNear, uPerFrame.VolumetricFogFar);
-    return UnprojectDepthToWorldPos(uv, rawDepth, InvViewProjMatrix);
+    const float rawDepth = uPerView.CurrentView.CameraNearPlane / linearDepth;
+    return UnprojectDepthToWorldPos(uv, rawDepth, uPerView.CurrentView.InvViewProjMatrix);
 }
 
 //---------------------------------------------------------------------------//
 
-float3 FroxelCoordToWorldPositionCameraSpace(in int3 froxelCoord)
+float3 FroxelCoordToWorldPositionNoJitter(in int3 froxelCoord)
 {
-    const float2 uv = (float2(froxelCoord.xy) + float2(0.5.xx) + float2(uPerFrame.HaltonX, uPerFrame.HaltonY) * temporalReprojectionJitterScale) / float2(froxelDimensions.xy);
-    const float depthJitter = GenerateNoise(float2(froxelCoord.xy), uPerFrame.FrameId, noiseScale);
-    const float linearDepth = SliceToExponentialDepthJittered(uPerFrame.VolumetricFogNear, uPerFrame.VolumetricFogFar, depthJitter, froxelCoord.z, froxelDimensions.z);
+    const float2 uv = (float2(froxelCoord.xy) + float2(0.5.xx)) / float2(froxelDimensions.xy);
+    const float linearDepth = SliceToExponentialDepthJittered(uPerFrame.VolumetricFogNear, uPerFrame.VolumetricFogFar, 0, froxelCoord.z, froxelDimensions.z);
     const float rawDepth = uPerView.CurrentView.CameraNearPlane / linearDepth;
     return UnprojectDepthToWorldPos(uv, rawDepth, uPerView.CurrentView.InvViewProjMatrix);
 }
@@ -196,12 +191,12 @@ RWTexture3D<float4> ScatteringExtinctionTexture : register(u0, space0);
 void InjectData(uint3 dispatchThreadId: SV_DispatchThreadID)
 {
     const int3 froxelCoord = int3(dispatchThreadId);
-    const float3 worldPosition = FroxelCoordToWorldPositionCameraSpace(froxelCoord);
+    const float3 worldPosition = FroxelCoordToWorldPosition(froxelCoord);
 
     float4 scatteringAndExtinction = float4(0.xxxx);
 
     const float3 volumetricNoiseUV = 
-        worldPosition * volumetricNoisePositionMultiplier * 0.5 + 
+        worldPosition * volumetricNoisePositionMultiplier + 
         normalize(volumetricNoiseDirection) * float(uPerFrame.FrameId) * volumetricNoiseSpeedMultiplier;
 
     float volumetricNoise = VolumetricNoiseTexture.SampleLevel(uLinearRepeatSampler, volumetricNoiseUV, 0).r;
@@ -237,6 +232,9 @@ StructuredBuffer<ShadowCascade> ShadowCascades : register(t3, space0);
 StructuredBuffer<ExposureInfo> ExposureBuffer : register(t4, space0);
 
 [[vk::binding(6, 0)]]
+Texture3D<float4> ScatteringExtinctionTexture : register(t5, space0);
+
+[[vk::binding(7, 0)]]
 RWTexture3D<float4> LightScatteringTexture : register(u0, space0);
 
 //---------------------------------------------------------------------------//
@@ -245,18 +243,20 @@ RWTexture3D<float4> LightScatteringTexture : register(u0, space0);
 void ScatterLight(uint3 dispatchThreadId: SV_DispatchThreadID)
 {
     const int3 froxelCoord = int3(dispatchThreadId);
-    const float3 worldPosition = FroxelCoordToWorldPositionCameraSpace(froxelCoord);
+    const float3 worldPosition = FroxelCoordToWorldPosition(froxelCoord);
     const float3 viewPostion = mul(uPerView.CurrentView.ViewMatrix, float4(worldPosition, 1)).xyz;
     const float3 V = normalize(uPerView.CurrentView.CameraPositionWS - worldPosition);
 
-    int cascadeIndex;    
-    const float dirLightShadow = SampleDirectionalLightShadowSingleTap(CascadeShadowTextures, ShadowCascades, worldPosition, viewPostion, cascadeIndex);
+    const float3 froxelDimensionsRcp = 1.f / float3(froxelDimensions.xyz);
+    const float4 scatteringExtinction = ScatteringExtinctionTexture.Sample(uNearestClampToEdgeSampler, froxelCoord * froxelDimensionsRcp);
+
+    const float dirLightShadow = SampleDirectionalLightShadowSingleTap(CascadeShadowTextures, ShadowCascades, worldPosition, viewPostion);
 
     const float3 ambientTerm = 0.02;
     const float sunStrengthExposed = uPerFrame.Sun.Strength * ExposureBuffer[0].Exposure;
     const float3 lightScattering = uPerFrame.Sun.Color * sunStrengthExposed * PhaseFunction(V, -uPerFrame.Sun.DirectionWS, phaseAnisotrophy01) * dirLightShadow + ambientTerm;
 
-    LightScatteringTexture[froxelCoord] = float4(lightScattering, 0);
+    LightScatteringTexture[froxelCoord] = float4(lightScattering * scatteringExtinction.rgb, scatteringExtinction.a);
 }
 
 #endif
@@ -269,9 +269,6 @@ void ScatterLight(uint3 dispatchThreadId: SV_DispatchThreadID)
 Texture3D<float4> ScatteringExtinctionTexture : register(t2, space0);
 
 [[vk::binding(4, 0)]]
-Texture3D<float4> LightScatteringTexture : register(t3, space0);
-
-[[vk::binding(5, 0)]]
 RWTexture3D<float4> IntegratedLightScatteringTexture : register(u0, space0);
 
 //---------------------------------------------------------------------------//
@@ -298,20 +295,15 @@ void IntegrateLight(uint3 dispatchThreadId: SV_DispatchThreadID)
 
         const float3 froxelUVW = float3(froxelCoord) * froxelDimensionsRcp;
 
-        const float4 sampledScatteringExtinction = ScatteringExtinctionTexture.Sample(uLinearClampToEdgeSampler, froxelUVW);
-        const float3 scatteredLight = LightScatteringTexture.Sample(uLinearClampToEdgeSampler, froxelUVW).rgb;
-        const float3 scattering = sampledScatteringExtinction.rgb * scatteredLight;
+        const float4 scatteringExtinction = ScatteringExtinctionTexture.Sample(uLinearClampToEdgeSampler, froxelUVW);
 
-        if (sampledScatteringExtinction.w > 0)
-        {
-            const float clampedExtinction = max(sampledScatteringExtinction.w, EPS_9);
-            const float transmittance = exp(-sampledScatteringExtinction.w * zStep);
+        const float clampedExtinction = max(scatteringExtinction.w, EPS_9);
+        const float transmittance = exp(-scatteringExtinction.w * zStep);
 
-            const float3 currentCellScattering = (scattering.rgb - (scattering.rgb * transmittance)) / clampedExtinction;
+        const float3 currentCellScattering = (scatteringExtinction.rgb - (scatteringExtinction.rgb * transmittance)) / clampedExtinction;
 
-            integratedScattering += (currentCellScattering);
-            integratedTransmittance *= transmittance;
-        }
+        integratedScattering += currentCellScattering;
+        integratedTransmittance *= transmittance;
         
         float3 storedScattering = integratedScattering;
 
@@ -343,10 +335,10 @@ float gaussian(in float radius, in float sigma)
 }
 
 [[vk::binding(3, 0)]]
-Texture3D<float4> IntegratedLightScatteringTexture : register(t2, space0);
+Texture3D<float4> LightScatteringExtinctionTexture : register(t2, space0);
 
 [[vk::binding(4, 0)]]
-RWTexture3D<float4> FilteredIntegratedLightScatteringTexture : register(u0, space0);
+RWTexture3D<float4> FilteredLightScatteringExtinctionTexture : register(u0, space0);
 
 [numthreads(FROXEL_DISPATCH_SIZE_X, FROXEL_DISPATCH_SIZE_Y, FROXEL_DISPATCH_SIZE_Z)]
 void SpatialFilter(uint3 dispatchThreadId: SV_DispatchThreadID)
@@ -369,7 +361,7 @@ void SpatialFilter(uint3 dispatchThreadId: SV_DispatchThreadID)
                     const float3 sampleUV = float3(sampleCoords) * froxelDimensionsRcp;
                     const float weight = gaussian(length(int2(i, j)), SIGMA_FILTER);
 
-                    const float4 scatteringTransmittance = IntegratedLightScatteringTexture.Sample(uLinearClampToEdgeSampler, sampleUV);
+                    const float4 scatteringTransmittance = LightScatteringExtinctionTexture.Sample(uLinearClampToEdgeSampler, sampleUV);
 
                     accumulatedWeight += weight;
                     accumulatedScatteringTransmittance += (scatteringTransmittance * weight);
@@ -377,11 +369,11 @@ void SpatialFilter(uint3 dispatchThreadId: SV_DispatchThreadID)
             }
         }
 
-        FilteredIntegratedLightScatteringTexture[froxelCoords] = accumulatedScatteringTransmittance / accumulatedWeight;
+        FilteredLightScatteringExtinctionTexture[froxelCoords] = accumulatedScatteringTransmittance / accumulatedWeight;
     }
     else
     {
-        FilteredIntegratedLightScatteringTexture[froxelCoords] = IntegratedLightScatteringTexture.Sample(uLinearClampToEdgeSampler, froxelCoords * froxelDimensionsRcp);
+        FilteredLightScatteringExtinctionTexture[froxelCoords] = LightScatteringExtinctionTexture.Sample(uLinearClampToEdgeSampler, froxelCoords * froxelDimensionsRcp);
     }
 }
 
@@ -390,43 +382,40 @@ void SpatialFilter(uint3 dispatchThreadId: SV_DispatchThreadID)
 #if defined(TEMPORAL_FILTER_SHADER)
 
 [[vk::binding(3, 0)]]
-Texture3D<float4> CurrentIntegratedScatteringTexture : register(t2, space0);
+Texture3D<float4> CurrentScatteringExtinctionTexture : register(t2, space0);
 
-[[vk::binding(4, 0)]]
-Texture3D<float4> PreviousIntegratedScatteringTexture : register(t3, space0);
+[[vk::binding(4, 0)]]       
+Texture3D<float4> PreviousScatteringExtinctionTexture : register(t3, space0);
 
 [[vk::binding(5, 0)]]
-RWTexture3D<float4> FinalIntegratedScatteringTexture : register(u0, space0);
+RWTexture3D<float4> FinalScatteringExtinctionTexture : register(u0, space0);
 
 [numthreads(FROXEL_DISPATCH_SIZE_X, FROXEL_DISPATCH_SIZE_Y, FROXEL_DISPATCH_SIZE_Z)]
 void TemporalFilter(uint3 dispatchThreadId: SV_DispatchThreadID)
 {
     const int3 froxelCoords = int3(dispatchThreadId);
-    const float3 froxelDimensionsRcp = 1.f / float3(froxelDimensions);
 
-    float4 scatteringTransmittance = CurrentIntegratedScatteringTexture.Sample(uLinearClampToEdgeSampler, float3(froxelCoords) * froxelDimensionsRcp);
+    float4 scatteringTransmittance = CurrentScatteringExtinctionTexture[froxelCoords];
 
     if (temporalFilterEnabled > 0)
     {
-        const float3 froxelWorldPosition = FroxelCoordToWorldPosition(froxelCoords);
-        const float4 lastFrameFroxelScreenSpacePosition = mul(PreviousViewProjectionMatrix, float4(froxelWorldPosition, 1));
+        const float3 froxelWorldPosition = FroxelCoordToWorldPositionNoJitter(froxelCoords);
+        const float4 lastFrameFroxelScreenSpacePosition = mul(uPerView.PreviousView.ViewProjectionMatrix, float4(froxelWorldPosition, 1));
         const float3 lastFrameNDC = lastFrameFroxelScreenSpacePosition.xyz / lastFrameFroxelScreenSpacePosition.w;
 
-        const float linearDepth = RawDepthToLinearDepth(lastFrameNDC.z, uPerFrame.VolumetricFogNear, uPerFrame.VolumetricFogFar);
+        const float linearDepth = LinearizeDepth(lastFrameNDC.z, uPerView.PreviousView.CameraNearPlane);
         const float depthUV = LinearDepthToUV(uPerFrame.VolumetricFogNear, uPerFrame.VolumetricFogFar, linearDepth, froxelDimensions.z);
-        const float3 historyUV = float3(lastFrameNDC.x * 0.5 + 0.5, lastFrameNDC.y * -0.5 + 0.5, depthUV);
 
-        if (all(historyUV >= 0) && all(historyUV <= 1))
+        const float3 historyUVW = float3(lastFrameNDC.x * 0.5 + 0.5, lastFrameNDC.y * -0.5 + 0.5, depthUV);
+
+        if (all(historyUVW >= 0) && all(historyUVW <= 1))
         {
-            float4 previousScatteringTransmittance = PreviousIntegratedScatteringTexture.SampleLevel(uLinearClampToEdgeSampler, historyUV, 0);
-            previousScatteringTransmittance = max(previousScatteringTransmittance, scatteringTransmittance);
-
-            scatteringTransmittance.rgb = lerp(previousScatteringTransmittance.rgb, scatteringTransmittance.rgb, temporalReprojectionPercentage);
-            scatteringTransmittance.a = lerp(previousScatteringTransmittance.a, scatteringTransmittance.a, temporalReprojectionPercentage);
+            const float4 previousScatteringTransmittance = PreviousScatteringExtinctionTexture.SampleLevel(uLinearClampToEdgeSampler, historyUVW, 0);
+            scatteringTransmittance = lerp(previousScatteringTransmittance, scatteringTransmittance, temporalReprojectionPercentage);
         }
     }
 
-    FinalIntegratedScatteringTexture[froxelCoords] = scatteringTransmittance;
+    FinalScatteringExtinctionTexture[froxelCoords] = scatteringTransmittance;
 }
 
 #endif

@@ -97,23 +97,15 @@
                 <InputImage name="CascadeShadows"/>
                 <InputBuffer usage="Storage" name="ShadowCascades"/>
                 <InputBuffer usage="Storage" name="ExposureBuffer" />
+                <InputImage name="VolumetricFogWorking1"/>
                 <OutputImage name="VolumetricFogWorking2"/>
             </LightScatteringBindings>
-
-            <IntegrateLightBindings>
-                <InputBuffer usage="Uniform"/>
-                <InputImage name="BlueNoise"/>
-                <InputImage name="VolumetricNoise"/>
-                <InputImage name="VolumetricFogWorking1"/>
-                <InputImage name="VolumetricFogWorking2"/>
-                <OutputImage name="VolumetricFog"/>
-            </IntegrateLightBindings>
 
             <SpatialFilterBindings>
                 <InputBuffer usage="Uniform"/>
                 <InputImage name="BlueNoise"/>
                 <InputImage name="VolumetricNoise"/>
-                <InputImage name="VolumetricFog"/>
+                <InputImage name="VolumetricFogWorking2"/>
                 <OutputImage name="VolumetricFogWorking1"/>
             </SpatialFilterBindings>
 
@@ -123,8 +115,16 @@
                 <InputImage name="VolumetricNoise"/>
                 <InputImage name="VolumetricFogWorking1"/>
                 <InputImage name="PreviousVolumetricFog"/>
-                <OutputImage name="VolumetricFog"/>
+                <OutputImage name="VolumetricFogWorking2"/>
             </TemporalFilterBindings>
+
+            <IntegrateLightBindings>
+                <InputBuffer usage="Uniform"/>
+                <InputImage name="BlueNoise"/>
+                <InputImage name="VolumetricNoise"/>
+                <InputImage name="VolumetricFogWorking2"/>
+                <OutputImage name="VolumetricFog"/>
+            </IntegrateLightBindings>
 
         </VolumetricFog>
 

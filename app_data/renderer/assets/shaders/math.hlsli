@@ -97,12 +97,14 @@ float4x4 CreateOrthographicMatrix(float left, float right, float bottom, float t
 
     return matrix;
 }
+
 //---------------------------------------------------------------------------//
 
 float SliceToExponentialDepthJittered(in float near, in float far, in float jitter, in int slice, in int numSlices)
 {
-    return near * pow(far / near, (float(slice) + 0.5f + jitter) / float(numSlices));
+    return near * pow(far / near, (float(slice) + 0.5 + jitter) / float(numSlices));
 }
+
 //---------------------------------------------------------------------------//
 
 // http://www.aortiz.me/2018/12/21/CG.html
@@ -114,12 +116,6 @@ float LinearDepthToUV(in float near, in float far, in float linearDepth, in int 
     const float scale = numSlices * oneOverLogFOverN;
     const float bias = -(numSlices * log2(near) * oneOverLogFOverN);
     return max(log2(linearDepth) * scale + bias, 0.0f) / float(numSlices);
-}
-
-// Convert raw_depth (1..0) to linear depth (near...far) for inverse Z
-float RawDepthToLinearDepth2(in float rawDepth, in float near, in float far)
-{
-    return near * far / (near + rawDepth * (far - near));
 }
 
 //---------------------------------------------------------------------------//
@@ -136,9 +132,14 @@ float LinearDepthToRawDepth(in float linearDepth, in float near, in float far)
 // Convert raw depth (0..1) to linear (near...far)
 float RawDepthToLinearDepth(in float rawDepth, in float near, in float far)
 {
-    return near * far / (far + rawDepth * (near - far));
+    return near * far / (near + rawDepth * (near - far));
 }
 
+// Convert raw_depth (1..0) to linear depth (near...far) for inverse Z
+float RawDepthToLinearDepth2(in float rawDepth, in float near, in float far)
+{
+    return near * far / (near + rawDepth * (far - near));
+}
 
 //---------------------------------------------------------------------------//
 

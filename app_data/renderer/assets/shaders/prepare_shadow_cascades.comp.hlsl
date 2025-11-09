@@ -85,7 +85,7 @@ void CSMain(uint localThreadIndex: SV_GroupIndex)
         textureSpaceConversion = transpose(textureSpaceConversion);
 
         // Calculate the view matrix for the light
-        const float3 forward = -uPerFrame.Sun.DirectionWS;
+        const float3 forward = uPerFrame.Sun.DirectionWS;
         float3 up = abs(forward.y) < 0.9999 ? float3(0.0, -1.0, 0.0) : float3(0.0, 0.0, -1.0);
         const float3 right = normalize(cross(forward, up));
         up = normalize(cross(right, forward));

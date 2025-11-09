@@ -103,7 +103,4 @@ void CSMain(uint2 dispatchThreadId: SV_DispatchThreadID)
 
     outputImage[input.cellCoord] = float4(pixelColor, 1);
 }
-
 //---------------------------------------------------------------------------//
-
-

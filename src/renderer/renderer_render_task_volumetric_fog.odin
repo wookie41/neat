@@ -73,9 +73,6 @@ VolumetricFogUniformData :: struct #packed {
 	temporal_reprojection_percentage:     f32,
 	volumetric_noise_direction:           glsl.vec3,
 	_padding3:                            u32,
-	view_proj:                            glsl.mat4x4,
-	inv_view_proj:                        glsl.mat4x4,
-	previous_view_proj:                   glsl.mat4x4,
 }
 
 //---------------------------------------------------------------------------//
@@ -299,13 +296,13 @@ create_instance :: proc(
 
 	render_task_data.uniform_data = VolumetricFogUniformData {
 		froxel_dimensions                    = VOLUMETRIC_FOG_IMAGE_RESOLUTION,
-		temporal_reprojection_jitter_scale   = 0.05,
+		temporal_reprojection_jitter_scale   = 0.25,
 		noise_type                           = 0,
-		noise_scale                          = 0.1,
+		noise_scale                          = 0.652,
 		spatial_filter_enabled               = 1,
 		temporal_filter_enabled              = 1,
 		volumetric_noise_position_multiplier = 0.1,
-		volumetric_noise_speed_multiplier    = 0.001,
+		volumetric_noise_speed_multiplier    = 0.00025,
 		volumetric_noise_direction           = {1, 0, 0},
 		constant_fog_density                 = 0.1,
 		constant_fog_color                   = glsl.vec3{0.5, 0.5, 0.5},
@@ -375,14 +372,6 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 	render_task := &g_resources.render_tasks[render_task_get_idx(p_render_task_ref)]
 	render_task_data := (^VolumetricFogRenderTaskData)(render_task.data_ptr)
 
-	if get_frame_id() > 0 {
-		image_copy_content(
-			get_frame_cmd_buffer_ref(),
-			render_task_data.volumetric_fog_image_ref,
-			render_task_data.previous_volumetric_fog_image_ref,
-		)
-	}
-
 	gpu_debug_region_begin(get_frame_cmd_buffer_ref(), render_task.desc.name)
 	defer gpu_debug_region_end(get_frame_cmd_buffer_ref())
 
@@ -396,25 +385,11 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 		uniform_buffer_create_view_data(render_views),
 	}
 
-	render_task_data.uniform_data.previous_view_proj = render_task_data.uniform_data.view_proj
-	render_task_data.uniform_data.view_proj =
-		glsl.mat4Perspective(
-			g_render_camera.fov,
-			render_views.current_view.aspect_ratio,
-			render_views.current_view.near_plane,
-			g_per_frame_data.volumetric_fog_far,
-		) *
-		render_views.current_view.view
-	render_task_data.uniform_data.inv_view_proj = glsl.inverse(
-		render_task_data.uniform_data.view_proj,
-	)
-
 	job_uniform_data_offsets := []u32 {
 		uniform_buffer_create_transient_buffer(&render_task_data.uniform_data),
 	}
 
 	transition_binding_resources(render_task_data.inject_fog_bindings, .Compute)
-	transition_binding_resources(render_task_data.light_scattering_bindings, .Compute)
 
 	// Inject fog data
 	{
@@ -430,6 +405,8 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 		)
 	}
 
+	transition_binding_resources(render_task_data.light_scattering_bindings, .Compute)
+
 	// Calculate light scattering
 	{
 		gpu_debug_region_begin(get_frame_cmd_buffer_ref(), "Calculate light scattering")
@@ -439,26 +416,6 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 			render_task_data.light_scattering_job.compute_command_ref,
 			get_frame_cmd_buffer_ref(),
 			VOLUMETRIC_FOG_IMAGE_RESOLUTION / VOLUMETRIC_FOG_DISPATCH_SIZE,
-			{job_uniform_data_offsets, global_uniform_offsets, nil, nil},
-			nil,
-		)
-	}
-
-	transition_binding_resources(render_task_data.integrate_light_bindings, .Compute)
-
-	// Integrate light
-	{
-		gpu_debug_region_begin(get_frame_cmd_buffer_ref(), "Integrate light")
-		defer gpu_debug_region_end(get_frame_cmd_buffer_ref())
-
-		compute_command_dispatch(
-			render_task_data.integrate_light_job.compute_command_ref,
-			get_frame_cmd_buffer_ref(),
-			glsl.uvec3 {
-				VOLUMETRIC_FOG_IMAGE_RESOLUTION.x / VOLUMETRIC_FOG_DISPATCH_SIZE.x,
-				VOLUMETRIC_FOG_IMAGE_RESOLUTION.y / VOLUMETRIC_FOG_DISPATCH_SIZE.y,
-				1,
-			},
 			{job_uniform_data_offsets, global_uniform_offsets, nil, nil},
 			nil,
 		)
@@ -491,6 +448,32 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 			render_task_data.temporal_filter_job.compute_command_ref,
 			get_frame_cmd_buffer_ref(),
 			VOLUMETRIC_FOG_IMAGE_RESOLUTION / VOLUMETRIC_FOG_DISPATCH_SIZE,
+			{job_uniform_data_offsets, global_uniform_offsets, nil, nil},
+			nil,
+		)
+	}
+
+	image_copy_content(
+		get_frame_cmd_buffer_ref(),
+		render_task_data.working_image_refs[1],
+		render_task_data.previous_volumetric_fog_image_ref,
+	)
+
+	transition_binding_resources(render_task_data.integrate_light_bindings, .Compute)
+
+	// Integrate light
+	{
+		gpu_debug_region_begin(get_frame_cmd_buffer_ref(), "Integrate light")
+		defer gpu_debug_region_end(get_frame_cmd_buffer_ref())
+
+		compute_command_dispatch(
+			render_task_data.integrate_light_job.compute_command_ref,
+			get_frame_cmd_buffer_ref(),
+			glsl.uvec3 {
+				VOLUMETRIC_FOG_IMAGE_RESOLUTION.x / VOLUMETRIC_FOG_DISPATCH_SIZE.x,
+				VOLUMETRIC_FOG_IMAGE_RESOLUTION.y / VOLUMETRIC_FOG_DISPATCH_SIZE.y,
+				1,
+			},
 			{job_uniform_data_offsets, global_uniform_offsets, nil, nil},
 			nil,
 		)
@@ -531,7 +514,7 @@ draw_debug_ui :: proc(p_render_task_ref: RenderTaskRef) {
 			"Temporal reprojection jitter scale",
 			&render_task_data.uniform_data.temporal_reprojection_jitter_scale,
 			0,
-			0.2,
+			2,
 		)
 
 		imgui.SliderInt("Noise type", &render_task_data.uniform_data.noise_type, 0, 2)
@@ -550,7 +533,12 @@ draw_debug_ui :: proc(p_render_task_ref: RenderTaskRef) {
 			0,
 			1,
 		)
-		imgui.SliderInt("Phase function type", &render_task_data.uniform_data.noise_type, 0, 3)
+		imgui.SliderInt(
+			"Phase function type",
+			&render_task_data.uniform_data.phase_function_type,
+			0,
+			3,
+		)
 
 		imgui.SliderFloat(
 			"Temporal reprojection percentage",
@@ -574,7 +562,7 @@ draw_debug_ui :: proc(p_render_task_ref: RenderTaskRef) {
 			&render_task_data.uniform_data.volumetric_noise_speed_multiplier,
 			0.0001,
 			0.0001,
-			0.001,
+			0.00,
 			nil,
 			{},
 		)

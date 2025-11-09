@@ -59,7 +59,7 @@ when USE_VULKAN_BACKEND {
 				// @TODO
 				// anisotropyEnable = true,
 				//maxAnisotropy    = device_properties.limits.maxSamplerAnisotropy,
-				borderColor  = .FLOAT_OPAQUE_BLACK,
+				borderColor  = .FLOAT_OPAQUE_WHITE,
 				compareOp    = .ALWAYS,
 				mipmapMode   = .LINEAR,
 				maxLod       = 16,
