@@ -32,6 +32,7 @@ struct MeshInstancedDrawInfo
 struct MeshInstanceInfo
 {
     float4x4 modelMatrix;
+    float4x4 prevModelMatrix;
 };
 
 //---------------------------------------------------------------------------//

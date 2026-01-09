@@ -12,7 +12,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	INTERNAL: struct {}
+	INTERNAL: struct{}
 
 	@(private)
 	BackendRenderPassResource :: struct {}

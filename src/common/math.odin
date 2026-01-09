@@ -95,3 +95,58 @@ pack_rgba_color :: proc(color: glsl.vec4) -> u32 {
 }
 
 //---------------------------------------------------------------------------//
+
+// http://www.pbr-book.org/3ed-2018/Sampling_and_Reconstruction/The_Halton_Sampler.html
+reverse32Bit :: proc(x: u32) -> u32 {
+	out: u32 = (x << 16) | (x >> 16) //swap adjacent 16 bits
+	out = ((out & 0x00ff00ff) << 8) | ((out & 0xff00ff00) >> 8) //swap adjacent 8 bits
+	out = ((out & 0x0f0f0f0f) << 4) | ((out & 0xf0f0f0f0) >> 4) //swap adjacent 4 bits
+	out = ((out & 0x33333333) << 2) | ((out & 0xcccccccc) >> 2) //swap adjacent 2 bits
+	out = ((out & 0x55555555) << 1) | ((out & 0xaaaaaaaa) >> 1) //swap adjacent 1 bits
+	return out
+}
+
+//---------------------------------------------------------------------------//
+
+// http://www.pbr-book.org/3ed-2018/Sampling_and_Reconstruction/The_Halton_Sampler.html
+radical_inverse_base2 :: proc(x: u32) -> f32 {
+	return f32(reverse32Bit(x)) * f32(2.3283064365386963e-10)
+}
+
+//---------------------------------------------------------------------------//
+
+// http://www.pbr-book.org/3ed-2018/Sampling_and_Reconstruction/The_Halton_Sampler.html
+radical_inverse_base3 :: proc(x: u32) -> f32 {
+	base: u32 = 3
+	inverse_base := 1.0 / f32(base)
+	reversed_digits : u32= 0
+	current := x //example: starting at 10
+	//we go from largest to smallest digit, until current reaches 0
+	inverse_base_power_n: f32 = 1
+	for (current > 0) {
+		next: u32 = current / base //example: 10 / base = 3
+		//digits go from 0 to base-1
+		//for example binary hase base 2 and has digits 0 and 1
+		digit: u32 = current - next * base //example: 10 - 3 * 3 = 10 - 9 = 1
+		reversed_digits *= base //'lifting' current digits to the next base
+		//example: take 101 base 10 and go left to right
+		//the first 1 has to be 'lifted' twice
+		//101 = 1 * 100 + 1 * 10 + 1 * 1
+		reversed_digits += digit //adding current digit
+		inverse_base_power_n *= inverse_base //incrementally building 1 / base^n
+		//this is simply done by multiplying 1 / base together n times
+		current = next
+	}
+	return f32(reversed_digits) * inverse_base_power_n //we multiply only once at the end with the inverse base
+	//by the previous 'lifting' this provides the correct weight per digit
+}
+
+//---------------------------------------------------------------------------//
+
+// http://www.pbr-book.org/3ed-2018/Sampling_and_Reconstruction/The_Halton_Sampler.html
+hammersley2D :: proc(index: u32) -> glsl.vec2 {
+	return glsl.vec2{radical_inverse_base2(index), radical_inverse_base3(index)}
+}
+
+
+//---------------------------------------------------------------------------//

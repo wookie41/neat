@@ -17,10 +17,12 @@ struct RenderView
     float3 CameraPositionWS;
     float CameraNearPlane;
     float3 CameraForwardWS;
-    float _padding1;
+    float JitterX;
     float3 CameraUpWS;
-    float _padding2;
+    float JitterY;
 };
+
+//---------------------------------------------------------------------------//
 
 struct PerView
 {
@@ -55,6 +57,29 @@ struct PerFrame
 
 //---------------------------------------------------------------------------//
 
+#define TAA_FLAG_ENABLED 0x01
+#define TAA_FLAG_RESET 0x02
+#define TAA_FLAG_DILATE_MOTION_VECTORS 0x04
+#define TAA_FLAG_HISTORY_SINGLE_TAP 0x08
+#define TAA_FLAG_TEMPORAL_FILTER 0x10
+#define TAA_FLAG_INVERSE_LUMINANCE_FILTERING 0x20
+#define TAA_FLAG_LUMINANCE_DIFFERENCE_FILTERING 0x40
+
+struct TAASettings
+{
+    uint Flags;
+    int3 _padding;
+};
+
+//---------------------------------------------------------------------------//
+
+struct RenderSettings
+{
+    TAASettings TAA;
+};
+
+//---------------------------------------------------------------------------//
+
 // NOTE: space/descriptor set 0 is reserved for any custom bindings,
 // e.g. input/output storage images for compute tasks
 
@@ -65,6 +90,9 @@ ConstantBuffer<PerFrame> uPerFrame : register(b0, space1);
 
 [[vk::binding(1, 1)]]
 ConstantBuffer<PerView> uPerView : register(b1, space1);
+
+[[vk::binding(2, 1)]]
+ConstantBuffer<RenderSettings> uRenderSettings : register(b1, space1);
 
 //---------------------------------------------------------------------------//
 

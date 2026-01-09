@@ -234,6 +234,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 	global_uniform_offsets := []u32 {
 		g_uniform_buffers.frame_data_offset,
 		uniform_buffer_create_view_data(render_views),
+		g_uniform_buffers.render_settings_data_offset,
 	}
 
 	gpu_debug_region_begin(get_frame_cmd_buffer_ref(), render_task.desc.name)
@@ -257,10 +258,11 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 		}
 
 		uniform_data_offset := uniform_buffer_create_transient_buffer(&uniform_data)
-		generic_compute_job_uniform_data_offset := generic_compute_job_update_uniform_data(.Full)
+		generic_compute_job_uniform_data_offset := generic_compute_job_create_uniform_data(.Full)
 
 		job_uniform_offsets := []u32{generic_compute_job_uniform_data_offset, uniform_data_offset}
 
+		bind_group_update(render_task_data.build_histogram_job.bind_group_ref, render_task_data.build_histogram_bindings)
 		transition_binding_resources(render_task_data.build_histogram_bindings, .Compute)
 
 		compute_command_dispatch(

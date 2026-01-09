@@ -67,5 +67,9 @@
         "name": "volumetric_fog_temporal_filter.comp",
         "path": "volumetric_fog.comp.hlsl",
         "customEntryPoint": "TemporalFilter"
+    },
+    {
+        "name": "taa.pix",
+        "path": "taa.pix.hlsl"
     }
 ]

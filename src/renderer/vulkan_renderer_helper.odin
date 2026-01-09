@@ -24,6 +24,7 @@ when USE_VULKAN_BACKEND {
 		.RG8UNorm        = .R8G8_UNORM,
 		.RG32UInt        = .R32G32_UINT,
 		.RG32Int         = .R32G32_SINT,
+		.RG16SNorm       = .R16G16_SNORM,
 		.RG32SFloat      = .R32G32_SFLOAT,
 		.RGB8UNorm       = .R8G8B8_UNORM,
 		.RGB32UInt       = .R32G32B32_UINT,

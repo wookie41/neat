@@ -11,8 +11,8 @@ import "core:mem"
 
 import "../common"
 
-import sdl "vendor:sdl2"
 import imgui "../third_party/odin-imgui"
+import sdl "vendor:sdl2"
 
 //---------------------------------------------------------------------------//
 
@@ -27,6 +27,13 @@ USE_VULKAN_BACKEND :: #config(USE_VULKAN_BACKEND, true)
 
 @(private)
 MAX_NUM_FRAMES_IN_FLIGHT :: #config(NUM_FRAMES_IN_FLIGHT, 2)
+
+@(private)
+GlobalUniformSlot :: enum u8 {
+	PerFrame,
+	PerView,
+	RenderSettings,
+}
 
 //---------------------------------------------------------------------------//
 
@@ -71,7 +78,7 @@ MAX_COMPUTE_COMMANDS :: #config(MAX_COMPUTE_COMMANDS, 128)
 @(private = "file")
 INTERNAL: struct {
 	frame_id:  u32,
-	frame_idx: u32, // frame_id % num_frames_in_flight 
+	frame_idx: u32, // frame_id % num_frames_in_flight
 	logger:    log.Logger,
 }
 
@@ -114,9 +121,6 @@ g_resource_refs: struct {
 	shaders:            common.RefArray(ShaderResource),
 	mesh_instances:     common.RefArray(MeshInstanceResource),
 }
-
-//---------------------------------------------------------------------------//
-
 
 //---------------------------------------------------------------------------//
 
@@ -169,7 +173,7 @@ G_RENDERER_ALLOCATORS: struct {
 	frame_arenas:          []mem.Arena,
 	frame_allocators:      []mem.Allocator,
 	resource_allocator:    mem.Allocator,
-	// Stack used to sub-allocate scratch arenas from that are used within a function scope 
+	// Stack used to sub-allocate scratch arenas from that are used within a function scope
 	temp_arenas_stack:     mem.Stack,
 	temp_arenas_allocator: mem.Allocator,
 }
@@ -184,6 +188,13 @@ G_RENDERER_SETTINGS: struct {
 	stabilize_shadow_cascades:                bool,
 	shadows_rendering_distance:               f32,
 	directional_light_shadow_sampling_radius: f32,
+	taa_enabled:                              bool,
+	taa_dilate_motion_vectors:                bool,
+	taa_history_single_tap:                   bool,
+	taa_jitter_period:                        u32,
+	taa_temporal_filter:                      bool,
+	taa_inverse_luminance_filter:             bool,
+	taa_luminance_difference_filter:          bool,
 }
 
 InitOptions :: struct {
@@ -264,6 +275,15 @@ init :: proc(p_options: InitOptions) -> bool {
 	G_RENDERER_SETTINGS.fit_shadow_cascades = true
 	G_RENDERER_SETTINGS.stabilize_shadow_cascades = false
 	G_RENDERER_SETTINGS.shadows_rendering_distance = 150
+	G_RENDERER_SETTINGS.taa_enabled = true
+	G_RENDERER_SETTINGS.taa_jitter_period = 8
+	G_RENDERER_SETTINGS.taa_dilate_motion_vectors = true
+	G_RENDERER_SETTINGS.taa_history_single_tap = false
+	G_RENDERER_SETTINGS.taa_temporal_filter = true
+	G_RENDERER_SETTINGS.taa_inverse_luminance_filter = true
+	G_RENDERER_SETTINGS.taa_luminance_difference_filter = true
+
+	g_render_settings_data.taa.flags += {.Reset}
 
 	backend_init(p_options) or_return
 
@@ -356,7 +376,7 @@ init :: proc(p_options: InitOptions) -> bool {
 		// Bind group layout creation
 		G_RENDERER.uniforms_bind_group_layout_ref = bind_group_layout_allocate(
 			common.create_name("Uniforms"),
-			2,
+			len(GlobalUniformSlot),
 		)
 
 		bind_group_layout_idx := bind_group_layout_get_idx(
@@ -365,14 +385,21 @@ init :: proc(p_options: InitOptions) -> bool {
 		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_idx]
 
 		// Per frame uniform buffer
-		bind_group_layout.desc.bindings[0] = {
+		bind_group_layout.desc.bindings[GlobalUniformSlot.PerFrame] = {
 			count         = 1,
 			shader_stages = {.Vertex, .Pixel, .Compute},
 			type          = .UniformBufferDynamic,
 		}
 
 		// Per view uniform buffer
-		bind_group_layout.desc.bindings[1] = {
+		bind_group_layout.desc.bindings[GlobalUniformSlot.PerView] = {
+			count         = 1,
+			shader_stages = {.Vertex, .Pixel, .Compute},
+			type          = .UniformBufferDynamic,
+		}
+
+		// Render settings uniform buffer
+		bind_group_layout.desc.bindings[GlobalUniformSlot.RenderSettings] = {
 			count         = 1,
 			shader_stages = {.Vertex, .Pixel, .Compute},
 			type          = .UniformBufferDynamic,
@@ -389,6 +416,7 @@ init :: proc(p_options: InitOptions) -> bool {
 		bind_group_idx := bind_group_get_idx(G_RENDERER.uniforms_bind_group_ref)
 		bind_group := &g_resources.bind_groups[bind_group_idx]
 		bind_group.desc.layout_ref = G_RENDERER.uniforms_bind_group_layout_ref
+		bind_group.desc.flags = {.GlobalBindGroup}
 
 		if bind_group_create(G_RENDERER.uniforms_bind_group_ref) == false {
 			log.error("Failed to create the uniforms bind group")
@@ -430,6 +458,7 @@ init :: proc(p_options: InitOptions) -> bool {
 		bind_group_idx := bind_group_get_idx(G_RENDERER.globals_bind_group_ref)
 		bind_group := &g_resources.bind_groups[bind_group_idx]
 		bind_group.desc.layout_ref = G_RENDERER.globals_bind_group_layout_ref
+		bind_group.desc.flags = {.GlobalBindGroup}
 
 		if bind_group_create(G_RENDERER.globals_bind_group_ref) == false {
 			log.error("Failed to create the global resources bind group")
@@ -483,6 +512,7 @@ init :: proc(p_options: InitOptions) -> bool {
 		bind_group_idx := bind_group_get_idx(G_RENDERER.bindless_bind_group_ref)
 		bind_group := &g_resources.bind_groups[bind_group_idx]
 		bind_group.desc.layout_ref = G_RENDERER.bindless_bind_group_layout_ref
+		bind_group.desc.flags = {.GlobalBindGroup}
 
 		if bind_group_create(G_RENDERER.bindless_bind_group_ref) == false {
 			log.error("Failed to create the bindless group")
@@ -535,38 +565,35 @@ init :: proc(p_options: InitOptions) -> bool {
 
 		bind_group_update(
 			G_RENDERER.uniforms_bind_group_ref,
-			BindGroupUpdate {
-				buffers = {
-					{
-						binding = 0,
-						buffer_ref = g_uniform_buffers.transient_buffer.buffer_ref,
-						size = size_of(g_per_frame_data),
-					},
-					{
-						binding = 1,
-						buffer_ref = g_uniform_buffers.transient_buffer.buffer_ref,
-						size = size_of(PerViewData),
-					},
+			[]Binding {
+				InputBufferBinding {
+					buffer_ref = g_uniform_buffers.transient_buffer.buffer_ref,
+					size = size_of(g_per_frame_data),
+				},
+				InputBufferBinding {
+					buffer_ref = g_uniform_buffers.transient_buffer.buffer_ref,
+					size = size_of(PerViewData),
+				},
+				InputBufferBinding {
+					buffer_ref = g_uniform_buffers.transient_buffer.buffer_ref,
+					size = size_of(g_render_settings_data),
 				},
 			},
 		)
 
-		global_bind_group_update := BindGroupUpdate {
-			buffers = {
-				{
-					binding = u32(GlobalResourceSlot.MeshInstanceInfosBuffer),
+		bind_group_update(
+			G_RENDERER.globals_bind_group_ref,
+			[]Binding {
+				InputBufferBinding {
 					buffer_ref = mesh_instance_info_buffer_ref,
 					size = mesh_instance_info_buffer.desc.size,
 				},
-				{
-					binding = u32(GlobalResourceSlot.MaterialsBuffer),
+				InputBufferBinding {
 					buffer_ref = material_instances_buffer_ref,
 					size = MATERIAL_PROPERTIES_BUFFER_SIZE,
 				},
 			},
-		}
-
-		bind_group_update(G_RENDERER.globals_bind_group_ref, global_bind_group_update)
+		)
 	}
 
 	g_render_camera.position = {0, 0, 0}
@@ -583,9 +610,29 @@ init :: proc(p_options: InitOptions) -> bool {
 //---------------------------------------------------------------------------//
 
 update :: proc(p_dt: f32) {
+
 	// Setup renderer context
 	context.allocator = G_RENDERER_ALLOCATORS.main_allocator
 	context.logger = INTERNAL.logger
+
+	// Update camera jitter
+	{
+		if G_RENDERER_SETTINGS.taa_enabled {
+			jitter_index := (g_per_frame_data.frame_id % G_RENDERER_SETTINGS.taa_jitter_period)
+
+			jitter_values := common.hammersley2D(jitter_index) * 2 - 1
+			pixel_size: glsl.vec2 =
+				1.0 /
+				glsl.vec2 {
+						f32(G_RENDERER.config.render_resolution.x),
+						f32(G_RENDERER.config.render_resolution.y),
+					}
+
+			g_render_camera.jitter = pixel_size * jitter_values
+		} else {
+			g_render_camera.jitter = glsl.vec2(0)
+		}
+	}
 
 	common.arena_reset_all()
 	backend_wait_for_frame_resources()
@@ -616,11 +663,14 @@ update :: proc(p_dt: f32) {
 	image_progress_uploads()
 
 	material_instance_update_dirty_materials()
-	mesh_instance_send_transform_data()
+	mesh_instance_update()
 
 	// Skip this on first frame, as initial resources are being loaded
 	if get_frame_id() > 0 {
 		render_task_update(p_dt)
+
+		g_render_settings_data.taa.flags -= {.Reset}
+
 		draw_debug_ui(p_dt)
 	}
 
@@ -668,7 +718,7 @@ run_initial_frame_tasks :: proc() {
 				volumetric_noise_image.desc.dimensions.y / 8,
 				volumetric_noise_image.desc.dimensions.z,
 			},
-			{nil, {0, 0}, nil, nil},
+			{nil, {0, 0, 0}, nil, nil},
 		)
 	}
 }
@@ -749,18 +799,15 @@ get_frame_cmd_buffer_ref :: proc() -> CommandBufferRef {
 @(private = "file")
 load_renderer_config :: proc() -> bool {
 
-	temp_arena: common.Arena
-	common.temp_arena_init(&temp_arena, common.MEGABYTE) // The parser is quite memory hungry
-	defer common.arena_delete(temp_arena)
-
 	doc, err := xml.load_from_file(
 		"app_data/renderer/config/renderer.xml",
-		allocator = temp_arena.allocator,
+		allocator = G_RENDERER_ALLOCATORS.main_allocator,
 	)
 	if err != nil {
 		log.fatal("Failed to load renderer config: %s\n", err)
 		return false
 	}
+	defer xml.destroy(doc)
 
 	render_width, render_width_found := common.xml_get_u32_attribute(doc, 0, "renderWidth")
 	render_height, render_height_found := common.xml_get_u32_attribute(doc, 0, "renderHeight")
@@ -895,13 +942,13 @@ renderer_config_image_creates :: proc(p_doc: ^xml.Document) -> bool {
 			image.desc.mip_count, _ = common.xml_get_u32_attribute(
 				p_doc,
 				element_id,
-				"mip_count",
+				"mipCount",
 				1,
 			)
 			image.desc.array_size, _ = common.xml_get_u32_attribute(
 				p_doc,
 				element_id,
-				"array_size",
+				"arraySize",
 				1,
 			)
 
@@ -909,6 +956,10 @@ renderer_config_image_creates :: proc(p_doc: ^xml.Document) -> bool {
 				log.errorf("Failed to create image '%s'\n", child.ident)
 				continue
 			}
+
+			temp_arena := common.Arena{}
+			common.temp_arena_init(&temp_arena)
+			defer common.arena_delete(temp_arena)
 
 			log.infof("Image '%s' created\n", child.ident)
 		}
@@ -1027,6 +1078,19 @@ draw_debug_ui :: proc(p_dt: f32) {
 
 	imgui.SliderFloat3("Sun direction", &g_per_frame_data.sun.direction, -1, 1)
 	imgui.SliderFloat("Sun strength", &g_per_frame_data.sun.strength, 0, 128000)
+
+	if imgui.CollapsingHeader("TAA", {}) {
+		imgui.Checkbox("Enabled", &G_RENDERER_SETTINGS.taa_enabled)
+		if imgui.Button("Reset TAA") {
+			g_render_settings_data.taa.flags += {.Reset}
+		}
+		imgui.Checkbox("Dilate motion vectors", &G_RENDERER_SETTINGS.taa_dilate_motion_vectors)
+		imgui.Checkbox("History single tap", &G_RENDERER_SETTINGS.taa_history_single_tap)
+		imgui.Checkbox("Temporal filter", &G_RENDERER_SETTINGS.taa_temporal_filter)
+		imgui.Checkbox("Inverse luminance filter", &G_RENDERER_SETTINGS.taa_inverse_luminance_filter)
+		imgui.Checkbox("Luminance difference filter", &G_RENDERER_SETTINGS.taa_luminance_difference_filter)
+		imgui.SliderInt("Jitter period", (^i32)(&G_RENDERER_SETTINGS.taa_jitter_period), 1, 16)
+	}
 
 	// Debug UI
 	render_task_draw_debug_ui()

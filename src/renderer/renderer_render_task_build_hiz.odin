@@ -331,6 +331,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 	global_uniform_offsets := []u32 {
 		g_uniform_buffers.frame_data_offset,
 		uniform_buffer_create_view_data(render_views),
+		g_uniform_buffers.render_settings_data_offset,
 	}
 
 	// Reset the buffer
@@ -366,7 +367,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 		}
 
 		hiz_uniform_data_offset := uniform_buffer_create_transient_buffer(&hiz_uniform_data)
-		generic_compute_job_uniform_data_offset := generic_compute_job_update_uniform_data(.Full)
+		generic_compute_job_uniform_data_offset := generic_compute_job_create_uniform_data(.Full)
 
 		per_instance_offsets := []u32 {
 			generic_compute_job_uniform_data_offset,

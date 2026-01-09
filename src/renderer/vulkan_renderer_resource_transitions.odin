@@ -174,7 +174,13 @@ when USE_VULKAN_BACKEND {
 		if len(output_image_barriers_graphics) > 0 || len(output_buffer_barriers_graphics) > 0 {
 			vk.CmdPipelineBarrier(
 				backend_graphics_cmd_buffer.vk_cmd_buff,
-				{.VERTEX_SHADER, .FRAGMENT_SHADER, .COMPUTE_SHADER, .TRANSFER, .COLOR_ATTACHMENT_OUTPUT},
+				{
+					.VERTEX_SHADER,
+					.FRAGMENT_SHADER,
+					.COMPUTE_SHADER,
+					.TRANSFER,
+					.COLOR_ATTACHMENT_OUTPUT,
+				},
 				{.COLOR_ATTACHMENT_OUTPUT} if p_pipeline_type == .Graphics else {.COMPUTE_SHADER},
 				{},
 				0,

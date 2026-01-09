@@ -7,7 +7,7 @@
 float SampleDirectionalLightShadow(
     Texture2D<float> cascadeShadowTextures[], 
     StructuredBuffer<ShadowCascade> shadowCascades,
-    in float3 positionWS, in float3 positionVS, int2 svPosition, out int cascadeIndex)
+    in float3 positionWS, in float3 positionVS, in float2 svPosition, out int cascadeIndex)
 {
     const float pixelZ = -positionVS.z;
 
@@ -21,7 +21,7 @@ float SampleDirectionalLightShadow(
     
     // Spiral sampling pattern based on
     // https://github.com/playdeadgames/publications/blob/master/INSIDE/rendering_inside_gdc2016.pdf
-    const float noise = InterleavedGradientNoise(svPosition.x, svPosition.y);
+    const float noise = InterleavedGradientNoise(svPosition);
     const float2 offsetScale = shadowCascades[cascadeIndex].OffsetScale * uPerFrame.Sun.ShadowSamplingRadius;
     const float sampleCount = 12.f;
 

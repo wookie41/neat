@@ -17,6 +17,8 @@ struct MaterialPixelInput
     float3 vertexNormal;
     float3 vertexTangent;
     float3 vertexBinormal;
+    float4 positionClip;
+    float4 prevPositionClip;
 };
 
 //---------------------------------------------------------------------------//
@@ -28,6 +30,7 @@ struct MaterialPixelOutput
     float roughness;
     float metalness;
     float occlusion;
+    float2 motionVector;
 };
 
 //---------------------------------------------------------------------------//

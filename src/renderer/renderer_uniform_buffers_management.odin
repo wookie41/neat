@@ -31,15 +31,43 @@ RenderViewData :: struct #packed {
 	camera_pos_ws:     glsl.vec3,
 	camera_near_plane: f32,
 	camera_forward_ws: glsl.vec3,
-	_padding1:         f32,
+	jitter_x:          f32,
 	camera_up_ws:      glsl.vec3,
-	_padding2:         f32,
+	jitter_y:          f32,
 }
+
+//---------------------------------------------------------------------------//
 
 @(private)
 PerViewData :: struct #packed {
 	current_view:  RenderViewData,
 	previous_view: RenderViewData,
+}
+
+//---------------------------------------------------------------------------//
+
+TAASettingFlagBits :: enum u32 {
+	Enabled,
+	Reset, // Set on camera cats/whenever the effect has to be reset
+	DilateMotionVectors,
+	HistorySingleTap,
+	TemporalFilter,
+	InverseLuminanceFilter,
+	LuminanceDifferenceFilter,
+}
+
+TAASettingFlags :: distinct bit_set[TAASettingFlagBits;u32]
+
+//---------------------------------------------------------------------------//
+
+@(private)
+TAASettings :: struct #packed {
+	flags: TAASettingFlags,
+}
+
+@(private)
+g_render_settings_data: struct #packed {
+	taa: TAASettings,
 }
 
 //---------------------------------------------------------------------------//
@@ -67,8 +95,9 @@ g_per_frame_data: struct #packed {
 
 @(private)
 g_uniform_buffers: struct {
-	transient_buffer:  DynamicUniformBuffer,
-	frame_data_offset: u32,
+	transient_buffer:            DynamicUniformBuffer,
+	frame_data_offset:           u32,
+	render_settings_data_offset: u32,
 }
 
 //---------------------------------------------------------------------------//
@@ -186,7 +215,46 @@ update_per_frame_data :: proc(p_dt: f32) {
 
 	g_per_frame_data.volumetric_fog_near = g_render_camera.near_plane
 
+	if G_RENDERER_SETTINGS.taa_enabled {
+		g_render_settings_data.taa.flags += {.Enabled}
+	} else {
+		g_render_settings_data.taa.flags -= {.Enabled}
+	}
+
+	if G_RENDERER_SETTINGS.taa_dilate_motion_vectors {
+		g_render_settings_data.taa.flags += {.DilateMotionVectors}
+	} else {
+		g_render_settings_data.taa.flags -= {.DilateMotionVectors}
+	}
+
+	if G_RENDERER_SETTINGS.taa_history_single_tap {
+		g_render_settings_data.taa.flags += {.HistorySingleTap}
+	} else {
+		g_render_settings_data.taa.flags -= {.HistorySingleTap}
+	}
+
+	if G_RENDERER_SETTINGS.taa_temporal_filter {
+		g_render_settings_data.taa.flags += {.TemporalFilter}
+	} else {
+		g_render_settings_data.taa.flags -= {.TemporalFilter}
+	}
+
+	if G_RENDERER_SETTINGS.taa_inverse_luminance_filter {
+		g_render_settings_data.taa.flags += {.InverseLuminanceFilter}
+	} else {
+		g_render_settings_data.taa.flags -= {.InverseLuminanceFilter}
+	}
+
+	if G_RENDERER_SETTINGS.taa_luminance_difference_filter {
+		g_render_settings_data.taa.flags += {.LuminanceDifferenceFilter}
+	} else {
+		g_render_settings_data.taa.flags -= {.LuminanceDifferenceFilter}
+	}
+
 	g_uniform_buffers.frame_data_offset = uniform_buffer_create_transient_buffer(&g_per_frame_data)
+	g_uniform_buffers.render_settings_data_offset = uniform_buffer_create_transient_buffer(
+		&g_render_settings_data,
+	)
 }
 
 //---------------------------------------------------------------------------//
@@ -204,10 +272,14 @@ per_view_data_create :: proc(p_view: RenderView) -> RenderViewData {
 		camera_near_plane = p_view.near_plane,
 		camera_forward_ws = p_view.forward,
 		camera_up_ws      = p_view.up,
+		jitter_x          = p_view.jitter.x,
+		jitter_y          = p_view.jitter.y,
 	}
 
 	return view_data
 }
+
+//---------------------------------------------------------------------------//
 
 @(private)
 uniform_buffer_create_view_data :: proc(p_render_views: RenderViews) -> u32 {

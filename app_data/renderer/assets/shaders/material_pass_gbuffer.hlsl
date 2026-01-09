@@ -31,16 +31,18 @@ struct VSInput
 struct PSInput
 {
     [[vk::location(0)]]
-    float3 positionWS : POSITION_WS;
+    float4 positionClip : POSITION;
     [[vk::location(1)]]
-    float2 uv : TEXCOORD0;
+    float4 prevPositionClip : PREV_POSITION;
     [[vk::location(2)]]
-    uint materialInstanceIdx : MATERIAL_INSTANCE_IDX;
+    float2 uv : TEXCOORD0;
     [[vk::location(3)]]
-    float3 normal : NORMAL;
+    uint materialInstanceIdx : MATERIAL_INSTANCE_IDX;
     [[vk::location(4)]]
-    float3 tangent : TANGENT;
+    float3 normal : NORMAL;
     [[vk::location(5)]]
+    float3 tangent : TANGENT;
+    [[vk::location(6)]]
     float3 binormal : BINORMAL;
 };
 
@@ -55,7 +57,7 @@ struct PSOutput
     [[vk::location(2)]]
     float4 parameters : SV_Target2;
     [[vk::location(3)]]
-    float4 positionWS : SV_Target3;
+    float2 motionVector : SV_Target3;
 };
 
 //---------------------------------------------------------------------------//
@@ -64,21 +66,28 @@ float4 VSMain(in VSInput pVertexInput, in uint pInstanceId: SV_INSTANCEID, out P
 {
     const MeshInstancedDrawInfo meshInstancedDrawInfo = FetchMeshInstanceInfo(pInstanceId);
 
-    float4x4 modelMatrix = gMeshInstanceInfoBuffer[meshInstancedDrawInfo.meshInstanceIdx].modelMatrix;
-    float3 positionWS = mul(modelMatrix, float4(pVertexInput.position, 1.0)).xyz;
+    const float4x4 modelMatrix = gMeshInstanceInfoBuffer[meshInstancedDrawInfo.meshInstanceIdx].modelMatrix;
+    const float4x4 prevModelMatrix = gMeshInstanceInfoBuffer[meshInstancedDrawInfo.meshInstanceIdx].prevModelMatrix;
+
+    const float3 positionWS = mul(modelMatrix, float4(pVertexInput.position, 1.0)).xyz;
+    const float3 prevPositionWS = mul(prevModelMatrix, float4(pVertexInput.position, 1.0)).xyz;
+
+    const float4 positionClip = mul(uPerView.CurrentView.ViewProjectionMatrix, float4(positionWS.xyz, 1));
+    const float4 prevPositionClip = mul(uPerView.PreviousView.ViewProjectionMatrix, float4(prevPositionWS.xyz, 1));
 
     // @TODO non-uniform scale support
-    float3x3 normalMatrix = (float3x3)modelMatrix;
+    const float3x3 normalMatrix = (float3x3)modelMatrix;
 
     // Write fragment input
-    pPixelInput.positionWS = positionWS;
+    pPixelInput.positionClip = positionClip;
+    pPixelInput.prevPositionClip = prevPositionClip;
     pPixelInput.materialInstanceIdx = meshInstancedDrawInfo.materialInstanceIdx;
     pPixelInput.uv = pVertexInput.uv;
     pPixelInput.normal = normalize(mul(normalMatrix, pVertexInput.normal));
     pPixelInput.tangent = normalize(mul(normalMatrix, pVertexInput.tangent));
     pPixelInput.binormal = normalize(cross(pVertexInput.normal, pVertexInput.tangent));
 
-    return mul(uPerView.CurrentView.ProjectionMatrix, mul(uPerView.CurrentView.ViewMatrix, float4(positionWS.xyz, 1)));
+    return positionClip;
 }
 
 //---------------------------------------------------------------------------//
@@ -86,11 +95,13 @@ float4 VSMain(in VSInput pVertexInput, in uint pInstanceId: SV_INSTANCEID, out P
 void PSMain(in PSInput pPixelInput, out PSOutput pPixelOutput)
 {
     MaterialPixelInput materialPixelInput;
-    materialPixelInput.uv = pPixelInput.uv;
+    materialPixelInput.uv = UnjitterUV(pPixelInput.uv, float2(uPerView.CurrentView.JitterX, uPerView.CurrentView.JitterY));
     materialPixelInput.vertexNormal = pPixelInput.normal;
     materialPixelInput.vertexBinormal = pPixelInput.binormal;
     materialPixelInput.vertexTangent = pPixelInput.tangent;
     materialPixelInput.materialInstanceIdx = pPixelInput.materialInstanceIdx;
+    materialPixelInput.positionClip = pPixelInput.positionClip;
+    materialPixelInput.prevPositionClip = pPixelInput.prevPositionClip;
 
     MaterialPixelOutput materialPixelOutput;
 
@@ -98,7 +109,8 @@ void PSMain(in PSInput pPixelInput, out PSOutput pPixelOutput)
 
     pPixelOutput.color = float4(materialPixelOutput.albedo, 1);
     pPixelOutput.normals = float4(encodeNormal(materialPixelOutput.normal), encodeNormal(pPixelInput.normal));
-    pPixelOutput.parameters = float4(materialPixelOutput.roughness, materialPixelOutput.metalness, materialPixelOutput.occlusion, 0);
+    pPixelOutput.parameters = float4(materialPixelOutput.roughness, materialPixelOutput.metalness, materialPixelOutput.occlusion, 0);    
+    pPixelOutput.motionVector = materialPixelOutput.motionVector;
 }
 
 //---------------------------------------------------------------------------//

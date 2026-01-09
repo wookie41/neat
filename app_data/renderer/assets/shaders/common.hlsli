@@ -1,6 +1,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+#include "math.hlsli"
 //---------------------------------------------------------------------------//
 
 #define RGB_TO_LUM float3(0.2125, 0.7154, 0.0721)
@@ -137,6 +138,121 @@ float4 UnpackColorRGBA(uint color)
                   ((color >> 16u) & 0xffu) / 255.f,
                   ((color >> 24u) & 0xffu) / 255.f);
 }
+
+//---------------------------------------------------------------------------//
+
+float2 ComputeMotionVector(in float4 positionClip, in float4 prevPositionClip, in float2 jitter, in float2 previousJitter)
+{
+    const float2 posNDC = (positionClip.xy / positionClip.w) - jitter;
+    const float2 prevNDC = (prevPositionClip.xy / prevPositionClip.w) - previousJitter;
+
+    return (prevNDC - posNDC) * 0.5;
+}
+
+//---------------------------------------------------------------------------//
+
+bool IsUVOutOfRange(in float2 uv)
+{
+    return uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1;
+}
+
+//---------------------------------------------------------------------------//
+
+float2 UnjitterUV(in float2 uv, in float2 jitter)
+{
+    return uv - ddx_fine(uv) * jitter.x + ddy_fine(uv.y) * jitter.y;
+}
+
+//---------------------------------------------------------------------------//
+
+// reference: "Filmic SMAA" Siggraph presentation, page 90
+float3 BicubicSample5Tap(in Texture2D<float3> srcTexture, in SamplerState srcSampler, in float2 uv, in float2 texelSize) 
+{
+    const float2 uvTrunc = floor(uv - 0.5) + 0.5f;
+    const float2 f = uv - uvTrunc;
+    const float2 f2 = f * f;
+    const float2 f3 = f2 * f;
+
+    const float2 w0 = -0.5 * f3 + f2 - 0.5 * f;
+    const float2 w1 = 1.5 * f3 - 2.5 * f2 + 1.f;
+    const float2 w2 = -1.5 * f3 + 2.f * f2 + 0.5 * f;
+    const float2 w3 = 0.5 * f3 - 0.5 * f2;
+
+    const float2 wB = w1 + w2;
+    const float2 t = w2 / wB;
+
+    float2 uv0 = uvTrunc - 1;
+    float2 uvT = uvTrunc + t;
+    float2 uv3 = uvTrunc + 2;
+
+    uv0 *= texelSize;
+    uvT *= texelSize;
+    uv3 *= texelSize;
+
+    const float4 result =
+        float4(srcTexture.SampleLevel(srcSampler, float2(uv0.x, uvT.y), 0), 1.f) * w0.x * wB.y +
+        float4(srcTexture.SampleLevel(srcSampler, float2(uvT.x, uv0.y), 0), 1.f) * wB.x * w0.y +
+        float4(srcTexture.SampleLevel(srcSampler, float2(uvT.x, uvT.y), 0), 1.f) * wB.x * wB.y +
+        float4(srcTexture.SampleLevel(srcSampler, float2(uvT.x, uv3.y), 0), 1.f) * wB.x * w3.y +
+        float4(srcTexture.SampleLevel(srcSampler, float2(uv3.x, uvT.y), 0), 1.f) * w3.x * wB.y;
+
+    // normalize by dividing trough total weight
+    // total weight is stored in alpha
+    return result.rgb / result.a;
+}
+
+//---------------------------------------------------------------------------//
+
+float FilterBlackmanHarris(in float value) 
+{
+    const float x = 1.0f - value;
+
+    const float a0 = 0.35875f;
+    const float a1 = 0.48829f;
+    const float a2 = 0.14128f;
+    const float a3 = 0.01168f;
+
+    return saturate(a0 - a1 * cos(MATH_PI * x) + a2 * cos(2 * MATH_PI * x) - a3 * cos(3 * MATH_PI * x));
+}
+
+//---------------------------------------------------------------------------//
+
+// Optimized clip aabb function from 
+// https://github.com/playdeadgames/publications/blob/master/INSIDE/rendering_inside_gdc2016.pdf
+float4 ClipAABB(in float3 aabbMin, float3 aabbMax, in float4 previousSample, in float averageAlpha) 
+{
+
+    // note: only clips towards aabb center (but fast!)
+    const float3 pClip = 0.5 * (aabbMax + aabbMin);
+    const float3 eClip = 0.5 * (aabbMax - aabbMin) + 0.000000001f;
+
+    const float4 vClip = previousSample - float4(pClip, averageAlpha);
+    const float3 vUnit = vClip.xyz / eClip;
+    const float3 aUnit = abs(vUnit);
+    const float maUnit = max(aUnit.x, max(aUnit.y, aUnit.z));
+
+    if (maUnit > 1.0) 
+        return float4(pClip, averageAlpha) + vClip / maUnit;
+    
+    // point inside aabb
+    return previousSample;
+}
+
+//---------------------------------------------------------------------------//
+
+//reverseable 'tonemapping' function and it's counterpart
+//see "High Quality Temporal Supersampling", page 20
+
+float3 Tonemap(in float3 color)
+{
+    return color / (1 + RGBToLuminance(color));
+}
+
+float3 TonemapReverse(in float3 color)
+{
+    return color / (1 - RGBToLuminance(color));
+}
+
 //---------------------------------------------------------------------------//
 
 #endif // COMMON_H

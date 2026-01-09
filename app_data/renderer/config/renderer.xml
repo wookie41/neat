@@ -1,12 +1,15 @@
-<RendererConfig renderWidth="1920" renderHeight="1080">
+ <RendererConfig renderWidth="1920" renderHeight="1080">
     <Images>
         <GBufferColor format="RGBA8UNorm" resolution="Full" sampled="" />
         <GBufferNormals format="RGBA16SNorm" resolution="Full" sampled="" />
         <GBufferParameters format="RGBA8UNorm" resolution="Full" sampled="" />
-        <SceneHDR format="R11G11B10UFloat" resolution="Full" sampled="" storage="" />
+        <GBufferMotionVectors format="RG16SNorm" resolution="Full" sampled="" />
+        <SceneHDR format="R11G11B10UFloat" resolution="Full" sampled="" storage=""/>
+        <SceneHDRHistory format="R11G11B10UFloat" resolution="Full" sampled="" storage=""/>
+        <SceneHDRFinal format="R11G11B10UFloat" resolution="Full" sampled="" storage="" />
         <SceneSDR format="R11G11B10UFloat" resolution="Full" sampled="" storage="" />
         <DepthBuffer format="Depth32SFloat" resolution="Full" sampled="" />
-        <CascadeShadows format="Depth16" width="2048" height="2048" sampled="" array_size="3" />
+        <CascadeShadows format="Depth16" width="2048" height="2048" sampled="" arraySize="3" />
     </Images>
     <RenderTasks>
 
@@ -34,6 +37,7 @@
             <OutputImage name="GBufferColor" clear="0, 0, 0, 0" />
             <OutputImage name="GBufferNormals" clear="0, 0, 0, 0" />
             <OutputImage name="GBufferParameters" clear="0, 0, 0, 0" />
+            <OutputImage name="GBufferMotionVectors" clear="0, 0, 0, 0" />
             <OutputImage name="DepthBuffer" clear="0" />
             <MaterialPass name="OpaquePBR" />
         </Mesh>
@@ -141,13 +145,25 @@
             <OutputImage name="SceneHDR" />
         </FullScreen>
 
+        <FullScreen name="TAA" shader="taa.pix" resolution="Full">
+            <InputBuffer usage="Uniform"/>
+            <InputImage name="DepthBuffer" />
+            <InputImage name="GBufferMotionVectors" />
+            <InputImage name="SceneHDR" />
+            <InputImage name="SceneHDRHistory"/>
+            <OutputImage name="SceneHDRFinal" />
+        </FullScreen>
+
+        <ImageCopy name="CopyTAAHistory" src="SceneHDRFinal" dst="SceneHDRHistory"/>
+
         <FullScreen name="Tonemap" shader="tonemap.comp" resolution="Full">
             <InputBuffer usage="Uniform"/>
-            <InputImage name="SceneHDR" />
+            <InputImage name="SceneHDRFinal" />
             <OutputImage name="SceneSDR" />
         </FullScreen>
 
         <FullScreen name="BlitSwapchain" shader="blit_to_swapchain.pix" resolution="Display">
+            <InputBuffer usage="Uniform"/>
             <InputImage name="SceneSDR" />
             <OutputImage name="SwapImage" />
         </FullScreen>

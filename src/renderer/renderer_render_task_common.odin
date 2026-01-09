@@ -6,10 +6,10 @@ import "../common"
 
 import "core:encoding/xml"
 import "core:log"
-import "core:mem"
-import "core:strings"
-import "core:strconv"
 import "core:math/linalg/glsl"
+import "core:mem"
+import "core:strconv"
+import "core:strings"
 
 //---------------------------------------------------------------------------//
 
@@ -165,7 +165,10 @@ parse_material_passes :: proc(
 		log.infof("Loaded material pass %s\n", material_pass_name)
 	}
 
-	assert(len(material_pass_refs) > 0, "Failed to load render task - it doesn't have any material passes \n")
+	assert(
+		len(material_pass_refs) > 0,
+		"Failed to load render task - it doesn't have any material passes \n",
+	)
 
 	return common.to_static_slice(material_pass_refs, p_allocator)
 }
@@ -235,47 +238,22 @@ parse_output_images :: proc(
 		}
 
 
-		mip, mip_found := common.xml_get_u32_attribute(
+		mip, _ := common.xml_get_u32_attribute(
 			p_render_task_config.doc,
 			output_image_element_id,
 			"mip",
 		)
-
-		// Use specific mip
-		if mip_found {
-
-			render_pass_output_image := RenderPassOutput {
-				image_ref = image_ref,
-				mip       = mip,
-			}
-
-			if clear_found {
-				render_pass_output_image.clear_color = glsl.vec4(clear_values)
-				render_pass_output_image.flags += {.Clear}
-			}
-
-			append(&output_images, render_pass_output_image)
-
-			current_element_idx += 1
-			continue
+		render_pass_output_image := RenderPassOutput {
+			image_ref = image_ref,
+			mip = mip,
 		}
 
-		// Bind all mips
-		image := &g_resources.images[image_get_idx(image_ref)]
-		for i in 0 ..< image.desc.mip_count {
-
-			render_pass_output_image := RenderPassOutput {
-				image_ref = image_ref,
-				mip       = i,
-			}
-
-			if clear_found {
-				render_pass_output_image.clear_color = glsl.vec4(clear_values)
-				render_pass_output_image.flags += {.Clear}
-			}
-
-			append(&output_images, render_pass_output_image)
+		if clear_found {
+			render_pass_output_image.clear_color = glsl.vec4(clear_values)
+			render_pass_output_image.flags += {.Clear}
 		}
+
+		append(&output_images, render_pass_output_image)
 
 		current_element_idx += 1
 	}

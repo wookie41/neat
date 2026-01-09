@@ -209,7 +209,7 @@ render_instanced_mesh_job_run :: proc(
 				continue
 			}
 
-			i_size : u32 = size_of(INDEX_DATA_TYPE)
+			i_size: u32 = size_of(INDEX_DATA_TYPE)
 			mesh_batch := MeshBatch {
 				index_buffer_offset  = mesh.index_buffer_allocation.offset + i_size * submesh.index_offset,
 				index_buffer_size    = submesh.index_count * i_size,
@@ -285,7 +285,7 @@ render_instanced_mesh_job_run :: proc(
 				&draw_stream,
 				G_RENDERER.uniforms_bind_group_ref,
 				1,
-				{common.DYNAMIC_OFFSET, common.DYNAMIC_OFFSET},
+				{common.DYNAMIC_OFFSET, common.DYNAMIC_OFFSET, common.DYNAMIC_OFFSET},
 			)
 
 			draw_stream_set_bind_group(&draw_stream, G_RENDERER.globals_bind_group_ref, 2, nil)
@@ -298,8 +298,10 @@ render_instanced_mesh_job_run :: proc(
 				}
 
 				uv_offset := mesh_batch.mesh_vertex_count * u32(offset_of(VertexFormat, uv))
-				normal_offset := mesh_batch.mesh_vertex_count * u32(offset_of(VertexFormat, normal))
-				tangent_offset := mesh_batch.mesh_vertex_count * u32(offset_of(VertexFormat, tangent))
+				normal_offset :=
+					mesh_batch.mesh_vertex_count * u32(offset_of(VertexFormat, normal))
+				tangent_offset :=
+					mesh_batch.mesh_vertex_count * u32(offset_of(VertexFormat, tangent))
 
 				draw_stream_set_vertex_buffer(
 					&draw_stream,
@@ -382,12 +384,14 @@ render_instanced_mesh_job_run :: proc(
 
 	resolved_dynamic_offsets := make(
 		[]u32,
-		p_job_data.num_dynamic_offset_buffers + 2, // +1 for per view, +1 for per frame
+		p_job_data.num_dynamic_offset_buffers + len(GlobalUniformSlot),
 		temp_arena.allocator,
 	)
 	resolved_dynamic_offsets[0] = mesh_instance_data_offset
-	resolved_dynamic_offsets[len(resolved_dynamic_offsets) - 2] =
+	resolved_dynamic_offsets[len(resolved_dynamic_offsets) - len(GlobalUniformSlot) + int(GlobalUniformSlot.PerFrame)] =
 		g_uniform_buffers.frame_data_offset
+	resolved_dynamic_offsets[len(resolved_dynamic_offsets) - len(GlobalUniformSlot) + int(GlobalUniformSlot.RenderSettings)] =
+		g_uniform_buffers.render_settings_data_offset
 
 	// Dispatch the draw stream for each view
 	num_user_dynamic_offsets := (p_job_data.num_dynamic_offset_buffers - 1)
@@ -401,7 +405,7 @@ render_instanced_mesh_job_run :: proc(
 				p_dynamic_offsets[u32(i) * num_user_dynamic_offsets + j]
 		}
 
-		resolved_dynamic_offsets[len(resolved_dynamic_offsets) - 1] =
+		resolved_dynamic_offsets[len(resolved_dynamic_offsets) - len(GlobalUniformSlot) + int(GlobalUniformSlot.PerView)] =
 			uniform_buffer_create_view_data(render_views)
 
 		render_task_render_pass_begin(p_render_pass_ref, outputs)

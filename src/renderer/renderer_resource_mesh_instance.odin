@@ -27,9 +27,10 @@ MeshInstanceFlags :: distinct bit_set[MeshInstanceFlagBits;u8]
 //---------------------------------------------------------------------------//
 
 MeshInstanceResource :: struct {
-	desc:         MeshInstanceDesc,
-	model_matrix: glsl.mat4,
-	flags:        MeshInstanceFlags,
+	desc:              MeshInstanceDesc,
+	flags:             MeshInstanceFlags,
+	model_matrix:      glsl.mat4,
+	prev_model_matrix: glsl.mat4,
 }
 
 //---------------------------------------------------------------------------//
@@ -46,7 +47,8 @@ InvalidMeshInstanceRef := MeshInstanceRef {
 
 @(private)
 MeshInstanceInfoData :: struct #packed {
-	model_matrix: glsl.mat4,
+	model_matrix:      glsl.mat4,
+	prev_model_matrix: glsl.mat4,
 }
 
 //---------------------------------------------------------------------------//
@@ -75,6 +77,7 @@ mesh_instance_deinit :: proc() {
 mesh_instance_create :: proc(p_mesh_instance_ref: MeshInstanceRef) -> bool {
 	mesh_instance := &g_resources.mesh_instances[mesh_instance_get_idx(p_mesh_instance_ref)]
 	mesh_instance.model_matrix = glsl.identity(glsl.mat4)
+	mesh_instance.prev_model_matrix = glsl.identity(glsl.mat4)
 	mesh_instance.flags += {.MeshInstanceDataDirty}
 	return true
 }
@@ -104,7 +107,7 @@ mesh_instance_destroy :: proc(p_ref: MeshInstanceRef) {
 //--------------------------------------------------------------------------//
 
 @(private)
-mesh_instance_send_transform_data :: proc() {
+mesh_instance_update :: proc() {
 
 	for i in 0 ..< g_resource_refs.mesh_instances.alive_count {
 
@@ -114,14 +117,18 @@ mesh_instance_send_transform_data :: proc() {
 
 		if .MeshInstanceDataDirty in mesh_instance.flags {
 
+			mesh_instance_info := MeshInstanceInfoData {
+				model_matrix = mesh_instance.model_matrix,
+				prev_model_matrix = mesh_instance.prev_model_matrix,
+			}
+
 			buffer_upload_request := BufferUploadRequest {
-				dst_buff = g_renderer_buffers.mesh_instance_info_buffer_ref,
-				dst_buff_offset = size_of(MeshInstanceInfoData) * mesh_instance_idx,
-				dst_queue_usage = .Graphics,
+				dst_buff          = g_renderer_buffers.mesh_instance_info_buffer_ref,
+				dst_buff_offset   = size_of(mesh_instance_info) * mesh_instance_idx,
+				dst_queue_usage   = .Graphics,
 				first_usage_stage = .VertexShader,
-				size = size_of(MeshInstanceInfoData),
-				flags = {.RunOnNextFrame},
-				data_ptr = &mesh_instance.model_matrix,
+				size              = size_of(mesh_instance_info),
+				data_ptr          = &mesh_instance_info,
 			}
 
 			buffer_upload_response := buffer_upload_request_upload(buffer_upload_request)
@@ -139,6 +146,7 @@ mesh_instance_set_model_matrix :: proc(
 	p_model_matrix: glsl.mat4x4,
 ) {
 	mesh_instance := &g_resources.mesh_instances[mesh_instance_get_idx(p_mesh_instance_ref)]
+	mesh_instance.prev_model_matrix = mesh_instance.model_matrix
 	mesh_instance.model_matrix = p_model_matrix
 	mesh_instance.flags += {.MeshInstanceDataDirty}
 }

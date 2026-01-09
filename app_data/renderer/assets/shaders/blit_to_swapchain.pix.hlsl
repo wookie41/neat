@@ -1,7 +1,7 @@
 #include "resources.hlsli"
 #include "fullscreen.hlsli"
 
-[[vk::binding(0, 0)]] Texture2D<float4> inputImage : register(t0, space0);
+[[vk::binding(1, 0)]] Texture2D<float4> inputImage : register(t0, space0);
 
 float4 PSMain(in FSInput pFragmentInput) : SV_Target0
 {

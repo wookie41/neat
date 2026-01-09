@@ -90,6 +90,7 @@ G_IMAGE_FORMAT_NAME_MAPPING := map[string]ImageFormat {
 	"RG8UNorm"        = .RG8UNorm,
 	"RG32UInt"        = .RG32UInt,
 	"RG32Int"         = .RG32Int,
+	"RG16SNorm"       = .RG16SNorm,
 	"RG32SFloat"      = .RG32SFloat,
 	"RGB8UNorm"       = .RGB8UNorm,
 	"RGB32UInt"       = .RGB32UInt,
@@ -134,6 +135,7 @@ ImageFormat :: enum u16 {
 	RG8UNorm,
 	RG32UInt,
 	RG32Int,
+	RG16SNorm,
 	RG32SFloat,
 	RGFormatsEnd,
 	RGBFormatsStart,
@@ -875,6 +877,8 @@ get_pixel_size_in_bytes :: proc(p_format: ImageFormat) -> u32 {
 	case .RGB32SFloat:
 		return 12
 	case .RGBA8UNorm:
+		return 4
+	case .RG16SNorm:
 		return 4
 	case .RGBA32UInt:
 		return 16

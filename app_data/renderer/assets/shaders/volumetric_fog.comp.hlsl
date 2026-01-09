@@ -248,7 +248,7 @@ void ScatterLight(uint3 dispatchThreadId: SV_DispatchThreadID)
     const float3 V = normalize(uPerView.CurrentView.CameraPositionWS - worldPosition);
 
     const float3 froxelDimensionsRcp = 1.f / float3(froxelDimensions.xyz);
-    const float4 scatteringExtinction = ScatteringExtinctionTexture.Sample(uNearestClampToEdgeSampler, froxelCoord * froxelDimensionsRcp);
+    const float4 scatteringExtinction = ScatteringExtinctionTexture.SampleLevel(uNearestClampToEdgeSampler, froxelCoord * froxelDimensionsRcp, 0);
 
     const float dirLightShadow = SampleDirectionalLightShadowSingleTap(CascadeShadowTextures, ShadowCascades, worldPosition, viewPostion);
 
@@ -295,7 +295,7 @@ void IntegrateLight(uint3 dispatchThreadId: SV_DispatchThreadID)
 
         const float3 froxelUVW = float3(froxelCoord) * froxelDimensionsRcp;
 
-        const float4 scatteringExtinction = ScatteringExtinctionTexture.Sample(uLinearClampToEdgeSampler, froxelUVW);
+        const float4 scatteringExtinction = ScatteringExtinctionTexture.SampleLevel(uLinearClampToEdgeSampler, froxelUVW, 0);
 
         const float clampedExtinction = max(scatteringExtinction.w, EPS_9);
         const float transmittance = exp(-scatteringExtinction.w * zStep);
@@ -361,7 +361,7 @@ void SpatialFilter(uint3 dispatchThreadId: SV_DispatchThreadID)
                     const float3 sampleUV = float3(sampleCoords) * froxelDimensionsRcp;
                     const float weight = gaussian(length(int2(i, j)), SIGMA_FILTER);
 
-                    const float4 scatteringTransmittance = LightScatteringExtinctionTexture.Sample(uLinearClampToEdgeSampler, sampleUV);
+                    const float4 scatteringTransmittance = LightScatteringExtinctionTexture.SampleLevel(uLinearClampToEdgeSampler, sampleUV, 0);
 
                     accumulatedWeight += weight;
                     accumulatedScatteringTransmittance += (scatteringTransmittance * weight);
@@ -373,7 +373,7 @@ void SpatialFilter(uint3 dispatchThreadId: SV_DispatchThreadID)
     }
     else
     {
-        FilteredLightScatteringExtinctionTexture[froxelCoords] = LightScatteringExtinctionTexture.Sample(uLinearClampToEdgeSampler, froxelCoords * froxelDimensionsRcp);
+        FilteredLightScatteringExtinctionTexture[froxelCoords] = LightScatteringExtinctionTexture.SampleLevel(uLinearClampToEdgeSampler, froxelCoords * froxelDimensionsRcp, 0);
     }
 }
 

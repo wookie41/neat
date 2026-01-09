@@ -30,6 +30,12 @@ void MaterialPixelShader(in MaterialPixelInput pMaterialInput, out MaterialPixel
     pMaterialOutput.occlusion = material.occlusionTex == 0 ? 1 : params.r;
     pMaterialOutput.roughness = params.g;
     pMaterialOutput.metalness = params.b;
+    pMaterialOutput.motionVector = ComputeMotionVector(
+        pMaterialInput.positionClip, 
+        pMaterialInput.prevPositionClip, 
+        float2(uPerView.CurrentView.JitterX, uPerView.CurrentView.JitterY), 
+        float2(uPerView.PreviousView.JitterX, uPerView.PreviousView.JitterY)
+    );
 }
 
 //---------------------------------------------------------------------------//

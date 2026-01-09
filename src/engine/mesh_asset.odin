@@ -627,7 +627,7 @@ assimp_load_node :: proc(
 		material_name := string(assimp_material_name.data[:assimp_material_name.length])
 		if assimp_material_name.length == 0 {
 			buff: [64]byte
-			material_idx := strconv.itoa(buff[:], int(p_import_ctx.current_sub_mesh))
+			material_idx := strconv.write_int(buff[:], i64(p_import_ctx.current_sub_mesh), 10)
 			material_name = strings.clone(material_idx, temp_arena.allocator)
 		}
 

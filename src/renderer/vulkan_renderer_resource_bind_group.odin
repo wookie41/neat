@@ -19,7 +19,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	BackendBindGroupResource :: struct {
-		vk_descriptor_set: vk.DescriptorSet,
+		vk_descriptor_sets: []vk.DescriptorSet,
 	}
 
 	//---------------------------------------------------------------------------//
@@ -42,7 +42,7 @@ when USE_VULKAN_BACKEND {
 				maxSets       = 1 << 15,
 				poolSizeCount = u32(len(pool_sizes)),
 				pPoolSizes    = raw_data(pool_sizes),
-				flags         = {.UPDATE_AFTER_BIND, .FREE_DESCRIPTOR_SET}, // @TODO create a separate pool for that 
+				flags         = {.UPDATE_AFTER_BIND, .FREE_DESCRIPTOR_SET}, // @TODO create a separate pool for that
 			}
 
 			vk.CreateDescriptorPool(
@@ -59,24 +59,43 @@ when USE_VULKAN_BACKEND {
 
 	backend_bind_group_create :: proc(p_bind_group_ref: BindGroupRef) -> bool {
 
+		temp_arena := common.Arena{}
+		common.temp_arena_init(&temp_arena)
+		defer common.arena_delete(temp_arena)
+
+
 		bind_group_idx := bind_group_get_idx(p_bind_group_ref)
 		bind_group := &g_resources.bind_groups[bind_group_idx]
 		backend_bind_group := &g_resources.backend_bind_groups[bind_group_idx]
 
 		backend_bind_group_layout := &g_resources.backend_bind_group_layouts[bind_group_layout_get_idx(bind_group.desc.layout_ref)]
 
+		num_descriptor_sets: u32 =
+			1 if .GlobalBindGroup in bind_group.desc.flags else MAX_NUM_FRAMES_IN_FLIGHT
+
+		layouts := make([]vk.DescriptorSetLayout, num_descriptor_sets, temp_arena.allocator)
+		for i in 0 ..< num_descriptor_sets {
+			layouts[i] = backend_bind_group_layout.vk_descriptor_set_layout
+		}
+
 		descriptor_set_alloc_info := vk.DescriptorSetAllocateInfo {
 			sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
-			pSetLayouts        = &backend_bind_group_layout.vk_descriptor_set_layout,
-			descriptorSetCount = 1,
+			pSetLayouts        = raw_data(layouts),
+			descriptorSetCount = num_descriptor_sets,
 			descriptorPool     = INTERNAL.descriptor_pool,
 		}
+
+		backend_bind_group.vk_descriptor_sets = make(
+			[]vk.DescriptorSet,
+			num_descriptor_sets,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		)
 
 		return(
 			vk.AllocateDescriptorSets(
 				G_RENDERER.device,
 				&descriptor_set_alloc_info,
-				&backend_bind_group.vk_descriptor_set,
+				raw_data(backend_bind_group.vk_descriptor_sets),
 			) ==
 			.SUCCESS \
 		)
@@ -92,6 +111,8 @@ when USE_VULKAN_BACKEND {
 		p_target: u32,
 		p_dynamic_offsets: []u32,
 	) {
+		bind_group := &g_resources.bind_groups[bind_group_get_idx(p_bind_group_ref)]
+
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(p_cmd_buff_ref)]
 		backend_bind_group := &g_resources.backend_bind_groups[bind_group_get_idx(p_bind_group_ref)]
 
@@ -104,7 +125,7 @@ when USE_VULKAN_BACKEND {
 			backend_pipeline.vk_pipeline_layout,
 			p_target,
 			1,
-			&backend_bind_group.vk_descriptor_set,
+			&backend_bind_group.vk_descriptor_sets[0 if .GlobalBindGroup in bind_group.desc.flags else get_frame_idx()],
 			u32(len(p_dynamic_offsets)),
 			raw_data(p_dynamic_offsets),
 		)
@@ -120,6 +141,8 @@ when USE_VULKAN_BACKEND {
 		p_target: u32,
 		p_dynamic_offsets: []u32,
 	) {
+		bind_group := &g_resources.bind_groups[bind_group_get_idx(p_bind_group_ref)]
+
 		backend_cmd_buffer := &g_resources.backend_cmd_buffers[command_buffer_get_idx(p_cmd_buff_ref)]
 		backend_bind_group := &g_resources.backend_bind_groups[bind_group_get_idx(p_bind_group_ref)]
 
@@ -132,7 +155,7 @@ when USE_VULKAN_BACKEND {
 			backend_pipeline.vk_pipeline_layout,
 			p_target,
 			1,
-			&backend_bind_group.vk_descriptor_set,
+			&backend_bind_group.vk_descriptor_sets[0 if .GlobalBindGroup in bind_group.desc.flags else get_frame_idx()],
 			u32(len(p_dynamic_offsets)),
 			raw_data(p_dynamic_offsets),
 		)
@@ -145,11 +168,15 @@ when USE_VULKAN_BACKEND {
 		bind_group_idx := bind_group_get_idx(p_bind_group_ref)
 		backend_bind_group := &g_resources.backend_bind_groups[bind_group_idx]
 
-		descriptor_set_to_delete := defer_resource_delete(
-			safe_destroy_descriptor_set,
-			vk.DescriptorSet,
-		)
-		descriptor_set_to_delete^ = backend_bind_group.vk_descriptor_set
+		for descriptor_set in backend_bind_group.vk_descriptor_sets {
+			descriptor_set_to_delete := defer_resource_delete(
+				safe_destroy_descriptor_set,
+				vk.DescriptorSet,
+			)
+			descriptor_set_to_delete^ = descriptor_set
+		}
+
+		delete(backend_bind_group.vk_descriptor_sets, G_RENDERER_ALLOCATORS.resource_allocator)
 	}
 
 	//---------------------------------------------------------------------------//
@@ -171,19 +198,16 @@ when USE_VULKAN_BACKEND {
 		common.temp_arena_init(&temp_arena)
 		defer common.arena_delete(temp_arena)
 
-		descriptor_writes := make(
-			[dynamic]vk.WriteDescriptorSet,
-			temp_arena.allocator,
-		)
+		descriptor_writes := make([dynamic]vk.WriteDescriptorSet, temp_arena.allocator)
 
-		image_writes := make(
-			[dynamic]vk.DescriptorImageInfo,
-			temp_arena.allocator,
-		)
+		image_writes := make([dynamic]vk.DescriptorImageInfo, temp_arena.allocator)
 		buffer_writes := make([]vk.DescriptorBufferInfo, buffer_infos_count, temp_arena.allocator)
 
 		bind_group_layout_idx := bind_group_layout_get_idx(bind_group.desc.layout_ref)
 		bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_idx]
+
+		is_global_bind_group := .GlobalBindGroup in bind_group.desc.flags
+		descriptor_set_idx := 0 if is_global_bind_group else get_frame_idx()
 
 		for image_binding in p_bind_group_update.images {
 
@@ -210,7 +234,6 @@ when USE_VULKAN_BACKEND {
 				image_info.imageLayout = .SHADER_READ_ONLY_OPTIMAL
 			}
 
-
 			if binding.type == .StorageImage {
 
 				base_image_write_idx := len(image_writes)
@@ -220,12 +243,30 @@ when USE_VULKAN_BACKEND {
 					append(&image_writes, image_info)
 				}
 
-				// Bind each mip as a seperate storage image
+				if p_bind_group_update.is_initial_update && !is_global_bind_group {
+
+					for i in 0 ..< MAX_NUM_FRAMES_IN_FLIGHT {
+
+						descriptor_write := vk.WriteDescriptorSet {
+							sType           = .WRITE_DESCRIPTOR_SET,
+							descriptorCount = image_binding.mip_count,
+							dstBinding      = image_binding.binding,
+							dstSet          = backend_bind_group.vk_descriptor_sets[i],
+							pImageInfo      = &image_writes[base_image_write_idx],
+							descriptorType  = .STORAGE_IMAGE,
+						}
+
+						append(&descriptor_writes, descriptor_write)
+					}
+
+					continue
+				}
+
 				descriptor_write := vk.WriteDescriptorSet {
 					sType           = .WRITE_DESCRIPTOR_SET,
 					descriptorCount = image_binding.mip_count,
 					dstBinding      = image_binding.binding,
-					dstSet          = backend_bind_group.vk_descriptor_set,
+					dstSet          = backend_bind_group.vk_descriptor_sets[descriptor_set_idx],
 					pImageInfo      = &image_writes[base_image_write_idx],
 					descriptorType  = .STORAGE_IMAGE,
 				}
@@ -241,11 +282,31 @@ when USE_VULKAN_BACKEND {
 				image_info.imageView = backend_image.vk_all_mips_views[array_layer]
 				append(&image_writes, image_info)
 
+				if p_bind_group_update.is_initial_update && !is_global_bind_group {
+
+					for i in 0 ..< MAX_NUM_FRAMES_IN_FLIGHT {
+
+						descriptor_write := vk.WriteDescriptorSet {
+							sType           = .WRITE_DESCRIPTOR_SET,
+							descriptorCount = 1,
+							dstBinding      = image_binding.binding,
+							dstSet          = backend_bind_group.vk_descriptor_sets[i],
+							pImageInfo      = &image_writes[image_write_idx],
+							dstArrayElement = array_layer,
+							descriptorType  = .SAMPLED_IMAGE,
+						}
+
+						append(&descriptor_writes, descriptor_write)
+					}
+
+					continue
+				}
+
 				descriptor_write := vk.WriteDescriptorSet {
 					sType           = .WRITE_DESCRIPTOR_SET,
 					descriptorCount = 1,
 					dstBinding      = image_binding.binding,
-					dstSet          = backend_bind_group.vk_descriptor_set,
+					dstSet          = backend_bind_group.vk_descriptor_sets[descriptor_set_idx],
 					pImageInfo      = &image_writes[image_write_idx],
 					dstArrayElement = array_layer,
 					descriptorType  = .SAMPLED_IMAGE,
@@ -274,29 +335,50 @@ when USE_VULKAN_BACKEND {
 			buffer_writes[i].offset = vk.DeviceSize(buffer_binding.offset)
 			buffer_writes[i].range = vk.DeviceSize(buffer_binding.size)
 
-			descriptor_write := vk.WriteDescriptorSet {
-				sType           = .WRITE_DESCRIPTOR_SET,
-				descriptorCount = 1,
-				dstBinding      = buffer_binding.binding,
-				dstSet          = backend_bind_group.vk_descriptor_set,
-				pBufferInfo     = &buffer_writes[i],
-				dstArrayElement = buffer_binding.array_index,
-			}
-
+			descriptor_type: vk.DescriptorType
 			if .UniformBuffer in buffer.desc.usage {
-				descriptor_write.descriptorType = .UNIFORM_BUFFER
+				descriptor_type = .UNIFORM_BUFFER
 			} else if .DynamicUniformBuffer in buffer.desc.usage {
-				descriptor_write.descriptorType = .UNIFORM_BUFFER_DYNAMIC
+				descriptor_type = .UNIFORM_BUFFER_DYNAMIC
 			} else if .StorageBuffer in buffer.desc.usage {
-				descriptor_write.descriptorType = .STORAGE_BUFFER
+				descriptor_type = .STORAGE_BUFFER
 			} else if .DynamicStorageBuffer in buffer.desc.usage {
-				descriptor_write.descriptorType = .STORAGE_BUFFER_DYNAMIC
+				descriptor_type = .STORAGE_BUFFER_DYNAMIC
 			} else {
 				assert(false, "Invalid buffer binding")
 			}
 
-			append(&descriptor_writes, descriptor_write)
 
+			if p_bind_group_update.is_initial_update && !is_global_bind_group {
+
+				for j in 0 ..< MAX_NUM_FRAMES_IN_FLIGHT {
+
+					descriptor_write := vk.WriteDescriptorSet {
+						sType           = .WRITE_DESCRIPTOR_SET,
+						descriptorCount = 1,
+						dstBinding      = buffer_binding.binding,
+						descriptorType  = descriptor_type,
+						dstSet          = backend_bind_group.vk_descriptor_sets[j],
+						pBufferInfo     = &buffer_writes[i],
+						dstArrayElement = buffer_binding.array_index,
+					}
+
+					append(&descriptor_writes, descriptor_write)
+				}
+				continue
+			}
+
+			descriptor_write := vk.WriteDescriptorSet {
+				sType           = .WRITE_DESCRIPTOR_SET,
+				descriptorCount = 1,
+				dstBinding      = buffer_binding.binding,
+				descriptorType  = descriptor_type,
+				dstSet          = backend_bind_group.vk_descriptor_sets[descriptor_set_idx],
+				pBufferInfo     = &buffer_writes[i],
+				dstArrayElement = buffer_binding.array_index,
+			}
+
+			append(&descriptor_writes, descriptor_write)
 		}
 
 		vk.UpdateDescriptorSets(

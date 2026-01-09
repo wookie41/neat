@@ -1,3 +1,4 @@
+
 package renderer
 
 //---------------------------------------------------------------------------//
@@ -163,7 +164,7 @@ generic_pixel_job_destroy :: proc(p_job: GenericPixelJob) {
 //---------------------------------------------------------------------------//
 
 @(private)
-generic_compute_job_update_uniform_data :: proc(p_resolution: Resolution) -> u32 {
+generic_compute_job_create_uniform_data :: proc(p_resolution: Resolution) -> u32 {
 	resolution := resolve_resolution(p_resolution)
 
 	// Upload uniform data

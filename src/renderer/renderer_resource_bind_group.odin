@@ -33,15 +33,24 @@ BindGroupImageBindingFlags :: distinct bit_set[BindGroupImageBindingFlagBits;u8]
 
 //---------------------------------------------------------------------------//
 
-BindGroupImageBinding :: struct {
-	binding:       u32,
-	image_ref:     ImageRef,
-	base_mip:      u32,
-	base_array:    u32,
-	mip_count:     u32,
-	layer_count:   u32,
-	flags:         BindGroupImageBindingFlags,
+BindGroupDescFlagBits :: enum u8 {
+	GlobalBindGroup,
 }
+
+BindGroupDescFlags :: distinct bit_set[BindGroupDescFlagBits;u8]
+
+//---------------------------------------------------------------------------//
+
+BindGroupImageBinding :: struct {
+	binding:     u32,
+	image_ref:   ImageRef,
+	base_mip:    u32,
+	base_array:  u32,
+	mip_count:   u32,
+	layer_count: u32,
+	flags:       BindGroupImageBindingFlags,
+}
+
 //---------------------------------------------------------------------------//
 
 BindGroupBufferBinding :: struct {
@@ -57,6 +66,7 @@ BindGroupBufferBinding :: struct {
 BindGroupDesc :: struct {
 	name:       common.Name,
 	layout_ref: BindGroupLayoutRef,
+	flags:      BindGroupDescFlags,
 }
 
 //---------------------------------------------------------------------------//
@@ -68,8 +78,9 @@ BindGroupResource :: struct {
 //---------------------------------------------------------------------------//
 
 BindGroupUpdate :: struct {
-	images:  []BindGroupImageBinding,
-	buffers: []BindGroupBufferBinding,
+	images:            []BindGroupImageBinding,
+	buffers:           []BindGroupBufferBinding,
+	is_initial_update: bool,
 }
 
 //---------------------------------------------------------------------------//
@@ -121,8 +132,81 @@ bind_group_create :: proc(p_bind_group_ref: BindGroupRef) -> bool {
 
 //---------------------------------------------------------------------------//
 
-bind_group_update :: proc(p_bind_group_ref: BindGroupRef, p_bind_group_update: BindGroupUpdate) {
-	backend_bind_group_update(p_bind_group_ref, p_bind_group_update)
+bind_group_update :: proc(
+	p_bind_group_ref: BindGroupRef,
+	p_bindings: []Binding,
+	p_is_initial_update: bool = false,
+) {
+
+	temp_arena: common.Arena
+	common.temp_arena_init(&temp_arena)
+	defer common.arena_delete(temp_arena)
+
+	buffers := make([dynamic]BindGroupBufferBinding, temp_arena.allocator)
+	images := make([dynamic]BindGroupImageBinding, temp_arena.allocator)
+
+	for binding, binding_index in p_bindings {
+
+		switch b in binding {
+		case InputImageBinding:
+			image_binding := BindGroupImageBinding {
+				binding     = u32(binding_index),
+				image_ref   = b.image_ref,
+				base_mip    = b.base_mip,
+				base_array  = b.base_array_layer,
+				mip_count   = b.mip_count,
+				layer_count = b.array_layer_count,
+			}
+
+			if b.base_mip > 0 || b.base_array_layer > 0 {
+				image_binding.flags += {.AddressSubresource}
+			}
+
+			append(&images, image_binding)
+
+		case OutputImageBinding:
+			image_binding := BindGroupImageBinding {
+				binding     = u32(binding_index),
+				image_ref   = b.image_ref,
+				base_mip    = b.base_mip,
+				base_array  = b.array_layer,
+				mip_count   = b.mip_count,
+				layer_count = 1,
+				flags       = {.AddressSubresource},
+			}
+
+			append(&images, image_binding)
+
+		case InputBufferBinding:
+			buffer_binding := BindGroupBufferBinding {
+				binding    = u32(binding_index),
+				buffer_ref = b.buffer_ref,
+				// The offset is expected to be updated dynamically
+				offset     = 0 if b.usage == .Uniform else b.offset,
+				size       = b.size,
+			}
+
+			append(&buffers, buffer_binding)
+
+		case OutputBufferBinding:
+			buffer_binding := BindGroupBufferBinding {
+				binding    = u32(binding_index),
+				buffer_ref = b.buffer_ref,
+				offset     = b.offset,
+				size       = b.size,
+			}
+
+			append(&buffers, buffer_binding)
+		}
+	}
+
+	bind_group_update_info := BindGroupUpdate {
+		buffers           = common.to_static_slice(buffers, temp_arena.allocator),
+		images            = common.to_static_slice(images, temp_arena.allocator),
+		is_initial_update = p_is_initial_update,
+	}
+
+	backend_bind_group_update(p_bind_group_ref, bind_group_update_info)
 }
 
 //---------------------------------------------------------------------------//
@@ -214,12 +298,13 @@ OutputImageBindingFlags :: distinct bit_set[OutputImageBindingFlagBits;u8]
 //---------------------------------------------------------------------------//
 
 OutputImageBinding :: struct {
-	image_ref:   ImageRef,
-	flags:       OutputImageBindingFlags,
-	base_mip:    u32,
-	mip_count:  u32,
-	array_layer: u32,
-	clear_color: glsl.vec4,
+	image_ref:      ImageRef,
+	temporal_index: u32,
+	flags:          OutputImageBindingFlags,
+	base_mip:       u32,
+	mip_count:      u32,
+	array_layer:    u32,
+	clear_color:    glsl.vec4,
 }
 
 //---------------------------------------------------------------------------//
@@ -289,6 +374,7 @@ bind_group_create_for_bindings :: proc(
 	images_count := 0
 	buffers_count := 0
 
+
 	for binding, binding_index in p_bindings {
 
 		bind_group_layout.desc.bindings[binding_index].count = 1
@@ -296,6 +382,7 @@ bind_group_create_for_bindings :: proc(
 
 		switch b in binding {
 		case InputImageBinding:
+
 			bind_group_layout.desc.bindings[binding_index].type = .Image
 			bind_group_layout.desc.bindings[binding_index].count = b.array_layer_count
 			images_count += 1
@@ -347,75 +434,8 @@ bind_group_create_for_bindings :: proc(
 		return InvalidBindGroupRef, InvalidBindGroupLayoutRef
 	}
 
-	// Prepare the update info
-	bind_group_update_info := BindGroupUpdate {
-		buffers = make([]BindGroupBufferBinding, buffers_count, temp_arena.allocator),
-		images  = make([]BindGroupImageBinding, images_count, temp_arena.allocator),
-	}
-
-	image_index := 0
-	buffer_index := 0
-	for binding, binding_index in p_bindings {
-
-		bind_group_layout.desc.bindings[binding_index].count = 1
-		bind_group_layout.desc.bindings[binding_index].shader_stages = shader_stage
-
-		switch b in binding {
-		case InputImageBinding:
-			bind_group_update_info.images[image_index] = BindGroupImageBinding {
-				binding     = u32(binding_index),
-				image_ref   = b.image_ref,
-				base_mip    = b.base_mip,
-				base_array  = b.base_array_layer,
-				mip_count   = b.mip_count,
-				layer_count = b.array_layer_count,
-			}
-
-			if b.base_mip > 0 || b.base_array_layer > 0 {
-				bind_group_update_info.images[image_index].flags += {.AddressSubresource}
-			}
-
-			image_index += 1
-
-		case OutputImageBinding:
-			bind_group_update_info.images[image_index] = BindGroupImageBinding {
-				binding     = u32(binding_index),
-				image_ref   = b.image_ref,
-				base_mip    = b.base_mip,
-				base_array  = b.array_layer,
-				mip_count   = b.mip_count,
-				layer_count = 1,
-				flags       = {.AddressSubresource},
-			}
-
-			image_index += 1
-
-		case InputBufferBinding:
-			bind_group_update_info.buffers[buffer_index] = BindGroupBufferBinding {
-				binding    = u32(binding_index),
-				buffer_ref = b.buffer_ref,
-				// The offset is expected to be updated dynamically
-				offset     = 0 if b.usage == .Uniform else b.offset,
-				size       = b.size,
-			}
-
-			buffer_index += 1
-
-		case OutputBufferBinding:
-			bind_group_update_info.buffers[buffer_index] = BindGroupBufferBinding {
-				binding    = u32(binding_index),
-				buffer_ref = b.buffer_ref,
-				offset     = b.offset,
-				size       = b.size,
-			}
-
-			buffer_index += 1
-		}
-	}
-
-
 	// Update bind group
-	bind_group_update(bind_group_ref, bind_group_update_info)
+	bind_group_update(bind_group_ref, p_bindings, true)
 
 	return bind_group_ref, bind_group_layout_ref
 }

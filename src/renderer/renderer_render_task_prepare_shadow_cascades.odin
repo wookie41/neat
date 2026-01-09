@@ -203,6 +203,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 	global_uniform_offsets := []u32 {
 		g_uniform_buffers.frame_data_offset,
 		uniform_buffer_create_view_data(render_views),
+		g_uniform_buffers.render_settings_data_offset,
 	}
 
 	transition_binding_resources(render_task_data.bindings, .Compute)

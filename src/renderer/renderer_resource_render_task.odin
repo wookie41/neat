@@ -35,6 +35,7 @@ RenderTaskType :: enum {
 	PrepareShadowCascades,
 	ComputeAvgLuminance,
 	VolumetricFog,
+	ImageCopy,
 }
 
 //---------------------------------------------------------------------------//
@@ -55,6 +56,7 @@ G_RENDER_TASK_TYPE_MAPPING := map[string]RenderTaskType {
 	"ComputeAvgLuminance"   = .ComputeAvgLuminance,
 	"PrepareShadowCascades" = .PrepareShadowCascades,
 	"VolumetricFog"         = .VolumetricFog,
+	"ImageCopy"             = .ImageCopy,
 }
 
 //---------------------------------------------------------------------------//
@@ -171,6 +173,13 @@ render_task_init :: proc() -> bool {
 		INTERNAL.render_task_functions[.VolumetricFog] = render_task_fn
 	}
 
+	// Init build copy image task
+	{
+		render_task_fn: RenderTaskFunctions
+		image_copy_render_task_init(&render_task_fn)
+		INTERNAL.render_task_functions[.ImageCopy] = render_task_fn
+	}
+
 	return true
 }
 
@@ -272,7 +281,6 @@ render_task_config_parse_bindings :: proc(
 	out_bindings: []Binding,
 	out_res: bool,
 ) {
-
 	temp_arena: common.Arena
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
@@ -538,12 +546,14 @@ parse_output_image :: proc(
 		p_render_task_config.doc,
 		p_output_image_element_id,
 		"baseMip",
+		0,
 	)
 
-	mip_count, mip_found := common.xml_get_u32_attribute(
+	mip_count, _ := common.xml_get_u32_attribute(
 		p_render_task_config.doc,
 		p_output_image_element_id,
 		"mipCount",
+		image.desc.mip_count,
 	)
 
 	output_image_binding := OutputImageBinding {
@@ -551,15 +561,9 @@ parse_output_image :: proc(
 		base_mip  = base_mip,
 	}
 
-
 	if clear_found {
 		output_image_binding.clear_color = glsl.vec4(clear_values)
 		output_image_binding.flags += {.Clear}
-	}
-
-	// use specific mip
-	if !mip_found {
-		mip_count = image.desc.mip_count
 	}
 
 	output_image_binding.mip_count = mip_count
@@ -627,3 +631,5 @@ render_task_draw_debug_ui :: proc() {
 		}
 	}
 }
+
+//---------------------------------------------------------------------------/

@@ -152,10 +152,7 @@ render_pass_init :: proc() -> bool {
 //---------------------------------------------------------------------------//
 
 
-render_pass_allocate :: proc(
-	p_name: common.Name,
-	p_render_target_count: int,
-) -> RenderPassRef {
+render_pass_allocate :: proc(p_name: common.Name, p_render_target_count: int) -> RenderPassRef {
 	ref := RenderPassRef(common.ref_create(RenderPassResource, &G_RENDER_PASS_REF_ARRAY, p_name))
 	g_resources.render_passes[render_pass_get_idx(ref)].desc.name = p_name
 
@@ -220,7 +217,6 @@ render_pass_begin :: proc(
 	p_cmd_buff_ref: CommandBufferRef,
 	p_begin_info: ^RenderPassBeginInfo,
 ) {
-
 	backend_render_pass_begin(p_render_pass_ref, p_cmd_buff_ref, p_begin_info)
 }
 
@@ -264,7 +260,7 @@ render_pass_load_passes_from_config_file :: proc() -> bool {
 		return false
 	}
 
-	// Create render passes 
+	// Create render passes
 	for render_pass_entry in render_passes {
 		render_pass_ref := render_pass_allocate(
 			common.create_name(render_pass_entry.name),
@@ -273,7 +269,7 @@ render_pass_load_passes_from_config_file :: proc() -> bool {
 
 		render_pass := &g_resources.render_passes[render_pass_get_idx(render_pass_ref)]
 
-		// Check if this render pass has a depth test 
+		// Check if this render pass has a depth test
 		if len(render_pass_entry.depth_format) > 0 {
 			assert(render_pass_entry.depth_format in G_IMAGE_FORMAT_NAME_MAPPING)
 
@@ -304,8 +300,11 @@ render_pass_load_passes_from_config_file :: proc() -> bool {
 				return false
 			}
 
-			render_pass.desc.resolution.x = u32(strconv.atoi(resolution_parts[0]))
-			render_pass.desc.resolution.y = u32(strconv.atoi(resolution_parts[1]))
+			x := strconv.parse_uint(resolution_parts[0]) or_return
+			y := strconv.parse_uint(resolution_parts[1]) or_return
+
+			render_pass.desc.resolution.x = u32(x)
+			render_pass.desc.resolution.y = u32(y)
 		}
 
 		for render_target_entry, i in render_pass_entry.render_targets {

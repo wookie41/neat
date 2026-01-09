@@ -194,27 +194,32 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 	global_uniform_offsets := []u32 {
 		g_uniform_buffers.frame_data_offset,
 		uniform_buffer_create_view_data(render_views),
+		g_uniform_buffers.render_settings_data_offset,
 	}
 
-	// Perform resource transitions
+	gpu_debug_region_begin(get_frame_cmd_buffer_ref(), fullscreen_render_task.desc.name)
+	defer gpu_debug_region_end(get_frame_cmd_buffer_ref())
+
 	transition_binding_resources(
 		fullscreen_render_task_data.bindings,
 		.Compute if fullscreen_render_task_data.is_using_compute else .Graphics,
 	)
 
-	gpu_debug_region_begin(get_frame_cmd_buffer_ref(), fullscreen_render_task.desc.name)
-	defer gpu_debug_region_end(get_frame_cmd_buffer_ref())
+	fullscreen_task_uniform_data_offset := generic_compute_job_create_uniform_data(
+		fullscreen_render_task_data.resolution,
+	)
+	per_instance_offsets := []u32{fullscreen_task_uniform_data_offset}
 
 	if fullscreen_render_task_data.is_using_compute {
 
 		resolution := resolve_resolution(fullscreen_render_task_data.resolution)
 
-		fullscreen_task_uniform_data_offset := generic_compute_job_update_uniform_data(
-			fullscreen_render_task_data.resolution,
+		bind_group_update(
+			fullscreen_render_task_data.compute_job.bind_group_ref,
+			fullscreen_render_task_data.bindings,
 		)
 
 		// Dispatch the command
-		per_instance_offsets := []u32{fullscreen_task_uniform_data_offset}
 		work_group_count := (resolution + THREAD_GROUP_SIZE) / THREAD_GROUP_SIZE
 
 		compute_command_dispatch(
@@ -228,6 +233,11 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 		return
 	}
 
+	bind_group_update(
+		fullscreen_render_task_data.pixel_job.bind_group_ref,
+		fullscreen_render_task_data.bindings,
+	)
+
 	render_task_render_pass_begin(
 		fullscreen_render_task_data.pixel_job.render_pass_ref,
 		fullscreen_render_task_data.render_pass_outputs,
@@ -237,7 +247,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 		fullscreen_render_task_data.pixel_job.draw_command_ref,
 		get_frame_cmd_buffer_ref(),
 		nil,
-		{nil, global_uniform_offsets, nil, nil},
+		{per_instance_offsets, global_uniform_offsets, nil, nil},
 	)
 
 	render_pass_end(
