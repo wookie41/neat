@@ -138,7 +138,7 @@ parse_material_passes :: proc(
 		if material_pass_ref == InvalidMaterialPassRef {
 			log.errorf(
 				"Error when parsing render task config - unknown material pass '%s'\n",
-				common.get_string(material_pass.desc.name),
+				common.get_string(material_pass.name),
 			)
 			continue
 		}
@@ -154,7 +154,7 @@ parse_material_passes :: proc(
 
 			log.errorf(
 				"Error when loading - failed to compile pso for material pass type '%s'\n",
-				common.get_string(material_pass.desc.name),
+				common.get_string(material_pass.name),
 			)
 
 			continue

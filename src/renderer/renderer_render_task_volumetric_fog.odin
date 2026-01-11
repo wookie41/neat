@@ -165,12 +165,14 @@ create_instance :: proc(
 	// Create all of the needed images
 	volumetric_fog_image_ref := image_allocate(common.create_name(volumetric_fog_image_name))
 	volumetric_fog_image := &g_resources.images[image_get_idx(volumetric_fog_image_ref)]
-	volumetric_fog_image.desc.array_size = 1
-	volumetric_fog_image.desc.dimensions = VOLUMETRIC_FOG_IMAGE_RESOLUTION
-	volumetric_fog_image.desc.flags = {.Storage, .Sampled}
-	volumetric_fog_image.desc.format = .RGBA16SFloat
-	volumetric_fog_image.desc.mip_count = 1
-	volumetric_fog_image.desc.type = .ThreeDimensional
+	volumetric_fog_image.desc = {
+		array_size = 1,
+dimensions = VOLUMETRIC_FOG_IMAGE_RESOLUTION,
+flags = {.Storage, .Sampled},
+format = .RGBA16SFloat,
+mip_count = 1,
+type = .ThreeDimensional,
+	}
 	image_create(volumetric_fog_image_ref) or_return
 
 	previous_volumetric_fog_image_ref := image_allocate(
@@ -178,19 +180,16 @@ create_instance :: proc(
 	)
 	previous_volumetric_fog_image := &g_resources.images[image_get_idx(previous_volumetric_fog_image_ref)]
 	previous_volumetric_fog_image.desc = volumetric_fog_image.desc
-	previous_volumetric_fog_image.desc.name = common.create_name("PreviousVolumetricFog")
 	image_create(previous_volumetric_fog_image_ref) or_return
 
 	working_image1_ref := image_allocate(common.create_name("VolumetricFogWorking1"))
 	working_image1 := &g_resources.images[image_get_idx(working_image1_ref)]
 	working_image1.desc = volumetric_fog_image.desc
-	working_image1.desc.name = common.create_name("VolumetricFogWorking1")
 	image_create(working_image1_ref) or_return
 
 	working_image2_ref := image_allocate(common.create_name("VolumetricFogWorking2"))
 	working_image2 := &g_resources.images[image_get_idx(working_image2_ref)]
 	working_image2.desc = working_image1.desc
-	working_image2.desc.name = common.create_name("VolumetricFogWorking2")
 	image_create(working_image2_ref) or_return
 
 	render_task_data := new(VolumetricFogRenderTaskData, G_RENDERER_ALLOCATORS.resource_allocator)

@@ -530,6 +530,12 @@ when USE_VULKAN_BACKEND {
 				pNext                                        = &dynamic_rendering_fratures,
 			}
 
+			buffer_device_address_features := vk.PhysicalDeviceBufferDeviceAddressFeatures {
+				sType = .PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
+				pNext = &descriptor_indexing_features,
+				bufferDeviceAddress = true,
+			}
+
 			device_create_info := vk.DeviceCreateInfo {
 				sType                   = .DEVICE_CREATE_INFO,
 				queueCreateInfoCount    = u32(len(queue_create_infos)),
@@ -537,7 +543,7 @@ when USE_VULKAN_BACKEND {
 				enabledExtensionCount   = u32(len(enabled_device_extensions)),
 				ppEnabledExtensionNames = raw_data(enabled_device_extensions),
 				pEnabledFeatures        = &device_features,
-				pNext                   = &descriptor_indexing_features,
+				pNext                   = &buffer_device_address_features,
 			}
 
 			if result := vk.CreateDevice(physical_device, &device_create_info, nil, &device);

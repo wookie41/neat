@@ -47,9 +47,13 @@ generic_compute_job_create :: proc(
 	common.temp_arena_init(&temp_arena)
 	defer common.arena_delete(temp_arena)
 
-	bind_group_ref, bind_group_layout_ref := bind_group_create_for_bindings(p_name, p_bindings, true)
+	bind_group_ref, bind_group_layout_ref := bind_group_create_for_bindings(
+		p_name,
+		p_bindings,
+		true,
+	)
 
-	// Create the compute command 
+	// Create the compute command
 	compute_command_ref := compute_command_allocate(p_name, 4, 0)
 	compute_command := &g_resources.compute_commands[compute_command_get_idx(compute_command_ref)]
 
@@ -109,21 +113,25 @@ generic_pixel_job_create :: proc(
 
 	render_pass_create(render_pass_ref) or_return
 
-	bind_group_ref, bind_group_layout_ref := bind_group_create_for_bindings(p_name, p_bindings, false)
-	
-	// Create the draw command 
+	bind_group_ref, bind_group_layout_ref := bind_group_create_for_bindings(
+		p_name,
+		p_bindings,
+		false,
+	)
+
+	// Create the draw command
 	draw_command_ref := draw_command_allocate(p_name, 4, 0)
 	draw_command := &g_resources.draw_commands[draw_command_get_idx(draw_command_ref)]
-
-	draw_command.desc.bind_group_layout_refs[0] = bind_group_layout_ref
-	draw_command.desc.bind_group_layout_refs[1] = G_RENDERER.uniforms_bind_group_layout_ref
-	draw_command.desc.bind_group_layout_refs[2] = G_RENDERER.globals_bind_group_layout_ref
-	draw_command.desc.bind_group_layout_refs[3] = G_RENDERER.bindless_bind_group_layout_ref
-
 	draw_command.desc.vert_shader_ref = shader_find_by_name("fullscreen.vert")
 	draw_command.desc.frag_shader_ref = p_shader_ref
 	draw_command.desc.draw_count = 3
 	draw_command.desc.vertex_layout = .Empty
+	draw_command.desc.bind_group_layout_refs = {
+		bind_group_layout_ref,
+		G_RENDERER.uniforms_bind_group_layout_ref,
+		G_RENDERER.globals_bind_group_layout_ref,
+		G_RENDERER.bindless_bind_group_layout_ref,
+	}
 
 	draw_command_create(draw_command_ref, render_pass_ref)
 

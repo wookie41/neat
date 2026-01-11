@@ -8,7 +8,6 @@ import c "core:c"
 //---------------------------------------------------------------------------//
 
 DrawCommandDesc :: struct {
-	name:                   common.Name,
 	vert_shader_ref:        ShaderRef,
 	frag_shader_ref:        ShaderRef,
 	bind_group_layout_refs: []BindGroupLayoutRef,
@@ -24,6 +23,7 @@ DrawCommandDesc :: struct {
 //---------------------------------------------------------------------------//
 
 DrawCommandResource :: struct {
+	name:            common.Name,
 	desc:            DrawCommandDesc,
 	pipeline_ref:    GraphicsPipelineRef,
 	bind_group_refs: []BindGroupRef,
@@ -77,25 +77,27 @@ draw_command_allocate :: proc(
 	ref := DrawCommandRef(
 		common.ref_create(DrawCommandResource, &G_COMPUTE_COMMAND_REF_ARRAY, p_name),
 	)
-	draw_command_reset(ref)
 	draw_command := &g_resources.draw_commands[draw_command_get_idx(ref)]
-	draw_command.desc.name = p_name
-	draw_command.desc.bind_group_layout_refs = make(
-		[]BindGroupLayoutRef,
-		p_bind_group_layouts_count,
-		G_RENDERER_ALLOCATORS.resource_allocator,
-	)
-	draw_command.desc.push_constants = make(
-		[]PushConstantDesc,
-		p_push_constants_count,
-		G_RENDERER_ALLOCATORS.resource_allocator,
-	)
+	draw_command^ = {}
+	draw_command.name = p_name
+	draw_command.desc = {
+		bind_group_layout_refs = make(
+			[]BindGroupLayoutRef,
+			p_bind_group_layouts_count,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		),
+		push_constants         = make(
+			[]PushConstantDesc,
+			p_push_constants_count,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		),
+	}
 	draw_command.bind_group_refs = make(
 		[]BindGroupRef,
 		p_bind_group_layouts_count,
 		G_RENDERER_ALLOCATORS.resource_allocator,
 	)
-
+	draw_command_reset(ref)
 	return ref
 }
 
@@ -120,7 +122,7 @@ draw_command_create :: proc(p_ref: DrawCommandRef, p_render_pass_ref: RenderPass
 	draw_command := &g_resources.draw_commands[draw_command_get_idx(p_ref)]
 
 	draw_command.pipeline_ref = graphics_pipeline_allocate(
-		draw_command.desc.name,
+		draw_command.name,
 		u32(len(draw_command.desc.bind_group_layout_refs)),
 		u32(len(draw_command.desc.push_constants)),
 	)

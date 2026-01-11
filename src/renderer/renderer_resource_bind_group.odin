@@ -64,7 +64,6 @@ BindGroupBufferBinding :: struct {
 //---------------------------------------------------------------------------//
 
 BindGroupDesc :: struct {
-	name:       common.Name,
 	layout_ref: BindGroupLayoutRef,
 	flags:      BindGroupDescFlags,
 }
@@ -72,6 +71,7 @@ BindGroupDesc :: struct {
 //---------------------------------------------------------------------------//
 
 BindGroupResource :: struct {
+	name: common.Name,
 	desc: BindGroupDesc,
 }
 
@@ -119,7 +119,8 @@ bind_group_init :: proc() {
 bind_group_allocate :: proc(p_name: common.Name) -> BindGroupRef {
 	ref := BindGroupRef(common.ref_create(BindGroupResource, &G_BIND_GROUP_REF_ARRAY, p_name))
 	bind_group := &g_resources.bind_groups[bind_group_get_idx(ref)]
-	bind_group.desc.name = p_name
+	bind_group^ = {}
+	bind_group.name = p_name
 	return ref
 }
 
@@ -382,7 +383,6 @@ bind_group_create_for_bindings :: proc(
 
 		switch b in binding {
 		case InputImageBinding:
-
 			bind_group_layout.desc.bindings[binding_index].type = .Image
 			bind_group_layout.desc.bindings[binding_index].count = b.array_layer_count
 			images_count += 1
@@ -427,7 +427,9 @@ bind_group_create_for_bindings :: proc(
 	bind_group_ref := bind_group_allocate(p_name)
 	bind_group := &g_resources.bind_groups[bind_group_get_idx(bind_group_ref)]
 
-	bind_group.desc.layout_ref = bind_group_layout_ref
+	bind_group.desc = {
+		layout_ref = bind_group_layout_ref,
+	}
 
 	if bind_group_create(bind_group_ref) == false {
 		bind_group_layout_destroy(bind_group_layout_ref)

@@ -22,9 +22,9 @@ ZERO_VECTOR := glsl.vec4{0, 0, 0, 0}
 
 VertexFormat :: struct #packed {
 	position: glsl.vec3,
-	uv:      glsl.vec2,
-	normal:  glsl.vec3,
-	tangent: glsl.vec3,
+	uv:       glsl.vec2,
+	normal:   glsl.vec3,
+	tangent:  glsl.vec3,
 }
 
 //---------------------------------------------------------------------------//
@@ -81,7 +81,7 @@ MeshDesc :: struct {
 	uv:             []glsl.vec2,
 	normal:         []glsl.vec3,
 	tangent:        []glsl.vec3,
-	// Allocator that was used to allocate memory for the vertex and index data 
+	// Allocator that was used to allocate memory for the vertex and index data
 	data_allocator: mem.Allocator,
 	file_mapping:   common.FileMemoryMapping,
 }
@@ -141,10 +141,11 @@ mesh_init :: proc() -> bool {
 		using INTERNAL
 		vertex_buffer_ref = buffer_allocate(common.create_name("MeshVertexBuffer"))
 		vertex_buffer := &g_resources.buffers[buffer_get_idx(vertex_buffer_ref)]
-
-		vertex_buffer.desc.size = VERTEX_BUFFER_SIZE
-		vertex_buffer.desc.usage = {.VertexBuffer, .TransferDst}
-		vertex_buffer.desc.flags = {.Dedicated}
+		vertex_buffer.desc = {
+			size  = VERTEX_BUFFER_SIZE,
+			usage = {.VertexBuffer, .TransferDst},
+			flags = {.Dedicated},
+		}
 		buffer_create(vertex_buffer_ref) or_return
 	}
 
@@ -153,10 +154,11 @@ mesh_init :: proc() -> bool {
 		using INTERNAL
 		index_buffer_ref = buffer_allocate(common.create_name("MeshIndexBuffer"))
 		index_buffer := &g_resources.buffers[buffer_get_idx(index_buffer_ref)]
-
-		index_buffer.desc.size = INDEX_BUFFER_SIZE
-		index_buffer.desc.usage = {.IndexBuffer, .TransferDst}
-		index_buffer.desc.flags = {.Dedicated}
+		index_buffer.desc = {
+			size  = INDEX_BUFFER_SIZE,
+			usage = {.IndexBuffer, .TransferDst},
+			flags = {.Dedicated},
+		}
 		buffer_create(index_buffer_ref) or_return
 	}
 
@@ -213,7 +215,7 @@ mesh_create :: proc(p_mesh_ref: MeshRef) -> bool {
 		needed_uploads_count   = 0,
 	}
 
-	// Upload index data 
+	// Upload index data
 	if .Indexed in mesh.desc.flags {
 		index_allocation_successful, index_allocation := buffer_suballocate(
 			INTERNAL.index_buffer_ref,
@@ -244,7 +246,7 @@ mesh_create :: proc(p_mesh_ref: MeshRef) -> bool {
 		mesh.index_buffer_allocation = index_allocation
 	}
 
-	// Upload vertex data 
+	// Upload vertex data
 	{
 		positions_size := u32(vertex_count * size_of(glsl.vec3))
 		uvs_size: u32 = 0

@@ -6,15 +6,15 @@
     "collections": [
         {
             "name": "core",
-            "path": "C:/Tools/Odin/core"
+            "path": "C:/Dev/Code/Odin/core"
         },
         {
             "name": "vendor",
-            "path": "C:/Tools/Odin/vendor"
+            "path": "C:/Dev/Code/Odin/vendor"
         },
         {
             "name": "base",
-            "path": "C:/Tools/Odin/base"
+            "path": "C:/Dev/Code/Odin/base"
         }
     ]
 }

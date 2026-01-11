@@ -26,7 +26,7 @@ when USE_VULKAN_BACKEND {
 	//---------------------------------------------------------------------------//
 
 	@(private = "file")
-	INTERNAL: struct {}
+	INTERNAL: struct{}
 
 	//---------------------------------------------------------------------------//
 
@@ -137,7 +137,7 @@ when USE_VULKAN_BACKEND {
 		defer common.arena_delete(temp_arena)
 
 		vk_name := strings.clone_to_cstring(
-			common.get_string(buffer.desc.name),
+			common.get_string(buffer.name),
 			temp_arena.allocator,
 		)
 

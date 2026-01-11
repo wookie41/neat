@@ -110,10 +110,11 @@ create_instance :: proc(
 	{
 		buffer_ref := buffer_allocate(common.create_name(luminance_histogram_buffer_name))
 		buffer := &g_resources.buffers[buffer_get_idx(buffer_ref)]
-		buffer.desc.flags = {.Dedicated}
-		buffer.desc.size = size_of(u32) * THREAD_GROUP_SIZE.x * THREAD_GROUP_SIZE.x
-		buffer.desc.usage = {.StorageBuffer}
-
+		buffer.desc = {
+			flags = {.Dedicated},
+			size  = size_of(u32) * THREAD_GROUP_SIZE.x * THREAD_GROUP_SIZE.x,
+			usage = {.StorageBuffer},
+		}
 		buffer_create(buffer_ref) or_return
 		render_task_data.histogram_buffer_ref = buffer_ref
 	}
@@ -125,10 +126,11 @@ create_instance :: proc(
 	{
 		buffer_ref := buffer_allocate(common.create_name(exposure_buffer_name))
 		buffer := &g_resources.buffers[buffer_get_idx(buffer_ref)]
-		buffer.desc.flags = {.Dedicated}
-		buffer.desc.size = size_of(f32) * 3
-		buffer.desc.usage = {.StorageBuffer}
-
+		buffer.desc = {
+			flags = {.Dedicated},
+			size  = size_of(f32) * 3,
+			usage = {.StorageBuffer},
+		}
 		buffer_create(buffer_ref) or_return
 		render_task_data.exposure_buffer_ref = buffer_ref
 	}
@@ -227,7 +229,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 	render_task_data := (^ComputeAvgLumRenderTaskData)(render_task.data_ptr)
 
 	render_views := RenderViews {
-		current_view = render_view_create_from_camera(g_render_camera),
+		current_view  = render_view_create_from_camera(g_render_camera),
 		previous_view = render_view_create_from_camera(g_previous_render_camera),
 	}
 
@@ -262,7 +264,10 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 
 		job_uniform_offsets := []u32{generic_compute_job_uniform_data_offset, uniform_data_offset}
 
-		bind_group_update(render_task_data.build_histogram_job.bind_group_ref, render_task_data.build_histogram_bindings)
+		bind_group_update(
+			render_task_data.build_histogram_job.bind_group_ref,
+			render_task_data.build_histogram_bindings,
+		)
 		transition_binding_resources(render_task_data.build_histogram_bindings, .Compute)
 
 		compute_command_dispatch(

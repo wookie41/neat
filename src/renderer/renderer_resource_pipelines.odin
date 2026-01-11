@@ -76,7 +76,6 @@ PushConstantDesc :: struct {
 //---------------------------------------------------------------------------//
 
 GraphicsPipelineDesc :: struct {
-	name:                   common.Name,
 	render_pass_ref:        RenderPassRef,
 	bind_group_layout_refs: []BindGroupLayoutRef,
 	vert_shader_ref:        ShaderRef,
@@ -88,6 +87,7 @@ GraphicsPipelineDesc :: struct {
 //---------------------------------------------------------------------------//
 
 GraphicsPipelineResource :: struct {
+	name: common.Name,
 	desc: GraphicsPipelineDesc,
 }
 
@@ -104,7 +104,6 @@ InvalidGraphicsPipelineRef := GraphicsPipelineRef {
 //---------------------------------------------------------------------------//
 
 ComputePipelineDesc :: struct {
-	name:                   common.Name,
 	bind_group_layout_refs: []BindGroupLayoutRef,
 	compute_shader_ref:     ShaderRef,
 	push_constants:         []PushConstantDesc,
@@ -113,6 +112,7 @@ ComputePipelineDesc :: struct {
 //---------------------------------------------------------------------------//
 
 ComputePipelineResource :: struct {
+	name: common.Name,
 	desc: ComputePipelineDesc,
 }
 
@@ -216,7 +216,7 @@ graphics_pipeline_allocate :: proc(
 		common.ref_create(GraphicsPipelineResource, &g_resource_refs.graphics_pipelines, p_name),
 	)
 	pipeline := &g_resources.graphics_pipelines[graphics_pipeline_get_idx(ref)]
-	pipeline.desc.name = p_name
+	pipeline.name = p_name
 	pipeline.desc.bind_group_layout_refs = make(
 		[]BindGroupLayoutRef,
 		p_bind_group_layouts_count,
@@ -280,7 +280,8 @@ compute_pipeline_allocate :: proc(
 		common.ref_create(ComputePipelineResource, &g_resource_refs.compute_pipelines, p_name),
 	)
 	pipeline := &g_resources.compute_pipelines[compute_pipeline_get_idx(ref)]
-	pipeline.desc.name = p_name
+	pipeline^ = {}
+	pipeline.name = p_name
 	pipeline.desc.bind_group_layout_refs = make(
 		[]BindGroupLayoutRef,
 		p_bind_group_layouts_count,

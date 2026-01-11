@@ -8,7 +8,6 @@ import c "core:c"
 //---------------------------------------------------------------------------//
 
 CommandBufferDesc :: struct {
-	name:   common.Name,
 	flags:  CommandBufferFlags,
 	thread: u8,
 	frame:  u8,
@@ -27,7 +26,8 @@ CommandBufferFlags :: distinct bit_set[CommandBufferFlagBits;u8]
 //---------------------------------------------------------------------------//
 
 CommandBufferResource :: struct {
-	desc:                     CommandBufferDesc,
+	name: common.Name,
+	desc: CommandBufferDesc,
 }
 
 //---------------------------------------------------------------------------//
@@ -73,7 +73,8 @@ command_buffer_allocate :: proc(p_name: common.Name) -> CommandBufferRef {
 	ref := CommandBufferRef(
 		common.ref_create(CommandBufferResource, &G_COMMAND_BUFFER_REF_ARRAY, p_name),
 	)
-	g_resources.cmd_buffers[command_buffer_get_idx(ref)].desc.name = p_name
+	g_resources.cmd_buffers[command_buffer_get_idx(ref)] = {}
+	g_resources.cmd_buffers[command_buffer_get_idx(ref)].name = p_name
 	return ref
 }
 

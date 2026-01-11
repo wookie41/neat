@@ -21,7 +21,7 @@ BufferDescFlags :: distinct bit_set[BufferDescFlagBits;u8]
 
 //---------------------------------------------------------------------------//
 
-BufferUsageFlagBits :: enum u8 {
+BufferUsageFlagBits :: enum u16 {
 	TransferSrc,
 	TransferDst,
 	UniformBuffer,
@@ -37,7 +37,6 @@ BufferUsageFlags :: distinct bit_set[BufferUsageFlagBits;u8]
 //---------------------------------------------------------------------------//
 
 BufferDesc :: struct {
-	name:  common.Name,
 	size:  u32,
 	flags: BufferDescFlags,
 	usage: BufferUsageFlags,
@@ -54,6 +53,7 @@ BufferAccessType :: enum u8 {
 //---------------------------------------------------------------------------//
 
 BufferResource :: struct {
+	name:        common.Name,
 	desc:        BufferDesc,
 	mapped_ptr:  ^u8,
 	// Virtual block used to suballocate the buffer using the VMA virtual allocator
@@ -89,7 +89,7 @@ BufferSuballocation :: struct {
 BufferSection :: struct {
 	buffer_ref: BufferRef,
 	offset:     u32,
-	size:     u32,
+	size:       u32,
 }
 
 InvalidBufferSection :: BufferSection {
@@ -122,7 +122,8 @@ buffer_init :: proc() {
 
 buffer_allocate :: proc(p_name: common.Name) -> BufferRef {
 	ref := BufferRef(common.ref_create(BufferResource, &G_BUFFER_REF_ARRAY, p_name))
-	g_resources.buffers[buffer_get_idx(ref)].desc.name = p_name
+	g_resources.buffers[buffer_get_idx(ref)] = {}
+	g_resources.buffers[buffer_get_idx(ref)].name = p_name
 	return ref
 }
 

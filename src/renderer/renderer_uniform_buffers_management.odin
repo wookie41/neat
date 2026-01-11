@@ -304,9 +304,11 @@ uniform_buffer_create_dynamic_by_size :: proc(
 
 	aligned_size := uniform_buffer_ensure_alignment(p_size)
 
-	buffer.desc.flags = {.HostWrite, .Mapped}
-	buffer.desc.size = aligned_size * G_RENDERER.num_frames_in_flight
-	buffer.desc.usage = {.DynamicUniformBuffer}
+	buffer.desc = {
+		flags = {.HostWrite, .Mapped},
+		size  = aligned_size * G_RENDERER.num_frames_in_flight,
+		usage = {.DynamicUniformBuffer},
+	}
 
 	if buffer_create(buffer_ref) == false {
 		return DynamicUniformBuffer{buffer_ref = InvalidBufferRef, aligned_size = 0}

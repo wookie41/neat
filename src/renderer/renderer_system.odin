@@ -415,9 +415,10 @@ init :: proc(p_options: InitOptions) -> bool {
 
 		bind_group_idx := bind_group_get_idx(G_RENDERER.uniforms_bind_group_ref)
 		bind_group := &g_resources.bind_groups[bind_group_idx]
-		bind_group.desc.layout_ref = G_RENDERER.uniforms_bind_group_layout_ref
-		bind_group.desc.flags = {.GlobalBindGroup}
-
+		bind_group.desc = {
+			layout_ref = G_RENDERER.uniforms_bind_group_layout_ref,
+			flags      = {.GlobalBindGroup},
+		}
 		if bind_group_create(G_RENDERER.uniforms_bind_group_ref) == false {
 			log.error("Failed to create the uniforms bind group")
 			return false
@@ -457,9 +458,10 @@ init :: proc(p_options: InitOptions) -> bool {
 
 		bind_group_idx := bind_group_get_idx(G_RENDERER.globals_bind_group_ref)
 		bind_group := &g_resources.bind_groups[bind_group_idx]
-		bind_group.desc.layout_ref = G_RENDERER.globals_bind_group_layout_ref
-		bind_group.desc.flags = {.GlobalBindGroup}
-
+		bind_group.desc = {
+			layout_ref = G_RENDERER.globals_bind_group_layout_ref,
+			flags      = {.GlobalBindGroup},
+		}
 		if bind_group_create(G_RENDERER.globals_bind_group_ref) == false {
 			log.error("Failed to create the global resources bind group")
 			return false
@@ -511,9 +513,10 @@ init :: proc(p_options: InitOptions) -> bool {
 
 		bind_group_idx := bind_group_get_idx(G_RENDERER.bindless_bind_group_ref)
 		bind_group := &g_resources.bind_groups[bind_group_idx]
-		bind_group.desc.layout_ref = G_RENDERER.bindless_bind_group_layout_ref
-		bind_group.desc.flags = {.GlobalBindGroup}
-
+		bind_group.desc = {
+				layout_ref = G_RENDERER.bindless_bind_group_layout_ref,
+				flags      = {.GlobalBindGroup},
+			}
 		if bind_group_create(G_RENDERER.bindless_bind_group_ref) == false {
 			log.error("Failed to create the bindless group")
 			return false
@@ -541,14 +544,14 @@ init :: proc(p_options: InitOptions) -> bool {
 		{
 			volumetric_noise_image_ref := image_allocate(common.create_name("VolumetricNoise"))
 			volumetric_noise_image := &g_resources.images[image_get_idx(volumetric_noise_image_ref)]
-
-			volumetric_noise_image.desc.array_size = 1
-			volumetric_noise_image.desc.dimensions = {64, 64, 64}
-			volumetric_noise_image.desc.flags = {.Sampled, .Storage}
-			volumetric_noise_image.desc.mip_count = 1
-			volumetric_noise_image.desc.format = .R8UNorm
-			volumetric_noise_image.desc.type = .ThreeDimensional
-
+			volumetric_noise_image.desc = {
+				array_size = 1,
+				dimensions = {64, 64, 64},
+				flags      = {.Sampled, .Storage},
+				mip_count  = 1,
+				format     = .R8UNorm,
+				type       = .ThreeDimensional,
+			}
 			image_create(volumetric_noise_image_ref) or_return
 
 			G_RENDERER.volumetric_noise_image_ref = volumetric_noise_image_ref
@@ -934,11 +937,12 @@ renderer_config_image_creates :: proc(p_doc: ^xml.Document) -> bool {
 			image_ref := image_allocate(image_name)
 			image_idx := image_get_idx(image_ref)
 			image := &g_resources.images[image_idx]
-
-			image.desc.dimensions = image_dimensions
-			image.desc.flags = image_flags
-			image.desc.type = image_type
-			image.desc.format = G_IMAGE_FORMAT_NAME_MAPPING[image_format_name]
+			image.desc = {
+				dimensions = image_dimensions,
+				flags      = image_flags,
+				type       = image_type,
+				format     = G_IMAGE_FORMAT_NAME_MAPPING[image_format_name],
+			}
 			image.desc.mip_count, _ = common.xml_get_u32_attribute(
 				p_doc,
 				element_id,
@@ -1087,8 +1091,14 @@ draw_debug_ui :: proc(p_dt: f32) {
 		imgui.Checkbox("Dilate motion vectors", &G_RENDERER_SETTINGS.taa_dilate_motion_vectors)
 		imgui.Checkbox("History single tap", &G_RENDERER_SETTINGS.taa_history_single_tap)
 		imgui.Checkbox("Temporal filter", &G_RENDERER_SETTINGS.taa_temporal_filter)
-		imgui.Checkbox("Inverse luminance filter", &G_RENDERER_SETTINGS.taa_inverse_luminance_filter)
-		imgui.Checkbox("Luminance difference filter", &G_RENDERER_SETTINGS.taa_luminance_difference_filter)
+		imgui.Checkbox(
+			"Inverse luminance filter",
+			&G_RENDERER_SETTINGS.taa_inverse_luminance_filter,
+		)
+		imgui.Checkbox(
+			"Luminance difference filter",
+			&G_RENDERER_SETTINGS.taa_luminance_difference_filter,
+		)
 		imgui.SliderInt("Jitter period", (^i32)(&G_RENDERER_SETTINGS.taa_jitter_period), 1, 16)
 	}
 

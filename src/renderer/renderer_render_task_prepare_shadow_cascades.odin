@@ -3,7 +3,7 @@ package renderer
 //---------------------------------------------------------------------------//
 
 // This task prepares the cascades shadows - matrix, split etc
-// based on the depth buffer. The cascades are tightly fitted to the depth buffer 
+// based on the depth buffer. The cascades are tightly fitted to the depth buffer
 // to maximize precision. It's achived by calculating the min and max depth values
 // during HiZ construction and then using it in this task to create the matrices.
 
@@ -110,10 +110,12 @@ create_instance :: proc(
 	// Create the shadow cascades buffer
 	shadow_cascades_buffer_ref := buffer_allocate(common.create_name(shadow_cascades_buffer_name))
 	shadow_cascades_buffer := &g_resources.buffers[buffer_get_idx(shadow_cascades_buffer_ref)]
-	shadow_cascades_buffer.desc.flags = {.Dedicated}
-	shadow_cascades_buffer.desc.size = size_of(ShadowCascade) * MAX_SHADOW_CASCADES
-	shadow_cascades_buffer.desc.usage = {.StorageBuffer}
-
+	shadow_cascades_buffer.desc = {
+		flags = {.Dedicated},
+		size  = size_of(ShadowCascade) * MAX_SHADOW_CASCADES,
+		usage = {.StorageBuffer},
+	}
+	
 	if buffer_create(shadow_cascades_buffer_ref) == false {
 		log.errorf(
 			"Failed to create render task '%s' - couldn't create shadow cascades buffer\n",

@@ -353,31 +353,31 @@ material_asset_save_properties :: proc(
 
 	if .HasAlbedoImage in p_material_properties.flags {
 		props_json.albedo_image_name = common.get_string(
-			renderer.g_resources.images[p_material_properties.albedo_image_id].desc.name,
+			renderer.g_resources.images[p_material_properties.albedo_image_id].name,
 		)
 	}
 
 	if .HasNormalImage in p_material_properties.flags {
 		props_json.normal_image_name = common.get_string(
-			renderer.g_resources.images[p_material_properties.normal_image_id].desc.name,
+			renderer.g_resources.images[p_material_properties.normal_image_id].name,
 		)
 	}
 
 	if .HasRoughnessImage in p_material_properties.flags {
 		props_json.roughness_image_name = common.get_string(
-			renderer.g_resources.images[p_material_properties.roughness_image_id].desc.name,
+			renderer.g_resources.images[p_material_properties.roughness_image_id].name,
 		)
 	}
 
 	if .HasMetalnessImage in p_material_properties.flags {
 		props_json.metalness_image_name = common.get_string(
-			renderer.g_resources.images[p_material_properties.metalness_image_id].desc.name,
+			renderer.g_resources.images[p_material_properties.metalness_image_id].name,
 		)
 	}
 
 	if .HasOcclusionImage in p_material_properties.flags {
 		props_json.occlusion_image_name = common.get_string(
-			renderer.g_resources.images[p_material_properties.occlusion_image_id].desc.name,
+			renderer.g_resources.images[p_material_properties.occlusion_image_id].name,
 		)
 	}
 

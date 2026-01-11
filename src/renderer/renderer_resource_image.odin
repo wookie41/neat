@@ -222,7 +222,6 @@ ImageUsage :: enum u8 {
 //---------------------------------------------------------------------------//
 
 ImageDesc :: struct {
-	name:               common.Name,
 	type:               ImageType,
 	format:             ImageFormat,
 	mip_count:          u32,
@@ -238,6 +237,7 @@ ImageDesc :: struct {
 //---------------------------------------------------------------------------//
 
 ImageResource :: struct {
+	name:             common.Name,
 	desc:             ImageDesc,
 	flags:            ImageFlags,
 	bindless_idx:     u32,
@@ -330,11 +330,11 @@ image_init :: proc() -> bool {
 		INTERNAL.staging_buffer_ref = buffer_allocate(common.create_name("ImageStagingBuffer"))
 
 		staging_buffer := &g_resources.buffers[buffer_get_idx(INTERNAL.staging_buffer_ref)]
-		staging_buffer.desc.size =
-			INTERNAL.staging_buffer_single_region_size * G_RENDERER.num_frames_in_flight
-		staging_buffer.desc.flags = {.HostWrite, .Mapped}
-		staging_buffer.desc.usage = {.TransferSrc}
-
+		staging_buffer.desc = {
+			size  = INTERNAL.staging_buffer_single_region_size * G_RENDERER.num_frames_in_flight,
+			flags = {.HostWrite, .Mapped},
+			usage = {.TransferSrc},
+		}
 		buffer_create(INTERNAL.staging_buffer_ref) or_return
 	}
 
@@ -345,14 +345,15 @@ image_init :: proc() -> bool {
 		G_RENDERER.default_image_ref = image_allocate(common.create_name("DefaultImage"))
 		default_image := &g_resources.images[image_get_idx(G_RENDERER.default_image_ref)]
 
-		default_image.desc.type = .TwoDimensional
-		default_image.desc.dimensions = glsl.uvec3{4, 4, 1}
-		default_image.desc.flags = {.Sampled, .AddToBindlessArray}
-		default_image.desc.sample_count_flags = {._1}
-		default_image.desc.format = .BC1_RGB_UNorm
-		default_image.desc.mip_count = 1
-		default_image.desc.array_size = 1
-
+		default_image.desc = {
+			type               = .TwoDimensional,
+			dimensions         = glsl.uvec3{4, 4, 1},
+			flags              = {.Sampled, .AddToBindlessArray},
+			sample_count_flags = {._1},
+			format             = .BC1_RGB_UNorm,
+			mip_count          = 1,
+			array_size         = 1,
+		}
 
 		image_create(G_RENDERER.default_image_ref)
 	}
@@ -371,19 +372,10 @@ image_upload_begin_frame :: proc() {
 
 image_allocate :: proc(p_name: common.Name) -> ImageRef {
 	ref := ImageRef(common.ref_create(ImageResource, &G_IMAGE_REF_ARRAY, p_name))
-	image_reset(ref)
 	image := &g_resources.images[image_get_idx(ref)]
-	image.desc.name = p_name
+	image^ = {}
+	image.name = p_name
 	return ref
-}
-
-//---------------------------------------------------------------------------//
-
-image_reset :: proc(p_image_ref: ImageRef) {
-	image := &g_resources.images[image_get_idx(p_image_ref)]
-	backend_image := &g_resources.backend_images[image_get_idx(p_image_ref)]
-	image^ = ImageResource{}
-	backend_image^ = BackendImageResource{}
 }
 
 //---------------------------------------------------------------------------//
@@ -474,17 +466,19 @@ image_load_from_path :: proc(p_image_name: common.Name, p_image_path: string) ->
 
 	image_ref := image_allocate(p_image_name)
 	image := &g_resources.images[image_get_idx(image_ref)]
-	image.desc.mip_count = 1
-	image.desc.array_size = 1
-	image.desc.dimensions = glsl.uvec3{u32(width), u32(height), 1}
-	image.desc.flags = {.AddToBindlessArray, .Sampled}
-	image.desc.format = .RGBA8UNorm
-	image.desc.sample_count_flags = {._1}
-	image.desc.type = .TwoDimensional
+	image.desc = {
+		mip_count          = 1,
+		array_size         = 1,
+		dimensions         = glsl.uvec3{u32(width), u32(height), 1},
+		flags              = {.AddToBindlessArray, .Sampled},
+		format             = .RGBA8UNorm,
+		sample_count_flags = {._1},
+		type               = .TwoDimensional,
+		mip_data_allocator = G_RENDERER_ALLOCATORS.main_allocator,
+	}
 
 	image.desc.data_per_mip = make([][]byte, 1, G_RENDERER_ALLOCATORS.main_allocator)
 	image.desc.data_per_mip[0] = image_data
-	image.desc.mip_data_allocator = G_RENDERER_ALLOCATORS.main_allocator
 
 	if image_create_texture(image_ref) {
 		return image_ref

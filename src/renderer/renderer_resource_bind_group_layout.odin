@@ -68,7 +68,6 @@ BindGroupLayoutFlags :: distinct bit_set[BindGroupLayoutFlagBits;u8]
 //---------------------------------------------------------------------------//
 
 BindGroupLayoutDesc :: struct {
-	name:     common.Name,
 	bindings: []BindGroupLayoutBinding,
 	flags:    BindGroupLayoutFlags,
 }
@@ -76,6 +75,7 @@ BindGroupLayoutDesc :: struct {
 //---------------------------------------------------------------------------//
 
 BindGroupLayoutResource :: struct {
+	name:                common.Name,
 	desc:                BindGroupLayoutDesc,
 	hash:                u32,
 	num_dynamic_offsets: u32,
@@ -114,13 +114,15 @@ bind_group_layout_allocate :: proc(
 	)
 
 	bind_group_layout := &g_resources.bind_group_layouts[bind_group_layout_get_idx(ref)]
-
-	bind_group_layout.desc.name = p_name
-	bind_group_layout.desc.bindings = make(
-		[]BindGroupLayoutBinding,
-		p_binding_count,
-		G_RENDERER_ALLOCATORS.resource_allocator,
-	)
+	bind_group_layout^ = {}
+	bind_group_layout.name = p_name
+	bind_group_layout.desc = {
+		bindings = make(
+			[]BindGroupLayoutBinding,
+			p_binding_count,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		),
+	}
 	return ref
 }
 

@@ -10,7 +10,6 @@ import "core:math/linalg/glsl"
 //---------------------------------------------------------------------------//
 
 ComputeCommandDesc :: struct {
-	name:                   common.Name,
 	compute_shader_ref:     ShaderRef,
 	bind_group_layout_refs: []BindGroupLayoutRef,
 	push_constants:         []PushConstantDesc,
@@ -19,6 +18,7 @@ ComputeCommandDesc :: struct {
 //---------------------------------------------------------------------------//
 
 ComputeCommandResource :: struct {
+	name:            common.Name,
 	desc:            ComputeCommandDesc,
 	pipeline_ref:    ComputePipelineRef,
 	bind_group_refs: []BindGroupRef,
@@ -73,17 +73,20 @@ compute_command_allocate :: proc(
 		common.ref_create(ComputeCommandResource, &G_COMPUTE_COMMAND_REF_ARRAY, p_name),
 	)
 	compute_command := &g_resources.compute_commands[compute_command_get_idx(ref)]
-	compute_command.desc.name = p_name
-	compute_command.desc.bind_group_layout_refs = make(
-		[]BindGroupLayoutRef,
-		p_bind_group_layouts_count,
-		G_RENDERER_ALLOCATORS.resource_allocator,
-	)
-	compute_command.desc.push_constants = make(
-		[]PushConstantDesc,
-		p_push_constants_count,
-		G_RENDERER_ALLOCATORS.resource_allocator,
-	)
+	compute_command^ = {}
+	compute_command.name = p_name
+	compute_command.desc = {
+		bind_group_layout_refs = make(
+			[]BindGroupLayoutRef,
+			p_bind_group_layouts_count,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		),
+		push_constants         = make(
+			[]PushConstantDesc,
+			p_push_constants_count,
+			G_RENDERER_ALLOCATORS.resource_allocator,
+		),
+	}
 	compute_command.bind_group_refs = make(
 		[]BindGroupRef,
 		p_bind_group_layouts_count,
@@ -104,7 +107,7 @@ compute_command_create :: proc(p_ref: ComputeCommandRef) -> bool {
 	compute_command := &g_resources.compute_commands[compute_command_get_idx(p_ref)]
 
 	compute_command.pipeline_ref = compute_pipeline_allocate(
-		compute_command.desc.name,
+		compute_command.name,
 		u32(len(compute_command.desc.bind_group_layout_refs)),
 		u32(len(compute_command.desc.push_constants)),
 	)

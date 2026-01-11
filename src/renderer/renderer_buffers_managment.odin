@@ -8,8 +8,8 @@ import "../common"
 
 @(private)
 g_renderer_buffers: struct {
-	mesh_instance_info_buffer_ref:       BufferRef,
-	material_instances_buffer_ref:       BufferRef,
+	mesh_instance_info_buffer_ref: BufferRef,
+	material_instances_buffer_ref: BufferRef,
 }
 
 //---------------------------------------------------------------------------//
@@ -36,24 +36,27 @@ buffer_management_init :: proc() -> bool {
 
 		mesh_instance_info_buffer := &g_resources.buffers[buffer_get_idx(mesh_instance_info_buffer_ref)]
 
-		mesh_instance_info_buffer.desc.flags = storage_buffer_flags
-		mesh_instance_info_buffer.desc.usage = storage_buffer_usage
-		mesh_instance_info_buffer.desc.size = size_of(MeshInstanceInfoData) * MAX_MESH_INSTANCES
+		mesh_instance_info_buffer.desc = {
+			flags = storage_buffer_flags,
+			usage = storage_buffer_usage,
+			size  = size_of(MeshInstanceInfoData) * MAX_MESH_INSTANCES,
+		}
 
 		buffer_create(mesh_instance_info_buffer_ref) or_return
 	}
 
-	// Create material instances buffer 
+	// Create material instances buffer
 	{
 		material_instances_buffer_ref = buffer_allocate(
 			common.create_name("MaterialInstancesBuffer"),
 		)
 
 		material_instances_buffer := &g_resources.buffers[buffer_get_idx(material_instances_buffer_ref)]
-
-		material_instances_buffer.desc.flags = storage_buffer_flags
-		material_instances_buffer.desc.usage = storage_buffer_usage
-		material_instances_buffer.desc.size = MATERIAL_PROPERTIES_BUFFER_SIZE
+		material_instances_buffer.desc = {
+			flags = storage_buffer_flags,
+			usage = storage_buffer_usage,
+			size  = MATERIAL_PROPERTIES_BUFFER_SIZE,
+		}
 
 		buffer_create(material_instances_buffer_ref) or_return
 	}

@@ -86,10 +86,11 @@ render_instanced_mesh_job_create :: proc(
 
 		mesh_instanced_draw_info_buffer := &g_resources.buffers[buffer_get_idx(mesh_job.instance_info_buffer_ref)]
 
-		mesh_instanced_draw_info_buffer.desc.flags = {.Dedicated}
-		mesh_instanced_draw_info_buffer.desc.usage = {.DynamicStorageBuffer}
-		mesh_instanced_draw_info_buffer.desc.size =
-			MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE * G_RENDERER.num_frames_in_flight
+		mesh_instanced_draw_info_buffer.desc = {
+			flags = {.Dedicated},
+			usage = {.DynamicStorageBuffer},
+			size  = MESH_INSTANCED_DRAW_INFO_BUFFER_SIZE * G_RENDERER.num_frames_in_flight,
+		}
 
 		if .IntegratedGPU in G_RENDERER.gpu_device_flags {
 			mesh_instanced_draw_info_buffer.desc.flags += {.Mapped}

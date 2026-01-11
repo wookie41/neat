@@ -8,7 +8,6 @@ import "core:c"
 //---------------------------------------------------------------------------//
 
 MaterialInstanceDesc :: struct {
-	name:              common.Name,
 	material_type_ref: MaterialTypeRef,
 }
 
@@ -23,6 +22,7 @@ MaterialInstanceFlags :: distinct bit_set[MaterialInstanceFlagBits;u8]
 //---------------------------------------------------------------------------//
 
 MaterialInstanceResource :: struct {
+	name:  common.Name,
 	desc:  MaterialInstanceDesc,
 	flags: MaterialInstanceFlags,
 }
@@ -87,7 +87,7 @@ material_instance_update_dirty_materials :: proc() {
 
 //---------------------------------------------------------------------------//
 
-@(private="file")
+@(private = "file")
 material_instance_update_dirty_data :: proc(p_material_instance_ref: MaterialInstanceRef) {
 	material_instance_idx := material_instance_get_idx(p_material_instance_ref)
 	material_instance := &g_resources.material_instances[material_instance_idx]
@@ -124,7 +124,8 @@ material_instance_allocate :: proc(p_name: common.Name) -> MaterialInstanceRef {
 	ref := MaterialInstanceRef(
 		common.ref_create(MaterialInstanceResource, &G_MATERIAL_INSTANCE_REF_ARRAY, p_name),
 	)
-	g_resources.material_instances[material_instance_get_idx(ref)].desc.name = p_name
+	g_resources.material_instances[material_instance_get_idx(ref)] = {}
+	g_resources.material_instances[material_instance_get_idx(ref)].name = p_name
 	return ref
 }
 //---------------------------------------------------------------------------//

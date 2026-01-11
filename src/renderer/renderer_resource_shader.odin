@@ -45,7 +45,6 @@ ShaderJSONEntry :: struct {
 //---------------------------------------------------------------------------//
 
 ShaderDesc :: struct {
-	name:               common.Name,
 	file_path:          common.Name,
 	stage:              ShaderStage,
 	features:           []string,
@@ -72,6 +71,7 @@ ShaderFlags :: distinct bit_set[ShaderFlagBits;u16]
 //---------------------------------------------------------------------------//
 
 ShaderResource :: struct {
+	name:           common.Name,
 	desc:           ShaderDesc,
 	flags:          ShaderFlags,
 	hash:           u32,
@@ -278,7 +278,8 @@ shader_create :: proc(p_shader_ref: ShaderRef) -> bool {
 
 shader_allocate :: proc(p_name: common.Name) -> ShaderRef {
 	ref := ShaderRef(common.ref_create(ShaderResource, &g_resource_refs.shaders, p_name))
-	g_resources.shaders[shader_get_idx(ref)].desc.name = p_name
+	g_resources.shaders[shader_get_idx(ref)] = {}
+	g_resources.shaders[shader_get_idx(ref)].name = p_name
 	return ref
 }
 //---------------------------------------------------------------------------//
@@ -580,7 +581,7 @@ shader_compile :: proc(
 		shader_path,
 	)
 
-	// Find out the last time the shader was modified. It's used to determine 
+	// Find out the last time the shader was modified. It's used to determine
 	// if the compiled version is up to date
 	last_shader_write_time := common.get_last_file_write_time(shader_src_path)
 

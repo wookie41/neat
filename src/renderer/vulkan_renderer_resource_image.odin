@@ -124,7 +124,7 @@ when USE_VULKAN_BACKEND {
 		if type_found == false {
 			log.warnf(
 				"Failed to create image %s, unsupported type: %s\n",
-				common.get_string(image.desc.name),
+				common.get_string(image.name),
 				image.desc.type,
 			)
 			return false
@@ -139,7 +139,7 @@ when USE_VULKAN_BACKEND {
 		if view_type_found == false {
 			log.warnf(
 				"Failed to create image %s, unsupported type: %s\n",
-				common.get_string(image.desc.name),
+				common.get_string(image.name),
 				image.desc.type,
 			)
 			return false
@@ -150,7 +150,7 @@ when USE_VULKAN_BACKEND {
 		if format_found == false {
 			log.warnf(
 				"Failed to create image %s, unsupported format: %s\n",
-				common.get_string(image.desc.name),
+				common.get_string(image.name),
 				image.desc.type,
 			)
 			return false
@@ -208,7 +208,7 @@ when USE_VULKAN_BACKEND {
 		}
 
 		vk_name := strings.clone_to_cstring(
-			common.get_string(image.desc.name),
+			common.get_string(image.name),
 			temp_arena.allocator,
 		)
 
@@ -386,17 +386,13 @@ when USE_VULKAN_BACKEND {
 
 			swap_image := &g_resources.images[image_idx]
 			backend_swap_image := &g_resources.backend_images[image_idx]
-
-			swap_image.desc.type = .TwoDimensional
-			swap_image.desc.format = G_IMAGE_FORMAT_MAPPING_VK[G_RENDERER.swapchain_format.format]
-			swap_image.desc.mip_count = 1
-			swap_image.desc.dimensions = {
-				G_RENDERER.swap_extent.width,
-				G_RENDERER.swap_extent.height,
-				1,
+			swap_image.desc = {
+				type       = .TwoDimensional,
+				format     = G_IMAGE_FORMAT_MAPPING_VK[G_RENDERER.swapchain_format.format],
+				mip_count  = 1,
+				dimensions = {G_RENDERER.swap_extent.width, G_RENDERER.swap_extent.height, 1},
+				flags      = {.SwapImage},
 			}
-			swap_image.desc.flags = {.SwapImage}
-
 			backend_swap_image.vk_image_view = G_RENDERER.swapchain_image_views[i]
 
 			backend_swap_image.vk_image = vk_swap_image
@@ -524,7 +520,7 @@ when USE_VULKAN_BACKEND {
 		}
 
 		vk_name := strings.clone_to_cstring(
-			common.get_string(image.desc.name),
+			common.get_string(image.name),
 			temp_arena.allocator,
 		)
 
@@ -1016,7 +1012,7 @@ when USE_VULKAN_BACKEND {
 		)
 
 		upload_fences := G_RENDERER.frame_fences[:]
-		
+
 		// Uploads from frame 0 are synchronous, they're finialized in frame 1
 		// so we need to check graphics queue fences, as it was used on frame 0 for uploads
 		if is_async_transfer_enabled() && get_frame_id() > 1 {

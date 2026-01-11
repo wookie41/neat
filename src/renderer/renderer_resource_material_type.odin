@@ -64,7 +64,6 @@ MaterialTypeShadingModel :: enum {
 //---------------------------------------------------------------------------//
 
 MaterialTypeDesc :: struct {
-	name:                 common.Name,
 	defines:              []common.Name,
 	material_passes_refs: []MaterialPassRef,
 }
@@ -72,6 +71,7 @@ MaterialTypeDesc :: struct {
 //---------------------------------------------------------------------------//
 
 MaterialTypeResource :: struct {
+	name:                 common.Name,
 	desc:               MaterialTypeDesc,
 }
 
@@ -164,7 +164,8 @@ material_type_allocate :: proc(p_name: common.Name) -> MaterialTypeRef {
 	ref := MaterialTypeRef(
 		common.ref_create(MaterialTypeResource, &G_MATERIAL_TYPE_REF_ARRAY, p_name),
 	)
-	g_resources.material_types[material_type_get_idx(ref)].desc.name = p_name
+	g_resources.material_types[material_type_get_idx(ref)] = {}
+	g_resources.material_types[material_type_get_idx(ref)].name = p_name
 	return ref
 }
 
@@ -225,7 +226,7 @@ material_types_load_types_from_config_file :: proc() -> bool {
 		)
 
 		material_type := &g_resources.material_types[material_type_get_idx(material_type_ref)]
-		material_type.desc.name = common.create_name(material_type_json_entry.name)
+		material_type.name = common.create_name(material_type_json_entry.name)
 
 		// Defines
 		material_type.desc.defines = make(

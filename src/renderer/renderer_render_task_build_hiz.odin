@@ -155,19 +155,20 @@ create_instance :: proc(
 	log2Size := linalg.min(
 		linalg.log2(glsl.vec2{f32(resolution.x), f32(resolution.y)}),
 		glsl.vec2(12),
-	) // clamp to SPD 
+	) // clamp to SPD
 
 	// Create the HiZ buffer
 	hiz_ref := image_allocate(common.create_name(hiz_buffer_name))
 	hiz := &g_resources.images[image_get_idx(hiz_ref)]
-	hiz.desc.dimensions = glsl.uvec3{resolution.x, resolution.y, 1}
-	hiz.desc.mip_count = u32(linalg.ceil(linalg.max(log2Size.x, log2Size.y)))
-	hiz.desc.array_size = 1
-	hiz.desc.flags = {.Sampled, .Storage}
-	hiz.desc.format = .R32SFloat
-	hiz.desc.type = .TwoDimensional
-	hiz.desc.sample_count_flags = {._1}
-
+	hiz.desc = {
+		dimensions         = glsl.uvec3{resolution.x, resolution.y, 1},
+		mip_count          = u32(linalg.ceil(linalg.max(log2Size.x, log2Size.y))),
+		array_size         = 1,
+		flags              = {.Sampled, .Storage},
+		format             = .R32SFloat,
+		type               = .TwoDimensional,
+		sample_count_flags = {._1},
+	}
 	if image_create(hiz_ref) == false {
 		log.errorf("Failed to create render task '%s' - couldn't create HiZ\n", doc_name)
 		return false
@@ -180,9 +181,11 @@ create_instance :: proc(
 	// Create the SPD atomic counter buffer
 	spd_atomic_counter_buffer_ref := buffer_allocate(common.create_name(spd_counter_name))
 	spd_atomic_counter_buffer := &g_resources.buffers[buffer_get_idx(spd_atomic_counter_buffer_ref)]
-	spd_atomic_counter_buffer.desc.flags = {.Dedicated}
-	spd_atomic_counter_buffer.desc.size = size_of(u32) * 6
-	spd_atomic_counter_buffer.desc.usage = {.StorageBuffer}
+	spd_atomic_counter_buffer.desc = {
+		flags = {.Dedicated},
+		size  = size_of(u32) * 6,
+		usage = {.StorageBuffer},
+	}
 
 	if buffer_create(spd_atomic_counter_buffer_ref) == false {
 		log.errorf(
@@ -198,9 +201,11 @@ create_instance :: proc(
 	// Create the min max depth buffer
 	min_max_depth_buffer_ref := buffer_allocate(common.create_name(min_max_depth_buffer_name))
 	min_max_depth_buffer := &g_resources.buffers[buffer_get_idx(min_max_depth_buffer_ref)]
-	min_max_depth_buffer.desc.flags = {.Dedicated}
-	min_max_depth_buffer.desc.size = size_of(u32) * 2
-	min_max_depth_buffer.desc.usage = {.StorageBuffer}
+	min_max_depth_buffer.desc = {
+		flags = {.Dedicated},
+		size  = size_of(u32) * 2,
+		usage = {.StorageBuffer},
+	}
 
 	if buffer_create(min_max_depth_buffer_ref) == false {
 		log.errorf(
@@ -247,10 +252,7 @@ create_instance :: proc(
 		bindings := render_task_config_parse_bindings(
 			p_render_task_config,
 			true,
-			{
-				size_of(GenericComputeJobUniformData),
-				size_of(HiZUniformData),
-			},
+			{size_of(GenericComputeJobUniformData), size_of(HiZUniformData)},
 			"BuildHiZBindings",
 		) or_return
 
@@ -324,7 +326,7 @@ render :: proc(p_render_task_ref: RenderTaskRef, pdt: f32) {
 	hiz_render_task_data := (^HiZRenderTaskData)(hiz_render_task.data_ptr)
 
 	render_views := RenderViews {
-		current_view = render_view_create_from_camera(g_render_camera),
+		current_view  = render_view_create_from_camera(g_render_camera),
 		previous_view = render_view_create_from_camera(g_previous_render_camera),
 	}
 

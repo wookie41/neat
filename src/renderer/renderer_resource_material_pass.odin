@@ -14,7 +14,6 @@ import "core:slice"
 //---------------------------------------------------------------------------//
 
 MaterialPassDesc :: struct {
-	name:         common.Name,
 	include_path: common.Name,
 	defines:      []string,
 }
@@ -22,6 +21,7 @@ MaterialPassDesc :: struct {
 //---------------------------------------------------------------------------//
 
 MaterialPassResource :: struct {
+	name:                    common.Name,
 	desc:                    MaterialPassDesc,
 	pass_type_pipeline_refs: []GraphicsPipelineRef,
 }
@@ -60,14 +60,14 @@ G_MATERIAL_PASS_REF_ARRAY: common.RefArray(MaterialPassResource)
 
 @(private = "file")
 G_MATERIAL_PASS_TYPE_MAPPING := map[string]MaterialPassType {
-	"GBuffer" = .GBuffer,
+	"GBuffer"        = .GBuffer,
 	"CascadeShadows" = .CascadeShadows,
 }
 //---------------------------------------------------------------------------//
 
 @(private = "file")
 G_MATERIAL_PASS_TYPE_SHADERS_MAPPING := map[MaterialPassType]string {
-	.GBuffer = "material_pass_gbuffer.hlsl",
+	.GBuffer        = "material_pass_gbuffer.hlsl",
 	.CascadeShadows = "material_pass_cascade_shadows.hlsl",
 }
 
@@ -117,7 +117,8 @@ material_pass_allocate :: proc(p_name: common.Name) -> MaterialPassRef {
 	ref := MaterialPassRef(
 		common.ref_create(MaterialPassResource, &G_MATERIAL_PASS_REF_ARRAY, p_name),
 	)
-	g_resources.material_passes[material_pass_get_idx(ref)].desc.name = p_name
+	g_resources.material_passes[material_pass_get_idx(ref)] = {}
+	g_resources.material_passes[material_pass_get_idx(ref)].name = p_name
 	return ref
 }
 //---------------------------------------------------------------------------//
@@ -281,7 +282,7 @@ material_pass_compile_for_type :: proc(
 		shader_destroy(pixel_shader_ref)
 	}
 
-	pipeline_ref := graphics_pipeline_allocate(material_pass.desc.name, 4, 0)
+	pipeline_ref := graphics_pipeline_allocate(material_pass.name, 4, 0)
 	pipeline := &g_resources.graphics_pipelines[graphics_pipeline_get_idx(pipeline_ref)]
 	pipeline.desc.bind_group_layout_refs = {
 		p_bind_group_layout_ref,
