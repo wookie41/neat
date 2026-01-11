@@ -56,14 +56,20 @@ float CalculateCascadeSplit(int cascadeIndex, float depthMinLinear, float depthM
 //---------------------------------------------------------------------------//
 
 [numthreads(MAX_SHADOW_CASCADES, 1, 1)]
-void CSMain(uint localThreadIndex: SV_GroupIndex)
+void CSMain(int localThreadIndex: SV_GroupIndex)
 {
     if (localThreadIndex < numCascades)
     {
-        const float depthMinLinear = (flags & FIT_CASCADES) > 0 ? LinearizeDepth(asfloat(minMaxDepthBuffer[1]), uPerView.CurrentView.CameraNearPlane) : uPerView.CurrentView.CameraNearPlane;
-        const float depthMaxLinear = (flags & FIT_CASCADES) > 0 ? LinearizeDepth(asfloat(minMaxDepthBuffer[0]), uPerView.CurrentView.CameraNearPlane) : renderingDistance;
+        float depthMinLinear = uPerView.CurrentView.CameraNearPlane;
+        float depthMaxLinear =  renderingDistance;
 
-        const float nearSplit = CalculateCascadeSplit(int(localThreadIndex) - 1, depthMinLinear, depthMaxLinear);
+        if ((flags & FIT_CASCADES) > 0)
+        {
+            depthMinLinear = LinearizeDepth(asfloat(minMaxDepthBuffer[1]), uPerView.CurrentView.CameraNearPlane);
+            depthMaxLinear = LinearizeDepth(asfloat(minMaxDepthBuffer[0]), uPerView.CurrentView.CameraNearPlane);
+        }
+
+        const float nearSplit = CalculateCascadeSplit(localThreadIndex - 1, depthMinLinear, depthMaxLinear);
         const float farSplit = CalculateCascadeSplit(localThreadIndex, depthMinLinear, depthMaxLinear);
 
         // Map Z component from [-1; 1] to [0; 1]
@@ -149,7 +155,9 @@ void CSMain(uint localThreadIndex: SV_GroupIndex)
             proj[1][3] += snapOffset.y;
         }
 
-        lightMatrices[localThreadIndex].RenderMatrix = mul(ndcCorrectionZ, mul(proj, view));
+        const float4x4 renderMatrix = mul(ndcCorrectionZ, mul(proj, view));
+
+        lightMatrices[localThreadIndex].RenderMatrix = renderMatrix;
         lightMatrices[localThreadIndex].LightMatrix = mul(textureSpaceConversion, lightMatrices[localThreadIndex].RenderMatrix);
         lightMatrices[localThreadIndex].Split = farSplit;
         lightMatrices[localThreadIndex].OffsetScale = scale.xy;

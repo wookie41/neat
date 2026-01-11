@@ -250,7 +250,8 @@ void ScatterLight(uint3 dispatchThreadId: SV_DispatchThreadID)
     const float3 froxelDimensionsRcp = 1.f / float3(froxelDimensions.xyz);
     const float4 scatteringExtinction = ScatteringExtinctionTexture.SampleLevel(uNearestClampToEdgeSampler, froxelCoord * froxelDimensionsRcp, 0);
 
-    const float dirLightShadow = SampleDirectionalLightShadowSingleTap(CascadeShadowTextures, ShadowCascades, worldPosition, viewPostion);
+    int cascadeIndex = 0;
+    const float dirLightShadow = SampleDirectionalLightShadowSingleTap(CascadeShadowTextures, ShadowCascades, worldPosition, viewPostion, cascadeIndex);
 
     const float3 ambientTerm = 0.02;
     const float sunStrengthExposed = uPerFrame.Sun.Strength * ExposureBuffer[0].Exposure;
